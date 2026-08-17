@@ -30,8 +30,10 @@ npm install
 npm run dev -- -p 3030
 ```
 
-Open [http://localhost:3030](http://localhost:3030) in your browser to view the login screen and dashboard home.
-- **Mock Account Email**: `name@msruas.ac.in` (e.g. `kayomarz@msruas.ac.in`)
+Open [http://localhost:3030](http://localhost:3030) in your browser to view the login screen.
+- **Mock Login Credentials (For Testing & Review)**:
+  - **Email**: `kayomarz@msruas.ac.in` (Accepts any email address containing `@`)
+  - **Password**: `password123` (Accepts any password value)
 - **Theme Switcher**: Supported seamlessly (Sun/Moon icon in the navbar) to toggle light and dark glassmorphic themes.
 
 ---
