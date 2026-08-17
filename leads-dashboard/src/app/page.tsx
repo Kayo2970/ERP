@@ -4,6 +4,15 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShieldAlert, LogIn, Mail, Lock } from 'lucide-react';
 
+const mockUsers = [
+  { name: 'Kayomarz Pavri', email: 'kayomarz.pavri@msruas.ac.in', role: 'Super User', tier: 1 },
+  { name: 'Dr. Subhadeep Mukherjee', email: 'subhadeep.mukherjee@msruas.ac.in', role: 'Centre Head', tier: 2 },
+  { name: 'Dr. Kiran Kumar B M', email: 'kiran.kumar@msruas.ac.in', role: 'Head of Events', tier: 3 },
+  { name: 'Dr. K. M. Sharath Kumar', email: 'sharath.kumar@msruas.ac.in', role: 'Advisory Board', tier: 4 },
+  { name: 'Gurutejas C', email: 'gurutejas.c@msruas.ac.in', role: 'Core Committee', tier: 5 },
+  { name: 'Kunal Bhadauria', email: 'kunal.bhadauria@msruas.ac.in', role: 'Training Associate', tier: 6 },
+];
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -16,15 +25,20 @@ export default function LoginPage() {
     setError('');
     setIsLoading(true);
 
-    // Mock validation: check if email contains msruas or standard domains. 
+    const trimmedEmail = email.trim().toLowerCase();
+    const matchedUser = mockUsers.find(u => u.email.toLowerCase() === trimmedEmail);
+
     // If empty or invalid, show the spec-defined error
-    if (!email || !email.includes('@')) {
+    if (!matchedUser) {
       setTimeout(() => {
         setError("We couldn't find an account with that email. Contact your committee head if you believe this is a mistake.");
         setIsLoading(false);
       }, 800);
       return;
     }
+
+    // Save logged-in user to localStorage
+    localStorage.setItem('user', JSON.stringify(matchedUser));
 
     // Redirect to home dashboard
     setTimeout(() => {

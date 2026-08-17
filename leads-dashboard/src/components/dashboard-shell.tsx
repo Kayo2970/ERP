@@ -47,8 +47,14 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDarkTheme, setIsDarkTheme] = useState(false);
+  const [user, setUser] = useState({
+    name: 'Kayomarz Pavri',
+    email: 'kayomarz.pavri@msruas.ac.in',
+    role: 'Super User',
+    tier: 1
+  });
 
-  // Initialize theme on mount
+  // Initialize theme and user on mount
   useEffect(() => {
     const theme = localStorage.getItem('theme');
     const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -59,6 +65,15 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     } else {
       setIsDarkTheme(false);
       document.documentElement.classList.remove('dark');
+    }
+
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch (e) {
+        console.error(e);
+      }
     }
   }, []);
 
@@ -128,8 +143,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
               <User className="h-5 w-5 text-accent" />
             </div>
             <div className="overflow-hidden">
-              <h4 className="font-medium text-sm text-theme-text-primary truncate">Kayomarz Pavri</h4>
-              <p className="text-[11px] text-theme-text-secondary truncate">Super User (Tier 1)</p>
+              <h4 className="font-medium text-sm text-theme-text-primary truncate">{user.name}</h4>
+              <p className="text-[11px] text-theme-text-secondary truncate">{user.role} (Tier {user.tier})</p>
             </div>
           </div>
           
@@ -205,8 +220,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                   <User className="h-5 w-5 text-accent" />
                 </div>
                 <div>
-                  <h4 className="font-medium text-sm text-theme-text-primary">Kayomarz Pavri</h4>
-                  <p className="text-xs text-theme-text-secondary font-medium">Super User (Tier 1)</p>
+                  <h4 className="font-medium text-sm text-theme-text-primary">{user.name}</h4>
+                  <p className="text-xs text-theme-text-secondary font-medium">{user.role} (Tier {user.tier})</p>
                 </div>
               </div>
               <button
@@ -257,11 +272,13 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             {/* Active User info */}
             <div className="flex items-center gap-3">
               <div className="text-right">
-                <h4 className="font-semibold text-sm text-theme-text-primary">Kayomarz Pavri</h4>
-                <p className="text-[11px] text-theme-text-secondary font-medium tracking-wider">Super User</p>
+                <h4 className="font-semibold text-sm text-theme-text-primary">{user.name}</h4>
+                <p className="text-[11px] text-theme-text-secondary font-medium tracking-wider">{user.role}</p>
               </div>
               <div className="h-9 w-9 bg-accent rounded-lg flex items-center justify-center shadow-lg shadow-accent/20">
-                <span className="text-white font-bold text-sm">KP</span>
+                <span className="text-white font-bold text-sm">
+                  {user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                </span>
               </div>
             </div>
           </div>
