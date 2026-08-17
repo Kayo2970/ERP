@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { 
   AreaChart, 
   Area, 
@@ -42,16 +43,20 @@ const criteriaScores = [
   { name: 'Initiative', score: 4.8, color: '#2E8B57' },
   { name: 'Collaboration', score: 4.7, color: '#7FB069' },
 ];
-
 export default function DashboardHome() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [eventsCount, setEventsCount] = useState(0);
   const [membersCount, setMembersCount] = useState(0);
   const [user, setUser] = useState<any>(null);
+  
+  // Announcements and Events Tab State
+  const [activeTab, setActiveTab] = useState<'events' | 'announcements'>('events');
+  const [events, setEvents] = useState<any[]>([]);
 
   useEffect(() => {
     setTasks(getTasks());
     setEventsCount(getEvents().length);
+    setEvents(getEvents().sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()));
     setMembersCount(getMembers().length);
     
     const savedUser = localStorage.getItem('user');
@@ -94,6 +99,17 @@ export default function DashboardHome() {
     { id: '1', title: 'Q3 Performance Evaluation Ratings Published', body: 'Faculty advisors have updated individual and committee ratings for the Q3 events cycle. Check your rating card.', date: 'Today, 10:30 AM', scope: 'Everyone' },
     { id: '2', title: 'Reimbursement Claims Deadline - August Cycle', body: 'All expense claims and receipts for events conducted in July/August must be submitted by August 24th.', date: 'Yesterday', scope: 'Core Committee' },
   ];
+
+  const getFormatDate = (dateStr: string) => {
+    try {
+      const d = new Date(dateStr);
+      const day = d.getDate();
+      const month = d.toLocaleString('default', { month: 'short' }).toUpperCase();
+      return { day, month };
+    } catch {
+      return { day: '??', month: 'EVT' };
+    }
+  };
 
   return (
     <div className="p-6 md:p-8 space-y-6">
@@ -288,7 +304,7 @@ export default function DashboardHome() {
 
       </div>
 
-      {/* Grid: Tasks Table & Announcements */}
+      {/* Grid: Tasks Table & Dynamic Tabbed Sidebar */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Active Tasks List */}
@@ -321,17 +337,17 @@ export default function DashboardHome() {
                   {displayedTasks.map(task => (
                     <tr key={task.id} className="hover:bg-theme-border/10 transition-all">
                       <td className="py-3.5 pr-2 font-medium text-theme-text-primary">{task.title}</td>
-                      <td className="py-3.5 pr-2 text-theme-text-secondary">{task.event}</td>
+                      <td className="py-3.5 pr-2 text-theme-text-secondary">{task.event || 'Standalone'}</td>
                       <td className="py-3.5 pr-2 text-theme-text-secondary">{task.dueDate}</td>
                       <td className="py-3.5 pr-2">
                         <span className={`inline-flex items-center text-xs font-semibold px-2.5 py-0.5 rounded-full ${
                           task.status === 'Assigned' 
-                            ? 'bg-accent/15 text-accent border border-accent/20' 
-                            : task.status === 'In Progress' 
-                              ? 'bg-warning/15 text-warning border border-warning/20' 
-                              : task.status === 'Completed'
-                                ? 'bg-success/15 text-success border border-success/20'
-                                : 'bg-danger/15 text-danger border border-danger/20'
+                             ? 'bg-accent/15 text-accent border border-accent/20' 
+                             : task.status === 'In Progress' 
+                               ? 'bg-warning/15 text-warning border border-warning/20' 
+                               : task.status === 'Completed'
+                                 ? 'bg-success/15 text-success border border-success/20'
+                                 : 'bg-danger/15 text-danger border border-danger/20'
                         }`}>
                           {task.status}
                         </span>
@@ -373,43 +389,110 @@ export default function DashboardHome() {
           </div>
         </div>
 
-        {/* Announcements List */}
+        {/* Tabbed Side Panel: Announcements & Events Calendar */}
         <div className="glass-panel rounded-2xl p-6 flex flex-col space-y-4">
-          <div className="flex items-center gap-2">
-            <Megaphone className="h-5 w-5 text-accent" />
-            <h3 className="text-base font-semibold text-theme-text-primary">Announcements</h3>
+          <div className="flex border-b border-theme-border/30 pb-1">
+            <button
+              onClick={() => setActiveTab('events')}
+              className={`flex-1 pb-2 text-center text-xs font-bold transition-all cursor-pointer border-b-2 ${
+                activeTab === 'events' 
+                  ? 'border-accent text-accent' 
+                  : 'border-transparent text-theme-text-secondary hover:text-theme-text-primary'
+              }`}
+            >
+              Event Calendar
+            </button>
+            <button
+              onClick={() => setActiveTab('announcements')}
+              className={`flex-1 pb-2 text-center text-xs font-bold transition-all cursor-pointer border-b-2 ${
+                activeTab === 'announcements' 
+                  ? 'border-accent text-accent' 
+                  : 'border-transparent text-theme-text-secondary hover:text-theme-text-primary'
+              }`}
+            >
+              Announcements
+            </button>
           </div>
 
-          <div className="flex-1 space-y-4 overflow-y-auto pr-1">
-            {announcements.map(announcement => (
-              <div 
-                key={announcement.id} 
-                className="p-4 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2 hover:bg-theme-border/15 transition-all"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-accent px-2 py-0.5 bg-accent/10 rounded-md tracking-wider uppercase">
-                    {announcement.scope}
-                  </span>
-                  <span className="text-[10px] text-theme-text-secondary">
-                    {announcement.date}
-                  </span>
+          <div className="flex-1 space-y-3.5 overflow-y-auto pr-1 max-h-[360px]">
+            {activeTab === 'events' ? (
+              // Events Calendar View
+              events.length === 0 ? (
+                <div className="text-center py-12 text-theme-text-secondary text-xs">
+                  No upcoming events scheduled.
                 </div>
-                <h4 className="font-semibold text-sm text-theme-text-primary leading-snug">
-                  {announcement.title}
-                </h4>
-                <p className="text-xs text-theme-text-secondary leading-relaxed">
-                  {announcement.body}
-                </p>
-              </div>
-            ))}
+              ) : (
+                events.map(ev => {
+                  const { day, month } = getFormatDate(ev.startDate);
+                  return (
+                    <div 
+                      key={ev.id} 
+                      className="flex gap-3.5 p-3.5 bg-theme-border/10 border border-theme-border/20 rounded-xl hover:bg-theme-border/15 transition-all"
+                    >
+                      {/* Calendar Block Icon */}
+                      <div className="h-12 w-12 shrink-0 bg-accent/15 rounded-xl border border-accent/25 flex flex-col items-center justify-center font-sans">
+                        <span className="text-[9px] font-bold text-accent leading-none">{month}</span>
+                        <span className="text-lg font-extrabold text-theme-text-primary leading-tight mt-0.5">{day}</span>
+                      </div>
+                      
+                      {/* Event Details */}
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md uppercase ${
+                            ev.status === 'active' 
+                              ? 'bg-success/15 text-success' 
+                              : 'bg-accent/15 text-accent'
+                          }`}>
+                            {ev.status}
+                          </span>
+                          <span className="text-[10px] text-theme-text-secondary font-medium">
+                            {ev.committee}
+                          </span>
+                        </div>
+                        <h4 className="font-semibold text-xs text-theme-text-primary leading-snug">
+                          {ev.title}
+                        </h4>
+                        <p className="text-[11px] text-theme-text-secondary leading-relaxed line-clamp-2">
+                          {ev.description}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })
+              )
+            ) : (
+              // Announcements List View
+              announcements.map(announcement => (
+                <div 
+                  key={announcement.id} 
+                  className="p-3.5 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2 hover:bg-theme-border/15 transition-all"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-accent px-2 py-0.5 bg-accent/10 rounded-md tracking-wider uppercase">
+                      {announcement.scope}
+                    </span>
+                    <span className="text-[10px] text-theme-text-secondary">
+                      {announcement.date}
+                    </span>
+                  </div>
+                  <h4 className="font-semibold text-xs text-theme-text-primary leading-snug">
+                    {announcement.title}
+                  </h4>
+                  <p className="text-[11px] text-theme-text-secondary leading-relaxed">
+                    {announcement.body}
+                  </p>
+                </div>
+              ))
+            )}
           </div>
 
-          <button className="w-full py-2.5 bg-theme-border/20 hover:bg-theme-border/30 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5">
-            View All Announcements
-            <ExternalLink className="h-3.5 w-3.5" />
-          </button>
+          <Link
+            href="/dashboard/events"
+            className="w-full py-2.5 bg-theme-border/20 hover:bg-theme-border/30 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 border border-theme-card-border"
+          >
+            {activeTab === 'events' ? 'Go to Events Manager' : 'View Announcements'}
+          </Link>
         </div>
-
       </div>
 
     </div>
