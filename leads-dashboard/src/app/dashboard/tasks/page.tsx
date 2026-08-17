@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Plus, X, Calendar, User, Briefcase, CheckCircle2, FileClock, Users } from 'lucide-react';
-import { getTasks, getEvents, getMembers, addTask, updateTaskStatus, TaskItem, EventItem, Member } from '@/lib/local-data';
+import { getTasks, getEvents, getMembers, getCommittees, addTask, updateTaskStatus, TaskItem, EventItem, Member } from '@/lib/local-data';
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
@@ -19,10 +19,12 @@ export default function TasksPage() {
   const [selectedCommittee, setSelectedCommittee] = useState('Organizing Committee');
   const [dueDate, setDueDate] = useState('');
   const [status, setStatus] = useState<TaskItem['status']>('Assigned');
+  const [committees, setCommittees] = useState<string[]>([]);
 
   useEffect(() => {
     setTasks(getTasks());
     setEvents(getEvents());
+    setCommittees(getCommittees());
     const mList = getMembers();
     setMembers(mList);
     if (mList.length > 0) {
@@ -331,10 +333,10 @@ export default function TasksPage() {
                     onChange={(e) => setSelectedCommittee(e.target.value)}
                     className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   >
-                    <option value="Executive Council">Executive Council</option>
-                    <option value="Senior Student Leadership">Senior Student Leadership</option>
-                    <option value="Organizing Committee">Organizing Committee</option>
                     <option value="All Committees">All Committees</option>
+                    {committees.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
                   </select>
                 </div>
               )}

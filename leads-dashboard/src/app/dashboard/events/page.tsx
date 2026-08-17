@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Plus, X, Calendar, MapPin, Users, Briefcase, Eye } from 'lucide-react';
-import { getEvents, addEvent, EventItem } from '@/lib/local-data';
+import { getEvents, addEvent, getCommittees, EventItem } from '@/lib/local-data';
 
 export default function EventsPage() {
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -16,9 +16,11 @@ export default function EventsPage() {
   const [endDate, setEndDate] = useState('');
   const [committee, setCommittee] = useState('Senior Student Leadership');
   const [status, setStatus] = useState<EventItem['status']>('planned');
+  const [committees, setCommittees] = useState<string[]>([]);
 
   useEffect(() => {
     setEvents(getEvents());
+    setCommittees(getCommittees());
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
       setUser(JSON.parse(savedUser));
@@ -201,10 +203,10 @@ export default function EventsPage() {
                     onChange={(e) => setCommittee(e.target.value)}
                     className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   >
-                    <option value="Executive Council">Executive Council</option>
-                    <option value="Senior Student Leadership">Senior Student Leadership</option>
-                    <option value="Organizing Committee">Organizing Committee</option>
                     <option value="All Committees">All Committees</option>
+                    {committees.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
                   </select>
                 </div>
 

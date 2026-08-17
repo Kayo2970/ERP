@@ -57,6 +57,16 @@ export interface ReimbursementItem {
   submittedAt: string;
 }
 
+const initialCommittees = [
+  'Executive Council', 
+  'Senior Student Leadership', 
+  'Organizing Committee', 
+  'Food & Catering Committee', 
+  'Logistics & Stage Committee', 
+  'Public Relations Committee', 
+  'Finance Committee'
+];
+
 // Initial mock data matching leadership website and dashboard requirements
 const initialMembers: Member[] = [
   { id: 'm1', name: 'Kayomarz Pavri', email: 'kayomarz.pavri@msruas.ac.in', role: 'Super User', tier: 1, committee: 'All Committees' },
@@ -140,6 +150,9 @@ export function initializeData() {
   }
   if (!localStorage.getItem('leads_reimbursements')) {
     localStorage.setItem('leads_reimbursements', JSON.stringify(initialReimbursements));
+  }
+  if (!localStorage.getItem('leads_committees')) {
+    localStorage.setItem('leads_committees', JSON.stringify(initialCommittees));
   }
 }
 
@@ -264,4 +277,25 @@ export function updateReimbursementStatus(id: string, status: ReimbursementItem[
   const reimbursements = getReimbursements();
   const updated = reimbursements.map(r => r.id === id ? { ...r, status } : r);
   saveReimbursements(updated);
+}
+
+// Committees helper functions
+export function getCommittees(): string[] {
+  if (!isBrowser) return initialCommittees;
+  initializeData();
+  const data = localStorage.getItem('leads_committees');
+  return data ? JSON.parse(data) : initialCommittees;
+}
+
+export function saveCommittees(committees: string[]) {
+  if (!isBrowser) return;
+  localStorage.setItem('leads_committees', JSON.stringify(committees));
+}
+
+export function addCommittee(name: string) {
+  const committees = getCommittees();
+  if (!committees.includes(name)) {
+    committees.push(name);
+    saveCommittees(committees);
+  }
 }

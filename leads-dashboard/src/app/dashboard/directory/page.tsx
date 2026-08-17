@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Download, Upload, X, ShieldAlert, CheckCircle, Search, UserMinus, Edit2 } from 'lucide-react';
-import { getMembers, saveMembers, addMember, Member } from '@/lib/local-data';
+import { getMembers, saveMembers, addMember, getCommittees, addCommittee, Member } from '@/lib/local-data';
 
 export default function DirectoryPage() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -20,6 +20,11 @@ export default function DirectoryPage() {
   // Notification Alert State
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Committee State
+  const [committees, setCommittees] = useState<string[]>([]);
+  const [isCommitteeModalOpen, setIsCommitteeModalOpen] = useState(false);
+  const [newCommitteeName, setNewCommitteeName] = useState('');
 
   // Edit Member Form State
   const [editingMember, setEditingMember] = useState<Member | null>(null);
@@ -67,6 +72,7 @@ export default function DirectoryPage() {
 
   useEffect(() => {
     setMembers(getMembers());
+    setCommittees(getCommittees());
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
       setUser(JSON.parse(savedUser));
@@ -104,6 +110,17 @@ export default function DirectoryPage() {
     // Refresh & Notify
     setMembers(getMembers());
     triggerSuccess('New member added successfully.');
+  };
+
+  const handleCreateCommittee = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCommitteeName.trim()) return;
+
+    addCommittee(newCommitteeName.trim());
+    setNewCommitteeName('');
+    setIsCommitteeModalOpen(false);
+    setCommittees(getCommittees());
+    triggerSuccess('New event-based committee created successfully.');
   };
 
   const handleDownloadTemplate = () => {
@@ -301,6 +318,14 @@ export default function DirectoryPage() {
             />
 
             <button
+              onClick={() => setIsCommitteeModalOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-card-border"
+            >
+              <Plus className="h-4 w-4" />
+              Create Committee
+            </button>
+
+            <button
               onClick={() => setIsModalOpen(true)}
               className="flex items-center gap-1.5 px-4 py-2.5 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer"
             >
@@ -447,16 +472,16 @@ export default function DirectoryPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Committee</label>
+                  <label className="block font-medium text-theme-text-secondary">Committee Assignment</label>
                   <select
                     value={committee}
                     onChange={(e) => setCommittee(e.target.value)}
                     className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   >
-                    <option value="Executive Council">Executive Council</option>
-                    <option value="Senior Student Leadership">Senior Student Leadership</option>
-                    <option value="Organizing Committee">Organizing Committee</option>
                     <option value="All Committees">All Committees</option>
+                    {committees.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -529,16 +554,16 @@ export default function DirectoryPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Committee</label>
+                  <label className="block font-medium text-theme-text-secondary">Committee Assignment</label>
                   <select
                     value={editCommittee}
                     onChange={(e) => setEditCommittee(e.target.value)}
                     className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   >
-                    <option value="Executive Council">Executive Council</option>
-                    <option value="Senior Student Leadership">Senior Student Leadership</option>
-                    <option value="Organizing Committee">Organizing Committee</option>
                     <option value="All Committees">All Committees</option>
+                    {committees.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -548,6 +573,44 @@ export default function DirectoryPage() {
                 className="w-full py-3 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer mt-4"
               >
                 Save Member Updates
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Create Committee Modal */}
+      {isCommitteeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="glass-panel w-full max-w-md rounded-3xl p-6 flex flex-col space-y-6 relative border border-white/15 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-theme-text-primary">Create Event-Based Committee</h2>
+              <button 
+                onClick={() => setIsCommitteeModalOpen(false)}
+                className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateCommittee} className="space-y-4 text-xs">
+              <div className="space-y-1.5">
+                <label className="block font-medium text-theme-text-secondary">Committee Name</label>
+                <input
+                  type="text"
+                  required
+                  value={newCommitteeName}
+                  onChange={(e) => setNewCommitteeName(e.target.value)}
+                  placeholder="e.g. Food & Catering Committee"
+                  className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer mt-4"
+              >
+                Create Committee
               </button>
             </form>
           </div>
