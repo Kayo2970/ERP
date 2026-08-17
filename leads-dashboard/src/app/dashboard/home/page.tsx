@@ -3,18 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { 
-  AreaChart, 
-  Area, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  Cell
-} from 'recharts';
-import { 
   Calendar, 
   CheckSquare, 
   Clock, 
@@ -24,9 +12,14 @@ import {
   Megaphone,
   CheckCircle2,
   FileClock,
-  ExternalLink
+  ExternalLink,
+  ChevronLeft,
+  ChevronRight,
+  Star,
+  Crown,
+  Award
 } from 'lucide-react';
-import { getTasks, getEvents, getMembers, updateTaskStatus, TaskItem } from '@/lib/local-data';
+import { getTasks, getEvents, getMembers, getRatings, updateTaskStatus, TaskItem } from '@/lib/local-data';
 
 // Mock Data for Quarters
 const scoreHistory = [
@@ -53,11 +46,60 @@ export default function DashboardHome() {
   const [activeTab, setActiveTab] = useState<'events' | 'announcements'>('events');
   const [events, setEvents] = useState<any[]>([]);
 
+  // Custom Calendar and Leaderboard State
+  const [calendarDate, setCalendarDate] = useState(new Date(2026, 7, 1)); // Default August 2026
+  const [selectedDay, setSelectedDay] = useState<number | null>(10); // Default to 10th (Tech Conclave start)
+  const [leaderboard, setLeaderboard] = useState<any[]>([]);
+
   useEffect(() => {
     setTasks(getTasks());
     setEventsCount(getEvents().length);
     setEvents(getEvents().sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()));
     setMembersCount(getMembers().length);
+    
+    // Leaderboard calculation
+    const ratingsList = getRatings();
+    const totalsMap: Record<string, { total: number; count: number; role: string; type: string }> = {};
+    
+    ratingsList.forEach(r => {
+      const key = r.targetName;
+      if (!totalsMap[key]) {
+        totalsMap[key] = { 
+          total: 0, 
+          count: 0, 
+          role: r.targetType === 'committee' ? 'Committee Group' : 'Student Leader',
+          type: r.targetType
+        };
+      }
+      totalsMap[key].total += r.overallScore;
+      totalsMap[key].count += 1;
+    });
+
+    const calculated = Object.keys(totalsMap).map(name => {
+      const item = totalsMap[name];
+      return {
+        name,
+        role: item.role,
+        score: Math.round((item.total / item.count) * 10) / 10,
+        type: item.type
+      };
+    });
+
+    const defaults = [
+      { name: 'Gurutejas C', role: 'Senior President', score: 4.9, type: 'individual' },
+      { name: 'Abhijit Arya', role: 'Senior Vice President', score: 4.8, type: 'individual' },
+      { name: 'Organizing Committee', role: 'Committee Group', score: 4.7, type: 'committee' },
+      { name: 'Sadiya Sawood', role: 'Head — Leadership & Dev', score: 4.6, type: 'individual' },
+    ];
+
+    const finalLeaderboard = [...calculated];
+    defaults.forEach(def => {
+      if (!finalLeaderboard.some(f => f.name === def.name)) {
+        finalLeaderboard.push(def);
+      }
+    });
+
+    setLeaderboard(finalLeaderboard.sort((a, b) => b.score - a.score).slice(0, 4));
     
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
@@ -78,6 +120,40 @@ export default function DashboardHome() {
   const handleRequestExtension = (id: string) => {
     updateTaskStatus(id, 'Pending Extension');
     setTasks(getTasks());
+  };
+
+  const handlePrevMonth = () => {
+    setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1));
+    setSelectedDay(null);
+  };
+
+  const handleNextMonth = () => {
+    setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1));
+    setSelectedDay(null);
+  };
+
+  const calYear = calendarDate.getFullYear();
+  const calMonth = calendarDate.getMonth();
+
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const firstDayIndex = new Date(calYear, calMonth, 1).getDay();
+
+  const calendarDays: (number | null)[] = [];
+  for (let i = 0; i < firstDayIndex; i++) {
+    calendarDays.push(null);
+  }
+  for (let i = 1; i <= daysInMonth; i++) {
+    calendarDays.push(i);
+  }
+
+  const getDayEvents = (day: number) => {
+    const checkStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return events.filter(e => checkStr >= e.startDate && checkStr <= e.endDate);
   };
 
   // Filter tasks based on logged-in user tier/roles
@@ -203,103 +279,166 @@ export default function DashboardHome() {
 
       </div>
 
-      {/* Grid: Charts & Reports Section */}
+      {/* Grid: Calendar & Leaderboard Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        {/* Score Trend (Line/Area Chart) */}
+        {/* Interactive Event Calendar */}
         <div className="glass-panel rounded-2xl p-6 flex flex-col space-y-4">
-          <div>
-            <h3 className="text-base font-semibold text-theme-text-primary">Overall Rating Trend</h3>
-            <p className="text-xs text-theme-text-secondary">Individual combined score rollup per academic quarter</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-semibold text-theme-text-primary">LEADS Event Calendar</h3>
+              <p className="text-xs text-theme-text-secondary">Click on highlighted days with event indicators</p>
+            </div>
+            
+            <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-xl p-1 text-xs">
+              <button 
+                onClick={handlePrevMonth}
+                className="p-1 hover:bg-theme-border/30 rounded-lg text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="px-2 font-semibold text-theme-text-primary select-none w-24 text-center">
+                {monthNames[calMonth]} {calYear}
+              </span>
+              <button 
+                onClick={handleNextMonth}
+                className="p-1 hover:bg-theme-border/30 rounded-lg text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
           </div>
-          <div className="h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={scoreHistory} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#2E75B6" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#2E75B6" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
-                <XAxis dataKey="quarter" stroke="var(--text-secondary)" fontSize={11} />
-                <YAxis domain={[0, 5]} stroke="var(--text-secondary)" fontSize={11} ticks={[0, 1, 2, 3, 4, 5]} />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'var(--card-bg)', 
-                    borderColor: 'var(--card-border)', 
-                    borderRadius: '12px',
-                    color: 'var(--text-primary)',
-                    fontSize: '12px'
-                  }} 
-                />
-                <Area type="monotone" dataKey="score" stroke="#2E75B6" strokeWidth={2} fillOpacity={1} fill="url(#colorScore)" />
-              </AreaChart>
-            </ResponsiveContainer>
+
+          {/* Calendar Grid */}
+          <div className="border border-theme-border/30 rounded-2xl p-4 bg-theme-background/10">
+            <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-theme-text-secondary uppercase tracking-wider mb-2">
+              <span>Su</span>
+              <span>Mo</span>
+              <span>Tu</span>
+              <span>We</span>
+              <span>Th</span>
+              <span>Fr</span>
+              <span>Sa</span>
+            </div>
+
+            <div className="grid grid-cols-7 gap-1.5">
+              {calendarDays.map((day, idx) => {
+                if (day === null) {
+                  return <div key={`empty-${idx}`} className="aspect-square"></div>;
+                }
+
+                const dayEvents = getDayEvents(day);
+                const hasEvents = dayEvents.length > 0;
+                const isSelected = selectedDay === day;
+
+                return (
+                  <button
+                    key={`day-${day}`}
+                    onClick={() => setSelectedDay(day)}
+                    className={`aspect-square rounded-xl text-xs font-semibold flex flex-col items-center justify-center relative transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-accent text-white shadow-md shadow-accent/25'
+                        : hasEvents
+                          ? 'bg-accent/10 border border-accent/25 text-accent hover:bg-accent/20'
+                          : 'hover:bg-theme-border/30 text-theme-text-primary'
+                    }`}
+                  >
+                    <span>{day}</span>
+                    {hasEvents && !isSelected && (
+                      <span className="absolute bottom-1 h-1 w-1 bg-accent rounded-full animate-pulse"></span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <table className="min-w-full text-xs text-left">
-            <thead>
-              <tr className="text-theme-text-secondary border-b border-theme-border/30">
-                <th className="pb-1.5 font-medium">Quarter</th>
-                <th className="pb-1.5 font-medium text-right">Score</th>
-              </tr>
-            </thead>
-            <tbody>
-              {scoreHistory.map(row => (
-                <tr key={row.quarter} className="border-b border-theme-border/20 last:border-0">
-                  <td className="py-2 text-theme-text-primary">{row.quarter} Summary</td>
-                  <td className="py-2 text-theme-text-primary text-right font-medium">{row.score} / 5.0</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+
+          {/* Selected Day Event Details */}
+          <div className="flex-1 space-y-2 max-h-[140px] overflow-y-auto pr-1">
+            <h4 className="text-[10px] font-bold text-theme-text-secondary uppercase tracking-wider">
+              Events on {monthNames[calMonth]} {selectedDay || '?'}:
+            </h4>
+            {selectedDay ? (
+              (() => {
+                const dayEvents = getDayEvents(selectedDay);
+                if (dayEvents.length === 0) {
+                  return (
+                    <div className="text-[11px] text-theme-text-secondary py-3 text-center bg-white/5 border border-white/5 rounded-xl">
+                      No events scheduled for this date.
+                    </div>
+                  );
+                }
+                return dayEvents.map(ev => (
+                  <div key={ev.id} className="p-3 bg-white/5 border border-white/5 rounded-xl flex items-center justify-between gap-3 hover:bg-white/10 transition-all text-xs">
+                    <div>
+                      <h5 className="font-semibold text-theme-text-primary">{ev.title}</h5>
+                      <p className="text-[10px] text-theme-text-secondary mt-0.5">{ev.committee}</p>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 bg-accent/15 text-accent font-medium rounded-md">
+                      {ev.status}
+                    </span>
+                  </div>
+                ));
+              })()
+            ) : (
+              <div className="text-[11px] text-theme-text-secondary py-3 text-center bg-white/5 border border-white/5 rounded-xl">
+                Select a day with indicators to audit scheduled events.
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Criteria Breakdown (Bar Chart) */}
+        {/* Top Performers Leaderboard */}
         <div className="glass-panel rounded-2xl p-6 flex flex-col space-y-4">
           <div>
-            <h3 className="text-base font-semibold text-theme-text-primary">Performance by Criteria</h3>
-            <p className="text-xs text-theme-text-secondary">Average score breakdown from Q4 evaluations</p>
+            <h3 className="text-base font-semibold text-theme-text-primary">Top Center Performers</h3>
+            <p className="text-xs text-theme-text-secondary">Leaderboard ranked by overall performance evaluations</p>
           </div>
-          <div className="h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={criteriaScores} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
-                <XAxis dataKey="name" stroke="var(--text-secondary)" fontSize={10} />
-                <YAxis domain={[0, 5]} stroke="var(--text-secondary)" fontSize={11} ticks={[0, 1, 2, 3, 4, 5]} />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'var(--card-bg)', 
-                    borderColor: 'var(--card-border)', 
-                    borderRadius: '12px',
-                    color: 'var(--text-primary)',
-                    fontSize: '12px'
-                  }}
-                />
-                <Bar dataKey="score" radius={[8, 8, 0, 0]} maxBarSize={45}>
-                  {criteriaScores.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+
+          <div className="flex-1 space-y-3.5">
+            {leaderboard.map((perf, index) => {
+              const rankIcons = [
+                <Crown key="crown" className="h-5 w-5 text-warning shrink-0" />,
+                <Award key="award2" className="h-5 w-5 text-theme-text-primary shrink-0 opacity-80" />,
+                <Award key="award3" className="h-5 w-5 text-theme-text-secondary shrink-0 opacity-60" />,
+              ];
+
+              return (
+                <div 
+                  key={perf.name} 
+                  className="flex items-center justify-between p-3.5 bg-theme-border/10 border border-theme-border/20 rounded-xl hover:bg-theme-border/15 transition-all text-xs"
+                >
+                  <div className="flex items-center gap-3.5">
+                    {/* Rank Indicator */}
+                    <div className="w-6 flex justify-center">
+                      {index < 3 ? rankIcons[index] : <span className="font-bold text-theme-text-secondary">#{index + 1}</span>}
+                    </div>
+
+                    {/* Initials Avatar */}
+                    <div className={`h-9 w-9 rounded-xl flex items-center justify-center border font-bold ${
+                      perf.type === 'committee'
+                        ? 'bg-success/10 border-success/20 text-success'
+                        : 'bg-accent/10 border-accent/20 text-accent'
+                    }`}>
+                      {perf.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                    </div>
+
+                    {/* Name & Role details */}
+                    <div>
+                      <h4 className="font-semibold text-theme-text-primary leading-snug">{perf.name}</h4>
+                      <p className="text-[10px] text-theme-text-secondary mt-0.5">{perf.role}</p>
+                    </div>
+                  </div>
+
+                  {/* Rating Badge */}
+                  <div className="flex items-center gap-1 px-2.5 py-1 bg-success/15 border border-success/20 text-success rounded-xl font-bold">
+                    <span>{perf.score.toFixed(1)}</span>
+                    <Star className="h-3.5 w-3.5 fill-current" />
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          <table className="min-w-full text-xs text-left">
-            <thead>
-              <tr className="text-theme-text-secondary border-b border-theme-border/30">
-                <th className="pb-1.5 font-medium">Evaluation Criteria</th>
-                <th className="pb-1.5 font-medium text-right">Score</th>
-              </tr>
-            </thead>
-            <tbody>
-              {criteriaScores.map(row => (
-                <tr key={row.name} className="border-b border-theme-border/20 last:border-0">
-                  <td className="py-2 text-theme-text-primary">{row.name}</td>
-                  <td className="py-2 text-theme-text-primary text-right font-medium">{row.score} / 5.0</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
 
       </div>
