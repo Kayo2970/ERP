@@ -8,8 +8,8 @@ This repository contains the private internal operations and management dashboar
 
 - **`leads-dashboard/`**: The Next.js (App Router) + TypeScript + Tailwind CSS (v4) project containing the active implementation of the dashboard.
 - **`PROJECT DOCS/`**: Curated product specifications, sitemaps, database models, technical specifications, and copywriting guidelines.
-- **`REFERENCE DATA/`**: Official Ramaiah University of Applied Sciences leadership directory, hierarchy structure, and references.
-- **`login_creds.md`**: Complete roster directory login credentials and testing accounts list.
+- **`REFERENCE DATA/`**: Official Ramaiah University of Applied Sciences leadership directory, hierarchy structure, source images, and references.
+- **`docs/`**: Engineering/ops working docs — login credentials for testing accounts, the bug audit log, and implementation specs for past fix passes.
 
 ---
 
@@ -46,7 +46,7 @@ This app is designed to run as **one long-lived instance** on a self-hosted serv
 
 **Important:** `data/database.json` is git-ignored on purpose — it's live server state, not source code. Only code changes travel through git; the data file should never be committed, and it must persist across redeploys (mount `leads-dashboard/data/` as a persistent TrueNAS dataset so a rebuild doesn't wipe live test data).
 
-**How live sync works once the server is running:** every open dashboard page polls the server every 7 seconds and re-renders automatically when new data arrives — no manual refresh needed to see a teammate's change. If you ever suspect sync is stuck (a change made by one person isn't showing up for another, even though both are pointed at the same server), see [`bugs-to-fix.md`](bugs-to-fix.md) for the known-issues log and root-cause history of exactly this class of bug.
+**How live sync works once the server is running:** every open dashboard page polls the server every 7 seconds and re-renders automatically when new data arrives — no manual refresh needed to see a teammate's change. If you ever suspect sync is stuck (a change made by one person isn't showing up for another, even though both are pointed at the same server), see [`docs/bugs-to-fix.md`](docs/bugs-to-fix.md) for the known-issues log and root-cause history of exactly this class of bug.
 
 ---
 
@@ -63,7 +63,7 @@ The system dynamically validates sign-ins against the registered members databas
 | **Core Committee** | `gurutejas.c@msruas.ac.in` | **Tier 5** — Operations control, task setup, form builder |
 | **Training Associate** | `kunal.bhadauria@msruas.ac.in` | **Tier 6** — Member dashboard, task completion, claim submission |
 
-For a complete index of all 35+ testing accounts, see [login_creds.md](login_creds.md).
+For a complete index of all 35+ testing accounts, see [docs/login_creds.md](docs/login_creds.md).
 
 ---
 
@@ -88,3 +88,9 @@ For detailed requirements and specs, see the `PROJECT DOCS/files/` directory:
 5. [Entity-Relationship Diagram & Database Schemas](PROJECT%20DOCS/files/05-DataModel-ERD-LEADSDashboard.md)
 6. [Copywriting & Email Alert Templates](PROJECT%20DOCS/files/06-Content-Copy-LEADSDashboard.md)
 7. [Reports & Analytics Specs](PROJECT%20DOCS/files/07-ReportsAnalytics-LEADSDashboard.md)
+
+For engineering/ops working docs, see `docs/`:
+- [Bug Audit Log](docs/bugs-to-fix.md) — full codebase bug audit with current resolution status per item.
+- [Backend Sync Fix — Implementation Spec](docs/changes-needed-for-claude.md) — the spec behind the per-collection API routes, write mutex, and live-sync architecture.
+- [Full System Review](docs/recommended-fixes.md) — screen-by-screen review of the dashboard.
+- [Testing Login Credentials](docs/login_creds.md) — full roster of test accounts.
