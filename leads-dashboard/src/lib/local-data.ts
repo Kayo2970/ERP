@@ -489,11 +489,14 @@ const initialSubmissions: FormSubmissionItem[] = [
 ];
 
 // -------------------------------------------------------------
-// Server Sync & Disk Persistence Helpers
+// Server Sync & Per-Collection API Helpers
 // -------------------------------------------------------------
 
-let syncTimeout: any = null;
-
+/**
+ * Fetch all collections from the server and hydrate localStorage.
+ * Server data ALWAYS wins — this is safe to call repeatedly (polling).
+ * Falls back to initialX sample data only if localStorage is also empty.
+ */
 export async function syncWithServer(): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   try {
@@ -501,67 +504,104 @@ export async function syncWithServer(): Promise<boolean> {
     if (!res.ok) return false;
     const data = await res.json();
     if (data && typeof data === 'object') {
-      if (Array.isArray(data.members) && data.members.length > 0) {
-        localStorage.setItem('leads_members', JSON.stringify(data.members));
+      // Always hydrate from server — server is source of truth
+      if (Array.isArray(data.members)) {
+        localStorage.setItem('leads_members', JSON.stringify(
+          data.members.length > 0 ? data.members : initialMembers
+        ));
       }
-      if (Array.isArray(data.events) && data.events.length > 0) {
-        localStorage.setItem('leads_events', JSON.stringify(data.events));
+      if (Array.isArray(data.events)) {
+        localStorage.setItem('leads_events', JSON.stringify(
+          data.events.length > 0 ? data.events : initialEvents
+        ));
       }
-      if (Array.isArray(data.tasks) && data.tasks.length > 0) {
-        localStorage.setItem('leads_tasks', JSON.stringify(data.tasks));
+      if (Array.isArray(data.tasks)) {
+        localStorage.setItem('leads_tasks', JSON.stringify(
+          data.tasks.length > 0 ? data.tasks : initialTasks
+        ));
       }
-      if (Array.isArray(data.ratings) && data.ratings.length > 0) {
-        localStorage.setItem('leads_ratings', JSON.stringify(data.ratings));
+      if (Array.isArray(data.ratings)) {
+        localStorage.setItem('leads_ratings', JSON.stringify(
+          data.ratings.length > 0 ? data.ratings : initialRatings
+        ));
       }
-      if (Array.isArray(data.reimbursements) && data.reimbursements.length > 0) {
-        localStorage.setItem('leads_reimbursements', JSON.stringify(data.reimbursements));
+      if (Array.isArray(data.reimbursements)) {
+        localStorage.setItem('leads_reimbursements', JSON.stringify(
+          data.reimbursements.length > 0 ? data.reimbursements : initialReimbursements
+        ));
       }
-      if (Array.isArray(data.announcements) && data.announcements.length > 0) {
-        localStorage.setItem('leads_announcements', JSON.stringify(data.announcements));
+      if (Array.isArray(data.announcements)) {
+        localStorage.setItem('leads_announcements', JSON.stringify(
+          data.announcements.length > 0 ? data.announcements : initialAnnouncements
+        ));
       }
-      if (Array.isArray(data.forms) && data.forms.length > 0) {
-        localStorage.setItem('leads_custom_forms', JSON.stringify(data.forms));
+      if (Array.isArray(data.forms)) {
+        localStorage.setItem('leads_custom_forms', JSON.stringify(
+          data.forms.length > 0 ? data.forms : initialForms
+        ));
       }
-      if (Array.isArray(data.submissions) && data.submissions.length > 0) {
-        localStorage.setItem('leads_form_submissions', JSON.stringify(data.submissions));
+      if (Array.isArray(data.submissions)) {
+        localStorage.setItem('leads_form_submissions', JSON.stringify(
+          data.submissions.length > 0 ? data.submissions : initialSubmissions
+        ));
       }
-      if (Array.isArray(data.auditLogs) && data.auditLogs.length > 0) {
+      if (Array.isArray(data.auditLogs)) {
         localStorage.setItem('leads_audit_logs', JSON.stringify(data.auditLogs));
       }
       return true;
     }
   } catch (err) {
-    console.warn('Server sync skipped (offline or initial boot):', err);
+    console.warn('[sync] Server sync skipped (offline or starting up):', err);
   }
   return false;
 }
 
-export function flushToServer(): void {
-  if (typeof window === 'undefined') return;
-  if (syncTimeout) clearTimeout(syncTimeout);
+/**
+ * Fire-and-forget helper for targeted per-collection server calls.
+ * Does NOT send the entire database — only touches the one record that changed.
+ */
+async function serverPost(endpoint: string, body: any): Promise<any> {
+  if (typeof window === 'undefined') return null;
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) console.warn(`[api] POST ${endpoint} failed:`, res.status);
+    return res.ok ? res.json() : null;
+  } catch (err) {
+    console.warn(`[api] POST ${endpoint} error:`, err);
+    return null;
+  }
+}
 
-  syncTimeout = setTimeout(async () => {
-    try {
-      const payload = {
-        members: getMembers(),
-        events: getEvents(),
-        tasks: getTasks(),
-        ratings: getRatings(),
-        reimbursements: getReimbursements(),
-        announcements: getAnnouncements(),
-        forms: getForms(),
-        submissions: getSubmissions(),
-        auditLogs: getAuditLogs(),
-      };
-      await fetch('/api/data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-    } catch (err) {
-      console.warn('Failed to flush updates to server JSON store:', err);
-    }
-  }, 300);
+async function serverPatch(endpoint: string, id: string, updates: any): Promise<any> {
+  if (typeof window === 'undefined') return null;
+  try {
+    const res = await fetch(`${endpoint}/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) console.warn(`[api] PATCH ${endpoint}/${id} failed:`, res.status);
+    return res.ok ? res.json() : null;
+  } catch (err) {
+    console.warn(`[api] PATCH ${endpoint}/${id} error:`, err);
+    return null;
+  }
+}
+
+async function serverDelete(endpoint: string, id: string): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  try {
+    const res = await fetch(`${endpoint}/${id}`, { method: 'DELETE' });
+    if (!res.ok) console.warn(`[api] DELETE ${endpoint}/${id} failed:`, res.status);
+    return res.ok;
+  } catch (err) {
+    console.warn(`[api] DELETE ${endpoint}/${id} error:`, err);
+    return false;
+  }
 }
 
 // -------------------------------------------------------------
@@ -588,14 +628,16 @@ export function getMembers(): Member[] {
       console.error(e);
     }
   }
-  localStorage.setItem('leads_members', JSON.stringify(initialMembers));
+  // Do NOT seed localStorage here — return sample data without writing
+  // syncWithServer() will seed properly on mount
   return initialMembers;
 }
 
 export function saveMembers(members: Member[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_members', JSON.stringify(members));
-  flushToServer();
+  // Note: bulk saves (e.g. bulkUpdateMembers) still write to /api/data for simplicity
+  // Individual mutations (addMember, deleteMember) use targeted endpoints
 }
 
 export function addMember(member: Omit<Member, 'id'>): Member {
@@ -611,6 +653,7 @@ export function addMember(member: Omit<Member, 'id'>): Member {
   };
   current.push(newMember);
   saveMembers(current);
+  serverPost('/api/members', newMember);
   logAuditEvent('MEMBER_ADDED', 'System / Admin', `Added member ${newMember.name} to ${newMember.division}`);
   return newMember;
 }
@@ -622,6 +665,7 @@ export function deleteMember(id: string): void {
 
   const updated = current.filter(m => m.id !== id);
   saveMembers(updated);
+  serverDelete('/api/members', id);
   logAuditEvent('MEMBER_DELETED', 'System / Admin', `Removed member ${target.name} (${target.email})`);
 }
 
@@ -637,15 +681,14 @@ export function bulkUpdateMembers(
   const updated = current.map(m => {
     if (targetIdSet.has(m.id)) {
       updatedCount++;
-      return {
-        ...m,
-        ...updates
-      };
+      return { ...m, ...updates };
     }
     return m;
   });
 
   saveMembers(updated);
+  // Bulk: patch each member individually
+  ids.forEach(id => serverPatch('/api/members', id, updates));
   const changeSummary = Object.entries(updates)
     .filter(([_, v]) => v !== undefined && v !== '')
     .map(([k, v]) => `${k}='${v}'`)
@@ -662,6 +705,7 @@ export function bulkDeleteMembers(ids: string[], actorName: string): Member[] {
 
   const updated = current.filter(m => !targetIdSet.has(m.id));
   saveMembers(updated);
+  Array.from(targetIdSet).forEach(id => serverDelete('/api/members', id));
   logAuditEvent('BULK_MEMBERS_DELETED', actorName, `Bulk removed ${current.length - updated.length} members`);
   return updated;
 }
@@ -685,7 +729,7 @@ export function getEvents(): EventItem[] {
       console.error(e);
     }
   }
-  localStorage.setItem('leads_events', JSON.stringify(initialEvents));
+  // Do NOT seed localStorage here — return sample data without writing
   return initialEvents;
 }
 
@@ -697,7 +741,7 @@ export function getEventById(id: string): EventItem | null {
 export function saveEvents(events: EventItem[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_events', JSON.stringify(events));
-  flushToServer();
+  // Individual mutations use targeted serverPost/serverPatch/serverDelete
 }
 
 export function addEvent(event: Omit<EventItem, 'id' | 'committees'> & { committees?: EventCommittee[] }): EventItem {
@@ -709,6 +753,7 @@ export function addEvent(event: Omit<EventItem, 'id' | 'committees'> & { committ
   };
   events.unshift(newEvent);
   saveEvents(events);
+  serverPost('/api/events', newEvent);
   logAuditEvent('EVENT_CREATED', event.createdBy || 'User', `Created new event: ${newEvent.title}`);
   return newEvent;
 }
@@ -720,6 +765,7 @@ export function updateEvent(id: string, updates: Partial<EventItem>, actorName: 
 
   events[idx] = { ...events[idx], ...updates };
   saveEvents(events);
+  serverPatch('/api/events', id, updates);
   logAuditEvent('EVENT_UPDATED', actorName, `Updated event: ${events[idx].title}`);
   return events[idx];
 }
@@ -731,6 +777,7 @@ export function deleteEvent(id: string, actorName: string): boolean {
 
   const updated = events.filter(e => e.id !== id);
   saveEvents(updated);
+  serverDelete('/api/events', id);
   logAuditEvent('EVENT_DELETED', actorName, `Deleted event: ${target.title}`);
   return true;
 }
@@ -747,6 +794,8 @@ export function addEventCommittee(eventId: string, committeeName: string, actorN
   };
   event.committees.push(newComm);
   saveEvents(events);
+  // Committees are nested in event — patch the whole event object
+  serverPatch('/api/events', eventId, { committees: event.committees });
   logAuditEvent('EVENT_COMMITTEE_ADDED', actorName, `Added committee "${committeeName}" to event "${event.title}"`);
   return event;
 }
@@ -761,6 +810,7 @@ export function updateEventCommitteeMembers(eventId: string, committeeId: string
 
   comm.memberIds = memberIds;
   saveEvents(events);
+  serverPatch('/api/events', eventId, { committees: event.committees });
   logAuditEvent('EVENT_COMMITTEE_UPDATED', actorName, `Updated member assignments for committee "${comm.name}" in event "${event.title}"`);
   return event;
 }
@@ -772,6 +822,7 @@ export function deleteEventCommittee(eventId: string, committeeId: string, actor
 
   event.committees = event.committees.filter(c => c.id !== committeeId);
   saveEvents(events);
+  serverPatch('/api/events', eventId, { committees: event.committees });
   logAuditEvent('EVENT_COMMITTEE_DELETED', actorName, `Removed committee from event "${event.title}"`);
   return event;
 }
@@ -802,14 +853,13 @@ export function getTasks(): TaskItem[] {
       console.error(e);
     }
   }
-  localStorage.setItem('leads_tasks', JSON.stringify(initialTasks));
+  // Do NOT seed localStorage here — return sample data without writing
   return initialTasks;
 }
 
 export function saveTasks(tasks: TaskItem[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_tasks', JSON.stringify(tasks));
-  flushToServer();
 }
 
 export function addTask(task: Omit<TaskItem, 'id' | 'status'> & { status?: TaskItem['status'] }): TaskItem {
@@ -821,6 +871,7 @@ export function addTask(task: Omit<TaskItem, 'id' | 'status'> & { status?: TaskI
   };
   tasks.unshift(newTask);
   saveTasks(tasks);
+  serverPost('/api/tasks', newTask);
   logAuditEvent('TASK_CREATED', task.creatorName || 'User', `Assigned task: ${newTask.title} to ${newTask.assignee}`);
   return newTask;
 }
@@ -832,6 +883,7 @@ export function updateTask(id: string, updates: Partial<TaskItem>, actorName: st
 
   tasks[idx] = { ...tasks[idx], ...updates };
   saveTasks(tasks);
+  serverPatch('/api/tasks', id, updates);
   logAuditEvent('TASK_UPDATED', actorName, `Updated task: ${tasks[idx].title}`);
   return tasks[idx];
 }
@@ -847,6 +899,7 @@ export function deleteTask(id: string, actorName: string): boolean {
 
   const updated = tasks.filter(t => t.id !== id);
   saveTasks(updated);
+  serverDelete('/api/tasks', id);
   logAuditEvent('TASK_DELETED', actorName, `Deleted task: ${target.title}`);
   return true;
 }
@@ -882,14 +935,13 @@ export function getRatings(): RatingItem[] {
       console.error(e);
     }
   }
-  localStorage.setItem('leads_ratings', JSON.stringify(initialRatings));
+  // Do NOT seed localStorage here — return sample data without writing
   return initialRatings;
 }
 
 export function saveRatings(ratings: RatingItem[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_ratings', JSON.stringify(ratings));
-  flushToServer();
 }
 
 export function addRating(rating: Omit<RatingItem, 'id' | 'createdAt'>): RatingItem {
@@ -901,6 +953,7 @@ export function addRating(rating: Omit<RatingItem, 'id' | 'createdAt'>): RatingI
   };
   ratings.unshift(newRating);
   saveRatings(ratings);
+  serverPost('/api/ratings', newRating);
 
   // Update task with rating metadata
   if (rating.taskId) {
@@ -922,6 +975,7 @@ export function updateRating(id: string, updates: Partial<RatingItem>, actorName
     updatedAt: new Date().toISOString().split('T')[0] 
   };
   saveRatings(ratings);
+  serverPatch('/api/ratings', id, updates);
 
   if (ratings[idx].taskId && updates.overallScore) {
     updateTask(ratings[idx].taskId, { ratingScore: updates.overallScore }, actorName);
@@ -938,6 +992,7 @@ export function deleteRating(id: string, actorName: string): boolean {
 
   const updated = ratings.filter(r => r.id !== id);
   saveRatings(updated);
+  serverDelete('/api/ratings', id);
   logAuditEvent('RATING_DELETED', actorName, `Deleted rating record for ${target.targetName}`);
   return true;
 }
@@ -1085,14 +1140,13 @@ export function getReimbursements(): ReimbursementItem[] {
       console.error(e);
     }
   }
-  localStorage.setItem('leads_reimbursements', JSON.stringify(initialReimbursements));
+  // Do NOT seed localStorage here — return sample data without writing
   return initialReimbursements;
 }
 
 export function saveReimbursements(reimbursements: ReimbursementItem[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_reimbursements', JSON.stringify(reimbursements));
-  flushToServer();
 }
 
 export function addReimbursement(item: Omit<ReimbursementItem, 'id' | 'status' | 'submittedAt'>): ReimbursementItem {
@@ -1105,6 +1159,7 @@ export function addReimbursement(item: Omit<ReimbursementItem, 'id' | 'status' |
   };
   current.unshift(newClaim);
   saveReimbursements(current);
+  serverPost('/api/reimbursements', newClaim);
   logAuditEvent('REIMBURSEMENT_CLAIMED', item.memberName, `Submitted expense claim of ₹${item.amount} under ${item.category}`);
   return newClaim;
 }
@@ -1132,6 +1187,7 @@ export function updateReimbursementStatus(
   }
 
   saveReimbursements(current);
+  serverPatch('/api/reimbursements', id, { status: claim.status, decidedAt: claim.decidedAt, firstPassReviewer: claim.firstPassReviewer, finalApprover: claim.finalApprover });
   return claim;
 }
 
@@ -1142,6 +1198,7 @@ export function deleteReimbursement(id: string, actorName: string): boolean {
 
   const updated = current.filter(r => r.id !== id);
   saveReimbursements(updated);
+  serverDelete('/api/reimbursements', id);
   logAuditEvent('REIMBURSEMENT_DELETED', actorName, `Deleted claim #${id} of ₹${target.amount}`);
   return true;
 }
@@ -1160,14 +1217,13 @@ export function getAnnouncements(): AnnouncementItem[] {
       console.error(e);
     }
   }
-  localStorage.setItem('leads_announcements', JSON.stringify(initialAnnouncements));
+  // Do NOT seed localStorage here — return sample data without writing
   return initialAnnouncements;
 }
 
 export function saveAnnouncements(announcements: AnnouncementItem[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_announcements', JSON.stringify(announcements));
-  flushToServer();
 }
 
 export function addAnnouncement(item: Omit<AnnouncementItem, 'id' | 'publishedAt'>): AnnouncementItem {
@@ -1182,6 +1238,7 @@ export function addAnnouncement(item: Omit<AnnouncementItem, 'id' | 'publishedAt
   };
   current.unshift(newAnn);
   saveAnnouncements(current);
+  serverPost('/api/announcements', newAnn);
   logAuditEvent('ANNOUNCEMENT_PUBLISHED', item.authorName, `Published announcement: "${item.title}" [Scope: ${item.scope}]`);
   return newAnn;
 }
@@ -1198,6 +1255,7 @@ export function updateAnnouncement(id: string, updates: Partial<AnnouncementItem
     editedAt: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}` 
   };
   saveAnnouncements(current);
+  serverPatch('/api/announcements', id, updates);
   logAuditEvent('ANNOUNCEMENT_UPDATED', actorName, `Updated announcement: "${current[idx].title}"`);
   return current[idx];
 }
@@ -1209,6 +1267,7 @@ export function deleteAnnouncement(id: string, actorName: string): boolean {
 
   const updated = current.filter(a => a.id !== id);
   saveAnnouncements(updated);
+  serverDelete('/api/announcements', id);
   logAuditEvent('ANNOUNCEMENT_DELETED', actorName, `Retracted announcement: "${target.title}"`);
   return true;
 }
@@ -1227,14 +1286,13 @@ export function getForms(): PublicFormItem[] {
       console.error(e);
     }
   }
-  localStorage.setItem('leads_custom_forms', JSON.stringify(initialForms));
+  // Do NOT seed localStorage here — return sample data without writing
   return initialForms;
 }
 
 export function saveForms(forms: PublicFormItem[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_custom_forms', JSON.stringify(forms));
-  flushToServer();
 }
 
 export function addForm(form: Omit<PublicFormItem, 'id' | 'createdAt'>): PublicFormItem {
@@ -1246,6 +1304,7 @@ export function addForm(form: Omit<PublicFormItem, 'id' | 'createdAt'>): PublicF
   };
   current.unshift(newForm);
   saveForms(current);
+  serverPost('/api/forms', newForm);
   logAuditEvent('FORM_CREATED', form.createdBy, `Created public form "${form.title}" at /forms/${form.slug}`);
   return newForm;
 }
@@ -1257,6 +1316,7 @@ export function updateForm(id: string, updates: Partial<PublicFormItem>, actorNa
 
   current[idx] = { ...current[idx], ...updates };
   saveForms(current);
+  serverPatch('/api/forms', id, updates);
   logAuditEvent('FORM_UPDATED', actorName, `Updated public form "${current[idx].title}"`);
   return current[idx];
 }
@@ -1268,6 +1328,7 @@ export function deleteForm(id: string, actorName: string): boolean {
 
   const updated = current.filter(f => f.id !== id);
   saveForms(updated);
+  serverDelete('/api/forms', id);
   logAuditEvent('FORM_DELETED', actorName, `Deleted public form "${target.title}"`);
   return true;
 }
@@ -1287,7 +1348,7 @@ export function getSubmissions(): FormSubmissionItem[] {
       console.error(e);
     }
   }
-  localStorage.setItem('leads_form_submissions', JSON.stringify(initialSubmissions));
+  // Do NOT seed localStorage here — return sample data without writing
   return initialSubmissions;
 }
 
@@ -1304,7 +1365,7 @@ export function addSubmission(sub: Omit<FormSubmissionItem, 'id' | 'submittedAt'
   current.unshift(newSub);
   if (typeof window !== 'undefined') {
     localStorage.setItem('leads_form_submissions', JSON.stringify(current));
-    flushToServer();
+    serverPost('/api/submissions', newSub);
   }
   logAuditEvent('FORM_SUBMITTED', 'Public Respondent', `New response submitted for form slug "${sub.slug}"`);
   return newSub;
@@ -1342,8 +1403,9 @@ export function logAuditEvent(action: string, actorName: string, details: string
     timestamp
   };
   current.unshift(newLog);
-  // Keep last 100 logs
+  // Keep last 100 logs in localStorage
   localStorage.setItem('leads_audit_logs', JSON.stringify(current.slice(0, 100)));
-  flushToServer();
+  // Push to server asynchronously (fire-and-forget)
+  serverPost('/api/auditlogs', newLog);
 }
 

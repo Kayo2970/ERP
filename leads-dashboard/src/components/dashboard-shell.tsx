@@ -196,9 +196,14 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       setUser(parsedUser);
       setIsAuthenticated(true);
 
-      // Perform initial background sync with server database.json
+      // Initial sync: pull server state into localStorage immediately
       setIsSyncing(true);
       syncWithServer().finally(() => setIsSyncing(false));
+
+      // Poll every 7 seconds so changes from other devices appear automatically
+      const pollInterval = setInterval(() => {
+        syncWithServer().catch(() => {}); // silent — offline is OK
+      }, 7000);
 
       // Load dynamic notifications from recent announcements and tasks
       const recentAnnounce = getAnnouncements().slice(0, 3).map(a => ({
@@ -214,10 +219,13 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         read: false
       }));
       setNotifications([...recentAnnounce, ...recentTasks]);
+
+      return () => clearInterval(pollInterval);
     } catch (e) {
       console.error('Failed to parse user session:', e);
       router.replace('/');
     }
+
   }, [router]);
 
   // Click outside to close dropdowns
