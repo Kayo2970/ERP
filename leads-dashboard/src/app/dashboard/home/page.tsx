@@ -64,7 +64,7 @@ export default function DashboardHome() {
     
     // Dynamic Leaderboard calculation from actual ratings
     const ratingsList = getRatings();
-    const totalsMap: Record<string, { total: number; count: number; role: string; type: string }> = {};
+    const totalsMap: Record<string, { total: number; count: number; role: string }> = {};
     
     ratingsList.forEach(r => {
       const key = r.targetName;
@@ -72,8 +72,7 @@ export default function DashboardHome() {
         totalsMap[key] = { 
           total: 0, 
           count: 0, 
-          role: r.targetType === 'committee' ? 'Committee Unit' : 'Member Evaluation',
-          type: r.targetType
+          role: 'Member Evaluation'
         };
       }
       totalsMap[key].total += r.overallScore;
@@ -85,8 +84,7 @@ export default function DashboardHome() {
       return {
         name,
         role: item.role,
-        score: Math.round((item.total / item.count) * 10) / 10,
-        type: item.type
+        score: Math.round((item.total / item.count) * 10) / 10
       };
     }).sort((a, b) => b.score - a.score);
 
@@ -371,15 +369,19 @@ export default function DashboardHome() {
                   );
                 }
                 return dayEvents.map(ev => (
-                  <div key={ev.id} className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl flex items-center justify-between gap-3 hover:bg-theme-border/20 transition-all">
+                  <Link 
+                    key={ev.id} 
+                    href={`/dashboard/events/${ev.id}`}
+                    className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl flex items-center justify-between gap-3 hover:bg-theme-border/20 transition-all block cursor-pointer"
+                  >
                     <div>
-                      <h5 className="font-semibold text-theme-text-primary text-xs">{ev.title}</h5>
-                      <p className="text-[10px] text-theme-text-secondary mt-0.5">{ev.committee}</p>
+                      <h5 className="font-semibold text-theme-text-primary text-xs hover:text-accent transition-colors">{ev.title}</h5>
+                      <p className="text-[10px] text-theme-text-secondary mt-0.5">{(ev.committees || []).length} Sub-Committees</p>
                     </div>
                     <span className="text-[10px] px-2.5 py-0.5 bg-accent/15 text-accent font-semibold rounded-md capitalize">
                       {ev.status}
                     </span>
-                  </div>
+                  </Link>
                 ));
               })()
             ) : (

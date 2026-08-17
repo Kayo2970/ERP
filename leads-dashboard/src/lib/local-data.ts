@@ -1,10 +1,23 @@
+export type MemberDivision = 'Advisory Board' | 'Core Committee' | 'Training Associate' | 'Alumni';
+
 export interface Member {
   id: string;
   name: string;
   email: string;
   role: string;
   tier: number;
-  committee: string;
+  division: MemberDivision;
+  committee?: string; // Legacy fallback
+  department?: string;
+  batch?: string; // e.g. "Class of 2025" for Alumni
+}
+
+export interface EventCommittee {
+  id: string;
+  name: string; // e.g. "Stage & Audio-Visual", "Hospitality & Logistics", "Design & Media"
+  leadMemberId?: string;
+  leadMemberName?: string;
+  memberIds: string[]; // Students participating in this event committee
 }
 
 export interface EventItem {
@@ -13,8 +26,9 @@ export interface EventItem {
   description: string;
   startDate: string;
   endDate: string;
-  committee: string;
   status: 'planned' | 'active' | 'completed' | 'archived';
+  location?: string;
+  committees: EventCommittee[];
   createdBy?: string;
 }
 
@@ -23,7 +37,10 @@ export interface TaskItem {
   title: string;
   event?: string;
   eventId?: string;
+  eventCommitteeId?: string;
+  eventCommitteeName?: string;
   assignee: string;
+  assigneeId?: string;
   assigneeEmail?: string;
   assigneeType: 'individual' | 'committee';
   dueDate: string;
@@ -32,13 +49,18 @@ export interface TaskItem {
   extensionReason?: string;
   decidedBy?: string;
   decidedAt?: string;
+  ratingScore?: number;
+  ratedAt?: string;
 }
 
 export interface RatingItem {
   id: string;
-  targetType: 'individual' | 'committee';
-  targetName: string;
-  targetId: string; // Member ID or Committee Name
+  taskId: string;
+  taskTitle: string;
+  eventId?: string;
+  eventName?: string;
+  targetId: string; // Member ID
+  targetName: string; // Member Name
   raterName: string;
   quality: number;
   timeliness: number;
@@ -72,7 +94,7 @@ export interface AnnouncementItem {
   id: string;
   title: string;
   content: string;
-  scope: string; // 'All Members' | 'Executive Council' | 'Advisory Board' | specific committee
+  scope: string; // 'All Members' | 'Advisory Board' | 'Core Committee' | 'Training Associate' | 'Alumni'
   authorName: string;
   publishedAt: string;
   editedAt?: string;
@@ -118,76 +140,274 @@ export interface AuditLogItem {
   timestamp: string;
 }
 
-const initialCommittees = [
-  'Executive Council', 
-  'Senior Student Leadership', 
-  'Organizing Committee', 
-  'Food & Catering Committee', 
-  'Logistics & Stage Committee', 
-  'Public Relations Committee', 
-  'Finance Committee'
-];
-
-// Initial mock data matching leadership website and dashboard requirements
+// Initial mock data matching leadership website and division structure
 const initialMembers: Member[] = [
-  { id: 'm1', name: 'Kayomarz Pavri', email: 'kayomarz.pavri@msruas.ac.in', role: 'Super User', tier: 1, committee: 'All Committees' },
-  { id: 'm2', name: 'Dr. Subhadeep Mukherjee', email: 'subhadeep.mukherjee@msruas.ac.in', role: 'Centre Head', tier: 2, committee: 'Executive Council' },
-  { id: 'm3', name: 'Dr. Kiran Kumar B M', email: 'kiran.kumar@msruas.ac.in', role: 'Head of Events', tier: 3, committee: 'Executive Council' },
-  { id: 'm4', name: 'Dr. K. M. Sharath Kumar', email: 'sharath.kumar@msruas.ac.in', role: 'Advisory Board', tier: 4, committee: 'Executive Council' },
-  { id: 'm5', name: 'Gurutejas C', email: 'gurutejas.c@msruas.ac.in', role: 'Core Committee', tier: 5, committee: 'Senior Student Leadership' },
-  { id: 'm6', name: 'Kunal Bhadauria', email: 'kunal.bhadauria@msruas.ac.in', role: 'Core Committee', tier: 5, committee: 'Organizing Committee' },
-  { id: 'm7', name: 'Dr. Hari Krishna S', email: 'hari.krishna@msruas.ac.in', role: 'Advisory Board', tier: 4, committee: 'Executive Council' },
-  { id: 'm8', name: 'Keerthan J', email: 'keerthan.j@msruas.ac.in', role: 'Training Associate', tier: 6, committee: 'Organizing Committee' },
-  { id: 'm9', name: 'Dr. Kuldeep Kumar Raina', email: 'kuldeep.raina@msruas.ac.in', role: 'Centre Head', tier: 2, committee: 'Executive Council' },
-  { id: 'm10', name: 'Dr. Pallabi Mund', email: 'pallabi.mund@msruas.ac.in', role: 'Head of Events', tier: 3, committee: 'Executive Council' },
-  { id: 'm11', name: 'Dr. Ajay R', email: 'ajay.r@msruas.ac.in', role: 'Head of Events', tier: 3, committee: 'Executive Council' },
-  { id: 'm12', name: 'Ms. Sujata Bijwe', email: 'sujata.bijwe@msruas.ac.in', role: 'Head of Events', tier: 3, committee: 'Executive Council' },
-  { id: 'm13', name: 'Abhijit Arya', email: 'abhijit.arya@msruas.ac.in', role: 'Core Committee', tier: 5, committee: 'Senior Student Leadership' },
-  { id: 'm14', name: 'Laksh Soorya Singh', email: 'laksh.singh@msruas.ac.in', role: 'Core Committee', tier: 5, committee: 'Senior Student Leadership' },
-  { id: 'm15', name: 'Bhawen Maroo', email: 'bhawen.maroo@msruas.ac.in', role: 'Core Committee', tier: 5, committee: 'Senior Student Leadership' },
-  { id: 'm16', name: 'Bharvi A Padia', email: 'bharvi.padia@msruas.ac.in', role: 'Core Committee', tier: 5, committee: 'Senior Student Leadership' },
-  { id: 'm17', name: 'Arvind Rakshith', email: 'arvind.rakshith@msruas.ac.in', role: 'Core Committee', tier: 5, committee: 'Senior Student Leadership' },
-  { id: 'm18', name: 'Shreesha S N', email: 'shreesha.sn@msruas.ac.in', role: 'Core Committee', tier: 5, committee: 'Senior Student Leadership' },
-  { id: 'm19', name: 'Nuthan H', email: 'nuthan.h@msruas.ac.in', role: 'Core Committee', tier: 5, committee: 'Organizing Committee' },
-  { id: 'm20', name: 'S Bhavya Shree', email: 'bhavya.shree@msruas.ac.in', role: 'Training Associate', tier: 6, committee: 'Organizing Committee' },
-  { id: 'm21', name: 'Shriram SG', email: 'shriram.sg@msruas.ac.in', role: 'Training Associate', tier: 6, committee: 'Organizing Committee' },
-  { id: 'm22', name: 'Manoj Petakamsetty', email: 'manoj.petakamsetty@msruas.ac.in', role: 'Training Associate', tier: 6, committee: 'Organizing Committee' },
-  { id: 'm23', name: 'Sudev Mitra', email: 'sudev.mitra@msruas.ac.in', role: 'Training Associate', tier: 6, committee: 'Organizing Committee' },
-  { id: 'm24', name: 'Jyotsna Karn', email: 'jyotsna.karn@msruas.ac.in', role: 'Training Associate', tier: 6, committee: 'Organizing Committee' },
-  { id: 'm25', name: 'Shravya T', email: 'shravya.t@msruas.ac.in', role: 'Training Associate', tier: 6, committee: 'Organizing Committee' },
-  { id: 'm26', name: 'P Koushik Reddy', email: 'koushik.reddy@msruas.ac.in', role: 'Training Associate', tier: 6, committee: 'Organizing Committee' },
-  { id: 'm27', name: 'Sadiya Sawood', email: 'sadiya.sawood@msruas.ac.in', role: 'Training Associate', tier: 6, committee: 'Organizing Committee' },
-  { id: 'm28', name: 'Syed Furqaan Ahmed', email: 'furqaan.ahmed@msruas.ac.in', role: 'Training Associate', tier: 6, committee: 'Organizing Committee' },
-  { id: 'm29', name: 'Kayomarz M Pavri', email: 'kayomarz.pavri@msruas.ac.in', role: 'Core Committee', tier: 5, committee: 'Organizing Committee' },
-  { id: 'm30', name: 'Nimisha K M', email: 'nimisha.km@msruas.ac.in', role: 'Training Associate', tier: 6, committee: 'Organizing Committee' },
-  { id: 'm31', name: 'Aravind Manashetti', email: 'aravind.manashetti@msruas.ac.in', role: 'Training Associate', tier: 6, committee: 'Organizing Committee' },
-  { id: 'm32', name: 'Shwetha S', email: 'shwetha.s@msruas.ac.in', role: 'Training Associate', tier: 6, committee: 'Organizing Committee' },
-  { id: 'm33', name: 'Kishan KP', email: 'kishan.kp@msruas.ac.in', role: 'Training Associate', tier: 6, committee: 'Organizing Committee' },
-  { id: 'm34', name: 'Yash Chandak', email: 'yash.chandak@msruas.ac.in', role: 'Training Associate', tier: 6, committee: 'Organizing Committee' },
-  { id: 'm35', name: 'Niyati Chawra', email: 'niyati.chawra@msruas.ac.in', role: 'Training Associate', tier: 6, committee: 'Organizing Committee' },
+  { id: 'm1', name: 'Kayomarz Pavri', email: 'kayomarz.pavri@msruas.ac.in', role: 'Super User', tier: 1, division: 'Core Committee' },
+  { id: 'm2', name: 'Dr. Subhadeep Mukherjee', email: 'subhadeep.mukherjee@msruas.ac.in', role: 'Centre Head', tier: 2, division: 'Advisory Board' },
+  { id: 'm3', name: 'Dr. Kiran Kumar B M', email: 'kiran.kumar@msruas.ac.in', role: 'Head of Events', tier: 3, division: 'Advisory Board' },
+  { id: 'm4', name: 'Dr. K. M. Sharath Kumar', email: 'sharath.kumar@msruas.ac.in', role: 'Advisory Board Member', tier: 4, division: 'Advisory Board' },
+  { id: 'm5', name: 'Gurutejas C', email: 'gurutejas.c@msruas.ac.in', role: 'President & Student Lead', tier: 5, division: 'Core Committee' },
+  { id: 'm6', name: 'Kunal Bhadauria', email: 'kunal.bhadauria@msruas.ac.in', role: 'Vice President', tier: 5, division: 'Core Committee' },
+  { id: 'm7', name: 'Dr. Hari Krishna S', email: 'hari.krishna@msruas.ac.in', role: 'Faculty Advisor', tier: 4, division: 'Advisory Board' },
+  { id: 'm8', name: 'Keerthan J', email: 'keerthan.j@msruas.ac.in', role: 'Junior Coordinator', tier: 6, division: 'Training Associate' },
+  { id: 'm9', name: 'Dr. Kuldeep Kumar Raina', email: 'kuldeep.raina@msruas.ac.in', role: 'Vice Chancellor / Advisory Patron', tier: 2, division: 'Advisory Board' },
+  { id: 'm10', name: 'Dr. Pallabi Mund', email: 'pallabi.mund@msruas.ac.in', role: 'Associate Advisor', tier: 3, division: 'Advisory Board' },
+  { id: 'm11', name: 'Dr. Ajay R', email: 'ajay.r@msruas.ac.in', role: 'Faculty Advisor', tier: 3, division: 'Advisory Board' },
+  { id: 'm12', name: 'Ms. Sujata Bijwe', email: 'sujata.bijwe@msruas.ac.in', role: 'Faculty Advisor', tier: 3, division: 'Advisory Board' },
+  { id: 'm13', name: 'Abhijit Arya', email: 'abhijit.arya@msruas.ac.in', role: 'General Secretary', tier: 5, division: 'Core Committee' },
+  { id: 'm14', name: 'Laksh Soorya Singh', email: 'laksh.singh@msruas.ac.in', role: 'Operations Lead', tier: 5, division: 'Core Committee' },
+  { id: 'm15', name: 'Bhawen Maroo', email: 'bhawen.maroo@msruas.ac.in', role: 'Logistics Head', tier: 5, division: 'Core Committee' },
+  { id: 'm16', name: 'Bharvi A Padia', email: 'bharvi.padia@msruas.ac.in', role: 'Finance Head', tier: 5, division: 'Core Committee' },
+  { id: 'm17', name: 'Arvind Rakshith', email: 'arvind.rakshith@msruas.ac.in', role: 'Design & Media Lead', tier: 5, division: 'Core Committee' },
+  { id: 'm18', name: 'Shreesha S N', email: 'shreesha.sn@msruas.ac.in', role: 'Technical Head', tier: 5, division: 'Core Committee' },
+  { id: 'm19', name: 'Nuthan H', email: 'nuthan.h@msruas.ac.in', role: 'Public Relations Lead', tier: 5, division: 'Core Committee' },
+  { id: 'm20', name: 'S Bhavya Shree', email: 'bhavya.shree@msruas.ac.in', role: 'Training Coordinator', tier: 6, division: 'Training Associate' },
+  { id: 'm21', name: 'Shriram SG', email: 'shriram.sg@msruas.ac.in', role: 'Technical Associate', tier: 6, division: 'Training Associate' },
+  { id: 'm22', name: 'Manoj Petakamsetty', email: 'manoj.petakamsetty@msruas.ac.in', role: 'Events Associate', tier: 6, division: 'Training Associate' },
+  { id: 'm23', name: 'Sudev Mitra', email: 'sudev.mitra@msruas.ac.in', role: 'Media Associate', tier: 6, division: 'Training Associate' },
+  { id: 'm24', name: 'Jyotsna Karn', email: 'jyotsna.karn@msruas.ac.in', role: 'Hospitality Associate', tier: 6, division: 'Training Associate' },
+  { id: 'm25', name: 'Shravya T', email: 'shravya.t@msruas.ac.in', role: 'Documentation Associate', tier: 6, division: 'Training Associate' },
+  { id: 'm26', name: 'P Koushik Reddy', email: 'koushik.reddy@msruas.ac.in', role: 'Logistics Associate', tier: 6, division: 'Training Associate' },
+  { id: 'm27', name: 'Sadiya Sawood', email: 'sadiya.sawood@msruas.ac.in', role: 'PR Associate', tier: 6, division: 'Training Associate' },
+  { id: 'm28', name: 'Syed Furqaan Ahmed', email: 'furqaan.ahmed@msruas.ac.in', role: 'Technical Associate', tier: 6, division: 'Training Associate' },
+  { id: 'm29', name: 'Kayomarz M Pavri', email: 'kayomarz.m@msruas.ac.in', role: 'Alumni Mentor (Former President)', tier: 7, division: 'Alumni', batch: 'Batch of 2024' },
+  { id: 'm30', name: 'Nimisha K M', email: 'nimisha.km@msruas.ac.in', role: 'Alumni Mentor (Former Tech Lead)', tier: 7, division: 'Alumni', batch: 'Batch of 2025' },
+  { id: 'm31', name: 'Aravind Manashetti', email: 'aravind.manashetti@msruas.ac.in', role: 'Training Associate', tier: 6, division: 'Training Associate' },
+  { id: 'm32', name: 'Shwetha S', email: 'shwetha.s@msruas.ac.in', role: 'Training Associate', tier: 6, division: 'Training Associate' },
+  { id: 'm33', name: 'Kishan KP', email: 'kishan.kp@msruas.ac.in', role: 'Training Associate', tier: 6, division: 'Training Associate' },
+  { id: 'm34', name: 'Yash Chandak', email: 'yash.chandak@msruas.ac.in', role: 'Training Associate', tier: 6, division: 'Training Associate' },
+  { id: 'm35', name: 'Niyati Chawra', email: 'niyati.chawra@msruas.ac.in', role: 'Training Associate', tier: 6, division: 'Training Associate' },
 ];
 
 const initialEvents: EventItem[] = [
-  { id: 'e1', title: 'Tech Conclave 2026', description: 'Annual tech symposium featuring sustainability and AI panels.', startDate: '2026-09-10', endDate: '2026-09-12', committee: 'Senior Student Leadership', status: 'active', createdBy: 'Kayomarz Pavri' },
-  { id: 'e2', title: 'Alumni Meet 2026', description: 'Reunion meet for RUAS alumni sharing entrepreneurial journeys.', startDate: '2026-10-05', endDate: '2026-10-06', committee: 'Organizing Committee', status: 'planned', createdBy: 'Dr. Subhadeep Mukherjee' },
-  { id: 'e3', title: 'Robotics Workshop', description: 'Hands-on bootcamp on ROS and robot assembly.', startDate: '2026-08-25', endDate: '2026-08-27', committee: 'All Committees', status: 'planned', createdBy: 'Dr. Kiran Kumar B M' },
-  { id: 'e4', title: 'Webinar Series', description: 'Expert online talks on sustainable leadership.', startDate: '2026-08-15', endDate: '2026-08-18', committee: 'Executive Council', status: 'active', createdBy: 'Dr. K. M. Sharath Kumar' },
+  { 
+    id: 'e1', 
+    title: 'Tech Conclave 2026', 
+    description: 'Annual tech symposium featuring sustainability, robotics showcase, and AI panel discussions.', 
+    startDate: '2026-09-10', 
+    endDate: '2026-09-12', 
+    location: 'Ramaiah Technology Campus - Auditorium 1',
+    status: 'active', 
+    createdBy: 'Kayomarz Pavri',
+    committees: [
+      { id: 'c1_1', name: 'Stage & Audio-Visual Committee', leadMemberId: 'm5', leadMemberName: 'Gurutejas C', memberIds: ['m5', 'm8', 'm21'] },
+      { id: 'c1_2', name: 'Hospitality & Catering Committee', leadMemberId: 'm15', leadMemberName: 'Bhawen Maroo', memberIds: ['m15', 'm24', 'm26'] },
+      { id: 'c1_3', name: 'Design & Media Committee', leadMemberId: 'm17', leadMemberName: 'Arvind Rakshith', memberIds: ['m17', 'm23', 'm27'] },
+      { id: 'c1_4', name: 'Finance & Registrations Committee', leadMemberId: 'm16', leadMemberName: 'Bharvi A Padia', memberIds: ['m16', 'm25'] },
+    ]
+  },
+  { 
+    id: 'e2', 
+    title: 'Alumni Meet & Innovation Summit 2026', 
+    description: 'Reunion meet for RUAS alumni sharing entrepreneurial journeys with undergraduate leaders.', 
+    startDate: '2026-10-05', 
+    endDate: '2026-10-06', 
+    location: 'Gnanagangothri Campus - Seminar Complex',
+    status: 'planned', 
+    createdBy: 'Dr. Subhadeep Mukherjee',
+    committees: [
+      { id: 'c2_1', name: 'Alumni Relations Committee', leadMemberId: 'm6', leadMemberName: 'Kunal Bhadauria', memberIds: ['m6', 'm29', 'm30'] },
+      { id: 'c2_2', name: 'Operations & Logistics Committee', leadMemberId: 'm14', leadMemberName: 'Laksh Soorya Singh', memberIds: ['m14', 'm22', 'm26'] }
+    ]
+  },
+  { 
+    id: 'e3', 
+    title: 'Robotics Bootcamp & Hackathon', 
+    description: 'Hands-on bootcamp on ROS, autonomous navigation, and robot assembly.', 
+    startDate: '2026-08-25', 
+    endDate: '2026-08-27', 
+    location: 'Robotics Lab 3',
+    status: 'planned', 
+    createdBy: 'Dr. Kiran Kumar B M',
+    committees: [
+      { id: 'c3_1', name: 'Technical Mentorship Committee', leadMemberId: 'm18', leadMemberName: 'Shreesha S N', memberIds: ['m18', 'm21', 'm28'] },
+      { id: 'c3_2', name: 'Hardware & Kit Logistics', leadMemberId: 'm8', leadMemberName: 'Keerthan J', memberIds: ['m8', 'm31', 'm33'] }
+    ]
+  },
+  { 
+    id: 'e4', 
+    title: 'Leadership Webinar Series', 
+    description: 'Expert online talks on sustainable leadership and modern engineering practices.', 
+    startDate: '2026-08-15', 
+    endDate: '2026-08-18', 
+    location: 'Virtual Zoom / MS Teams Room',
+    status: 'active', 
+    createdBy: 'Dr. K. M. Sharath Kumar',
+    committees: [
+      { id: 'c4_1', name: 'Public Relations & Streaming', leadMemberId: 'm19', leadMemberName: 'Nuthan H', memberIds: ['m19', 'm20', 'm27'] }
+    ]
+  },
 ];
 
 const initialTasks: TaskItem[] = [
-  { id: 't1', title: 'Prepare Event Budget Spreadsheet', event: 'Tech Conclave 2026', eventId: 'e1', assignee: 'Gurutejas C', assigneeEmail: 'gurutejas.c@msruas.ac.in', assigneeType: 'individual', dueDate: '2026-08-20', status: 'Assigned', creatorName: 'Kayomarz Pavri' },
-  { id: 't2', title: 'Coordinate Speaker Panel Invitations', event: 'Alumni Meet 2026', eventId: 'e2', assignee: 'Kunal Bhadauria', assigneeEmail: 'kunal.bhadauria@msruas.ac.in', assigneeType: 'individual', dueDate: '2026-08-22', status: 'In Progress', creatorName: 'Dr. Subhadeep Mukherjee' },
-  { id: 't3', title: 'Setup Audio-Visual Check', event: 'Robotics Workshop', eventId: 'e3', assignee: 'Keerthan J', assigneeEmail: 'keerthan.j@msruas.ac.in', assigneeType: 'individual', dueDate: '2026-08-25', status: 'Assigned', creatorName: 'Dr. Kiran Kumar B M' },
-  { id: 't4', title: 'Compile Feedback Survey Results', event: 'Webinar Series', eventId: 'e4', assignee: 'Gurutejas C', assigneeEmail: 'gurutejas.c@msruas.ac.in', assigneeType: 'individual', dueDate: '2026-08-18', status: 'Pending Extension', creatorName: 'Kayomarz Pavri', extensionReason: 'Waiting for 15 pending responses from participants.' },
-  { id: 't5', title: 'Finalize Event Banners & Design Assets', assignee: 'Organizing Committee', assigneeType: 'committee', dueDate: '2026-08-12', status: 'Completed', creatorName: 'Kunal Bhadauria' },
-  { id: 't6', title: 'Confirm Catering Service Layout', event: 'Tech Conclave 2026', eventId: 'e1', assignee: 'Keerthan J', assigneeEmail: 'keerthan.j@msruas.ac.in', assigneeType: 'individual', dueDate: '2026-08-14', status: 'Completed', creatorName: 'Gurutejas C' },
+  { 
+    id: 't1', 
+    title: 'Prepare Event Budget Spreadsheet', 
+    event: 'Tech Conclave 2026', 
+    eventId: 'e1', 
+    eventCommitteeName: 'Finance & Registrations Committee',
+    assignee: 'Bharvi A Padia', 
+    assigneeId: 'm16',
+    assigneeEmail: 'bharvi.padia@msruas.ac.in', 
+    assigneeType: 'individual', 
+    dueDate: '2026-08-20', 
+    status: 'Completed', 
+    creatorName: 'Kayomarz Pavri',
+    ratingScore: 4.8,
+    ratedAt: '2026-08-14'
+  },
+  { 
+    id: 't2', 
+    title: 'Coordinate Speaker Panel Invitations', 
+    event: 'Alumni Meet & Innovation Summit 2026', 
+    eventId: 'e2', 
+    eventCommitteeName: 'Alumni Relations Committee',
+    assignee: 'Kunal Bhadauria', 
+    assigneeId: 'm6',
+    assigneeEmail: 'kunal.bhadauria@msruas.ac.in', 
+    assigneeType: 'individual', 
+    dueDate: '2026-08-22', 
+    status: 'In Progress', 
+    creatorName: 'Dr. Subhadeep Mukherjee' 
+  },
+  { 
+    id: 't3', 
+    title: 'Setup Audio-Visual & Microphones Check', 
+    event: 'Tech Conclave 2026', 
+    eventId: 'e1', 
+    eventCommitteeName: 'Stage & Audio-Visual Committee',
+    assignee: 'Keerthan J', 
+    assigneeId: 'm8',
+    assigneeEmail: 'keerthan.j@msruas.ac.in', 
+    assigneeType: 'individual', 
+    dueDate: '2026-08-25', 
+    status: 'Completed', 
+    creatorName: 'Dr. Kiran Kumar B M',
+    ratingScore: 4.5,
+    ratedAt: '2026-08-10'
+  },
+  { 
+    id: 't4', 
+    title: 'Compile Participant Feedback Survey Results', 
+    event: 'Leadership Webinar Series', 
+    eventId: 'e4', 
+    eventCommitteeName: 'Public Relations & Streaming',
+    assignee: 'Gurutejas C', 
+    assigneeId: 'm5',
+    assigneeEmail: 'gurutejas.c@msruas.ac.in', 
+    assigneeType: 'individual', 
+    dueDate: '2026-08-18', 
+    status: 'Pending Extension', 
+    creatorName: 'Kayomarz Pavri', 
+    extensionReason: 'Waiting for 15 pending survey responses from participants.' 
+  },
+  { 
+    id: 't5', 
+    title: 'Finalize Event Banners & Backdrop Graphics', 
+    event: 'Tech Conclave 2026',
+    eventId: 'e1',
+    eventCommitteeName: 'Design & Media Committee',
+    assignee: 'Arvind Rakshith', 
+    assigneeId: 'm17',
+    assigneeEmail: 'arvind.rakshith@msruas.ac.in',
+    assigneeType: 'individual', 
+    dueDate: '2026-08-12', 
+    status: 'Completed', 
+    creatorName: 'Kunal Bhadauria',
+    ratingScore: 5.0,
+    ratedAt: '2026-08-12'
+  },
+  { 
+    id: 't6', 
+    title: 'Confirm Catering Service Layout & Meal Counts', 
+    event: 'Tech Conclave 2026', 
+    eventId: 'e1', 
+    eventCommitteeName: 'Hospitality & Catering Committee',
+    assignee: 'Bhawen Maroo', 
+    assigneeId: 'm15',
+    assigneeEmail: 'bhawen.maroo@msruas.ac.in', 
+    assigneeType: 'individual', 
+    dueDate: '2026-08-14', 
+    status: 'Completed', 
+    creatorName: 'Gurutejas C',
+    ratingScore: 4.3,
+    ratedAt: '2026-08-15'
+  },
 ];
 
 const initialRatings: RatingItem[] = [
-  { id: 'r1', targetType: 'individual', targetName: 'Gurutejas C', targetId: 'm5', raterName: 'Dr. Kiran Kumar B M', quality: 5, timeliness: 4, initiative: 5, collaboration: 5, overallScore: 4.8, notes: 'Excellent leadership in tech conclave organization.', quarter: '2026-Q3', createdAt: '2026-08-14' },
-  { id: 'r2', targetType: 'committee', targetName: 'Organizing Committee', targetId: 'Organizing Committee', raterName: 'Dr. Subhadeep Mukherjee', quality: 4, timeliness: 4, initiative: 5, collaboration: 4, overallScore: 4.3, notes: 'Design tasks completed early, very prompt.', quarter: '2026-Q3', createdAt: '2026-08-13' },
-  { id: 'r3', targetType: 'individual', targetName: 'Kunal Bhadauria', targetId: 'm6', raterName: 'Kayomarz Pavri', quality: 5, timeliness: 5, initiative: 4, collaboration: 5, overallScore: 4.8, notes: 'Outstanding dedication across cross-committee logistics.', quarter: '2026-Q3', createdAt: '2026-08-12' },
-  { id: 'r4', targetType: 'individual', targetName: 'Keerthan J', targetId: 'm8', raterName: 'Dr. Kiran Kumar B M', quality: 4, timeliness: 4, initiative: 4, collaboration: 4, overallScore: 4.0, notes: 'Great support in audio visual setup.', quarter: '2026-Q3', createdAt: '2026-08-10' },
+  { 
+    id: 'r1', 
+    taskId: 't1',
+    taskTitle: 'Prepare Event Budget Spreadsheet',
+    eventId: 'e1',
+    eventName: 'Tech Conclave 2026',
+    targetName: 'Bharvi A Padia', 
+    targetId: 'm16', 
+    raterName: 'Dr. Kiran Kumar B M', 
+    quality: 5, 
+    timeliness: 5, 
+    initiative: 4, 
+    collaboration: 5, 
+    overallScore: 4.8, 
+    notes: 'Flawless financial planning and transparent allocations for conclave.', 
+    quarter: '2026-Q3', 
+    createdAt: '2026-08-14' 
+  },
+  { 
+    id: 'r2', 
+    taskId: 't5',
+    taskTitle: 'Finalize Event Banners & Backdrop Graphics',
+    eventId: 'e1',
+    eventName: 'Tech Conclave 2026',
+    targetName: 'Arvind Rakshith', 
+    targetId: 'm17', 
+    raterName: 'Dr. Subhadeep Mukherjee', 
+    quality: 5, 
+    timeliness: 5, 
+    initiative: 5, 
+    collaboration: 5, 
+    overallScore: 5.0, 
+    notes: 'Outstanding branding assets delivered ahead of schedule.', 
+    quarter: '2026-Q3', 
+    createdAt: '2026-08-12' 
+  },
+  { 
+    id: 'r3', 
+    taskId: 't3',
+    taskTitle: 'Setup Audio-Visual & Microphones Check',
+    eventId: 'e1',
+    eventName: 'Tech Conclave 2026',
+    targetName: 'Keerthan J', 
+    targetId: 'm8', 
+    raterName: 'Dr. Kiran Kumar B M', 
+    quality: 4, 
+    timeliness: 5, 
+    initiative: 4, 
+    collaboration: 5, 
+    overallScore: 4.5, 
+    notes: 'Handled AV testing and soundboard check smoothly.', 
+    quarter: '2026-Q3', 
+    createdAt: '2026-08-10' 
+  },
+  { 
+    id: 'r4', 
+    taskId: 't6',
+    taskTitle: 'Confirm Catering Service Layout & Meal Counts',
+    eventId: 'e1',
+    eventName: 'Tech Conclave 2026',
+    targetName: 'Bhawen Maroo', 
+    targetId: 'm15', 
+    raterName: 'Dr. Subhadeep Mukherjee', 
+    quality: 4, 
+    timeliness: 4, 
+    initiative: 5, 
+    collaboration: 4, 
+    overallScore: 4.3, 
+    notes: 'Vendor negotiations and seating arrangements were well coordinated.', 
+    quarter: '2026-Q3', 
+    createdAt: '2026-08-15' 
+  },
 ];
 
 const initialReimbursements: ReimbursementItem[] = [
@@ -196,8 +416,8 @@ const initialReimbursements: ReimbursementItem[] = [
 ];
 
 const initialAnnouncements: AnnouncementItem[] = [
-  { id: 'a1', title: 'Tech Conclave 2026 Core Planning Briefing', content: 'All committee leads and senior student members are requested to join the final walkthrough in Seminar Hall 2 at 4:30 PM.', scope: 'All Members', authorName: 'Kayomarz Pavri', publishedAt: '2026-08-16 10:30' },
-  { id: 'a2', title: 'Q3 Financial Reconciliation Window Open', content: 'Submit all outstanding reimbursement slips and bills before the 25th of August for leadership sign-off.', scope: 'Organizing Committee', authorName: 'Dr. Subhadeep Mukherjee', publishedAt: '2026-08-14 15:00' },
+  { id: 'a1', title: 'Tech Conclave 2026 Core Planning Briefing', content: 'All event committee leads and student organizers are requested to join the final walkthrough in Seminar Hall 2 at 4:30 PM.', scope: 'Core Committee', authorName: 'Kayomarz Pavri', publishedAt: '2026-08-16 10:30' },
+  { id: 'a2', title: 'Q3 Financial Reconciliation Window Open', content: 'Submit all outstanding reimbursement slips and bills before the 25th of August for leadership sign-off.', scope: 'All Members', authorName: 'Dr. Subhadeep Mukherjee', publishedAt: '2026-08-14 15:00' },
   { id: 'a3', title: 'Advisory Board Strategic Review Meeting', content: 'Review of event calendar and academic integration scheduled for next Monday with the executive leadership team.', scope: 'Advisory Board', authorName: 'Dr. K. M. Sharath Kumar', publishedAt: '2026-08-12 11:15' },
 ];
 
@@ -207,7 +427,7 @@ const initialForms: PublicFormItem[] = [
     slug: 'tech-conclave-registration',
     title: 'Tech Conclave 2026 Participant Registration',
     description: 'Register for panel sessions, workshops, and student innovation showcase.',
-    committee: 'Senior Student Leadership',
+    committee: 'Tech Conclave 2026',
     createdBy: 'Kayomarz Pavri',
     createdAt: '2026-08-10',
     isSample: true,
@@ -225,7 +445,7 @@ const initialForms: PublicFormItem[] = [
     slug: 'robotics-bootcamp-rsvp',
     title: 'Robotics Bootcamp RSVP & Kit Request',
     description: 'Confirm participation and kit allocation for hands-on ROS sessions.',
-    committee: 'Organizing Committee',
+    committee: 'Robotics Bootcamp',
     createdBy: 'Gurutejas C',
     createdAt: '2026-08-12',
     isSample: true,
@@ -250,507 +470,630 @@ const initialSubmissions: FormSubmissionItem[] = [
       field_email: 'ananya.s@msruas.ac.in',
       field_dept: 'Computer Science & Engineering',
       field_track: 'AI & Robotics',
-      field_notes: 'Excited to attend the keynote panel on GenAI in Healthcare.',
-    },
+      field_notes: 'Excited for the keynote session.'
+    }
   },
   {
     id: 'sub_2',
     formId: 'f1',
     slug: 'tech-conclave-registration',
     isSample: true,
-    submittedAt: '2026-08-12 09:45',
+    submittedAt: '2026-08-11 15:40',
     data: {
-      field_name: 'Rohan Deshmukh',
-      field_email: 'rohan.d@msruas.ac.in',
-      field_dept: 'Electronics & Communication',
-      field_track: 'Design & UI/UX',
-      field_notes: '',
-    },
-  },
+      field_name: 'Rohan Verma',
+      field_email: 'rohan.v@msruas.ac.in',
+      field_dept: 'Mechanical & Manufacturing',
+      field_track: 'Sustainable Engineering',
+    }
+  }
 ];
 
-const isBrowser = typeof window !== 'undefined';
+// -------------------------------------------------------------
+// Storage & Accessors
+// -------------------------------------------------------------
 
-export function initializeData() {
-  if (!isBrowser) return;
-  
-  const storedMembers = localStorage.getItem('leads_members');
-  if (!storedMembers || JSON.parse(storedMembers).length < 15) {
-    localStorage.setItem('leads_members', JSON.stringify(initialMembers));
-  }
-  
-  if (!localStorage.getItem('leads_events')) {
-    localStorage.setItem('leads_events', JSON.stringify(initialEvents));
-  }
-  if (!localStorage.getItem('leads_tasks')) {
-    localStorage.setItem('leads_tasks', JSON.stringify(initialTasks));
-  }
-  if (!localStorage.getItem('leads_ratings')) {
-    localStorage.setItem('leads_ratings', JSON.stringify(initialRatings));
-  }
-  if (!localStorage.getItem('leads_reimbursements')) {
-    localStorage.setItem('leads_reimbursements', JSON.stringify(initialReimbursements));
-  }
-  if (!localStorage.getItem('leads_announcements')) {
-    localStorage.setItem('leads_announcements', JSON.stringify(initialAnnouncements));
-  }
-  if (!localStorage.getItem('leads_forms')) {
-    localStorage.setItem('leads_forms', JSON.stringify(initialForms));
-  }
-  if (!localStorage.getItem('leads_submissions')) {
-    localStorage.setItem('leads_submissions', JSON.stringify(initialSubmissions));
-  }
-  
-  const storedCommittees = localStorage.getItem('leads_committees');
-  if (!storedCommittees || JSON.parse(storedCommittees).length < 5) {
-    localStorage.setItem('leads_committees', JSON.stringify(initialCommittees));
-  }
-}
-
-// -------------------------------------------------------------
-// Centralized Permission / Visibility Helpers
-// -------------------------------------------------------------
-export function canViewTask(
-  task: TaskItem, 
-  user: { name: string; email: string; tier: number; committee: string } | null
-): boolean {
-  if (!user) return false;
-  // Tier 1-3 (Super User, Centre Head, Head of Events): see all tasks
-  if (user.tier <= 3) return true;
-  // Tier 4 (Advisory Board): read-only role, no task execution duties
-  if (user.tier === 4) return false;
-  // Tier 5-6 (Core Committee, Training Associate):
-  if (task.assigneeType === 'individual') {
-    return Boolean(
-      (task.assignee && task.assignee.toLowerCase() === user.name.toLowerCase()) ||
-      (task.assigneeEmail && task.assigneeEmail.toLowerCase() === user.email.toLowerCase())
-    );
-  }
-  if (task.assigneeType === 'committee') {
-    return Boolean(
-      user.committee === 'All Committees' || 
-      (task.assignee && task.assignee.toLowerCase() === user.committee.toLowerCase())
-    );
-  }
-  return false;
-}
-
-// -------------------------------------------------------------
-// Members
-// -------------------------------------------------------------
 export function getMembers(): Member[] {
-  if (!isBrowser) return initialMembers;
-  initializeData();
-  const data = localStorage.getItem('leads_members');
-  return data ? JSON.parse(data) : initialMembers;
+  if (typeof window === 'undefined') return initialMembers;
+  const saved = localStorage.getItem('leads_members');
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      // Migrate legacy members without division
+      return parsed.map((m: any) => {
+        if (!m.division) {
+          if (m.tier <= 4) m.division = 'Advisory Board';
+          else if (m.tier === 5) m.division = 'Core Committee';
+          else if (m.tier === 7) m.division = 'Alumni';
+          else m.division = 'Training Associate';
+        }
+        return m;
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  localStorage.setItem('leads_members', JSON.stringify(initialMembers));
+  return initialMembers;
 }
 
-export function saveMembers(members: Member[]) {
-  if (!isBrowser) return;
+export function saveMembers(members: Member[]): void {
+  if (typeof window === 'undefined') return;
   localStorage.setItem('leads_members', JSON.stringify(members));
 }
 
-export function addMember(member: Omit<Member, 'id'>) {
-  const members = getMembers();
-  // Check for duplicate email
-  const exists = members.some(m => m.email.toLowerCase() === member.email.toLowerCase());
-  if (exists) {
+export function addMember(member: Omit<Member, 'id'>): Member {
+  const current = getMembers();
+  const existing = current.find(m => m.email.toLowerCase() === member.email.toLowerCase());
+  if (existing) {
     throw new Error(`A member with email ${member.email} already exists in the roster.`);
   }
-  const newMember = { ...member, id: 'm_' + Date.now() };
-  members.push(newMember);
-  saveMembers(members);
-  logAuditEvent('MEMBER_ADDED', 'System Admin', `Added member ${member.name} (${member.email})`);
+
+  const newMember: Member = {
+    ...member,
+    id: 'm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+  };
+  current.push(newMember);
+  saveMembers(current);
+  logAuditEvent('MEMBER_ADDED', 'System / Admin', `Added member ${newMember.name} to ${newMember.division}`);
   return newMember;
 }
 
-export function deleteMember(id: string) {
-  const members = getMembers();
-  const target = members.find(m => m.id === id);
-  if (target?.id === 'm1') {
-    throw new Error('Cannot delete the primary Super User account.');
-  }
-  const updated = members.filter(m => m.id !== id);
+export function deleteMember(id: string): void {
+  const current = getMembers();
+  const target = current.find(m => m.id === id);
+  if (!target) return;
+
+  const updated = current.filter(m => m.id !== id);
   saveMembers(updated);
-  if (target) {
-    logAuditEvent('MEMBER_DELETED', 'System Admin', `Deleted member ${target.name} (${target.email})`);
-  }
+  logAuditEvent('MEMBER_DELETED', 'System / Admin', `Removed member ${target.name} (${target.email})`);
 }
 
 // -------------------------------------------------------------
 // Events
 // -------------------------------------------------------------
+
 export function getEvents(): EventItem[] {
-  if (!isBrowser) return initialEvents;
-  initializeData();
-  const data = localStorage.getItem('leads_events');
-  return data ? JSON.parse(data) : initialEvents;
+  if (typeof window === 'undefined') return initialEvents;
+  const saved = localStorage.getItem('leads_events');
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      // Ensure committees array exists
+      return parsed.map((e: any) => ({
+        ...e,
+        committees: Array.isArray(e.committees) ? e.committees : []
+      }));
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  localStorage.setItem('leads_events', JSON.stringify(initialEvents));
+  return initialEvents;
 }
 
-export function saveEvents(events: EventItem[]) {
-  if (!isBrowser) return;
+export function getEventById(id: string): EventItem | null {
+  const events = getEvents();
+  return events.find(e => e.id === id) || null;
+}
+
+export function saveEvents(events: EventItem[]): void {
+  if (typeof window === 'undefined') return;
   localStorage.setItem('leads_events', JSON.stringify(events));
 }
 
-export function addEvent(event: Omit<EventItem, 'id'>) {
+export function addEvent(event: Omit<EventItem, 'id' | 'committees'> & { committees?: EventCommittee[] }): EventItem {
   const events = getEvents();
-  const newEvent = { ...event, id: 'e_' + Date.now() };
-  events.push(newEvent);
+  const newEvent: EventItem = {
+    ...event,
+    id: 'e_' + Date.now(),
+    committees: event.committees || []
+  };
+  events.unshift(newEvent);
   saveEvents(events);
-  logAuditEvent('EVENT_CREATED', event.createdBy || 'User', `Created event: ${event.title}`);
+  logAuditEvent('EVENT_CREATED', event.createdBy || 'User', `Created new event: ${newEvent.title}`);
   return newEvent;
 }
 
-export function updateEvent(id: string, updates: Partial<EventItem>, actorName = 'User') {
+export function updateEvent(id: string, updates: Partial<EventItem>, actorName: string): EventItem | null {
   const events = getEvents();
-  const updated = events.map(e => e.id === id ? { ...e, ...updates } : e);
-  saveEvents(updated);
-  logAuditEvent('EVENT_UPDATED', actorName, `Updated event ID: ${id}`);
+  const idx = events.findIndex(e => e.id === id);
+  if (idx === -1) return null;
+
+  events[idx] = { ...events[idx], ...updates };
+  saveEvents(events);
+  logAuditEvent('EVENT_UPDATED', actorName, `Updated event: ${events[idx].title}`);
+  return events[idx];
 }
 
-export function deleteEvent(id: string, actorName = 'User') {
+export function deleteEvent(id: string, actorName: string): boolean {
   const events = getEvents();
   const target = events.find(e => e.id === id);
+  if (!target) return false;
+
   const updated = events.filter(e => e.id !== id);
   saveEvents(updated);
-  logAuditEvent('EVENT_DELETED', actorName, `Deleted event: ${target?.title || id}`);
+  logAuditEvent('EVENT_DELETED', actorName, `Deleted event: ${target.title}`);
+  return true;
+}
+
+export function addEventCommittee(eventId: string, committeeName: string, actorName: string): EventItem | null {
+  const events = getEvents();
+  const event = events.find(e => e.id === eventId);
+  if (!event) return null;
+
+  const newComm: EventCommittee = {
+    id: 'comm_' + Date.now(),
+    name: committeeName,
+    memberIds: []
+  };
+  event.committees.push(newComm);
+  saveEvents(events);
+  logAuditEvent('EVENT_COMMITTEE_ADDED', actorName, `Added committee "${committeeName}" to event "${event.title}"`);
+  return event;
+}
+
+export function updateEventCommitteeMembers(eventId: string, committeeId: string, memberIds: string[], actorName: string): EventItem | null {
+  const events = getEvents();
+  const event = events.find(e => e.id === eventId);
+  if (!event) return null;
+
+  const comm = event.committees.find(c => c.id === committeeId);
+  if (!comm) return null;
+
+  comm.memberIds = memberIds;
+  saveEvents(events);
+  logAuditEvent('EVENT_COMMITTEE_UPDATED', actorName, `Updated member assignments for committee "${comm.name}" in event "${event.title}"`);
+  return event;
+}
+
+export function deleteEventCommittee(eventId: string, committeeId: string, actorName: string): EventItem | null {
+  const events = getEvents();
+  const event = events.find(e => e.id === eventId);
+  if (!event) return null;
+
+  event.committees = event.committees.filter(c => c.id !== committeeId);
+  saveEvents(events);
+  logAuditEvent('EVENT_COMMITTEE_DELETED', actorName, `Removed committee from event "${event.title}"`);
+  return event;
+}
+
+export function getCommittees(): string[] {
+  const events = getEvents();
+  const names = new Set<string>();
+  events.forEach(e => {
+    (e.committees || []).forEach(c => names.add(c.name));
+  });
+  if (names.size === 0) {
+    return ['Logistics & Venue Committee', 'Technical & AV Committee', 'Design & Media Committee'];
+  }
+  return Array.from(names);
 }
 
 // -------------------------------------------------------------
-// Tasks
+// Tasks & Visibility Rule
 // -------------------------------------------------------------
+
 export function getTasks(): TaskItem[] {
-  if (!isBrowser) return initialTasks;
-  initializeData();
-  const data = localStorage.getItem('leads_tasks');
-  return data ? JSON.parse(data) : initialTasks;
+  if (typeof window === 'undefined') return initialTasks;
+  const saved = localStorage.getItem('leads_tasks');
+  if (saved) {
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  localStorage.setItem('leads_tasks', JSON.stringify(initialTasks));
+  return initialTasks;
 }
 
-export function saveTasks(tasks: TaskItem[]) {
-  if (!isBrowser) return;
+export function saveTasks(tasks: TaskItem[]): void {
+  if (typeof window === 'undefined') return;
   localStorage.setItem('leads_tasks', JSON.stringify(tasks));
 }
 
-export function addTask(task: Omit<TaskItem, 'id'>) {
+export function addTask(task: Omit<TaskItem, 'id' | 'status'> & { status?: TaskItem['status'] }): TaskItem {
   const tasks = getTasks();
-  const newTask = { ...task, id: 't_' + Date.now() };
-  tasks.push(newTask);
+  const newTask: TaskItem = {
+    ...task,
+    id: 't_' + Date.now(),
+    status: task.status || 'Assigned'
+  };
+  tasks.unshift(newTask);
   saveTasks(tasks);
-  logAuditEvent('TASK_CREATED', task.creatorName || 'User', `Created task: ${task.title} for ${task.assignee}`);
+  logAuditEvent('TASK_CREATED', task.creatorName || 'User', `Assigned task: ${newTask.title} to ${newTask.assignee}`);
   return newTask;
 }
 
-export function updateTask(id: string, updates: Partial<TaskItem>, actorName = 'User') {
+export function updateTask(id: string, updates: Partial<TaskItem>, actorName: string): TaskItem | null {
   const tasks = getTasks();
-  const updated = tasks.map(t => t.id === id ? { ...t, ...updates } : t);
-  saveTasks(updated);
-  logAuditEvent('TASK_UPDATED', actorName, `Updated task: ${id}`);
+  const idx = tasks.findIndex(t => t.id === id);
+  if (idx === -1) return null;
+
+  tasks[idx] = { ...tasks[idx], ...updates };
+  saveTasks(tasks);
+  logAuditEvent('TASK_UPDATED', actorName, `Updated task: ${tasks[idx].title}`);
+  return tasks[idx];
 }
 
-export function updateTaskStatus(id: string, status: TaskItem['status']) {
-  const tasks = getTasks();
-  const updated = tasks.map(t => t.id === id ? { ...t, status } : t);
-  saveTasks(updated);
+export function updateTaskStatus(id: string, status: TaskItem['status'], actorName?: string): TaskItem | null {
+  return updateTask(id, { status }, actorName || 'User');
 }
 
-export function deleteTask(id: string, actorName = 'User') {
+export function deleteTask(id: string, actorName: string): boolean {
   const tasks = getTasks();
   const target = tasks.find(t => t.id === id);
+  if (!target) return false;
+
   const updated = tasks.filter(t => t.id !== id);
   saveTasks(updated);
-  logAuditEvent('TASK_DELETED', actorName, `Deleted task: ${target?.title || id}`);
+  logAuditEvent('TASK_DELETED', actorName, `Deleted task: ${target.title}`);
+  return true;
+}
+
+export function canViewTask(
+  task: TaskItem, 
+  user: { name: string; email: string; tier: number; division?: string; committee?: string } | null
+): boolean {
+  if (!user) return false;
+  // Tier 1-3 (Super User, Centre Head, Head of Events): see all tasks
+  if (user.tier <= 3) return true;
+  // Tier 4 (Advisory Board): strategic read-only oversight
+  if (user.tier === 4) return true;
+  // Tier 5-6 (Core Committee, Training Associate): see their assigned tasks
+  return Boolean(
+    (task.assignee && task.assignee.toLowerCase() === user.name.toLowerCase()) ||
+    (task.assigneeEmail && task.assigneeEmail.toLowerCase() === user.email.toLowerCase()) ||
+    (task.assigneeId && task.assigneeId === (user as any).id)
+  );
 }
 
 // -------------------------------------------------------------
-// Ratings
+// Ratings (Tied to Task Performance)
 // -------------------------------------------------------------
+
 export function getRatings(): RatingItem[] {
-  if (!isBrowser) return initialRatings;
-  initializeData();
-  const data = localStorage.getItem('leads_ratings');
-  return data ? JSON.parse(data) : initialRatings;
+  if (typeof window === 'undefined') return initialRatings;
+  const saved = localStorage.getItem('leads_ratings');
+  if (saved) {
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  localStorage.setItem('leads_ratings', JSON.stringify(initialRatings));
+  return initialRatings;
 }
 
-export function saveRatings(ratings: RatingItem[]) {
-  if (!isBrowser) return;
+export function saveRatings(ratings: RatingItem[]): void {
+  if (typeof window === 'undefined') return;
   localStorage.setItem('leads_ratings', JSON.stringify(ratings));
 }
 
-export function addRating(rating: Omit<RatingItem, 'id' | 'createdAt'>) {
+export function addRating(rating: Omit<RatingItem, 'id' | 'createdAt'>): RatingItem {
   const ratings = getRatings();
-  const now = new Date();
-  const month = now.getMonth() + 1;
-  const quarter = `${now.getFullYear()}-Q${Math.ceil(month / 3)}`;
-  
-  const newRating: RatingItem = { 
-    ...rating, 
+  const newRating: RatingItem = {
+    ...rating,
     id: 'r_' + Date.now(),
-    quarter: rating.quarter || quarter,
-    createdAt: now.toISOString().split('T')[0] 
+    createdAt: new Date().toISOString().split('T')[0]
   };
-  ratings.push(newRating);
+  ratings.unshift(newRating);
   saveRatings(ratings);
-  logAuditEvent('RATING_SUBMITTED', rating.raterName, `Rated ${rating.targetName} (${rating.overallScore}/5.0)`);
+
+  // Update task with rating metadata
+  if (rating.taskId) {
+    updateTask(rating.taskId, { ratingScore: rating.overallScore, ratedAt: newRating.createdAt }, rating.raterName);
+  }
+
+  logAuditEvent('RATING_SUBMITTED', rating.raterName, `Evaluated task performance (${rating.overallScore}/5.0) for ${rating.targetName} on "${rating.taskTitle}"`);
   return newRating;
 }
 
-export function updateRating(id: string, updates: Partial<RatingItem>, actorName = 'User') {
+export function updateRating(id: string, updates: Partial<RatingItem>, actorName: string): RatingItem | null {
   const ratings = getRatings();
-  const updated = ratings.map(r => r.id === id ? { ...r, ...updates, updatedAt: new Date().toISOString().split('T')[0] } : r);
-  saveRatings(updated);
-  logAuditEvent('RATING_UPDATED', actorName, `Updated evaluation ID: ${id}`);
+  const idx = ratings.findIndex(r => r.id === id);
+  if (idx === -1) return null;
+
+  ratings[idx] = { 
+    ...ratings[idx], 
+    ...updates, 
+    updatedAt: new Date().toISOString().split('T')[0] 
+  };
+  saveRatings(ratings);
+
+  if (ratings[idx].taskId && updates.overallScore) {
+    updateTask(ratings[idx].taskId, { ratingScore: updates.overallScore }, actorName);
+  }
+
+  logAuditEvent('RATING_UPDATED', actorName, `Updated evaluation scorecard for ${ratings[idx].targetName}`);
+  return ratings[idx];
 }
 
-export function deleteRating(id: string, actorName = 'User') {
+export function deleteRating(id: string, actorName: string): boolean {
   const ratings = getRatings();
   const target = ratings.find(r => r.id === id);
+  if (!target) return false;
+
   const updated = ratings.filter(r => r.id !== id);
   saveRatings(updated);
-  logAuditEvent('RATING_DELETED', actorName, `Deleted rating for ${target?.targetName || id}`);
+  logAuditEvent('RATING_DELETED', actorName, `Deleted rating record for ${target.targetName}`);
+  return true;
+}
+
+// Helper: Get ratable tasks (completed or in-progress)
+export function getRatableTasks(): TaskItem[] {
+  const tasks = getTasks();
+  return tasks.filter(t => t.status === 'Completed' || t.status === 'In Progress');
 }
 
 // -------------------------------------------------------------
-// Reimbursements (Two-Stage Workflow)
+// Reimbursements (Two-Stage Approval)
 // -------------------------------------------------------------
+
 export function getReimbursements(): ReimbursementItem[] {
-  if (!isBrowser) return initialReimbursements;
-  initializeData();
-  const data = localStorage.getItem('leads_reimbursements');
-  return data ? JSON.parse(data) : initialReimbursements;
+  if (typeof window === 'undefined') return initialReimbursements;
+  const saved = localStorage.getItem('leads_reimbursements');
+  if (saved) {
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  localStorage.setItem('leads_reimbursements', JSON.stringify(initialReimbursements));
+  return initialReimbursements;
 }
 
-export function saveReimbursements(reimbursements: ReimbursementItem[]) {
-  if (!isBrowser) return;
+export function saveReimbursements(reimbursements: ReimbursementItem[]): void {
+  if (typeof window === 'undefined') return;
   localStorage.setItem('leads_reimbursements', JSON.stringify(reimbursements));
 }
 
-export function addReimbursement(reimbursement: Omit<ReimbursementItem, 'id' | 'status' | 'submittedAt'>) {
-  const reimbursements = getReimbursements();
-  const newReimbursement: ReimbursementItem = {
-    ...reimbursement,
+export function addReimbursement(item: Omit<ReimbursementItem, 'id' | 'status' | 'submittedAt'>): ReimbursementItem {
+  const current = getReimbursements();
+  const newClaim: ReimbursementItem = {
+    ...item,
     id: 'rem_' + Date.now(),
     status: 'Pending',
     submittedAt: new Date().toISOString().split('T')[0]
   };
-  reimbursements.push(newReimbursement);
-  saveReimbursements(reimbursements);
-  logAuditEvent('REIMBURSEMENT_SUBMITTED', reimbursement.memberName, `Submitted claim for ₹${reimbursement.amount} (${reimbursement.category})`);
-  return newReimbursement;
+  current.unshift(newClaim);
+  saveReimbursements(current);
+  logAuditEvent('REIMBURSEMENT_CLAIMED', item.memberName, `Submitted expense claim of ₹${item.amount} under ${item.category}`);
+  return newClaim;
 }
 
 export function updateReimbursementStatus(
   id: string, 
   status: ReimbursementItem['status'],
   reviewerInfo?: { name: string; stage: 'firstPass' | 'final' }
-) {
-  const reimbursements = getReimbursements();
-  const now = new Date().toISOString().split('T')[0];
-  const updated = reimbursements.map(r => {
-    if (r.id !== id) return r;
-    const upd: ReimbursementItem = { ...r, status, decidedAt: now };
-    if (reviewerInfo?.stage === 'firstPass') {
-      upd.firstPassReviewer = reviewerInfo.name;
-    } else if (reviewerInfo?.stage === 'final') {
-      upd.finalApprover = reviewerInfo.name;
+): ReimbursementItem | null {
+  const current = getReimbursements();
+  const idx = current.findIndex(r => r.id === id);
+  if (idx === -1) return null;
+
+  const claim = current[idx];
+  claim.status = status;
+  claim.decidedAt = new Date().toISOString().split('T')[0];
+
+  if (reviewerInfo) {
+    if (reviewerInfo.stage === 'firstPass') {
+      claim.firstPassReviewer = reviewerInfo.name;
+    } else {
+      claim.finalApprover = reviewerInfo.name;
     }
-    return upd;
-  });
-  saveReimbursements(updated);
-  logAuditEvent('REIMBURSEMENT_STATUS_CHANGE', reviewerInfo?.name || 'Reviewer', `Claim ${id} status moved to ${status}`);
+    logAuditEvent('REIMBURSEMENT_STATUS_UPDATED', reviewerInfo.name, `Updated claim #${claim.id} status to "${status}" (${reviewerInfo.stage})`);
+  }
+
+  saveReimbursements(current);
+  return claim;
 }
 
-export function deleteReimbursement(id: string, actorName = 'User') {
-  const reimbursements = getReimbursements();
-  const updated = reimbursements.filter(r => r.id !== id);
+export function deleteReimbursement(id: string, actorName: string): boolean {
+  const current = getReimbursements();
+  const target = current.find(r => r.id === id);
+  if (!target) return false;
+
+  const updated = current.filter(r => r.id !== id);
   saveReimbursements(updated);
-  logAuditEvent('REIMBURSEMENT_DELETED', actorName, `Deleted reimbursement claim ID: ${id}`);
+  logAuditEvent('REIMBURSEMENT_DELETED', actorName, `Deleted claim #${id} of ₹${target.amount}`);
+  return true;
 }
 
 // -------------------------------------------------------------
 // Announcements
 // -------------------------------------------------------------
+
 export function getAnnouncements(): AnnouncementItem[] {
-  if (!isBrowser) return initialAnnouncements;
-  initializeData();
-  const data = localStorage.getItem('leads_announcements');
-  return data ? JSON.parse(data) : initialAnnouncements;
+  if (typeof window === 'undefined') return initialAnnouncements;
+  const saved = localStorage.getItem('leads_announcements');
+  if (saved) {
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  localStorage.setItem('leads_announcements', JSON.stringify(initialAnnouncements));
+  return initialAnnouncements;
 }
 
-export function saveAnnouncements(announcements: AnnouncementItem[]) {
-  if (!isBrowser) return;
+export function saveAnnouncements(announcements: AnnouncementItem[]): void {
+  if (typeof window === 'undefined') return;
   localStorage.setItem('leads_announcements', JSON.stringify(announcements));
 }
 
-export function addAnnouncement(announcement: Omit<AnnouncementItem, 'id' | 'publishedAt'>) {
-  const announcements = getAnnouncements();
+export function addAnnouncement(item: Omit<AnnouncementItem, 'id' | 'publishedAt'>): AnnouncementItem {
+  const current = getAnnouncements();
   const now = new Date();
-  const timeStr = `${now.toISOString().split('T')[0]} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  const newAnnouncement: AnnouncementItem = {
-    ...announcement,
+  const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+  const newAnn: AnnouncementItem = {
+    ...item,
     id: 'a_' + Date.now(),
-    publishedAt: timeStr,
+    publishedAt: formattedDate
   };
-  announcements.unshift(newAnnouncement);
-  saveAnnouncements(announcements);
-  logAuditEvent('ANNOUNCEMENT_PUBLISHED', announcement.authorName, `Published announcement: ${announcement.title} (Scope: ${announcement.scope})`);
-  return newAnnouncement;
+  current.unshift(newAnn);
+  saveAnnouncements(current);
+  logAuditEvent('ANNOUNCEMENT_PUBLISHED', item.authorName, `Published announcement: "${item.title}" [Scope: ${item.scope}]`);
+  return newAnn;
 }
 
-export function updateAnnouncement(id: string, updates: Partial<AnnouncementItem>, actorName = 'User') {
-  const announcements = getAnnouncements();
+export function updateAnnouncement(id: string, updates: Partial<AnnouncementItem>, actorName: string): AnnouncementItem | null {
+  const current = getAnnouncements();
+  const idx = current.findIndex(a => a.id === id);
+  if (idx === -1) return null;
+
   const now = new Date();
-  const timeStr = `${now.toISOString().split('T')[0]} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  const updated = announcements.map(a => a.id === id ? { ...a, ...updates, editedAt: timeStr } : a);
-  saveAnnouncements(updated);
-  logAuditEvent('ANNOUNCEMENT_UPDATED', actorName, `Updated announcement ID: ${id}`);
+  current[idx] = { 
+    ...current[idx], 
+    ...updates, 
+    editedAt: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}` 
+  };
+  saveAnnouncements(current);
+  logAuditEvent('ANNOUNCEMENT_UPDATED', actorName, `Updated announcement: "${current[idx].title}"`);
+  return current[idx];
 }
 
-export function deleteAnnouncement(id: string, actorName = 'User') {
-  const announcements = getAnnouncements();
-  const target = announcements.find(a => a.id === id);
-  const updated = announcements.filter(a => a.id !== id);
+export function deleteAnnouncement(id: string, actorName: string): boolean {
+  const current = getAnnouncements();
+  const target = current.find(a => a.id === id);
+  if (!target) return false;
+
+  const updated = current.filter(a => a.id !== id);
   saveAnnouncements(updated);
-  logAuditEvent('ANNOUNCEMENT_DELETED', actorName, `Deleted announcement: ${target?.title || id}`);
+  logAuditEvent('ANNOUNCEMENT_DELETED', actorName, `Retracted announcement: "${target.title}"`);
+  return true;
 }
 
 // -------------------------------------------------------------
-// Public Forms & Responses
+// Forms & Submissions
 // -------------------------------------------------------------
+
 export function getForms(): PublicFormItem[] {
-  if (!isBrowser) return initialForms;
-  initializeData();
-  const data = localStorage.getItem('leads_forms');
-  return data ? JSON.parse(data) : initialForms;
-}
-
-export function saveForms(forms: PublicFormItem[]) {
-  if (!isBrowser) return;
-  localStorage.setItem('leads_forms', JSON.stringify(forms));
-}
-
-export function isSlugUnique(slug: string, excludeFormId?: string): boolean {
-  const forms = getForms();
-  return !forms.some(f => f.slug.toLowerCase() === slug.toLowerCase() && f.id !== excludeFormId);
-}
-
-export function addForm(form: Omit<PublicFormItem, 'id' | 'createdAt'>) {
-  if (!isSlugUnique(form.slug)) {
-    throw new Error(`The public link slug "${form.slug}" is already taken. Please choose a unique slug.`);
+  if (typeof window === 'undefined') return initialForms;
+  const saved = localStorage.getItem('leads_custom_forms');
+  if (saved) {
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
   }
-  const forms = getForms();
+  localStorage.setItem('leads_custom_forms', JSON.stringify(initialForms));
+  return initialForms;
+}
+
+export function saveForms(forms: PublicFormItem[]): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem('leads_custom_forms', JSON.stringify(forms));
+}
+
+export function addForm(form: Omit<PublicFormItem, 'id' | 'createdAt'>): PublicFormItem {
+  const current = getForms();
   const newForm: PublicFormItem = {
     ...form,
-    id: 'f_' + Date.now(),
-    createdAt: new Date().toISOString().split('T')[0],
+    id: 'form_' + Date.now(),
+    createdAt: new Date().toISOString().split('T')[0]
   };
-  forms.push(newForm);
-  saveForms(forms);
-  logAuditEvent('FORM_CREATED', form.createdBy, `Created public form: ${form.title} (/${form.slug})`);
+  current.unshift(newForm);
+  saveForms(current);
+  logAuditEvent('FORM_CREATED', form.createdBy, `Created public form "${form.title}" at /forms/${form.slug}`);
   return newForm;
 }
 
-export function updateForm(id: string, updates: Partial<PublicFormItem>, actorName = 'User') {
-  if (updates.slug && !isSlugUnique(updates.slug, id)) {
-    throw new Error(`The public link slug "${updates.slug}" is already taken.`);
-  }
-  const forms = getForms();
-  const updated = forms.map(f => f.id === id ? { ...f, ...updates } : f);
-  saveForms(updated);
-  logAuditEvent('FORM_UPDATED', actorName, `Updated form ID: ${id}`);
+export function updateForm(id: string, updates: Partial<PublicFormItem>, actorName: string): PublicFormItem | null {
+  const current = getForms();
+  const idx = current.findIndex(f => f.id === id);
+  if (idx === -1) return null;
+
+  current[idx] = { ...current[idx], ...updates };
+  saveForms(current);
+  logAuditEvent('FORM_UPDATED', actorName, `Updated public form "${current[idx].title}"`);
+  return current[idx];
 }
 
-export function deleteForm(id: string, actorName = 'User') {
-  const forms = getForms();
-  const target = forms.find(f => f.id === id);
-  const updated = forms.filter(f => f.id !== id);
+export function deleteForm(id: string, actorName: string): boolean {
+  const current = getForms();
+  const target = current.find(f => f.id === id);
+  if (!target) return false;
+
+  const updated = current.filter(f => f.id !== id);
   saveForms(updated);
-  logAuditEvent('FORM_DELETED', actorName, `Deleted form: ${target?.title || id}`);
+  logAuditEvent('FORM_DELETED', actorName, `Deleted public form "${target.title}"`);
+  return true;
+}
+
+export function isSlugUnique(slug: string, excludeFormId?: string): boolean {
+  const current = getForms();
+  return !current.some(f => f.slug.toLowerCase() === slug.toLowerCase() && f.id !== excludeFormId);
 }
 
 export function getSubmissions(): FormSubmissionItem[] {
-  if (!isBrowser) return initialSubmissions;
-  initializeData();
-  const data = localStorage.getItem('leads_submissions');
-  return data ? JSON.parse(data) : initialSubmissions;
+  if (typeof window === 'undefined') return initialSubmissions;
+  const saved = localStorage.getItem('leads_form_submissions');
+  if (saved) {
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  localStorage.setItem('leads_form_submissions', JSON.stringify(initialSubmissions));
+  return initialSubmissions;
 }
 
-export function saveSubmissions(submissions: FormSubmissionItem[]) {
-  if (!isBrowser) return;
-  localStorage.setItem('leads_submissions', JSON.stringify(submissions));
-}
-
-export function addSubmission(submission: Omit<FormSubmissionItem, 'id' | 'submittedAt'>) {
-  const submissions = getSubmissions();
+export function addSubmission(sub: Omit<FormSubmissionItem, 'id' | 'submittedAt'>): FormSubmissionItem {
+  const current = getSubmissions();
   const now = new Date();
-  const timeStr = `${now.toISOString().split('T')[0]} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const formatted = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
   const newSub: FormSubmissionItem = {
-    ...submission,
+    ...sub,
     id: 'sub_' + Date.now(),
-    submittedAt: timeStr,
+    submittedAt: formatted
   };
-  submissions.push(newSub);
-  saveSubmissions(submissions);
+  current.unshift(newSub);
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('leads_form_submissions', JSON.stringify(current));
+  }
+  logAuditEvent('FORM_SUBMITTED', 'Public Respondent', `New response submitted for form slug "${sub.slug}"`);
   return newSub;
 }
 
 // -------------------------------------------------------------
 // Audit Logs
 // -------------------------------------------------------------
-export function getAuditLogs(): AuditLogItem[] {
-  if (!isBrowser) return [];
-  const data = localStorage.getItem('leads_audit_logs');
-  return data ? JSON.parse(data) : [];
-}
 
-export function logAuditEvent(action: string, actorName: string, details: string, target?: string) {
-  if (!isBrowser) return;
-  const logs = getAuditLogs();
-  const userStr = localStorage.getItem('user');
-  let actorEmail = 'system@msruas.ac.in';
-  if (userStr) {
+export function getAuditLogs(): AuditLogItem[] {
+  if (typeof window === 'undefined') return [];
+  const saved = localStorage.getItem('leads_audit_logs');
+  if (saved) {
     try {
-      const user = JSON.parse(userStr);
-      actorEmail = user.email || actorEmail;
-    } catch {
-      // ignore
+      return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
     }
   }
+  return [];
+}
+
+export function logAuditEvent(action: string, actorName: string, details: string, actorEmail?: string): void {
+  if (typeof window === 'undefined') return;
+  const current = getAuditLogs();
   const now = new Date();
-  const timeStr = `${now.toISOString().split('T')[0]} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-  const entry: AuditLogItem = {
-    id: 'log_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+  const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+
+  const newLog: AuditLogItem = {
+    id: 'log_' + Date.now(),
     action,
     actorName,
-    actorEmail,
-    target,
+    actorEmail: actorEmail || 'system@msruas.ac.in',
     details,
-    timestamp: timeStr,
+    timestamp
   };
-  logs.unshift(entry);
-  if (logs.length > 200) logs.pop();
-  localStorage.setItem('leads_audit_logs', JSON.stringify(logs));
-}
-
-// -------------------------------------------------------------
-// Committees
-// -------------------------------------------------------------
-export function getCommittees(): string[] {
-  if (!isBrowser) return initialCommittees;
-  initializeData();
-  const data = localStorage.getItem('leads_committees');
-  return data ? JSON.parse(data) : initialCommittees;
-}
-
-export function saveCommittees(committees: string[]) {
-  if (!isBrowser) return;
-  localStorage.setItem('leads_committees', JSON.stringify(committees));
-}
-
-export function addCommittee(name: string) {
-  const committees = getCommittees();
-  if (!committees.includes(name)) {
-    committees.push(name);
-    saveCommittees(committees);
-    logAuditEvent('COMMITTEE_CREATED', 'System Admin', `Created committee: ${name}`);
-  }
+  current.unshift(newLog);
+  // Keep last 100 logs
+  localStorage.setItem('leads_audit_logs', JSON.stringify(current.slice(0, 100)));
 }

@@ -14,7 +14,9 @@ import {
   Search, 
   Edit2, 
   Trash2,
-  Filter
+  Filter,
+  CheckSquare,
+  AlertCircle
 } from 'lucide-react';
 import { 
   getRatings, 
@@ -23,7 +25,7 @@ import {
   deleteRating,
   getMembers, 
   getTasks, 
-  getCommittees, 
+  getRatableTasks,
   Member, 
   TaskItem, 
   RatingItem 
@@ -36,11 +38,10 @@ export default function RatingsPage() {
   const [ratings, setRatings] = useState<RatingItem[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
-  const [committees, setCommittees] = useState<string[]>([]);
   const [user, setUser] = useState<any>(null);
 
   // Search & Filter state
-  const [memberSearchQuery, setMemberSearchQuery] = useState('');
+  const [taskSearchQuery, setTaskSearchQuery] = useState('');
   const [historySearchQuery, setHistorySearchQuery] = useState('');
   const [selectedQuarterFilter, setSelectedQuarterFilter] = useState('ALL');
 
@@ -49,9 +50,8 @@ export default function RatingsPage() {
   const [editingRating, setEditingRating] = useState<RatingItem | null>(null);
   const [deletingRatingId, setDeletingRatingId] = useState<string | null>(null);
 
-  const [targetType, setTargetType] = useState<'individual' | 'committee'>('individual');
-  const [targetId, setTargetId] = useState('');
-  const [targetName, setTargetName] = useState('');
+  // Selected Task for Evaluation
+  const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
 
   // Form Scores
   const [quality, setQuality] = useState(5);
@@ -62,12 +62,12 @@ export default function RatingsPage() {
 
   // Notification Alerts
   const [alertMsg, setAlertMsg] = useState('');
+  const [formError, setFormError] = useState('');
 
   useEffect(() => {
     setRatings(getRatings());
     setMembers(getMembers());
     setTasks(getTasks());
-    setCommittees(getCommittees());
 
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
@@ -84,35 +84,41 @@ export default function RatingsPage() {
     setTimeout(() => setAlertMsg(''), 4000);
   };
 
-  const openEvaluation = (type: 'individual' | 'committee', id: string, name: string) => {
+  const openEvaluationForTask = (task: TaskItem) => {
     setEditingRating(null);
-    setTargetType(type);
-    setTargetId(id);
-    setTargetName(name);
+    setSelectedTask(task);
     setQuality(5);
     setTimeliness(5);
     setInitiative(5);
     setCollaboration(5);
     setNotes('');
+    setFormError('');
     setIsModalOpen(true);
   };
 
   const openEditEvaluation = (rating: RatingItem) => {
     setEditingRating(rating);
-    setTargetType(rating.targetType);
-    setTargetId(rating.targetId);
-    setTargetName(rating.targetName);
+    const matchedTask = tasks.find(t => t.id === rating.taskId) || null;
+    setSelectedTask(matchedTask);
     setQuality(rating.quality);
     setTimeliness(rating.timeliness);
     setInitiative(rating.initiative);
     setCollaboration(rating.collaboration);
     setNotes(rating.notes || '');
+    setFormError('');
     setIsModalOpen(true);
   };
 
   const handleEvaluateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!targetName || !user) return;
+    setFormError('');
+
+    if (!selectedTask && !editingRating) {
+      setFormError('Task selection is mandatory. Performance ratings must be evaluated against a specific task deliverable.');
+      return;
+    }
+
+    if (!user) return;
 
     const overall = parseFloat(((quality + timeliness + initiative + collaboration) / 4).toFixed(1));
 
@@ -125,26 +131,34 @@ export default function RatingsPage() {
         overallScore: overall,
         notes,
       }, user?.name || 'User');
-      triggerSuccess(`Updated evaluation scorecard for ${targetName}`);
-    } else {
+      triggerSuccess(`Updated evaluation scorecard for ${editingRating.targetName}`);
+    } else if (selectedTask) {
+      const assigneeMember = members.find(m => m.name.toLowerCase() === selectedTask.assignee.toLowerCase());
+
       addRating({
-        targetType,
-        targetName,
-        targetId,
+        taskId: selectedTask.id,
+        taskTitle: selectedTask.title,
+        eventId: selectedTask.eventId,
+        eventName: selectedTask.event,
+        targetId: assigneeMember ? assigneeMember.id : (selectedTask.assigneeId || selectedTask.assignee),
+        targetName: selectedTask.assignee,
         raterName: user.name,
         quality,
         timeliness,
         initiative,
         collaboration,
         overallScore: overall,
-        notes
+        notes,
+        quarter: '2026-Q3'
       });
-      triggerSuccess(`Submitted rating evaluation of ${overall}/5.0 for ${targetName}`);
+      triggerSuccess(`Submitted performance score of ${overall}/5.0 for ${selectedTask.assignee} on "${selectedTask.title}"`);
     }
 
     setIsModalOpen(false);
     setEditingRating(null);
+    setSelectedTask(null);
     setRatings(getRatings());
+    setTasks(getTasks());
   };
 
   const handleConfirmDeleteRating = () => {
@@ -152,24 +166,30 @@ export default function RatingsPage() {
     deleteRating(deletingRatingId, user?.name || 'User');
     setDeletingRatingId(null);
     setRatings(getRatings());
+    setTasks(getTasks());
     triggerSuccess('Rating record removed successfully.');
   };
 
-  const completedTasks = tasks.filter(t => t.status === 'Completed');
-  const isAdmin = user && user.tier <= 3; // Tier 1-3 can evaluate
+  const isAdmin = user && (user.tier <= 3 || user.tier === 5); // Tiers 1-3 & 5 can evaluate tasks
 
-  // Filtered members in evaluation roster
-  const filteredEvaluationMembers = members
-    .filter(m => m.tier >= 5)
-    .filter(m => {
-      const q = memberSearchQuery.toLowerCase();
-      return m.name.toLowerCase().includes(q) || m.role.toLowerCase().includes(q) || m.committee.toLowerCase().includes(q);
+  // Ratable Tasks Queue (Completed or In Progress tasks awaiting performance rating)
+  const ratableTasks = tasks
+    .filter(t => t.status === 'Completed' || t.status === 'In Progress')
+    .filter(t => {
+      const q = taskSearchQuery.toLowerCase();
+      return (
+        t.title.toLowerCase().includes(q) ||
+        t.assignee.toLowerCase().includes(q) ||
+        (t.event && t.event.toLowerCase().includes(q))
+      );
     });
 
   // Filtered ratings history
   const filteredRatingsHistory = ratings.filter(r => {
     const matchesSearch = 
       r.targetName.toLowerCase().includes(historySearchQuery.toLowerCase()) ||
+      r.taskTitle.toLowerCase().includes(historySearchQuery.toLowerCase()) ||
+      (r.eventName && r.eventName.toLowerCase().includes(historySearchQuery.toLowerCase())) ||
       r.raterName.toLowerCase().includes(historySearchQuery.toLowerCase()) ||
       (r.notes && r.notes.toLowerCase().includes(historySearchQuery.toLowerCase()));
 
@@ -190,50 +210,80 @@ export default function RatingsPage() {
 
       {/* Header section */}
       <div>
-        <h1 className="text-xl font-bold text-theme-text-primary">Performance Evaluation & Ratings</h1>
-        <p className="text-xs text-theme-text-secondary">Rate individual student members or entire committees on Quality, Timeliness, Initiative, and Collaboration</p>
+        <h1 className="text-xl font-bold text-theme-text-primary">Task-Based Performance Ratings</h1>
+        <p className="text-xs text-theme-text-secondary">Evaluate student members directly on task execution: Quality, Timeliness, Initiative, and Collaboration</p>
       </div>
 
-      {/* Completed Tasks Queue & Direct Evaluation Roster */}
+      {/* Grid: Task Evaluation Queue & Evaluation History */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         
-        {/* Completed Tasks Queue */}
-        <div className="glass-panel rounded-2xl p-6 xl:col-span-1 space-y-4 flex flex-col max-h-[500px]">
+        {/* Left Column: Task Evaluation Queue */}
+        <div className="glass-panel rounded-2xl p-6 xl:col-span-1 space-y-4 flex flex-col max-h-[580px]">
           <div>
-            <h3 className="text-base font-bold text-theme-text-primary">Completed Tasks Queue</h3>
-            <p className="text-xs text-theme-text-secondary">Evaluate performance for recently completed deliverables</p>
+            <h3 className="text-base font-bold text-theme-text-primary flex items-center gap-2">
+              <CheckSquare className="h-4 w-4 text-accent" />
+              Task Evaluation Queue
+            </h3>
+            <p className="text-xs text-theme-text-secondary">Select any task deliverable to evaluate assignee performance</p>
+          </div>
+
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-theme-text-secondary" />
+            <input
+              type="text"
+              value={taskSearchQuery}
+              onChange={(e) => setTaskSearchQuery(e.target.value)}
+              placeholder="Search tasks or assignees..."
+              className="w-full pl-8 pr-3 py-1.5 bg-theme-background/40 border border-theme-border/40 rounded-xl text-xs text-theme-text-primary placeholder-theme-text-secondary focus:outline-none focus:border-accent"
+            />
           </div>
           
           <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-            {completedTasks.length === 0 ? (
-              <div className="text-center py-8 text-theme-text-secondary text-xs">
-                No completed tasks awaiting evaluation.
+            {ratableTasks.length === 0 ? (
+              <div className="text-center py-8 text-theme-text-secondary text-xs bg-theme-border/5 rounded-xl border border-theme-border/20">
+                No active or completed deliverables currently queued.
               </div>
             ) : (
-              completedTasks.map(task => (
+              ratableTasks.map(task => (
                 <div 
                   key={task.id} 
-                  className="p-3.5 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2.5 hover:bg-theme-border/15 transition-all"
+                  className="p-3.5 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2 hover:bg-theme-border/15 transition-all text-xs"
                 >
-                  <div>
-                    <h4 className="font-semibold text-xs text-theme-text-primary line-clamp-1">{task.title}</h4>
-                    <p className="text-[10px] text-theme-text-secondary mt-0.5">Assignee: {task.assignee}</p>
-                  </div>
-                  
-                  {isAdmin ? (
-                    <button
-                      onClick={() => openEvaluation(
-                        task.assigneeType, 
-                        task.assigneeType === 'individual' ? (members.find(m => m.name === task.assignee)?.id || 'unknown') : task.assignee, 
-                        task.assignee
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h4 className="font-bold text-xs text-theme-text-primary line-clamp-1">{task.title}</h4>
+                      <p className="text-[10px] text-theme-text-secondary mt-0.5">
+                        Assignee: <strong className="text-theme-text-primary">{task.assignee}</strong>
+                      </p>
+                      {task.event && (
+                        <span className="text-[10px] text-accent block mt-0.5">{task.event}</span>
                       )}
-                      className="w-full py-1.5 bg-accent hover:bg-primary-light text-white text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                    </div>
+                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                      task.status === 'Completed' ? 'bg-success/15 text-success' : 'bg-primary/15 text-primary-light'
+                    }`}>
+                      {task.status}
+                    </span>
+                  </div>
+
+                  {task.ratingScore ? (
+                    <div className="flex items-center justify-between pt-1 border-t border-theme-border/20 text-[11px]">
+                      <span className="text-theme-text-secondary">Evaluated Score:</span>
+                      <span className="font-bold text-accent flex items-center gap-1">
+                        <Star className="h-3 w-3 fill-accent" />
+                        {task.ratingScore.toFixed(1)}/5.0
+                      </span>
+                    </div>
+                  ) : isAdmin ? (
+                    <button
+                      onClick={() => openEvaluationForTask(task)}
+                      className="w-full py-1.5 bg-accent hover:bg-primary-light text-white text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 mt-1"
                     >
                       <Award className="h-3.5 w-3.5" />
-                      Evaluate Assignee
+                      Evaluate Performance
                     </button>
                   ) : (
-                    <span className="text-[10px] text-theme-text-secondary italic block">Awaiting advisor evaluation</span>
+                    <span className="text-[10px] text-theme-text-secondary italic block pt-1">Awaiting advisor evaluation</span>
                   )}
                 </div>
               ))
@@ -241,211 +291,134 @@ export default function RatingsPage() {
           </div>
         </div>
 
-        {/* Evaluation Roster Lists */}
-        <div className="glass-panel rounded-2xl p-6 xl:col-span-2 space-y-4">
-          <div>
-            <h3 className="text-base font-bold text-theme-text-primary">Direct Evaluation Roster</h3>
-            <p className="text-xs text-theme-text-secondary">Advisors can evaluate any committee or student directory member directly</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            
-            {/* Committees List (Loaded dynamically) */}
-            <div className="border border-theme-border/30 rounded-xl p-4 space-y-3 bg-theme-background/10">
-              <h4 className="font-bold text-xs text-theme-text-primary uppercase tracking-wider flex items-center gap-1.5">
-                <Users className="h-4 w-4 text-warning" />
-                Committees ({committees.length})
-              </h4>
-              <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
-                {committees.map(comm => (
-                  <div key={comm} className="flex items-center justify-between p-2 hover:bg-theme-border/10 rounded-lg text-xs">
-                    <span className="text-theme-text-primary font-medium truncate pr-2">{comm}</span>
-                    {isAdmin && (
-                      <button
-                        onClick={() => openEvaluation('committee', comm, comm)}
-                        className="px-2.5 py-1 bg-accent/20 hover:bg-accent text-accent hover:text-white text-[10px] font-bold rounded-md transition-all cursor-pointer shrink-0"
-                      >
-                        Rate Unit
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
+        {/* Right Column: Submitted Evaluations & Scorecards History */}
+        <div className="glass-panel rounded-2xl p-6 xl:col-span-2 space-y-4 flex flex-col">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-base font-bold text-theme-text-primary">Performance Evaluation Scorecards</h3>
+              <p className="text-xs text-theme-text-secondary">Audited ratings tied directly to student task deliverables</p>
             </div>
 
-            {/* Individual Members List with Search Box */}
-            <div className="border border-theme-border/30 rounded-xl p-4 space-y-3 bg-theme-background/10">
-              <div className="flex items-center justify-between">
-                <h4 className="font-bold text-xs text-theme-text-primary uppercase tracking-wider flex items-center gap-1.5">
-                  <User className="h-4 w-4 text-accent" />
-                  Student Members
-                </h4>
-                <span className="text-[10px] text-theme-text-secondary">{filteredEvaluationMembers.length} available</span>
-              </div>
+            <div className="flex items-center gap-2.5">
+              {/* Quarter Filter */}
+              <select
+                value={selectedQuarterFilter}
+                onChange={(e) => setSelectedQuarterFilter(e.target.value)}
+                className="px-3 py-1.5 bg-theme-background/30 border border-theme-border/40 rounded-xl text-xs text-theme-text-primary focus:outline-none focus:border-accent"
+              >
+                <option value="ALL">All Quarters</option>
+                <option value="2026-Q3">2026 Q3 (Current)</option>
+                <option value="2026-Q2">2026 Q2</option>
+                <option value="2026-Q1">2026 Q1</option>
+              </select>
 
-              {/* Roster Search input */}
+              {/* Search filter */}
               <div className="relative">
-                <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-theme-text-secondary" />
+                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-theme-text-secondary" />
                 <input
                   type="text"
-                  value={memberSearchQuery}
-                  onChange={(e) => setMemberSearchQuery(e.target.value)}
-                  placeholder="Search student members..."
-                  className="w-full pl-8 pr-3 py-1.5 bg-theme-background/40 border border-theme-border/40 rounded-lg text-xs text-theme-text-primary placeholder-theme-text-secondary focus:outline-none focus:border-accent"
+                  value={historySearchQuery}
+                  onChange={(e) => setHistorySearchQuery(e.target.value)}
+                  placeholder="Search scorecards..."
+                  className="w-44 pl-8 pr-3 py-1.5 bg-theme-background/30 border border-theme-border/40 rounded-xl text-xs text-theme-text-primary placeholder-theme-text-secondary focus:outline-none focus:border-accent"
                 />
               </div>
+            </div>
+          </div>
 
-              <div className="space-y-1.5 max-h-[250px] overflow-y-auto pr-1">
-                {filteredEvaluationMembers.length === 0 ? (
-                  <div className="text-center py-6 text-theme-text-secondary text-xs">
-                    No matching members.
-                  </div>
-                ) : (
-                  filteredEvaluationMembers.map(member => (
-                    <div key={member.id} className="flex items-center justify-between p-2 hover:bg-theme-border/10 rounded-lg text-xs">
-                      <div className="overflow-hidden pr-2">
-                        <p className="text-theme-text-primary font-medium truncate">{member.name}</p>
-                        <p className="text-[10px] text-theme-text-secondary truncate">{member.role} &middot; {member.committee}</p>
-                      </div>
-                      {isAdmin && (
-                        <button
-                          onClick={() => openEvaluation('individual', member.id, member.name)}
-                          className="px-2.5 py-1 bg-accent/20 hover:bg-accent text-accent hover:text-white text-[10px] font-bold rounded-md transition-all cursor-pointer shrink-0"
-                        >
-                          Rate
-                        </button>
-                      )}
-                    </div>
-                  ))
-                )}
+          <div className="overflow-x-auto flex-1">
+            {filteredRatingsHistory.length === 0 ? (
+              <div className="text-center py-12 text-theme-text-secondary text-xs">
+                No task evaluation scorecards found matching the selected filter.
               </div>
-            </div>
+            ) : (
+              <table className="min-w-full text-xs text-left">
+                <thead>
+                  <tr className="text-theme-text-secondary border-b border-theme-border/40 text-xs">
+                    <th className="pb-3 font-semibold">Student Assignee</th>
+                    <th className="pb-3 font-semibold">Evaluated Task / Event</th>
+                    <th className="pb-3 font-semibold">Evaluator</th>
+                    <th className="pb-3 font-semibold">Breakdown (Q / T / I / C)</th>
+                    <th className="pb-3 font-semibold">Score</th>
+                    <th className="pb-3 font-semibold">Remarks</th>
+                    {isAdmin && <th className="pb-3 font-semibold text-right">Actions</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-theme-border/20">
+                  {filteredRatingsHistory.map(rating => {
+                    const colorTokens = getRatingColor(rating.overallScore);
+                    const canEdit = user && (user.tier === 1 || user.name === rating.raterName);
 
-          </div>
-        </div>
-
-      </div>
-
-      {/* Ratings History List & Filters */}
-      <div className="glass-panel rounded-2xl p-6 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h3 className="text-base font-bold text-theme-text-primary">Submitted Evaluations & History</h3>
-            <p className="text-xs text-theme-text-secondary">Historical logs of evaluations, criteria breakdowns, and advisor remarks</p>
-          </div>
-
-          <div className="flex items-center gap-2.5">
-            {/* Quarter Filter */}
-            <select
-              value={selectedQuarterFilter}
-              onChange={(e) => setSelectedQuarterFilter(e.target.value)}
-              className="px-3 py-1.5 bg-theme-background/30 border border-theme-border/40 rounded-xl text-xs text-theme-text-primary focus:outline-none focus:border-accent"
-            >
-              <option value="ALL">All Quarters</option>
-              <option value="2026-Q3">2026 Q3 (Current)</option>
-              <option value="2026-Q2">2026 Q2</option>
-              <option value="2026-Q1">2026 Q1</option>
-            </select>
-
-            {/* Search filter */}
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-theme-text-secondary" />
-              <input
-                type="text"
-                value={historySearchQuery}
-                onChange={(e) => setHistorySearchQuery(e.target.value)}
-                placeholder="Search history..."
-                className="w-48 pl-8 pr-3 py-1.5 bg-theme-background/30 border border-theme-border/40 rounded-xl text-xs text-theme-text-primary placeholder-theme-text-secondary focus:outline-none focus:border-accent"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          {filteredRatingsHistory.length === 0 ? (
-            <div className="text-center py-12 text-theme-text-secondary text-xs">
-              No rating evaluations found matching the selected filter.
-            </div>
-          ) : (
-            <table className="min-w-full text-xs text-left">
-              <thead>
-                <tr className="text-theme-text-secondary border-b border-theme-border/40 text-xs">
-                  <th className="pb-3 font-semibold">Target / Unit</th>
-                  <th className="pb-3 font-semibold">Type</th>
-                  <th className="pb-3 font-semibold">Quarter</th>
-                  <th className="pb-3 font-semibold">Evaluator</th>
-                  <th className="pb-3 font-semibold">Breakdown (Q / T / I / C)</th>
-                  <th className="pb-3 font-semibold">Overall Rating</th>
-                  <th className="pb-3 font-semibold">Remarks</th>
-                  {isAdmin && <th className="pb-3 font-semibold text-right">Actions</th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-theme-border/20">
-                {filteredRatingsHistory.map(rating => {
-                  const colorTokens = getRatingColor(rating.overallScore);
-                  const canEdit = user && (user.tier === 1 || user.name === rating.raterName);
-
-                  return (
-                    <tr key={rating.id} className="hover:bg-theme-border/10 transition-all text-xs">
-                      <td className="py-3.5 pr-2 font-bold text-theme-text-primary">{rating.targetName}</td>
-                      <td className="py-3.5 pr-2 text-theme-text-secondary capitalize">{rating.targetType}</td>
-                      <td className="py-3.5 pr-2 text-theme-text-secondary">{rating.quarter || '2026-Q3'}</td>
-                      <td className="py-3.5 pr-2 text-theme-text-secondary">{rating.raterName}</td>
-                      <td className="py-3.5 pr-2 text-theme-text-secondary">
-                        <span className="font-semibold text-theme-text-primary">{rating.quality}</span> &middot; <span className="font-semibold text-theme-text-primary">{rating.timeliness}</span> &middot; <span className="font-semibold text-theme-text-primary">{rating.initiative}</span> &middot; <span className="font-semibold text-theme-text-primary">{rating.collaboration}</span>
-                      </td>
-                      <td className="py-3.5 pr-2">
-                        <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-lg border ${colorTokens.bg} ${colorTokens.text} ${colorTokens.border}`}>
-                          <Star className="h-3 w-3 fill-current" />
-                          {rating.overallScore.toFixed(1)}
-                        </span>
-                      </td>
-                      <td className="py-3.5 text-theme-text-secondary max-w-xs truncate" title={rating.notes}>
-                        {rating.notes || 'No remarks recorded.'}
-                      </td>
-                      {isAdmin && (
-                        <td className="py-3.5 text-right">
-                          {canEdit && (
-                            <div className="flex justify-end gap-1">
-                              <button
-                                onClick={() => openEditEvaluation(rating)}
-                                className="p-1 hover:bg-theme-border/30 rounded-md text-theme-text-secondary hover:text-accent transition-all cursor-pointer"
-                                title="Edit Evaluation"
-                              >
-                                <Edit2 className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                onClick={() => setDeletingRatingId(rating.id)}
-                                className="p-1 hover:bg-danger/10 rounded-md text-danger transition-all cursor-pointer"
-                                title="Delete Evaluation"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
+                    return (
+                      <tr key={rating.id} className="hover:bg-theme-border/10 transition-all text-xs">
+                        <td className="py-3.5 pr-2 font-bold text-theme-text-primary whitespace-nowrap">
+                          {rating.targetName}
+                        </td>
+                        <td className="py-3.5 pr-2 max-w-xs">
+                          <p className="font-semibold text-theme-text-primary truncate">{rating.taskTitle}</p>
+                          {rating.eventName && (
+                            <span className="text-[10px] text-theme-text-secondary">{rating.eventName}</span>
                           )}
                         </td>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
+                        <td className="py-3.5 pr-2 text-theme-text-secondary whitespace-nowrap">{rating.raterName}</td>
+                        <td className="py-3.5 pr-2 text-theme-text-secondary whitespace-nowrap">
+                          <span className="font-semibold text-theme-text-primary">{rating.quality}</span> &middot; <span className="font-semibold text-theme-text-primary">{rating.timeliness}</span> &middot; <span className="font-semibold text-theme-text-primary">{rating.initiative}</span> &middot; <span className="font-semibold text-theme-text-primary">{rating.collaboration}</span>
+                        </td>
+                        <td className="py-3.5 pr-2 whitespace-nowrap">
+                          <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-lg border ${colorTokens.bg} ${colorTokens.text} ${colorTokens.border}`}>
+                            <Star className="h-3 w-3 fill-current" />
+                            {rating.overallScore.toFixed(1)}
+                          </span>
+                        </td>
+                        <td className="py-3.5 text-theme-text-secondary max-w-xs truncate" title={rating.notes}>
+                          {rating.notes || '—'}
+                        </td>
+                        {isAdmin && (
+                          <td className="py-3.5 text-right">
+                            {canEdit && (
+                              <div className="flex justify-end gap-1">
+                                <button
+                                  onClick={() => openEditEvaluation(rating)}
+                                  className="p-1 hover:bg-theme-border/30 rounded-md text-theme-text-secondary hover:text-accent transition-all cursor-pointer"
+                                  title="Edit Scorecard"
+                                >
+                                  <Edit2 className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => setDeletingRatingId(rating.id)}
+                                  className="p-1 hover:bg-danger/10 rounded-md text-danger transition-all cursor-pointer"
+                                  title="Delete Scorecard"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
+
       </div>
 
-      {/* Evaluate / Edit Dialog Modal */}
+      {/* Task Performance Evaluation Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="glass-panel w-full max-w-lg rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-theme-text-primary">
-                {editingRating ? 'Edit Performance Scorecard' : 'Performance Rating Scorecard'}
+                {editingRating ? 'Edit Task Performance Scorecard' : 'Evaluate Task Performance'}
               </h2>
               <button 
                 onClick={() => {
                   setIsModalOpen(false);
                   setEditingRating(null);
+                  setSelectedTask(null);
                 }}
                 className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
               >
@@ -453,12 +426,27 @@ export default function RatingsPage() {
               </button>
             </div>
 
-            <div className="bg-accent/10 border border-accent/15 p-3.5 rounded-xl text-xs space-y-1">
-              <p className="text-theme-text-secondary font-semibold uppercase tracking-wider text-[10px]">Evaluating Unit</p>
-              <h3 className="text-sm font-bold text-theme-text-primary flex items-center gap-2">
-                {targetType === 'committee' ? <Users className="h-4.5 w-4.5 text-warning" /> : <User className="h-4.5 w-4.5 text-accent" />}
-                {targetName}
+            {formError && (
+              <div className="p-3 bg-danger/10 border border-danger/25 rounded-xl text-danger text-xs flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4 shrink-0" />
+                <span>{formError}</span>
+              </div>
+            )}
+
+            {/* Task & Assignee Info Header */}
+            <div className="bg-accent/10 border border-accent/15 p-3.5 rounded-2xl text-xs space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-theme-text-secondary font-semibold uppercase tracking-wider text-[10px]">Deliverable</span>
+                {selectedTask?.event && (
+                  <span className="text-[10px] text-accent font-semibold">{selectedTask.event}</span>
+                )}
+              </div>
+              <h3 className="text-sm font-bold text-theme-text-primary">
+                {editingRating ? editingRating.taskTitle : selectedTask?.title}
               </h3>
+              <p className="text-[11px] text-theme-text-secondary">
+                Student Assignee: <strong className="text-theme-text-primary">{editingRating ? editingRating.targetName : selectedTask?.assignee}</strong>
+              </p>
             </div>
 
             <form onSubmit={handleEvaluateSubmit} className="space-y-4 text-xs">
@@ -469,7 +457,7 @@ export default function RatingsPage() {
                 {/* Quality */}
                 <div className="space-y-1">
                   <div className="flex justify-between items-center text-xs">
-                    <span className="font-semibold text-theme-text-primary">1. Quality of Deliverables</span>
+                    <span className="font-semibold text-theme-text-primary">1. Quality of Deliverable</span>
                     <span className="font-bold text-accent">{quality} / 5</span>
                   </div>
                   <input 
@@ -495,7 +483,7 @@ export default function RatingsPage() {
                 {/* Initiative */}
                 <div className="space-y-1">
                   <div className="flex justify-between items-center text-xs">
-                    <span className="font-semibold text-theme-text-primary">3. Proactive Initiative & Ownership</span>
+                    <span className="font-semibold text-theme-text-primary">3. Proactive Initiative & Problem Solving</span>
                     <span className="font-bold text-accent">{initiative} / 5</span>
                   </div>
                   <input 
@@ -508,7 +496,7 @@ export default function RatingsPage() {
                 {/* Collaboration */}
                 <div className="space-y-1">
                   <div className="flex justify-between items-center text-xs">
-                    <span className="font-semibold text-theme-text-primary">4. Collaboration & Team Spirit</span>
+                    <span className="font-semibold text-theme-text-primary">4. Team Collaboration & Communication</span>
                     <span className="font-bold text-accent">{collaboration} / 5</span>
                   </div>
                   <input 
@@ -522,11 +510,11 @@ export default function RatingsPage() {
 
               {/* Remarks Notes */}
               <div className="space-y-1.5">
-                <label className="block font-medium text-theme-text-secondary">Evaluation Remarks / Milestone Feedback</label>
+                <label className="block font-medium text-theme-text-secondary">Evaluation Remarks / Feedback for Student</label>
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Record summary feedback or specific milestones reached..."
+                  placeholder="Record constructive feedback on deliverables and milestone targets..."
                   rows={3}
                   className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                 />
@@ -534,7 +522,7 @@ export default function RatingsPage() {
 
               {/* Rolling Average Score */}
               <div className="bg-theme-border/10 p-3 rounded-xl border border-theme-border/20 flex justify-between items-center">
-                <span className="font-semibold text-theme-text-secondary">Overall Scorecard Result:</span>
+                <span className="font-semibold text-theme-text-secondary">Calculated Performance Rating:</span>
                 <span className="text-sm font-black text-warning flex items-center gap-1">
                   <Star className="h-4 w-4 fill-warning stroke-warning" />
                   {((quality + timeliness + initiative + collaboration) / 4).toFixed(1)} / 5.0
@@ -545,7 +533,7 @@ export default function RatingsPage() {
                 type="submit"
                 className="w-full py-3 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer mt-4"
               >
-                {editingRating ? 'Save Scorecard Updates' : 'Submit Scorecard'}
+                {editingRating ? 'Save Scorecard Updates' : 'Submit Performance Rating'}
               </button>
             </form>
           </div>
@@ -555,9 +543,9 @@ export default function RatingsPage() {
       {/* Delete Confirmation Modal */}
       <ConfirmModal
         isOpen={Boolean(deletingRatingId)}
-        title="Delete Evaluation Record"
-        message="Are you sure you want to delete this rating evaluation record? This will adjust the overall rollups and performance history."
-        confirmLabel="Delete Record"
+        title="Delete Scorecard Record"
+        message="Are you sure you want to delete this task evaluation scorecard? The performance rating on the task deliverable will be cleared."
+        confirmLabel="Delete Scorecard"
         variant="danger"
         onConfirm={handleConfirmDeleteRating}
         onCancel={() => setDeletingRatingId(null)}
