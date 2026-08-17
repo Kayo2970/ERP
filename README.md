@@ -1,15 +1,15 @@
 # LEADS Next Gen All-in-One Dashboard
 
-This repository contains the private internal operations and management dashboard for the **LEADS Next Gen Centre at MSRUAS, Bengaluru**. It consolidates task traceability, event management, performance evaluation, reimbursement claims, and public feedback collection into a single, cohesive portal.
+This repository contains the private internal operations and management dashboard for the **LEADS Next Gen Centre at MSRUAS, Bengaluru**. It consolidates task traceability, event management, performance evaluation, reimbursement claims, dynamic public form building, and roster management into a single, cohesive portal.
 
 ---
 
 ## 📂 Project Structure
 
-- **`leads-dashboard/`**: The Next.js 14 (App Router) + TypeScript + Tailwind CSS (v4) project containing the active implementation of the dashboard.
+- **`leads-dashboard/`**: The Next.js (App Router) + TypeScript + Tailwind CSS (v4) project containing the active implementation of the dashboard.
 - **`PROJECT DOCS/`**: Curated product specifications, sitemaps, database models, technical specifications, and copywriting guidelines.
-- **`Arclon_v1.0/`**: Gulp-based reference Bootstrap 5 admin template, serving as the visual reference for the dashboard.
-- **`Arclon-Sketch_v1.0.sketch`**: Reference UI design Sketch source file.
+- **`REFERENCE DATA/`**: Official Ramaiah University of Applied Sciences leadership directory, hierarchy structure, and references.
+- **`login_creds.md`**: Complete roster directory login credentials and testing accounts list.
 
 ---
 
@@ -17,7 +17,7 @@ This repository contains the private internal operations and management dashboar
 
 ### 1. Running the LEADS Next Gen Dashboard (Active Implementation)
 
-The dashboard is built using **Next.js 14 (App Router)** and **Tailwind CSS v4** featuring a modern, premium space-themed glassmorphic UI.
+The dashboard is built using **Next.js** and **Tailwind CSS v4** featuring a modern, premium space-themed glassmorphic UI.
 
 ```bash
 # Navigate to the project directory
@@ -31,21 +31,34 @@ npm run dev -- -p 3030
 ```
 
 Open [http://localhost:3030](http://localhost:3030) in your browser to view the login screen.
-- **Mock Login Credentials (For Testing & Review)**:
-  - **Email**: `kayomarz@msruas.ac.in` (Accepts any email address containing `@`)
-  - **Password**: `password123` (Accepts any password value)
-- **Theme Switcher**: Supported seamlessly (Sun/Moon icon in the navbar) to toggle light and dark glassmorphic themes.
+
+---
+
+## 🔐 Authentication & Access Level Tiers (Testing)
+
+The system dynamically validates sign-ins against the registered members database. You can test different role perspectives using the default password `password123`:
+
+| Role / Rank | Representative Test Email | Access Level Tier |
+| :--- | :--- | :--- |
+| **Super User** | `kayomarz.pavri@msruas.ac.in` | **Tier 1** — Full Operations & Settings Control |
+| **Centre Head** | `subhadeep.mukherjee@msruas.ac.in` | **Tier 2** — Member uploads & reimbursement audits |
+| **Events Head** | `pallabi.mund@msruas.ac.in` | **Tier 3** — Event creation and task assignments |
+| **Advisory Board** | `sharath.kumar@msruas.ac.in` | **Tier 4** — Read-only performance and rating reviewer |
+| **Core Committee** | `gurutejas.c@msruas.ac.in` | **Tier 5** — Operations control, task setup, form builder |
+| **Training Associate** | `kunal.bhadauria@msruas.ac.in` | **Tier 6** — Member dashboard, task completion, claim submission |
+
+For a complete index of all 35+ testing accounts, see [login_creds.md](login_creds.md).
 
 ---
 
 ## 🛠️ Tech Stack & Key Integrations
 
-- **Frontend**: Next.js 14 (App Router) & TypeScript
-- **Styling**: Tailwind CSS v4 & custom glassmorphism utilities (`globals.css`)
+- **Frontend**: Next.js (App Router) & TypeScript
+- **Styling**: Tailwind CSS v4 & custom space glassmorphism utilities (`globals.css`)
 - **State & Theme**: Client-side theme context with localStorage persistence
-- **Icons**: Lucide React
-- **Charts**: Recharts (fully responsive custom graphs)
-- **Database (Target)**: PostgreSQL via Supabase with database-level Row-Level Security (RLS)
+- **Charts**: Recharts (fully responsive custom graphs and metrics radar)
+- **Forms**: Dynamic public feedback builder and submissions logger
+- **Orchestration**: Direct integration of task workflows, event milestones, and dynamic event-based committees (Logistics, Stage, Food, etc.)
 
 ---
 
