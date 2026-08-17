@@ -1,14 +1,23 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Plus, X, Calendar, MapPin, Users, Briefcase, Eye } from 'lucide-react';
-import { getEvents, addEvent, getCommittees, EventItem } from '@/lib/local-data';
+import { Plus, X, Calendar, Briefcase, Eye, Edit2, Trash2, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { getEvents, addEvent, updateEvent, deleteEvent, getCommittees, getTasks, EventItem, TaskItem } from '@/lib/local-data';
+import { ConfirmModal } from '@/components/ui/confirm-modal';
+import { EmptyState } from '@/components/ui/empty-state';
 
 export default function EventsPage() {
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [user, setUser] = useState<any>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [committees, setCommittees] = useState<string[]>([]);
   
+  // Modals
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
+  const [viewingEvent, setViewingEvent] = useState<EventItem | null>(null);
+  const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
+
   // Form State
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -16,10 +25,12 @@ export default function EventsPage() {
   const [endDate, setEndDate] = useState('');
   const [committee, setCommittee] = useState('Senior Student Leadership');
   const [status, setStatus] = useState<EventItem['status']>('planned');
-  const [committees, setCommittees] = useState<string[]>([]);
+  const [formError, setFormError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
 
   useEffect(() => {
     setEvents(getEvents());
+    setTasks(getTasks());
     setCommittees(getCommittees());
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
@@ -27,34 +38,86 @@ export default function EventsPage() {
     }
   }, []);
 
-  const handleCreateEvent = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title || !startDate || !endDate) return;
+  const triggerSuccess = (msg: string) => {
+    setSuccessMsg(msg);
+    setTimeout(() => setSuccessMsg(''), 4000);
+  };
 
-    addEvent({
-      title,
-      description,
-      startDate,
-      endDate,
-      committee,
-      status
-    });
-
-    // Reset Form & Close Modal
+  const handleOpenCreate = () => {
     setTitle('');
     setDescription('');
     setStartDate('');
     setEndDate('');
-    setCommittee('Senior Student Leadership');
+    setCommittee(committees[0] || 'Senior Student Leadership');
     setStatus('planned');
-    setIsModalOpen(false);
+    setFormError('');
+    setIsCreateModalOpen(true);
+  };
 
-    // Refresh Events list
+  const handleOpenEdit = (event: EventItem) => {
+    setEditingEvent(event);
+    setTitle(event.title);
+    setDescription(event.description);
+    setStartDate(event.startDate);
+    setEndDate(event.endDate);
+    setCommittee(event.committee);
+    setStatus(event.status);
+    setFormError('');
+  };
+
+  const handleSaveEvent = (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError('');
+
+    if (!title || !startDate || !endDate) {
+      setFormError('Please fill in all required fields.');
+      return;
+    }
+
+    // Validate End Date >= Start Date
+    if (new Date(endDate) < new Date(startDate)) {
+      setFormError('End Date must be on or after Start Date.');
+      return;
+    }
+
+    if (editingEvent) {
+      updateEvent(editingEvent.id, {
+        title,
+        description,
+        startDate,
+        endDate,
+        committee,
+        status,
+      }, user?.name || 'User');
+      triggerSuccess('Event updated successfully.');
+      setEditingEvent(null);
+    } else {
+      addEvent({
+        title,
+        description,
+        startDate,
+        endDate,
+        committee,
+        status,
+        createdBy: user?.name || 'User'
+      });
+      triggerSuccess('New event created successfully.');
+      setIsCreateModalOpen(false);
+    }
+
     setEvents(getEvents());
   };
 
-  // Check if current user has admin rights to create events (Tiers 1-3 & 5)
-  const canCreate = user && (user.tier <= 3 || user.tier === 5);
+  const handleConfirmDelete = () => {
+    if (!deletingEventId) return;
+    deleteEvent(deletingEventId, user?.name || 'User');
+    setDeletingEventId(null);
+    setEvents(getEvents());
+    triggerSuccess('Event deleted successfully.');
+  };
+
+  // Check if current user has admin rights to create/edit events (Tiers 1-3 & 5)
+  const canManage = user && (user.tier <= 3 || user.tier === 5);
 
   const getStatusBadge = (status: EventItem['status']) => {
     switch (status) {
@@ -71,18 +134,30 @@ export default function EventsPage() {
     }
   };
 
+  const linkedTasks = viewingEvent 
+    ? tasks.filter(t => t.eventId === viewingEvent.id || (t.event && t.event.toLowerCase() === viewingEvent.title.toLowerCase()))
+    : [];
+
   return (
     <div className="p-6 md:p-8 space-y-6">
       
+      {/* Notifications */}
+      {successMsg && (
+        <div className="flex items-center gap-3 p-4 bg-success/15 border border-success/20 rounded-2xl text-theme-text-primary text-xs animate-in fade-in duration-300">
+          <CheckCircle2 className="h-5 w-5 text-success shrink-0" />
+          <span>{successMsg}</span>
+        </div>
+      )}
+
       {/* Header section with Create Button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-theme-text-primary">Events Calendar</h1>
-          <p className="text-xs text-theme-text-secondary">Plan, view, and link committees to center events</p>
+          <h1 className="text-xl font-bold text-theme-text-primary">Events Calendar & Management</h1>
+          <p className="text-xs text-theme-text-secondary">Plan symposiums, track milestones, and audit committee deliverables</p>
         </div>
-        {canCreate && (
+        {canManage && (
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={handleOpenCreate}
             className="flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer"
           >
             <Plus className="h-4 w-4" />
@@ -93,9 +168,13 @@ export default function EventsPage() {
 
       {/* Grid of Events Card */}
       {events.length === 0 ? (
-        <div className="glass-panel rounded-2xl p-12 text-center text-theme-text-secondary">
-          No events created yet. Click "Create Event" to get started.
-        </div>
+        <EmptyState
+          icon={Calendar}
+          title="No events scheduled"
+          description="Create your first symposium, workshop, or conference milestone."
+          actionLabel={canManage ? "Create Event" : undefined}
+          onAction={canManage ? handleOpenCreate : undefined}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {events.map((event) => (
@@ -120,42 +199,78 @@ export default function EventsPage() {
               <div className="border-t border-theme-border/20 pt-4 mt-5 flex items-center justify-between text-xs text-theme-text-secondary">
                 <div className="flex items-center gap-1.5">
                   <Calendar className="h-4 w-4 text-accent" />
-                  <span>{event.startDate} &middot; {event.endDate}</span>
+                  <span className="text-[11px] font-medium">{event.startDate} &middot; {event.endDate}</span>
                 </div>
                 
-                <button className="p-1 hover:bg-theme-border/30 rounded-md transition-all text-theme-text-primary flex items-center gap-1">
-                  <Eye className="h-4 w-4" />
-                  View Details
-                </button>
+                <div className="flex items-center gap-1">
+                  <button 
+                    onClick={() => setViewingEvent(event)}
+                    className="p-1.5 hover:bg-theme-border/30 rounded-lg transition-all text-theme-text-primary flex items-center gap-1 cursor-pointer"
+                    title="View Event Details"
+                  >
+                    <Eye className="h-4 w-4 text-accent" />
+                  </button>
+                  
+                  {canManage && (
+                    <>
+                      <button 
+                        onClick={() => handleOpenEdit(event)}
+                        className="p-1.5 hover:bg-theme-border/30 rounded-lg transition-all text-theme-text-primary flex items-center gap-1 cursor-pointer"
+                        title="Edit Event"
+                      >
+                        <Edit2 className="h-4 w-4 text-theme-text-secondary hover:text-accent" />
+                      </button>
+                      <button 
+                        onClick={() => setDeletingEventId(event.id)}
+                        className="p-1.5 hover:bg-danger/10 rounded-lg transition-all text-danger flex items-center gap-1 cursor-pointer"
+                        title="Delete Event"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Create Event Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="glass-panel w-full max-w-lg rounded-3xl p-6 flex flex-col space-y-6 relative border border-white/15 shadow-2xl">
+      {/* Create / Edit Event Modal */}
+      {(isCreateModalOpen || editingEvent) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="glass-panel w-full max-w-lg rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl">
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-theme-text-primary">Create New Event</h2>
+              <h2 className="text-base font-bold text-theme-text-primary">
+                {editingEvent ? 'Edit Event Details' : 'Create New Event'}
+              </h2>
               <button 
-                onClick={() => setIsModalOpen(false)}
+                onClick={() => {
+                  setIsCreateModalOpen(false);
+                  setEditingEvent(null);
+                }}
                 className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateEvent} className="space-y-4 text-xs">
+            {formError && (
+              <div className="p-3 bg-danger/10 border border-danger/25 rounded-xl text-danger text-xs flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4 shrink-0" />
+                <span>{formError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveEvent} className="space-y-4 text-xs">
               <div className="space-y-1.5">
-                <label className="block font-medium text-theme-text-secondary">Event Title</label>
+                <label className="block font-medium text-theme-text-secondary">Event Title *</label>
                 <input
                   type="text"
                   required
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. Sustainable Leadership Meet"
+                  placeholder="e.g. Annual Tech Symposium 2026"
                   className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                 />
               </div>
@@ -165,7 +280,7 @@ export default function EventsPage() {
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Provide event overview or objectives"
+                  placeholder="Provide context on speakers, topics, venue, and goals..."
                   rows={3}
                   className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                 />
@@ -173,7 +288,7 @@ export default function EventsPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Start Date</label>
+                  <label className="block font-medium text-theme-text-secondary">Start Date *</label>
                   <input
                     type="date"
                     required
@@ -184,7 +299,7 @@ export default function EventsPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">End Date</label>
+                  <label className="block font-medium text-theme-text-secondary">End Date *</label>
                   <input
                     type="date"
                     required
@@ -214,12 +329,13 @@ export default function EventsPage() {
                   <label className="block font-medium text-theme-text-secondary">Status</label>
                   <select
                     value={status}
-                    onChange={(e) => setStatus(e.target.value as any)}
+                    onChange={(e) => setStatus(e.target.value as EventItem['status'])}
                     className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   >
                     <option value="planned">Planned</option>
                     <option value="active">Active</option>
                     <option value="completed">Completed</option>
+                    <option value="archived">Archived</option>
                   </select>
                 </div>
               </div>
@@ -228,12 +344,94 @@ export default function EventsPage() {
                 type="submit"
                 className="w-full py-3 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer mt-4"
               >
-                Create Event
+                {editingEvent ? 'Save Event Updates' : 'Publish Event'}
               </button>
             </form>
           </div>
         </div>
       )}
+
+      {/* Event Details Drawer / Modal */}
+      {viewingEvent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="glass-panel w-full max-w-lg rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl">
+            <div className="flex items-start justify-between">
+              <div>
+                <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full capitalize ${getStatusBadge(viewingEvent.status)}`}>
+                  {viewingEvent.status}
+                </span>
+                <h2 className="text-lg font-bold text-theme-text-primary mt-2">{viewingEvent.title}</h2>
+              </div>
+              <button 
+                onClick={() => setViewingEvent(null)}
+                className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="bg-theme-background/30 p-4 rounded-xl border border-theme-border/30 space-y-2">
+                <p className="text-theme-text-secondary leading-relaxed">
+                  {viewingEvent.description || 'No detailed description recorded.'}
+                </p>
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-theme-border/20 text-[11px]">
+                  <div>
+                    <span className="text-theme-text-secondary block">Date Range:</span>
+                    <strong className="text-theme-text-primary">{viewingEvent.startDate} &middot; {viewingEvent.endDate}</strong>
+                  </div>
+                  <div>
+                    <span className="text-theme-text-secondary block">Committee Unit:</span>
+                    <strong className="text-theme-text-primary">{viewingEvent.committee}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Linked Tasks Section */}
+              <div className="space-y-2">
+                <h4 className="font-bold text-xs text-theme-text-primary uppercase tracking-wider">
+                  Linked Deliverables & Tasks ({linkedTasks.length})
+                </h4>
+                {linkedTasks.length === 0 ? (
+                  <p className="text-xs text-theme-text-secondary italic">No tasks linked to this event yet.</p>
+                ) : (
+                  <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                    {linkedTasks.map(t => (
+                      <div key={t.id} className="p-2.5 bg-theme-border/10 rounded-lg border border-theme-border/20 flex items-center justify-between text-xs">
+                        <div>
+                          <p className="font-medium text-theme-text-primary">{t.title}</p>
+                          <p className="text-[10px] text-theme-text-secondary">Assignee: {t.assignee} &middot; Due: {t.dueDate}</p>
+                        </div>
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-accent/15 text-accent">{t.status}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setViewingEvent(null)}
+                className="px-4 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={Boolean(deletingEventId)}
+        title="Delete Event"
+        message="Are you sure you want to delete this event? This action will permanently remove it from the schedule and audit trail."
+        confirmLabel="Delete Event"
+        variant="danger"
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeletingEventId(null)}
+      />
 
     </div>
   );

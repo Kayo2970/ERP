@@ -1,10 +1,381 @@
-export default function Page() {
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { 
+  User, 
+  ShieldCheck, 
+  History, 
+  Lock, 
+  Key, 
+  CheckCircle2, 
+  ShieldAlert, 
+  Users, 
+  Sliders, 
+  Clock, 
+  Sun, 
+  Moon,
+  Save
+} from 'lucide-react';
+import { getAuditLogs, getMembers, Member, AuditLogItem, logAuditEvent } from '@/lib/local-data';
+
+export default function SettingsPage() {
+  const [activeTab, setActiveTab] = useState<'account' | 'roles' | 'audit'>('account');
+  const [user, setUser] = useState<any>(null);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
+
+  // Account form state
+  const [displayName, setDisplayName] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  // Notification state
+  const [successMsg, setSuccessMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  useEffect(() => {
+    setMembers(getMembers());
+    setAuditLogs(getAuditLogs());
+
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      try {
+        const u = JSON.parse(savedUser);
+        setUser(u);
+        setDisplayName(u.name);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  }, []);
+
+  const triggerSuccess = (msg: string) => {
+    setSuccessMsg(msg);
+    setErrorMsg('');
+    setTimeout(() => setSuccessMsg(''), 4000);
+  };
+
+  const triggerError = (msg: string) => {
+    setErrorMsg(msg);
+    setSuccessMsg('');
+    setTimeout(() => setErrorMsg(''), 4000);
+  };
+
+  const handleUpdateAccount = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!displayName.trim()) {
+      triggerError('Name cannot be blank.');
+      return;
+    }
+
+    if (newPassword) {
+      if (newPassword.length < 4) {
+        triggerError('New password must be at least 4 characters.');
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        triggerError('New password and confirmation do not match.');
+        return;
+      }
+    }
+
+    const updatedUser = { ...user, name: displayName.trim() };
+    setUser(updatedUser);
+    localStorage.setItem('user', JSON.stringify(updatedUser));
+
+    // Update in members list as well
+    const allMembers = getMembers();
+    const updatedMembers = allMembers.map(m => m.id === user.id ? { ...m, name: displayName.trim() } : m);
+    localStorage.setItem('leads_members', JSON.stringify(updatedMembers));
+    setMembers(updatedMembers);
+
+    logAuditEvent('ACCOUNT_UPDATED', user.name, 'Updated profile name and security preferences');
+    setAuditLogs(getAuditLogs());
+
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    triggerSuccess('Account details and credentials saved successfully.');
+  };
+
+  const isSuperAdmin = user && (user.tier === 1 || user.tier === 2);
+
+  const rolePrivileges = [
+    { tier: 1, role: 'Super User', access: 'Full unconstrained system administration, user management, audit logs, and forms building.' },
+    { tier: 2, role: 'Centre Head', access: 'Final reimbursement authorization, event oversight, performance evaluations, and reporting.' },
+    { tier: 3, role: 'Head of Events', access: 'Event creation & management, task assignments, deadline extensions, and ratings.' },
+    { tier: 4, role: 'Advisory Board', access: 'Strategic read-only oversight, quarterly analytics, and event calendar reviews.' },
+    { tier: 5, role: 'Core Committee', access: 'Event organizing, task assignments, public form creation, and reimbursement first-pass checks.' },
+    { tier: 6, role: 'Training Associate', access: 'Assigned deliverable execution, task acknowledgment, and personal claim submissions.' },
+  ];
+
   return (
-    <div className="p-6">
-      <div className="glass-panel rounded-2xl p-8 max-w-2xl">
-        <h1 className="text-2xl font-semibold mb-2">Settings</h1>
-        <p className="text-theme-text-secondary">Configure account preferences, user management, and security audit logs.</p>
+    <div className="p-6 md:p-8 space-y-6">
+      
+      {/* Notifications */}
+      {successMsg && (
+        <div className="flex items-center gap-3 p-4 bg-success/15 border border-success/20 rounded-2xl text-theme-text-primary text-xs animate-in fade-in duration-300">
+          <CheckCircle2 className="h-5 w-5 text-success shrink-0" />
+          <span>{successMsg}</span>
+        </div>
+      )}
+      {errorMsg && (
+        <div className="flex items-center gap-3 p-4 bg-danger/15 border border-danger/20 rounded-2xl text-theme-text-primary text-xs animate-in fade-in duration-300">
+          <ShieldAlert className="h-5 w-5 text-danger shrink-0" />
+          <span>{errorMsg}</span>
+        </div>
+      )}
+
+      {/* Header section */}
+      <div>
+        <h1 className="text-xl font-bold text-theme-text-primary">System Settings & Governance</h1>
+        <p className="text-xs text-theme-text-secondary">Configure your profile credentials, inspect role privileges, and review audit records</p>
       </div>
+
+      {/* Tabs navigation */}
+      <div className="flex border-b border-theme-border/30 gap-4 text-xs font-semibold">
+        <button
+          onClick={() => setActiveTab('account')}
+          className={`pb-3 flex items-center gap-2 transition-all cursor-pointer ${
+            activeTab === 'account'
+              ? 'text-accent border-b-2 border-accent'
+              : 'text-theme-text-secondary hover:text-theme-text-primary'
+          }`}
+        >
+          <User className="h-4 w-4" />
+          Account Profile
+        </button>
+
+        <button
+          onClick={() => setActiveTab('roles')}
+          className={`pb-3 flex items-center gap-2 transition-all cursor-pointer ${
+            activeTab === 'roles'
+              ? 'text-accent border-b-2 border-accent'
+              : 'text-theme-text-secondary hover:text-theme-text-primary'
+          }`}
+        >
+          <ShieldCheck className="h-4 w-4" />
+          Roles & Permissions Matrix
+        </button>
+
+        {isSuperAdmin && (
+          <button
+            onClick={() => {
+              setActiveTab('audit');
+              setAuditLogs(getAuditLogs());
+            }}
+            className={`pb-3 flex items-center gap-2 transition-all cursor-pointer ${
+              activeTab === 'audit'
+                ? 'text-accent border-b-2 border-accent'
+                : 'text-theme-text-secondary hover:text-theme-text-primary'
+            }`}
+          >
+            <History className="h-4 w-4" />
+            Audit Trail ({auditLogs.length})
+          </button>
+        )}
+      </div>
+
+      {/* Tab 1: Account Profile */}
+      {activeTab === 'account' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="glass-panel rounded-2xl p-6 lg:col-span-2 space-y-5">
+            <div>
+              <h3 className="text-base font-bold text-theme-text-primary">Profile & Security Preferences</h3>
+              <p className="text-xs text-theme-text-secondary">Update your display information and access credentials</p>
+            </div>
+
+            <form onSubmit={handleUpdateAccount} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">Full Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">Email Address (Read-only)</label>
+                  <input
+                    type="email"
+                    disabled
+                    value={user?.email || ''}
+                    className="w-full px-4 py-2.5 bg-theme-background/10 border border-theme-border/30 rounded-xl text-theme-text-secondary cursor-not-allowed opacity-70"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-theme-border/20">
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">Role Tier</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={`${user?.role || 'Super User'} (Tier ${user?.tier || 1})`}
+                    className="w-full px-4 py-2.5 bg-theme-background/10 border border-theme-border/30 rounded-xl text-theme-text-secondary cursor-not-allowed opacity-70"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">Committee</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={user?.committee || 'All Committees'}
+                    className="w-full px-4 py-2.5 bg-theme-background/10 border border-theme-border/30 rounded-xl text-theme-text-secondary cursor-not-allowed opacity-70"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-theme-border/20 space-y-3">
+                <h4 className="font-bold text-xs text-theme-text-primary uppercase tracking-wider flex items-center gap-1.5">
+                  <Key className="h-4 w-4 text-accent" />
+                  Change Password
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="block font-medium text-theme-text-secondary">New Password</label>
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Minimum 4 characters"
+                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block font-medium text-theme-text-secondary">Confirm New Password</label>
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Re-enter new password"
+                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-3">
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer flex items-center gap-1.5 text-xs"
+                >
+                  <Save className="h-4 w-4" />
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* User Session Info Card */}
+          <div className="glass-panel rounded-2xl p-6 space-y-4 flex flex-col justify-between">
+            <div className="space-y-3 text-xs">
+              <h3 className="text-sm font-bold text-theme-text-primary">Session Info</h3>
+              <div className="bg-theme-background/30 p-4 rounded-xl border border-theme-border/30 space-y-2 text-[11px]">
+                <p className="text-theme-text-secondary">Authenticated Account:</p>
+                <p className="font-bold text-theme-text-primary text-xs">{user?.name}</p>
+                <p className="font-mono text-accent">{user?.email}</p>
+                <div className="pt-2 border-t border-theme-border/20 text-theme-text-secondary">
+                  <span>Authorized Tier: </span>
+                  <strong className="text-theme-text-primary">{user?.role} (Level {user?.tier})</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="text-[11px] text-theme-text-secondary space-y-1">
+              <p>MSRUAS LEADS Next Gen Portal</p>
+              <p>Build version: v2026.8.18-stable</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 2: Roles Matrix */}
+      {activeTab === 'roles' && (
+        <div className="glass-panel rounded-2xl p-6 space-y-5">
+          <div>
+            <h3 className="text-base font-bold text-theme-text-primary">System Access & Permission Hierarchy</h3>
+            <p className="text-xs text-theme-text-secondary">Governing access rules across the 6 role tiers defined in LEADS PRD</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {rolePrivileges.map(rp => (
+              <div key={rp.tier} className="p-4 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-theme-text-primary text-sm">{rp.role}</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/20">
+                    Tier {rp.tier}
+                  </span>
+                </div>
+                <p className="text-xs text-theme-text-secondary leading-relaxed">
+                  {rp.access}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Tab 3: Security & Audit Trail */}
+      {activeTab === 'audit' && isSuperAdmin && (
+        <div className="glass-panel rounded-2xl p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-bold text-theme-text-primary">Security Audit Trail</h3>
+              <p className="text-xs text-theme-text-secondary">Immutable log of system actions, member updates, and governance events</p>
+            </div>
+            <span className="text-xs font-semibold text-accent px-2.5 py-0.5 bg-accent/15 rounded-md">
+              {auditLogs.length} events logged
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            {auditLogs.length === 0 ? (
+              <div className="text-center py-10 text-theme-text-secondary text-xs">
+                No audit logs recorded yet in this session.
+              </div>
+            ) : (
+              <table className="min-w-full text-xs text-left">
+                <thead>
+                  <tr className="text-theme-text-secondary border-b border-theme-border/40 text-xs">
+                    <th className="pb-3 font-semibold">Timestamp</th>
+                    <th className="pb-3 font-semibold">Event Action</th>
+                    <th className="pb-3 font-semibold">Actor Name</th>
+                    <th className="pb-3 font-semibold">Actor Email</th>
+                    <th className="pb-3 font-semibold">Details</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-theme-border/20">
+                  {auditLogs.map(log => (
+                    <tr key={log.id} className="hover:bg-theme-border/10 transition-all text-xs">
+                      <td className="py-3 pr-2 text-theme-text-secondary whitespace-nowrap font-mono">{log.timestamp}</td>
+                      <td className="py-3 pr-2">
+                        <span className="font-semibold px-2 py-0.5 bg-accent/10 text-accent rounded text-[10px] uppercase">
+                          {log.action}
+                        </span>
+                      </td>
+                      <td className="py-3 pr-2 font-bold text-theme-text-primary">{log.actorName}</td>
+                      <td className="py-3 pr-2 text-theme-text-secondary font-mono">{log.actorEmail}</td>
+                      <td className="py-3 text-theme-text-secondary max-w-md truncate" title={log.details}>
+                        {log.details}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

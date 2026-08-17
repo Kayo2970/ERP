@@ -1,15 +1,45 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Download, Upload, X, ShieldAlert, CheckCircle, Search, UserMinus, Edit2 } from 'lucide-react';
-import { getMembers, saveMembers, addMember, getCommittees, addCommittee, Member } from '@/lib/local-data';
+import { 
+  Plus, 
+  Download, 
+  Upload, 
+  X, 
+  ShieldAlert, 
+  CheckCircle, 
+  Search, 
+  UserMinus, 
+  Edit2, 
+  ChevronLeft, 
+  ChevronRight,
+  ArrowUpDown,
+  Users
+} from 'lucide-react';
+import { 
+  getMembers, 
+  saveMembers, 
+  addMember, 
+  deleteMember,
+  getCommittees, 
+  addCommittee, 
+  Member 
+} from '@/lib/local-data';
+import { ConfirmModal } from '@/components/ui/confirm-modal';
 
 export default function DirectoryPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [user, setUser] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [deletingMember, setDeletingMember] = useState<Member | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Pagination & Sorting State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(15);
+  const [sortField, setSortField] = useState<keyof Member>('tier');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   // Manual Add Form State
   const [name, setName] = useState('');
@@ -55,10 +85,17 @@ export default function DirectoryPage() {
     };
 
     const currentMembers = getMembers();
+    // Check if new email conflicts with another member
+    const emailConflict = currentMembers.some(m => m.id !== editingMember.id && m.email.toLowerCase() === editEmail.toLowerCase().trim());
+    if (emailConflict) {
+      triggerError(`Email ${editEmail} is already assigned to another member.`);
+      return;
+    }
+
     const updated = currentMembers.map(m => m.id === editingMember.id ? {
       ...m,
-      name: editName,
-      email: editEmail,
+      name: editName.trim(),
+      email: editEmail.toLowerCase().trim(),
       role: rolesMap[editRoleTier] || 'Training Associate',
       tier: editRoleTier,
       committee: editCommittee
@@ -75,7 +112,11 @@ export default function DirectoryPage() {
     setCommittees(getCommittees());
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
-      setUser(JSON.parse(savedUser));
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch (e) {
+        console.error(e);
+      }
     }
   }, []);
 
@@ -92,24 +133,28 @@ export default function DirectoryPage() {
       6: 'Training Associate',
     };
 
-    addMember({
-      name,
-      email,
-      role: rolesMap[roleTier] || 'Training Associate',
-      tier: roleTier,
-      committee
-    });
+    try {
+      addMember({
+        name: name.trim(),
+        email: email.toLowerCase().trim(),
+        role: rolesMap[roleTier] || 'Training Associate',
+        tier: roleTier,
+        committee
+      });
 
-    // Reset & Close
-    setName('');
-    setEmail('');
-    setRoleTier(6);
-    setCommittee('Organizing Committee');
-    setIsModalOpen(false);
+      // Reset & Close
+      setName('');
+      setEmail('');
+      setRoleTier(6);
+      setCommittee('Organizing Committee');
+      setIsModalOpen(false);
 
-    // Refresh & Notify
-    setMembers(getMembers());
-    triggerSuccess('New member added successfully.');
+      // Refresh & Notify
+      setMembers(getMembers());
+      triggerSuccess('New member added to roster successfully.');
+    } catch (err: any) {
+      triggerError(err.message || 'Failed to add member.');
+    }
   };
 
   const handleCreateCommittee = (e: React.FormEvent) => {
@@ -180,21 +225,27 @@ export default function DirectoryPage() {
 
         const currentMembers = getMembers();
         let importCount = 0;
+        let duplicateCount = 0;
 
         for (let i = 1; i < lines.length; i++) {
           const line = lines[i].trim();
           if (!line) continue;
 
-          // Simple CSV splitter handling potential quotes (standard split is fine for basic tests)
           const values = line.split(',').map(v => v.replace(/^"|"$/g, '').trim());
           if (values.length < 4) continue;
 
           const mName = values[nameIndex];
-          const mEmail = values[emailIndex];
+          const mEmail = values[emailIndex]?.toLowerCase();
           const mCommittee = values[committeeIndex];
           const mRole = values[roleIndex];
 
           if (!mName || !mEmail || !mRole) continue;
+
+          // Duplicate Email Check
+          if (currentMembers.some(m => m.email.toLowerCase() === mEmail)) {
+            duplicateCount++;
+            continue;
+          }
 
           // Map string designation to Role Tier
           const mRoleLower = mRole.toLowerCase();
@@ -222,7 +273,9 @@ export default function DirectoryPage() {
         if (importCount > 0) {
           saveMembers(currentMembers);
           setMembers(getMembers());
-          triggerSuccess(`Successfully imported ${importCount} new members.`);
+          triggerSuccess(`Successfully imported ${importCount} new members. ${duplicateCount > 0 ? `(${duplicateCount} existing duplicates skipped)` : ''}`);
+        } else if (duplicateCount > 0) {
+          triggerError(`No new members imported. ${duplicateCount} duplicate email addresses found in file.`);
         } else {
           triggerError('No valid member rows found in the CSV.');
         }
@@ -231,42 +284,68 @@ export default function DirectoryPage() {
       }
     };
     reader.readAsText(file);
-    // Clear value to allow upload again
     e.target.value = '';
   };
 
   const triggerSuccess = (msg: string) => {
     setSuccessMsg(msg);
     setErrorMsg('');
-    setTimeout(() => setSuccessMsg(''), 5000);
+    setTimeout(() => setSuccessMsg(''), 4000);
   };
 
   const triggerError = (msg: string) => {
     setErrorMsg(msg);
     setSuccessMsg('');
-    setTimeout(() => setErrorMsg(''), 5000);
+    setTimeout(() => setErrorMsg(''), 4000);
   };
 
-  const handleDeleteMember = (id: string) => {
-    if (confirm('Are you sure you want to remove this member?')) {
-      const current = getMembers().filter(m => m.id !== id);
-      saveMembers(current);
+  const handleConfirmDelete = () => {
+    if (!deletingMember) return;
+    try {
+      deleteMember(deletingMember.id);
       setMembers(getMembers());
-      triggerSuccess('Member removed successfully.');
+      triggerSuccess(`Removed ${deletingMember.name} from directory.`);
+    } catch (err: any) {
+      triggerError(err.message || 'Failed to remove member.');
+    } finally {
+      setDeletingMember(null);
+    }
+  };
+
+  const toggleSort = (field: keyof Member) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
     }
   };
 
   const isAdmin = user && user.tier <= 3; // Tier 1-3 can manage roster
 
-  // Filter members list based on search query safely
-  const filteredMembers = members.filter(m => {
-    const q = searchQuery.toLowerCase();
-    const nameMatch = (m.name || '').toLowerCase().includes(q);
-    const emailMatch = (m.email || '').toLowerCase().includes(q);
-    const roleMatch = (m.role || '').toLowerCase().includes(q);
-    const committeeMatch = (m.committee || '').toLowerCase().includes(q);
-    return nameMatch || emailMatch || roleMatch || committeeMatch;
-  });
+  // Filter members list based on search query
+  const filteredMembers = members
+    .filter(m => {
+      const q = searchQuery.toLowerCase();
+      const nameMatch = (m.name || '').toLowerCase().includes(q);
+      const emailMatch = (m.email || '').toLowerCase().includes(q);
+      const roleMatch = (m.role || '').toLowerCase().includes(q);
+      const committeeMatch = (m.committee || '').toLowerCase().includes(q);
+      return nameMatch || emailMatch || roleMatch || committeeMatch;
+    })
+    .sort((a, b) => {
+      let aVal = a[sortField];
+      let bVal = b[sortField];
+      if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+      if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+  // Pagination slice
+  const totalPages = Math.ceil(filteredMembers.length / pageSize) || 1;
+  const paginatedMembers = filteredMembers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
     <div className="p-6 md:p-8 space-y-6">
@@ -288,16 +367,16 @@ export default function DirectoryPage() {
       {/* Header section with actions */}
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-theme-text-primary">Member Directory</h1>
-          <p className="text-xs text-theme-text-secondary">View and manage center advisors, committees, and training associate rosters</p>
+          <h1 className="text-xl font-bold text-theme-text-primary">Member Directory & Rosters</h1>
+          <p className="text-xs text-theme-text-secondary">View and configure center advisors, committees, and training associate credentials</p>
         </div>
         
         {isAdmin && (
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={handleDownloadTemplate}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-card-border"
-              title="Download Excel/CSV Template"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-border/40"
+              title="Download CSV Template"
             >
               <Download className="h-4 w-4" />
               Download Template
@@ -305,7 +384,7 @@ export default function DirectoryPage() {
             
             <button
               onClick={handleUploadClick}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-card-border"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-border/40"
               title="Upload Filled CSV File"
             >
               <Upload className="h-4 w-4" />
@@ -321,7 +400,7 @@ export default function DirectoryPage() {
 
             <button
               onClick={() => setIsCommitteeModalOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2.5 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-card-border"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-border/40"
             >
               <Plus className="h-4 w-4" />
               Create Committee
@@ -329,7 +408,7 @@ export default function DirectoryPage() {
 
             <button
               onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2.5 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer"
+              className="flex items-center gap-1.5 px-4 py-2 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer"
             >
               <Plus className="h-4 w-4" />
               Add Member
@@ -339,71 +418,122 @@ export default function DirectoryPage() {
       </div>
 
       {/* Directory Filter Bar & Search */}
-      <div className="glass-panel rounded-2xl p-4 flex items-center gap-3">
-        <Search className="h-5 w-5 text-theme-text-secondary shrink-0" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search members by name, email, role, or committee..."
-          className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-sm text-theme-text-primary placeholder-theme-text-secondary"
-        />
+      <div className="glass-panel rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3 flex-1">
+          <Search className="h-4.5 w-4.5 text-theme-text-secondary shrink-0" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setCurrentPage(1);
+            }}
+            placeholder="Search roster by name, email, designation, or committee..."
+            className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-xs text-theme-text-primary placeholder-theme-text-secondary"
+          />
+        </div>
+
+        <div className="flex items-center gap-3 text-xs text-theme-text-secondary">
+          <span>Rows per page:</span>
+          <select
+            value={pageSize}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value));
+              setCurrentPage(1);
+            }}
+            className="px-2 py-1 bg-theme-background/40 border border-theme-border/40 rounded-lg text-xs text-theme-text-primary focus:outline-none"
+          >
+            <option value={10}>10</option>
+            <option value={15}>15</option>
+            <option value={25}>25</option>
+            <option value={50}>50</option>
+          </select>
+          <span className="font-semibold text-theme-text-primary">{filteredMembers.length} members</span>
+        </div>
       </div>
 
-      {/* Directory Grid / Roster List */}
-      <div className="glass-panel rounded-2xl p-6 overflow-hidden">
+      {/* Directory Table */}
+      <div className="glass-panel rounded-2xl p-6 overflow-hidden space-y-4">
         <div className="overflow-x-auto">
           {filteredMembers.length === 0 ? (
-            <div className="text-center py-12 text-theme-text-secondary text-sm">
+            <div className="text-center py-12 text-theme-text-secondary text-xs">
               No matching members found in the directory.
             </div>
           ) : (
-            <table className="min-w-full text-sm text-left">
+            <table className="min-w-full text-xs text-left">
               <thead>
                 <tr className="text-theme-text-secondary border-b border-theme-border/40 text-xs">
-                  <th className="pb-3.5 font-semibold">Name</th>
-                  <th className="pb-3.5 font-semibold">Email</th>
-                  <th className="pb-3.5 font-semibold">Role Tier</th>
-                  <th className="pb-3.5 font-semibold">Committee Assignment</th>
+                  <th 
+                    onClick={() => toggleSort('name')}
+                    className="pb-3.5 font-semibold cursor-pointer hover:text-theme-text-primary select-none"
+                  >
+                    <span className="flex items-center gap-1">
+                      Name <ArrowUpDown className="h-3 w-3" />
+                    </span>
+                  </th>
+                  <th 
+                    onClick={() => toggleSort('email')}
+                    className="pb-3.5 font-semibold cursor-pointer hover:text-theme-text-primary select-none"
+                  >
+                    <span className="flex items-center gap-1">
+                      Email Address <ArrowUpDown className="h-3 w-3" />
+                    </span>
+                  </th>
+                  <th 
+                    onClick={() => toggleSort('tier')}
+                    className="pb-3.5 font-semibold cursor-pointer hover:text-theme-text-primary select-none"
+                  >
+                    <span className="flex items-center gap-1">
+                      Privilege Tier <ArrowUpDown className="h-3 w-3" />
+                    </span>
+                  </th>
+                  <th 
+                    onClick={() => toggleSort('committee')}
+                    className="pb-3.5 font-semibold cursor-pointer hover:text-theme-text-primary select-none"
+                  >
+                    <span className="flex items-center gap-1">
+                      Committee Assignment <ArrowUpDown className="h-3 w-3" />
+                    </span>
+                  </th>
                   {isAdmin && <th className="pb-3.5 font-semibold text-right">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-theme-border/20">
-                {filteredMembers.map(member => (
-                  <tr key={member.id} className="hover:bg-theme-border/10 transition-all">
-                    <td className="py-4 pr-2 font-medium text-theme-text-primary flex items-center gap-2.5">
-                      <div className="h-8 w-8 bg-accent/10 rounded-lg flex items-center justify-center border border-accent/10">
-                        <span className="text-xs font-bold text-accent">
+                {paginatedMembers.map(member => (
+                  <tr key={member.id} className="hover:bg-theme-border/10 transition-all text-xs">
+                    <td className="py-3.5 pr-2 font-bold text-theme-text-primary flex items-center gap-2.5">
+                      <div className="h-8 w-8 bg-accent/15 rounded-xl flex items-center justify-center border border-accent/20">
+                        <span className="text-[11px] font-bold text-accent">
                           {member.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                         </span>
                       </div>
                       <span>{member.name}</span>
                     </td>
-                    <td className="py-4 pr-2 text-theme-text-secondary">{member.email}</td>
-                    <td className="py-4 pr-2">
-                      <span className="inline-flex items-center text-xs font-medium text-theme-text-primary px-2.5 py-0.5 rounded-full bg-theme-border/30">
+                    <td className="py-3.5 pr-2 text-theme-text-secondary">{member.email}</td>
+                    <td className="py-3.5 pr-2">
+                      <span className="inline-flex items-center text-[10px] font-semibold text-theme-text-primary px-2.5 py-0.5 rounded-full bg-theme-border/30">
                         {member.role} (Tier {member.tier})
                       </span>
                     </td>
-                    <td className="py-4 pr-2 text-theme-text-secondary">{member.committee}</td>
+                    <td className="py-3.5 pr-2 text-theme-text-secondary">{member.committee}</td>
                     {isAdmin && (
-                      <td className="py-4 text-right">
+                      <td className="py-3.5 text-right">
                         <div className="flex justify-end gap-1">
                           <button
                             onClick={() => startEdit(member)}
                             className="p-1.5 text-accent hover:bg-accent/10 rounded-md transition-all cursor-pointer"
                             title="Edit Member Privileges"
                           >
-                            <Edit2 className="h-4.5 w-4.5" />
+                            <Edit2 className="h-4 w-4" />
                           </button>
                           
-                          {member.id !== 'm1' ? ( // Prevent deleting main super user
+                          {member.id !== 'm1' ? (
                             <button
-                              onClick={() => handleDeleteMember(member.id)}
+                              onClick={() => setDeletingMember(member)}
                               className="p-1.5 text-danger hover:bg-danger/10 rounded-md transition-all cursor-pointer"
                               title="Remove Member"
                             >
-                              <UserMinus className="h-4.5 w-4.5" />
+                              <UserMinus className="h-4 w-4" />
                             </button>
                           ) : null}
                         </div>
@@ -415,14 +545,39 @@ export default function DirectoryPage() {
             </table>
           )}
         </div>
+
+        {/* Pagination Navigation */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between pt-3 border-t border-theme-border/20 text-xs">
+            <span className="text-theme-text-secondary">
+              Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-1.5 rounded-lg border border-theme-border/30 hover:bg-theme-border/30 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-theme-text-primary"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-1.5 rounded-lg border border-theme-border/30 hover:bg-theme-border/30 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-theme-text-primary"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Add Member Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="glass-panel w-full max-w-lg rounded-3xl p-6 flex flex-col space-y-6 relative border border-white/15 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="glass-panel w-full max-w-lg rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl">
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-theme-text-primary">Add Center Member</h2>
+              <h2 className="text-base font-bold text-theme-text-primary">Add Member to Roster</h2>
               <button 
                 onClick={() => setIsModalOpen(false)}
                 className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
@@ -433,32 +588,32 @@ export default function DirectoryPage() {
 
             <form onSubmit={handleCreateMember} className="space-y-4 text-xs">
               <div className="space-y-1.5">
-                <label className="block font-medium text-theme-text-secondary">Full Name</label>
+                <label className="block font-medium text-theme-text-secondary">Full Name *</label>
                 <input
                   type="text"
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. John Doe"
+                  placeholder="e.g. Ananya Sharma"
                   className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="block font-medium text-theme-text-secondary">Email Address</label>
+                <label className="block font-medium text-theme-text-secondary">Email Address *</label>
                 <input
                   type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@msruas.ac.in"
+                  placeholder="ananya.s@msruas.ac.in"
                   className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Designation / Role</label>
+                  <label className="block font-medium text-theme-text-secondary">Role & Privilege Tier</label>
                   <select
                     value={roleTier}
                     onChange={(e) => setRoleTier(parseInt(e.target.value))}
@@ -492,7 +647,7 @@ export default function DirectoryPage() {
                 type="submit"
                 className="w-full py-3 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer mt-4"
               >
-                Add Member
+                Add Member to Roster
               </button>
             </form>
           </div>
@@ -501,8 +656,8 @@ export default function DirectoryPage() {
 
       {/* Edit Member Modal */}
       {editingMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="glass-panel w-full max-w-lg rounded-3xl p-6 flex flex-col space-y-6 relative border border-white/15 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="glass-panel w-full max-w-lg rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-theme-text-primary">Edit Member Privileges</h2>
               <button 
@@ -515,25 +670,23 @@ export default function DirectoryPage() {
 
             <form onSubmit={handleUpdateMember} className="space-y-4 text-xs">
               <div className="space-y-1.5">
-                <label className="block font-medium text-theme-text-secondary">Full Name</label>
+                <label className="block font-medium text-theme-text-secondary">Full Name *</label>
                 <input
                   type="text"
                   required
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  placeholder="e.g. John Doe"
                   className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="block font-medium text-theme-text-secondary">Email Address</label>
+                <label className="block font-medium text-theme-text-secondary">Email Address *</label>
                 <input
                   type="email"
                   required
                   value={editEmail}
                   onChange={(e) => setEditEmail(e.target.value)}
-                  placeholder="name@msruas.ac.in"
                   className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                 />
               </div>
@@ -583,8 +736,8 @@ export default function DirectoryPage() {
 
       {/* Create Committee Modal */}
       {isCommitteeModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="glass-panel w-full max-w-md rounded-3xl p-6 flex flex-col space-y-6 relative border border-white/15 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="glass-panel w-full max-w-md rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-theme-text-primary">Create Event-Based Committee</h2>
               <button 
@@ -597,13 +750,13 @@ export default function DirectoryPage() {
 
             <form onSubmit={handleCreateCommittee} className="space-y-4 text-xs">
               <div className="space-y-1.5">
-                <label className="block font-medium text-theme-text-secondary">Committee Name</label>
+                <label className="block font-medium text-theme-text-secondary">Committee Name *</label>
                 <input
                   type="text"
                   required
                   value={newCommitteeName}
                   onChange={(e) => setNewCommitteeName(e.target.value)}
-                  placeholder="e.g. Food & Catering Committee"
+                  placeholder="e.g. Media & Photography Committee"
                   className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                 />
               </div>
@@ -618,6 +771,17 @@ export default function DirectoryPage() {
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={Boolean(deletingMember)}
+        title="Remove Member from Roster"
+        message={`Are you sure you want to remove ${deletingMember?.name} (${deletingMember?.email}) from the LEADS directory roster?`}
+        confirmLabel="Remove Member"
+        variant="danger"
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeletingMember(null)}
+      />
 
     </div>
   );

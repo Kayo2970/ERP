@@ -17,47 +17,52 @@ import {
   ChevronRight,
   Star,
   Crown,
-  Award
+  Award,
+  Users
 } from 'lucide-react';
-import { getTasks, getEvents, getMembers, getRatings, updateTaskStatus, TaskItem } from '@/lib/local-data';
+import { 
+  getTasks, 
+  getEvents, 
+  getMembers, 
+  getRatings, 
+  getAnnouncements, 
+  updateTaskStatus, 
+  canViewTask, 
+  TaskItem, 
+  EventItem,
+  AnnouncementItem
+} from '@/lib/local-data';
+import { getRatingColor } from '@/lib/design-tokens';
 
-// Mock Data for Quarters
-const scoreHistory = [
-  { quarter: 'Q1', score: 4.2 },
-  { quarter: 'Q2', score: 4.5 },
-  { quarter: 'Q3', score: 4.7 },
-  { quarter: 'Q4', score: 4.8 },
-];
-
-// Mock Data for Criteria
-const criteriaScores = [
-  { name: 'Quality', score: 4.9, color: '#2E8B57' },
-  { name: 'Timeliness', score: 4.6, color: '#7FB069' },
-  { name: 'Initiative', score: 4.8, color: '#2E8B57' },
-  { name: 'Collaboration', score: 4.7, color: '#7FB069' },
-];
 export default function DashboardHome() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
-  const [eventsCount, setEventsCount] = useState(0);
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [activeEventsCount, setActiveEventsCount] = useState(0);
   const [membersCount, setMembersCount] = useState(0);
+  const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [user, setUser] = useState<any>(null);
   
   // Announcements and Events Tab State
   const [activeTab, setActiveTab] = useState<'events' | 'announcements'>('events');
-  const [events, setEvents] = useState<any[]>([]);
 
   // Custom Calendar and Leaderboard State
   const [calendarDate, setCalendarDate] = useState(new Date(2026, 7, 1)); // Default August 2026
-  const [selectedDay, setSelectedDay] = useState<number | null>(10); // Default to 10th (Tech Conclave start)
+  const [selectedDay, setSelectedDay] = useState<number | null>(10); // Default to 10th
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
+  const [overallAvgScore, setOverallAvgScore] = useState<number>(4.8);
 
   useEffect(() => {
-    setTasks(getTasks());
-    setEventsCount(getEvents().length);
-    setEvents(getEvents().sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()));
-    setMembersCount(getMembers().length);
+    const allEvents = getEvents();
+    setEvents(allEvents.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()));
+    setActiveEventsCount(allEvents.filter(e => e.status === 'active').length);
     
-    // Leaderboard calculation
+    const allTasks = getTasks();
+    setTasks(allTasks);
+    
+    setMembersCount(getMembers().length);
+    setAnnouncements(getAnnouncements());
+    
+    // Dynamic Leaderboard calculation from actual ratings
     const ratingsList = getRatings();
     const totalsMap: Record<string, { total: number; count: number; role: string; type: string }> = {};
     
@@ -67,7 +72,7 @@ export default function DashboardHome() {
         totalsMap[key] = { 
           total: 0, 
           count: 0, 
-          role: r.targetType === 'committee' ? 'Committee Group' : 'Student Leader',
+          role: r.targetType === 'committee' ? 'Committee Unit' : 'Member Evaluation',
           type: r.targetType
         };
       }
@@ -83,27 +88,22 @@ export default function DashboardHome() {
         score: Math.round((item.total / item.count) * 10) / 10,
         type: item.type
       };
-    });
+    }).sort((a, b) => b.score - a.score);
 
-    const defaults = [
-      { name: 'Gurutejas C', role: 'Senior President', score: 4.9, type: 'individual' },
-      { name: 'Abhijit Arya', role: 'Senior Vice President', score: 4.8, type: 'individual' },
-      { name: 'Organizing Committee', role: 'Committee Group', score: 4.7, type: 'committee' },
-      { name: 'Sadiya Sawood', role: 'Head — Leadership & Dev', score: 4.6, type: 'individual' },
-    ];
+    setLeaderboard(calculated.slice(0, 4));
 
-    const finalLeaderboard = [...calculated];
-    defaults.forEach(def => {
-      if (!finalLeaderboard.some(f => f.name === def.name)) {
-        finalLeaderboard.push(def);
-      }
-    });
-
-    setLeaderboard(finalLeaderboard.sort((a, b) => b.score - a.score).slice(0, 4));
+    if (ratingsList.length > 0) {
+      const totalScore = ratingsList.reduce((acc, r) => acc + r.overallScore, 0);
+      setOverallAvgScore(parseFloat((totalScore / ratingsList.length).toFixed(1)));
+    }
     
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
-      setUser(JSON.parse(savedUser));
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch (e) {
+        console.error(e);
+      }
     }
   }, []);
 
@@ -123,13 +123,17 @@ export default function DashboardHome() {
   };
 
   const handlePrevMonth = () => {
-    setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1));
-    setSelectedDay(null);
+    const newDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1);
+    setCalendarDate(newDate);
+    const maxDays = new Date(newDate.getFullYear(), newDate.getMonth() + 1, 0).getDate();
+    setSelectedDay(prev => prev ? Math.min(prev, maxDays) : 1);
   };
 
   const handleNextMonth = () => {
-    setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1));
-    setSelectedDay(null);
+    const newDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1);
+    setCalendarDate(newDate);
+    const maxDays = new Date(newDate.getFullYear(), newDate.getMonth() + 1, 0).getDate();
+    setSelectedDay(prev => prev ? Math.min(prev, maxDays) : 1);
   };
 
   const calYear = calendarDate.getFullYear();
@@ -156,49 +160,38 @@ export default function DashboardHome() {
     return events.filter(e => checkStr >= e.startDate && checkStr <= e.endDate);
   };
 
-  // Filter tasks based on logged-in user tier/roles
-  const displayedTasks = tasks.filter(task => {
-    if (!user) return true;
-    if (user.tier <= 3) return true; // Super User, Centre Head, Head of Events see all
-    if (user.tier === 5) {
-      // Core Committee see their own tasks plus tasks related to their committee
-      return task.assigneeEmail === user.email || task.event === 'Tech Conclave 2026';
-    }
-    // Training Associates see only their own assigned tasks
-    return task.assigneeEmail === user.email;
-  });
+  // Filter tasks based on shared permission helper
+  const displayedTasks = tasks.filter(task => canViewTask(task, user));
 
   // Count tasks awaiting acknowledgment
   const pendingAckCount = displayedTasks.filter(t => t.status === 'Assigned').length;
 
-  const announcements = [
-    { id: '1', title: 'Q3 Performance Evaluation Ratings Published', body: 'Faculty advisors have updated individual and committee ratings for the Q3 events cycle. Check your rating card.', date: 'Today, 10:30 AM', scope: 'Everyone' },
-    { id: '2', title: 'Reimbursement Claims Deadline - August Cycle', body: 'All expense claims and receipts for events conducted in July/August must be submitted by August 24th.', date: 'Yesterday', scope: 'Core Committee' },
-  ];
-
-  const getFormatDate = (dateStr: string) => {
-    try {
-      const d = new Date(dateStr);
-      const day = d.getDate();
-      const month = d.toLocaleString('default', { month: 'short' }).toUpperCase();
-      return { day, month };
-    } catch {
-      return { day: '??', month: 'EVT' };
-    }
-  };
+  const scorePercentage = Math.min(100, Math.max(0, (overallAvgScore / 5.0) * 100));
 
   return (
     <div className="p-6 md:p-8 space-y-6">
       
-      {/* Welcome Card & Context Alert */}
+      {/* Welcome Card */}
       {user && (
-        <div className="glass-panel rounded-3xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gradient-to-r from-accent/5 to-primary/5 border-accent/10">
+        <div className="glass-panel rounded-3xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gradient-to-r from-accent/10 to-primary/5 border border-accent/20">
           <div>
             <h1 className="text-xl font-bold text-theme-text-primary">Welcome Back, {user.name}!</h1>
-            <p className="text-xs text-theme-text-secondary mt-1">Logged in as {user.role} &middot; Tier {user.tier}</p>
+            <p className="text-xs text-theme-text-secondary mt-1">
+              Role: <span className="font-semibold text-theme-text-primary">{user.role}</span> &middot; Tier {user.tier} &middot; Committee: {user.committee}
+            </p>
           </div>
-          <span className="text-xs font-semibold text-accent px-3 py-1 bg-accent/15 rounded-xl border border-accent/10">
-            {user.tier <= 3 ? 'Administrator Workspace' : 'Collaborator Workspace'}
+          <span className="text-xs font-semibold text-accent px-3 py-1 bg-accent/15 rounded-xl border border-accent/15">
+            {user.tier <= 3 ? 'Leadership Access' : user.tier === 4 ? 'Advisory Oversight' : 'Core Workspace'}
+          </span>
+        </div>
+      )}
+
+      {/* Advisory Board Alert */}
+      {user && user.tier === 4 && (
+        <div className="flex items-center gap-3 p-4 bg-accent/10 border border-accent/20 rounded-2xl text-theme-text-primary text-xs animate-in fade-in duration-300">
+          <AlertCircle className="h-5 w-5 text-accent shrink-0" />
+          <span>
+            <strong>Advisory Board Role Notice:</strong> Advisory Board members provide strategic oversight and do not receive operational task assignments. View event progress, analytics rollups, and performance evaluations below.
           </span>
         </div>
       )}
@@ -208,11 +201,16 @@ export default function DashboardHome() {
         <div className="flex items-center justify-between p-4 bg-warning/10 border border-warning/20 rounded-2xl text-theme-text-primary animate-in fade-in duration-300">
           <div className="flex items-center gap-3">
             <AlertCircle className="h-5 w-5 text-warning shrink-0" />
-            <span className="text-sm font-medium">
+            <span className="text-xs font-semibold">
               You have {pendingAckCount} task(s) awaiting your acknowledgment.
             </span>
           </div>
-          <span className="text-xs font-semibold text-warning uppercase tracking-wider bg-warning/10 px-2 py-0.5 rounded-md">Action Required</span>
+          <Link 
+            href="/dashboard/tasks"
+            className="text-xs font-semibold text-warning uppercase tracking-wider bg-warning/15 px-2.5 py-1 rounded-lg hover:bg-warning/25 transition-all"
+          >
+            Review Tasks
+          </Link>
         </div>
       )}
 
@@ -221,59 +219,61 @@ export default function DashboardHome() {
         
         {/* Active Events */}
         <div className="glass-panel rounded-2xl p-5 flex items-center justify-between">
-          <div className="space-y-2">
-            <span className="text-xs font-medium text-theme-text-secondary uppercase tracking-wider">Active Events</span>
-            <h3 className="text-2xl font-bold text-theme-text-primary">{eventsCount}</h3>
-            <span className="text-[10px] text-success font-semibold flex items-center gap-1">
-              <TrendingUp className="h-3 w-3" /> +2 this month
+          <div className="space-y-1.5">
+            <span className="text-xs font-semibold text-theme-text-secondary uppercase tracking-wider">Active Events</span>
+            <h3 className="text-2xl font-bold text-theme-text-primary">{activeEventsCount}</h3>
+            <span className="text-[11px] text-theme-text-secondary font-medium">
+              {events.length} total planned / active
             </span>
           </div>
-          <div className="h-12 w-12 bg-accent/15 rounded-xl flex items-center justify-center border border-accent/15">
-            <Calendar className="h-6 w-6 text-accent" />
+          <div className="h-11 w-11 bg-accent/15 rounded-xl flex items-center justify-center border border-accent/15">
+            <Calendar className="h-5 w-5 text-accent" />
           </div>
         </div>
 
         {/* Tasks Assigned */}
         <div className="glass-panel rounded-2xl p-5 flex items-center justify-between">
-          <div className="space-y-2">
-            <span className="text-xs font-medium text-theme-text-secondary uppercase tracking-wider">Your Tasks</span>
+          <div className="space-y-1.5">
+            <span className="text-xs font-semibold text-theme-text-secondary uppercase tracking-wider">Assigned Tasks</span>
             <h3 className="text-2xl font-bold text-theme-text-primary">{displayedTasks.length}</h3>
-            <span className="text-[10px] text-theme-text-secondary font-medium">
+            <span className="text-[11px] text-success font-semibold">
               {displayedTasks.filter(t => t.status === 'Completed').length} completed
             </span>
           </div>
-          <div className="h-12 w-12 bg-success/15 rounded-xl flex items-center justify-center border border-success/15">
-            <CheckSquare className="h-6 w-6 text-success" />
+          <div className="h-11 w-11 bg-success/15 rounded-xl flex items-center justify-center border border-success/15">
+            <CheckSquare className="h-5 w-5 text-success" />
           </div>
         </div>
 
         {/* Members / Roster Count */}
         <div className="glass-panel rounded-2xl p-5 flex items-center justify-between">
-          <div className="space-y-2">
-            <span className="text-xs font-medium text-theme-text-secondary uppercase tracking-wider">Member Roster</span>
+          <div className="space-y-1.5">
+            <span className="text-xs font-semibold text-theme-text-secondary uppercase tracking-wider">Member Roster</span>
             <h3 className="text-2xl font-bold text-theme-text-primary">{membersCount}</h3>
-            <span className="text-[10px] text-accent font-semibold">Active center roster</span>
+            <span className="text-[11px] text-accent font-semibold">Active center members</span>
           </div>
-          <div className="h-12 w-12 bg-primary/15 rounded-xl flex items-center justify-center border border-primary/15">
-            <TrendingUp className="h-6 w-6 text-accent" />
+          <div className="h-11 w-11 bg-primary/15 rounded-xl flex items-center justify-center border border-primary/15">
+            <Users className="h-5 w-5 text-accent" />
           </div>
         </div>
 
-        {/* Performance Rating */}
+        {/* Performance Rollup */}
         <div className="glass-panel rounded-2xl p-5 flex items-center justify-between">
-          <div className="space-y-2">
-            <span className="text-xs font-medium text-theme-text-secondary uppercase tracking-wider">Performance Rollup</span>
-            <h3 className="text-2xl font-bold text-theme-text-primary">4.8 <span className="text-sm font-normal text-theme-text-secondary">/ 5</span></h3>
-            <div className="flex gap-0.5">
-              <span className="h-1.5 w-6 bg-success rounded-full"></span>
-              <span className="h-1.5 w-6 bg-success rounded-full"></span>
-              <span className="h-1.5 w-6 bg-success rounded-full"></span>
-              <span className="h-1.5 w-6 bg-success rounded-full"></span>
-              <span className="h-1.5 w-6 bg-theme-border rounded-full"></span>
+          <div className="space-y-1.5 flex-1 pr-2">
+            <span className="text-xs font-semibold text-theme-text-secondary uppercase tracking-wider">Performance Rollup</span>
+            <h3 className="text-2xl font-bold text-theme-text-primary">
+              {overallAvgScore.toFixed(1)} <span className="text-xs font-normal text-theme-text-secondary">/ 5.0</span>
+            </h3>
+            {/* Continuous progress track */}
+            <div className="w-full bg-theme-border/40 h-2 rounded-full overflow-hidden">
+              <div 
+                className="bg-emerald-500 h-full rounded-full transition-all duration-500" 
+                style={{ width: `${scorePercentage}%` }}
+              ></div>
             </div>
           </div>
-          <div className="h-12 w-12 bg-accent/15 rounded-xl flex items-center justify-center border border-accent/15">
-            <ArrowUpRight className="h-6 w-6 text-accent" />
+          <div className="h-11 w-11 bg-emerald-500/15 rounded-xl flex items-center justify-center border border-emerald-500/20">
+            <Star className="h-5 w-5 text-emerald-500 fill-emerald-500" />
           </div>
         </div>
 
@@ -286,23 +286,25 @@ export default function DashboardHome() {
         <div className="glass-panel rounded-2xl p-6 flex flex-col space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-base font-semibold text-theme-text-primary">LEADS Event Calendar</h3>
-              <p className="text-xs text-theme-text-secondary">Click on highlighted days with event indicators</p>
+              <h3 className="text-base font-bold text-theme-text-primary">LEADS Event Calendar</h3>
+              <p className="text-xs text-theme-text-secondary">Explore scheduled symposiums, workshops, and milestones</p>
             </div>
             
-            <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-xl p-1 text-xs">
+            <div className="flex items-center gap-1 bg-theme-background/30 border border-theme-border/30 rounded-xl p-1 text-xs">
               <button 
                 onClick={handlePrevMonth}
                 className="p-1 hover:bg-theme-border/30 rounded-lg text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
+                title="Previous Month"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <span className="px-2 font-semibold text-theme-text-primary select-none w-24 text-center">
+              <span className="px-2 font-semibold text-theme-text-primary select-none w-28 text-center text-xs">
                 {monthNames[calMonth]} {calYear}
               </span>
               <button 
                 onClick={handleNextMonth}
                 className="p-1 hover:bg-theme-border/30 rounded-lg text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
+                title="Next Month"
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
@@ -339,13 +341,13 @@ export default function DashboardHome() {
                       isSelected
                         ? 'bg-accent text-white shadow-md shadow-accent/25'
                         : hasEvents
-                          ? 'bg-accent/10 border border-accent/25 text-accent hover:bg-accent/20'
+                          ? 'bg-accent/15 border border-accent/30 text-accent hover:bg-accent/25'
                           : 'hover:bg-theme-border/30 text-theme-text-primary'
                     }`}
                   >
                     <span>{day}</span>
                     {hasEvents && !isSelected && (
-                      <span className="absolute bottom-1 h-1 w-1 bg-accent rounded-full animate-pulse"></span>
+                      <span className="absolute bottom-1 h-1.5 w-1.5 bg-accent rounded-full animate-pulse"></span>
                     )}
                   </button>
                 );
@@ -354,8 +356,8 @@ export default function DashboardHome() {
           </div>
 
           {/* Selected Day Event Details */}
-          <div className="flex-1 space-y-2 max-h-[140px] overflow-y-auto pr-1">
-            <h4 className="text-[10px] font-bold text-theme-text-secondary uppercase tracking-wider">
+          <div className="flex-1 space-y-2 max-h-[140px] overflow-y-auto pr-1 text-xs">
+            <h4 className="text-[11px] font-bold text-theme-text-secondary uppercase tracking-wider">
               Events on {monthNames[calMonth]} {selectedDay || '?'}:
             </h4>
             {selectedDay ? (
@@ -363,26 +365,26 @@ export default function DashboardHome() {
                 const dayEvents = getDayEvents(selectedDay);
                 if (dayEvents.length === 0) {
                   return (
-                    <div className="text-[11px] text-theme-text-secondary py-3 text-center bg-white/5 border border-white/5 rounded-xl">
+                    <div className="text-xs text-theme-text-secondary py-3 text-center bg-theme-border/10 border border-theme-border/20 rounded-xl">
                       No events scheduled for this date.
                     </div>
                   );
                 }
                 return dayEvents.map(ev => (
-                  <div key={ev.id} className="p-3 bg-white/5 border border-white/5 rounded-xl flex items-center justify-between gap-3 hover:bg-white/10 transition-all text-xs">
+                  <div key={ev.id} className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl flex items-center justify-between gap-3 hover:bg-theme-border/20 transition-all">
                     <div>
-                      <h5 className="font-semibold text-theme-text-primary">{ev.title}</h5>
+                      <h5 className="font-semibold text-theme-text-primary text-xs">{ev.title}</h5>
                       <p className="text-[10px] text-theme-text-secondary mt-0.5">{ev.committee}</p>
                     </div>
-                    <span className="text-[10px] px-2 py-0.5 bg-accent/15 text-accent font-medium rounded-md">
+                    <span className="text-[10px] px-2.5 py-0.5 bg-accent/15 text-accent font-semibold rounded-md capitalize">
                       {ev.status}
                     </span>
                   </div>
                 ));
               })()
             ) : (
-              <div className="text-[11px] text-theme-text-secondary py-3 text-center bg-white/5 border border-white/5 rounded-xl">
-                Select a day with indicators to audit scheduled events.
+              <div className="text-xs text-theme-text-secondary py-3 text-center bg-theme-border/10 border border-theme-border/20 rounded-xl">
+                Select a day to view scheduled events.
               </div>
             )}
           </div>
@@ -391,53 +393,57 @@ export default function DashboardHome() {
         {/* Top Performers Leaderboard */}
         <div className="glass-panel rounded-2xl p-6 flex flex-col space-y-4">
           <div>
-            <h3 className="text-base font-semibold text-theme-text-primary">Top Center Performers</h3>
-            <p className="text-xs text-theme-text-secondary">Leaderboard ranked by overall performance evaluations</p>
+            <h3 className="text-base font-bold text-theme-text-primary">Performance Leaderboard</h3>
+            <p className="text-xs text-theme-text-secondary">Ranked by authenticated peer and advisor evaluations</p>
           </div>
 
-          <div className="flex-1 space-y-3.5">
-            {leaderboard.map((perf, index) => {
-              const rankIcons = [
-                <Crown key="crown" className="h-5 w-5 text-warning shrink-0" />,
-                <Award key="award2" className="h-5 w-5 text-theme-text-primary shrink-0 opacity-80" />,
-                <Award key="award3" className="h-5 w-5 text-theme-text-secondary shrink-0 opacity-60" />,
-              ];
+          <div className="flex-1 space-y-3">
+            {leaderboard.length === 0 ? (
+              <div className="text-center py-10 text-theme-text-secondary text-xs">
+                No evaluation scores submitted yet. Visit Ratings to evaluate committee members.
+              </div>
+            ) : (
+              leaderboard.map((perf, index) => {
+                const rankIcons = [
+                  <Crown key="crown" className="h-5 w-5 text-amber-400 shrink-0" />,
+                  <Award key="award2" className="h-5 w-5 text-slate-300 shrink-0" />,
+                  <Award key="award3" className="h-5 w-5 text-amber-600 shrink-0" />,
+                ];
 
-              return (
-                <div 
-                  key={perf.name} 
-                  className="flex items-center justify-between p-3.5 bg-theme-border/10 border border-theme-border/20 rounded-xl hover:bg-theme-border/15 transition-all text-xs"
-                >
-                  <div className="flex items-center gap-3.5">
-                    {/* Rank Indicator */}
-                    <div className="w-6 flex justify-center">
-                      {index < 3 ? rankIcons[index] : <span className="font-bold text-theme-text-secondary">#{index + 1}</span>}
+                const colorTokens = getRatingColor(perf.score);
+
+                return (
+                  <div 
+                    key={perf.name} 
+                    className="flex items-center justify-between p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl hover:bg-theme-border/20 transition-all text-xs"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-5 flex justify-center">
+                        {index < 3 ? rankIcons[index] : <span className="font-bold text-theme-text-secondary">#{index + 1}</span>}
+                      </div>
+
+                      <div className={`h-8 w-8 rounded-lg flex items-center justify-center border font-bold text-xs ${
+                        perf.type === 'committee'
+                          ? 'bg-success/15 border-success/20 text-success'
+                          : 'bg-accent/15 border-accent/20 text-accent'
+                      }`}>
+                        {perf.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                      </div>
+
+                      <div>
+                        <h4 className="font-semibold text-theme-text-primary text-xs leading-snug">{perf.name}</h4>
+                        <p className="text-[10px] text-theme-text-secondary">{perf.role}</p>
+                      </div>
                     </div>
 
-                    {/* Initials Avatar */}
-                    <div className={`h-9 w-9 rounded-xl flex items-center justify-center border font-bold ${
-                      perf.type === 'committee'
-                        ? 'bg-success/10 border-success/20 text-success'
-                        : 'bg-accent/10 border-accent/20 text-accent'
-                    }`}>
-                      {perf.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
-                    </div>
-
-                    {/* Name & Role details */}
-                    <div>
-                      <h4 className="font-semibold text-theme-text-primary leading-snug">{perf.name}</h4>
-                      <p className="text-[10px] text-theme-text-secondary mt-0.5">{perf.role}</p>
+                    <div className={`flex items-center gap-1 px-2.5 py-1 rounded-xl font-bold text-xs border ${colorTokens.bg} ${colorTokens.text} ${colorTokens.border}`}>
+                      <span>{perf.score.toFixed(1)}</span>
+                      <Star className="h-3 w-3 fill-current" />
                     </div>
                   </div>
-
-                  {/* Rating Badge */}
-                  <div className="flex items-center gap-1 px-2.5 py-1 bg-success/15 border border-success/20 text-success rounded-xl font-bold">
-                    <span>{perf.score.toFixed(1)}</span>
-                    <Star className="h-3.5 w-3.5 fill-current" />
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </div>
 
@@ -450,36 +456,41 @@ export default function DashboardHome() {
         <div className="glass-panel rounded-2xl p-6 lg:col-span-2 flex flex-col space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-base font-semibold text-theme-text-primary">Actionable Tasks</h3>
-              <p className="text-xs text-theme-text-secondary">Your current assignments and task lifecycles</p>
+              <h3 className="text-base font-bold text-theme-text-primary">Actionable Tasks</h3>
+              <p className="text-xs text-theme-text-secondary">Current assignments and workflow progress</p>
             </div>
-            <span className="text-xs font-semibold text-accent px-2 py-0.5 bg-accent/15 rounded-md">{displayedTasks.length} total</span>
+            <Link 
+              href="/dashboard/tasks" 
+              className="text-xs font-semibold text-accent hover:underline flex items-center gap-1"
+            >
+              View All Tasks <ExternalLink className="h-3 w-3" />
+            </Link>
           </div>
 
           <div className="overflow-x-auto">
             {displayedTasks.length === 0 ? (
-              <div className="text-center py-8 text-theme-text-secondary text-sm">
-                No active tasks assigned.
+              <div className="text-center py-8 text-theme-text-secondary text-xs">
+                {user?.tier === 4 ? 'No task obligations for Advisory Board role.' : 'No active tasks assigned to your view.'}
               </div>
             ) : (
-              <table className="min-w-full text-sm text-left">
+              <table className="min-w-full text-xs text-left">
                 <thead>
                   <tr className="text-theme-text-secondary border-b border-theme-border/40 text-xs">
-                    <th className="pb-3 font-medium">Task</th>
-                    <th className="pb-3 font-medium">Linked Event</th>
-                    <th className="pb-3 font-medium">Due Date</th>
-                    <th className="pb-3 font-medium">Status</th>
-                    <th className="pb-3 font-medium text-right">Action</th>
+                    <th className="pb-3 font-semibold">Task</th>
+                    <th className="pb-3 font-semibold">Event</th>
+                    <th className="pb-3 font-semibold">Due Date</th>
+                    <th className="pb-3 font-semibold">Status</th>
+                    <th className="pb-3 font-semibold text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-theme-border/20">
-                  {displayedTasks.map(task => (
+                  {displayedTasks.slice(0, 5).map(task => (
                     <tr key={task.id} className="hover:bg-theme-border/10 transition-all">
-                      <td className="py-3.5 pr-2 font-medium text-theme-text-primary">{task.title}</td>
-                      <td className="py-3.5 pr-2 text-theme-text-secondary">{task.event || 'Standalone'}</td>
-                      <td className="py-3.5 pr-2 text-theme-text-secondary">{task.dueDate}</td>
-                      <td className="py-3.5 pr-2">
-                        <span className={`inline-flex items-center text-xs font-semibold px-2.5 py-0.5 rounded-full ${
+                      <td className="py-3 pr-2 font-medium text-theme-text-primary">{task.title}</td>
+                      <td className="py-3 pr-2 text-theme-text-secondary">{task.event || 'Standalone'}</td>
+                      <td className="py-3 pr-2 text-theme-text-secondary">{task.dueDate}</td>
+                      <td className="py-3 pr-2">
+                        <span className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full ${
                           task.status === 'Assigned' 
                              ? 'bg-accent/15 text-accent border border-accent/20' 
                              : task.status === 'In Progress' 
@@ -491,33 +502,32 @@ export default function DashboardHome() {
                           {task.status}
                         </span>
                       </td>
-                      <td className="py-3.5 text-right">
+                      <td className="py-3 text-right">
                         {task.status === 'Assigned' ? (
                           <button
                             onClick={() => handleAcknowledge(task.id)}
-                            className="px-3 py-1.5 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-lg transition-all cursor-pointer shadow-md shadow-accent/15"
+                            className="px-2.5 py-1 bg-accent hover:bg-primary-light text-white text-[10px] font-semibold rounded-lg transition-all cursor-pointer"
                           >
                             Acknowledge
                           </button>
                         ) : task.status === 'In Progress' ? (
                           <div className="flex justify-end gap-1.5">
-                            <button 
+                            <button
                               onClick={() => handleComplete(task.id)}
-                              className="p-1 text-success hover:bg-success/15 rounded-md transition-all cursor-pointer"
-                              title="Mark Completed"
+                              className="px-2.5 py-1 bg-success hover:bg-success/90 text-white text-[10px] font-semibold rounded-lg transition-all cursor-pointer"
                             >
-                              <CheckCircle2 className="h-5 w-5" />
+                              Complete
                             </button>
-                            <button 
+                            <button
                               onClick={() => handleRequestExtension(task.id)}
-                              className="p-1 text-warning hover:bg-warning/15 rounded-md transition-all cursor-pointer"
-                              title="Request Extension"
+                              className="px-2 py-1 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-[10px] font-semibold rounded-lg transition-all cursor-pointer"
+                              title="Request Deadline Extension"
                             >
-                              <FileClock className="h-5 w-5" />
+                              Extend
                             </button>
                           </div>
                         ) : (
-                          <span className="text-xs text-theme-text-secondary font-medium">-</span>
+                          <span className="text-[10px] text-theme-text-secondary">Closed</span>
                         )}
                       </td>
                     </tr>
@@ -528,110 +538,68 @@ export default function DashboardHome() {
           </div>
         </div>
 
-        {/* Tabbed Side Panel: Announcements & Events Calendar */}
+        {/* Dynamic Tabbed Events & Announcements Panel */}
         <div className="glass-panel rounded-2xl p-6 flex flex-col space-y-4">
-          <div className="flex border-b border-theme-border/30 pb-1">
+          <div className="flex border-b border-theme-border/30 pb-2.5 gap-2">
             <button
               onClick={() => setActiveTab('events')}
-              className={`flex-1 pb-2 text-center text-xs font-bold transition-all cursor-pointer border-b-2 ${
-                activeTab === 'events' 
-                  ? 'border-accent text-accent' 
-                  : 'border-transparent text-theme-text-secondary hover:text-theme-text-primary'
+              className={`pb-1 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                activeTab === 'events'
+                  ? 'text-accent border-b-2 border-accent'
+                  : 'text-theme-text-secondary hover:text-theme-text-primary'
               }`}
             >
-              Event Calendar
+              <Calendar className="h-3.5 w-3.5" />
+              Upcoming Events
             </button>
             <button
               onClick={() => setActiveTab('announcements')}
-              className={`flex-1 pb-2 text-center text-xs font-bold transition-all cursor-pointer border-b-2 ${
-                activeTab === 'announcements' 
-                  ? 'border-accent text-accent' 
-                  : 'border-transparent text-theme-text-secondary hover:text-theme-text-primary'
+              className={`pb-1 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                activeTab === 'announcements'
+                  ? 'text-accent border-b-2 border-accent'
+                  : 'text-theme-text-secondary hover:text-theme-text-primary'
               }`}
             >
+              <Megaphone className="h-3.5 w-3.5" />
               Announcements
             </button>
           </div>
 
-          <div className="flex-1 space-y-3.5 overflow-y-auto pr-1 max-h-[360px]">
+          <div className="flex-1 space-y-3 overflow-y-auto max-h-[300px] pr-1 text-xs">
             {activeTab === 'events' ? (
-              // Events Calendar View
               events.length === 0 ? (
-                <div className="text-center py-12 text-theme-text-secondary text-xs">
-                  No upcoming events scheduled.
-                </div>
+                <div className="text-center py-8 text-theme-text-secondary text-xs">No upcoming events.</div>
               ) : (
-                events.map(ev => {
-                  const { day, month } = getFormatDate(ev.startDate);
-                  return (
-                    <div 
-                      key={ev.id} 
-                      className="flex gap-3.5 p-3.5 bg-theme-border/10 border border-theme-border/20 rounded-xl hover:bg-theme-border/15 transition-all"
-                    >
-                      {/* Calendar Block Icon */}
-                      <div className="h-12 w-12 shrink-0 bg-accent/15 rounded-xl border border-accent/25 flex flex-col items-center justify-center font-sans">
-                        <span className="text-[9px] font-bold text-accent leading-none">{month}</span>
-                        <span className="text-lg font-extrabold text-theme-text-primary leading-tight mt-0.5">{day}</span>
-                      </div>
-                      
-                      {/* Event Details */}
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md uppercase ${
-                            ev.status === 'active' 
-                              ? 'bg-success/15 text-success' 
-                              : 'bg-accent/15 text-accent'
-                          }`}>
-                            {ev.status}
-                          </span>
-                          <span className="text-[10px] text-theme-text-secondary font-medium">
-                            {ev.committee}
-                          </span>
-                        </div>
-                        <h4 className="font-semibold text-xs text-theme-text-primary leading-snug">
-                          {ev.title}
-                        </h4>
-                        <p className="text-[11px] text-theme-text-secondary leading-relaxed line-clamp-2">
-                          {ev.description}
-                        </p>
-                      </div>
+                events.map(ev => (
+                  <div key={ev.id} className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-1 hover:bg-theme-border/15 transition-all">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-semibold text-theme-text-primary text-xs">{ev.title}</h4>
+                      <span className="text-[10px] px-2 py-0.5 bg-accent/15 text-accent font-semibold rounded-md capitalize">{ev.status}</span>
                     </div>
-                  );
-                })
+                    <p className="text-[10px] text-theme-text-secondary line-clamp-2">{ev.description}</p>
+                    <p className="text-[10px] text-theme-text-secondary font-medium pt-1">{ev.startDate} to {ev.endDate}</p>
+                  </div>
+                ))
               )
             ) : (
-              // Announcements List View
-              announcements.map(announcement => (
-                <div 
-                  key={announcement.id} 
-                  className="p-3.5 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2 hover:bg-theme-border/15 transition-all"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-accent px-2 py-0.5 bg-accent/10 rounded-md tracking-wider uppercase">
-                      {announcement.scope}
-                    </span>
-                    <span className="text-[10px] text-theme-text-secondary">
-                      {announcement.date}
-                    </span>
+              announcements.length === 0 ? (
+                <div className="text-center py-8 text-theme-text-secondary text-xs">No announcements published.</div>
+              ) : (
+                announcements.map(ann => (
+                  <div key={ann.id} className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-1 hover:bg-theme-border/15 transition-all">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-semibold text-theme-text-primary text-xs">{ann.title}</h4>
+                      <span className="text-[10px] text-accent font-medium px-2 py-0.5 bg-accent/10 rounded">{ann.scope}</span>
+                    </div>
+                    <p className="text-[10px] text-theme-text-secondary line-clamp-2">{ann.content}</p>
+                    <p className="text-[10px] text-theme-text-secondary font-medium pt-1">{ann.publishedAt} &middot; by {ann.authorName}</p>
                   </div>
-                  <h4 className="font-semibold text-xs text-theme-text-primary leading-snug">
-                    {announcement.title}
-                  </h4>
-                  <p className="text-[11px] text-theme-text-secondary leading-relaxed">
-                    {announcement.body}
-                  </p>
-                </div>
-              ))
+                ))
+              )
             )}
           </div>
-
-          <Link
-            href="/dashboard/events"
-            className="w-full py-2.5 bg-theme-border/20 hover:bg-theme-border/30 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 border border-theme-card-border"
-          >
-            {activeTab === 'events' ? 'Go to Events Manager' : 'View Announcements'}
-          </Link>
         </div>
+
       </div>
 
     </div>
