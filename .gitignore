@@ -1,0 +1,17 @@
+# Dependencies
+**/node_modules/
+
+# Next.js build outputs
+**/.next/
+**/out/
+
+# Gulp/dist outputs (if you want to ignore them, but reference dist is kept)
+# **/dist/
+
+# Logs
+**/*.log
+**/.system_generated/
+
+# OS files
+.DS_Store
+Thumbs.db

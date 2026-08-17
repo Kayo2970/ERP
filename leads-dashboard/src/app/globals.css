@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+:root {
+  --background: #F5F7FA;
+  --foreground: #1A1A1A;
+  --card-bg: rgba(255, 255, 255, 0.7);
+  --card-border: rgba(255, 255, 255, 0.5);
+  --text-primary: #1A1A1A;
+  --text-secondary: #6B7280;
+  --border-color: rgba(0, 0, 0, 0.08);
+  --sidebar-bg: rgba(255, 255, 255, 0.6);
+  --sidebar-border: rgba(0, 0, 0, 0.06);
+}
+
+.dark {
+  --background: #0B1B2E;
+  --foreground: #E8ECF1;
+  --card-bg: rgba(20, 36, 58, 0.65);
+  --card-border: rgba(255, 255, 255, 0.08);
+  --text-primary: #E8ECF1;
+  --text-secondary: #9CA3AF;
+  --border-color: rgba(255, 255, 255, 0.08);
+  --sidebar-bg: rgba(11, 27, 46, 0.75);
+  --sidebar-border: rgba(255, 255, 255, 0.05);
+}
+
+@theme {
+  --color-primary: #0F2A47;
+  --color-primary-light: #1E4D7B;
+  --color-accent: #2E75B6;
+  --color-success: #2E8B57;
+  --color-warning: #D9A441;
+  --color-danger: #C0392B;
+
+  --color-theme-background: var(--background);
+  --color-theme-foreground: var(--foreground);
+  --color-theme-card: var(--card-bg);
+  --color-theme-border: var(--border-color);
+  --color-theme-card-border: var(--card-border);
+  --color-theme-text-primary: var(--text-primary);
+  --color-theme-text-secondary: var(--text-secondary);
+  --color-theme-sidebar: var(--sidebar-bg);
+  --color-theme-sidebar-border: var(--sidebar-border);
+
+  /* Rating color scale */
+  --color-rating-5: #2E8B57;
+  --color-rating-4: #7FB069;
+  --color-rating-3: #D9A441;
+  --color-rating-2: #E08E45;
+  --color-rating-1: #C0392B;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  min-height: 100vh;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Glassmorphism panel styling */
+.glass-panel {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  background-color: var(--card-bg);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.03);
+}
+
+.dark .glass-panel {
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25);
+}
+
+/* Background Space Layouts */
+.bg-space-theme {
+  background-image: url('/images/body-bg-light.jpg');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+
+.dark .bg-space-theme {
+  background-image: url('/images/body-bg-dark.jpg');
+}
