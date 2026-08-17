@@ -153,7 +153,7 @@ export interface AuditLogItem {
 }
 
 // Initial mock data matching leadership website and division structure
-const initialMembers: Member[] = [
+export const initialMembers: Member[] = [
   { id: 'm1', name: 'Kayomarz Pavri', email: 'kayomarz.pavri@msruas.ac.in', role: 'Super User', tier: 1, division: 'Core Committee' },
   { id: 'm2', name: 'Dr. Subhadeep Mukherjee', email: 'subhadeep.mukherjee@msruas.ac.in', role: 'Centre Head', tier: 2, division: 'Advisory Board' },
   { id: 'm3', name: 'Dr. Kiran Kumar B M', email: 'kiran.kumar@msruas.ac.in', role: 'Head of Events', tier: 3, division: 'Advisory Board' },
@@ -191,7 +191,7 @@ const initialMembers: Member[] = [
   { id: 'm35', name: 'Niyati Chawra', email: 'niyati.chawra@msruas.ac.in', role: 'Training Associate', tier: 6, division: 'Training Associate' },
 ];
 
-const initialEvents: EventItem[] = [
+export const initialEvents: EventItem[] = [
   {
     id: 'e1',
     title: 'Tech Conclave 2026',
@@ -251,7 +251,7 @@ const initialEvents: EventItem[] = [
   },
 ];
 
-const initialTasks: TaskItem[] = [
+export const initialTasks: TaskItem[] = [
   {
     id: 't1',
     title: 'Prepare Event Budget Spreadsheet',
@@ -347,7 +347,7 @@ const initialTasks: TaskItem[] = [
   },
 ];
 
-const initialRatings: RatingItem[] = [
+export const initialRatings: RatingItem[] = [
   {
     id: 'r1',
     taskId: 't1',
@@ -422,7 +422,7 @@ const initialRatings: RatingItem[] = [
   },
 ];
 
-const initialReimbursements: ReimbursementItem[] = [
+export const initialReimbursements: ReimbursementItem[] = [
   { 
     id: 'rem1', 
     memberName: 'Gurutejas C', 
@@ -469,13 +469,13 @@ const initialReimbursements: ReimbursementItem[] = [
   },
 ];
 
-const initialAnnouncements: AnnouncementItem[] = [
+export const initialAnnouncements: AnnouncementItem[] = [
   { id: 'a1', title: 'Tech Conclave 2026 Core Planning Briefing', content: 'All event committee leads and student organizers are requested to join the final walkthrough in Seminar Hall 2 at 4:30 PM.', scope: 'Core Committee', authorName: 'Kayomarz Pavri', publishedAt: '2026-08-16 10:30' },
   { id: 'a2', title: 'Q3 Financial Reconciliation Window Open', content: 'Submit all outstanding reimbursement slips and bills before the 25th of August for leadership sign-off.', scope: 'All Members', authorName: 'Dr. Subhadeep Mukherjee', publishedAt: '2026-08-14 15:00' },
   { id: 'a3', title: 'Advisory Board Strategic Review Meeting', content: 'Review of event calendar and academic integration scheduled for next Monday with the executive leadership team.', scope: 'Advisory Board', authorName: 'Dr. K. M. Sharath Kumar', publishedAt: '2026-08-12 11:15' },
 ];
 
-const initialForms: PublicFormItem[] = [
+export const initialForms: PublicFormItem[] = [
   {
     id: 'f1',
     slug: 'tech-conclave-registration',
@@ -512,7 +512,7 @@ const initialForms: PublicFormItem[] = [
   },
 ];
 
-const initialSubmissions: FormSubmissionItem[] = [
+export const initialSubmissions: FormSubmissionItem[] = [
   {
     id: 'sub_1',
     formId: 'f1',
@@ -547,9 +547,31 @@ const initialSubmissions: FormSubmissionItem[] = [
 // -------------------------------------------------------------
 
 /**
+ * Write a collection fetched from the server into localStorage, verbatim —
+ * including a legitimately empty array. The bundled sample data is never
+ * written here; it only ever appears as each getX()'s own in-memory fallback
+ * before the first sync resolves (see below). Writing samples from here too
+ * used to fight that: a real, empty server collection would get permanently
+ * re-padded with stale samples on every poll, silently undoing any edit or
+ * delete made against what the server actually has. (A "only seed on this
+ * browser's first-ever hydration" variant was tried and reverted — React's
+ * dev-mode double-invoked effects fire syncWithServer() twice concurrently,
+ * and the second call would see the first call's just-written key and decide
+ * it's no longer "first," immediately overwriting the seeded sample with the
+ * real empty array anyway. Simpler and race-free to never seed here at all.)
+ */
+function hydrateCollection(key: string, serverArray: unknown): void {
+  if (!Array.isArray(serverArray)) return;
+  localStorage.setItem(key, JSON.stringify(serverArray));
+}
+
+/**
  * Fetch all collections from the server and hydrate localStorage.
  * Server data ALWAYS wins — this is safe to call repeatedly (polling).
- * Falls back to initialX sample data only if localStorage is also empty.
+ * Before the first sync ever resolves, each getX() shows bundled sample data
+ * from memory without persisting it (see the "Do NOT seed localStorage here"
+ * getters below) — that's the true first-run/offline experience. Once a sync
+ * resolves, even to an empty collection, that's what's shown from then on.
  */
 export async function syncWithServer(): Promise<boolean> {
   if (typeof window === 'undefined') return false;
@@ -558,47 +580,14 @@ export async function syncWithServer(): Promise<boolean> {
     if (!res.ok) return false;
     const data = await res.json();
     if (data && typeof data === 'object') {
-      // Always hydrate from server — server is source of truth
-      if (Array.isArray(data.members)) {
-        localStorage.setItem('leads_members', JSON.stringify(
-          data.members.length > 0 ? data.members : initialMembers
-        ));
-      }
-      if (Array.isArray(data.events)) {
-        localStorage.setItem('leads_events', JSON.stringify(
-          data.events.length > 0 ? data.events : initialEvents
-        ));
-      }
-      if (Array.isArray(data.tasks)) {
-        localStorage.setItem('leads_tasks', JSON.stringify(
-          data.tasks.length > 0 ? data.tasks : initialTasks
-        ));
-      }
-      if (Array.isArray(data.ratings)) {
-        localStorage.setItem('leads_ratings', JSON.stringify(
-          data.ratings.length > 0 ? data.ratings : initialRatings
-        ));
-      }
-      if (Array.isArray(data.reimbursements)) {
-        localStorage.setItem('leads_reimbursements', JSON.stringify(
-          data.reimbursements.length > 0 ? data.reimbursements : initialReimbursements
-        ));
-      }
-      if (Array.isArray(data.announcements)) {
-        localStorage.setItem('leads_announcements', JSON.stringify(
-          data.announcements.length > 0 ? data.announcements : initialAnnouncements
-        ));
-      }
-      if (Array.isArray(data.forms)) {
-        localStorage.setItem('leads_custom_forms', JSON.stringify(
-          data.forms.length > 0 ? data.forms : initialForms
-        ));
-      }
-      if (Array.isArray(data.submissions)) {
-        localStorage.setItem('leads_form_submissions', JSON.stringify(
-          data.submissions.length > 0 ? data.submissions : initialSubmissions
-        ));
-      }
+      hydrateCollection('leads_members', data.members);
+      hydrateCollection('leads_events', data.events);
+      hydrateCollection('leads_tasks', data.tasks);
+      hydrateCollection('leads_ratings', data.ratings);
+      hydrateCollection('leads_reimbursements', data.reimbursements);
+      hydrateCollection('leads_announcements', data.announcements);
+      hydrateCollection('leads_custom_forms', data.forms);
+      hydrateCollection('leads_form_submissions', data.submissions);
       if (Array.isArray(data.auditLogs)) {
         localStorage.setItem('leads_audit_logs', JSON.stringify(data.auditLogs));
       }
@@ -745,8 +734,13 @@ export function bulkUpdateMembers(
   });
 
   saveMembers(updated);
-  // Bulk: patch each member individually
-  ids.forEach(id => serverPatch('/api/members', id, updates));
+  // Bulk: patch each member individually with its full merged record (not just the
+  // diff) so a member that only ever existed as bundled sample data gets a complete,
+  // non-corrupt row if the server has to upsert it.
+  ids.forEach(id => {
+    const full = updated.find(m => m.id === id);
+    if (full) serverPatch('/api/members', id, full);
+  });
   const changeSummary = Object.entries(updates)
     .filter(([_, v]) => v !== undefined && v !== '')
     .map(([k, v]) => `${k}='${v}'`)
@@ -823,7 +817,9 @@ export function updateEvent(id: string, updates: Partial<EventItem>, actorName: 
 
   events[idx] = { ...events[idx], ...updates };
   saveEvents(events);
-  serverPatch('/api/events', id, updates);
+  // Send the full merged event, not just the diff, so a server-side upsert (a
+  // client-only sample event that was never POSTed) creates a complete record.
+  serverPatch('/api/events', id, events[idx]);
   logAuditEvent('EVENT_UPDATED', actorName, `Updated event: ${events[idx].title}`);
   return events[idx];
 }
@@ -852,8 +848,9 @@ export function addEventCommittee(eventId: string, committeeName: string, actorN
   };
   event.committees.push(newComm);
   saveEvents(events);
-  // Committees are nested in event — patch the whole event object
-  serverPatch('/api/events', eventId, { committees: event.committees });
+  // Committees are nested in event — patch the whole event object (full record,
+  // so a server-side upsert of a client-only sample event stays complete).
+  serverPatch('/api/events', eventId, event);
   logAuditEvent('EVENT_COMMITTEE_ADDED', actorName, `Added committee "${committeeName}" to event "${event.title}"`);
   return event;
 }
@@ -868,7 +865,7 @@ export function updateEventCommitteeMembers(eventId: string, committeeId: string
 
   comm.memberIds = memberIds;
   saveEvents(events);
-  serverPatch('/api/events', eventId, { committees: event.committees });
+  serverPatch('/api/events', eventId, event);
   logAuditEvent('EVENT_COMMITTEE_UPDATED', actorName, `Updated member assignments for committee "${comm.name}" in event "${event.title}"`);
   return event;
 }
@@ -880,7 +877,7 @@ export function deleteEventCommittee(eventId: string, committeeId: string, actor
 
   event.committees = event.committees.filter(c => c.id !== committeeId);
   saveEvents(events);
-  serverPatch('/api/events', eventId, { committees: event.committees });
+  serverPatch('/api/events', eventId, event);
   logAuditEvent('EVENT_COMMITTEE_DELETED', actorName, `Removed committee from event "${event.title}"`);
   return event;
 }
@@ -950,7 +947,9 @@ export function updateTask(id: string, updates: Partial<TaskItem>, actorName: st
 
   tasks[idx] = { ...tasks[idx], ...updates };
   saveTasks(tasks);
-  serverPatch('/api/tasks', id, updates);
+  // Send the full merged task, not just the diff, so a server-side upsert (a
+  // client-only sample task that was never POSTed) creates a complete record.
+  serverPatch('/api/tasks', id, tasks[idx]);
   logAuditEvent('TASK_UPDATED', actorName, `Updated task: ${tasks[idx].title}`);
   return tasks[idx];
 }
@@ -1068,7 +1067,9 @@ export function updateRating(id: string, updates: Partial<RatingItem>, actorName
     updatedAt: new Date().toISOString().split('T')[0]
   };
   saveRatings(ratings);
-  serverPatch('/api/ratings', id, updates);
+  // Send the full merged rating, not just the diff, so a server-side upsert (a
+  // client-only sample rating that was never POSTed) creates a complete record.
+  serverPatch('/api/ratings', id, ratings[idx]);
 
   if (ratings[idx].taskId && updates.overallScore) {
     updateTask(ratings[idx].taskId, { ratingScore: updates.overallScore }, actorName);
@@ -1284,7 +1285,10 @@ export function updateReimbursementStatus(
   }
 
   saveReimbursements(current);
-  serverPatch('/api/reimbursements', id, { status: claim.status, decidedAt: claim.decidedAt, firstPassReviewer: claim.firstPassReviewer, finalApprover: claim.finalApprover });
+  // Send the full merged claim, not just the changed fields, so a server-side upsert
+  // (a client-only sample reimbursement that was never POSTed, e.g. the seeded demo
+  // claims) creates a complete record instead of a corrupt partial one.
+  serverPatch('/api/reimbursements', id, claim);
   return claim;
 }
 
@@ -1352,7 +1356,10 @@ export function updateAnnouncement(id: string, updates: Partial<AnnouncementItem
     editedAt: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
   };
   saveAnnouncements(current);
-  serverPatch('/api/announcements', id, updates);
+  // Send the full merged announcement, not just the diff, so a server-side upsert
+  // (a client-only sample announcement that was never POSTed) creates a complete
+  // record.
+  serverPatch('/api/announcements', id, current[idx]);
   logAuditEvent('ANNOUNCEMENT_UPDATED', actorName, `Updated announcement: "${current[idx].title}"`);
   return current[idx];
 }
@@ -1413,7 +1420,9 @@ export function updateForm(id: string, updates: Partial<PublicFormItem>, actorNa
 
   current[idx] = { ...current[idx], ...updates };
   saveForms(current);
-  serverPatch('/api/forms', id, updates);
+  // Send the full merged form, not just the diff, so a server-side upsert (a
+  // client-only sample form that was never POSTed) creates a complete record.
+  serverPatch('/api/forms', id, current[idx]);
   logAuditEvent('FORM_UPDATED', actorName, `Updated public form "${current[idx].title}"`);
   return current[idx];
 }
