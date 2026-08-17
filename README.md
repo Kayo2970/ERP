@@ -34,6 +34,22 @@ Open [http://localhost:3030](http://localhost:3030) in your browser to view the 
 
 ---
 
+## 🖥️ Self-Hosted Deployment & Multi-Device Sync (TrueNAS)
+
+This app is designed to run as **one long-lived instance** on a self-hosted server (e.g. a TrueNAS box), with every team member's browser — laptops, phones, other machines — pointed at that single instance over the LAN. There is no separate database server: all data lives in one file, `leads-dashboard/data/database.json`, on the host running the app.
+
+**Workflow:**
+1. Develop and test locally (Claude Code, Antigravity, or any editor/terminal), committing to a feature branch as usual.
+2. Push the branch and merge it into `main` once it's ready.
+3. On the TrueNAS box: `git pull`, then rebuild/restart the running instance (`npm run build && npm run start`, or restart the container if it's running in one).
+4. Every device on the network hits that one instance's LAN address (e.g. `http://<truenas-ip>:3030`) — because they all share the same server process and the same `data/database.json`, they're automatically in sync with each other.
+
+**Important:** `data/database.json` is git-ignored on purpose — it's live server state, not source code. Only code changes travel through git; the data file should never be committed, and it must persist across redeploys (mount `leads-dashboard/data/` as a persistent TrueNAS dataset so a rebuild doesn't wipe live test data).
+
+**How live sync works once the server is running:** every open dashboard page polls the server every 7 seconds and re-renders automatically when new data arrives — no manual refresh needed to see a teammate's change. If you ever suspect sync is stuck (a change made by one person isn't showing up for another, even though both are pointed at the same server), see [`bugs-to-fix.md`](bugs-to-fix.md) for the known-issues log and root-cause history of exactly this class of bug.
+
+---
+
 ## 🔐 Authentication & Access Level Tiers (Testing)
 
 The system dynamically validates sign-ins against the registered members database. You can test different role perspectives using the default password `password123`:
