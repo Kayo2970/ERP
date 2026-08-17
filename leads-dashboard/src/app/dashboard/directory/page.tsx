@@ -19,13 +19,20 @@ import {
   GraduationCap,
   ShieldCheck,
   UserCheck,
-  Eye
+  Eye,
+  CheckSquare,
+  Square,
+  MinusSquare,
+  Layers,
+  Sparkles
 } from 'lucide-react';
 import { 
   getMembers, 
   saveMembers, 
   addMember, 
   deleteMember, 
+  bulkUpdateMembers,
+  bulkDeleteMembers,
   Member,
   MemberDivision
 } from '@/lib/local-data';
@@ -59,6 +66,19 @@ export default function DirectoryPage() {
   // Notification Alert State
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Bulk Selection & Uniform Actions State
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
+  const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+  
+  // Bulk Edit Form State
+  const [bulkDivision, setBulkDivision] = useState<MemberDivision | ''>('');
+  const [bulkRole, setBulkRole] = useState('');
+  const [bulkBatch, setBulkBatch] = useState('');
+  const [applyDivision, setApplyDivision] = useState(true);
+  const [applyRole, setApplyRole] = useState(false);
+  const [applyBatch, setApplyBatch] = useState(false);
 
   // Edit Member Form State
   const [editingMember, setEditingMember] = useState<Member | null>(null);
@@ -332,6 +352,128 @@ export default function DirectoryPage() {
   const totalPages = Math.ceil(filteredMembers.length / pageSize) || 1;
   const paginatedMembers = filteredMembers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
+  // Checkbox selection helpers
+  const paginatedIds = paginatedMembers.map(m => m.id);
+  const allPaginatedSelected = paginatedMembers.length > 0 && paginatedMembers.every(m => selectedMemberIds.includes(m.id));
+  const somePaginatedSelected = paginatedMembers.some(m => selectedMemberIds.includes(m.id)) && !allPaginatedSelected;
+
+  const toggleSelectAllPage = () => {
+    if (allPaginatedSelected) {
+      const pageIdSet = new Set(paginatedIds);
+      setSelectedMemberIds(prev => prev.filter(id => !pageIdSet.has(id)));
+    } else {
+      setSelectedMemberIds(prev => Array.from(new Set([...prev, ...paginatedIds])));
+    }
+  };
+
+  const toggleSelectMember = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setSelectedMemberIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllFiltered = () => {
+    setSelectedMemberIds(filteredMembers.map(m => m.id));
+  };
+
+  const handleClearSelection = () => {
+    setSelectedMemberIds([]);
+  };
+
+  // Bulk Operations Handlers
+  const handleBulkMoveDivision = (targetDivision: MemberDivision) => {
+    if (selectedMemberIds.length === 0) return;
+    try {
+      const calculatedTier = getTierForDivision(targetDivision);
+      bulkUpdateMembers(
+        selectedMemberIds,
+        {
+          division: targetDivision,
+          tier: calculatedTier,
+          batch: targetDivision === 'Alumni' ? 'Class of 2025' : undefined
+        },
+        user?.name || 'Admin'
+      );
+      setMembers(getMembers());
+      triggerSuccess(`Successfully moved ${selectedMemberIds.length} members to ${targetDivision}.`);
+      setSelectedMemberIds([]);
+    } catch (err: any) {
+      triggerError(err.message || 'Failed to update division for selected members.');
+    }
+  };
+
+  const handleApplyBulkEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedMemberIds.length === 0) return;
+
+    if (!applyDivision && !applyRole && !applyBatch) {
+      triggerError('Please select at least one field to update.');
+      return;
+    }
+
+    try {
+      const updates: Partial<Pick<Member, 'division' | 'role' | 'batch' | 'tier'>> = {};
+      if (applyDivision && bulkDivision) {
+        updates.division = bulkDivision as MemberDivision;
+        updates.tier = getTierForDivision(bulkDivision as MemberDivision);
+      }
+      if (applyRole && bulkRole.trim()) {
+        updates.role = bulkRole.trim();
+      }
+      if (applyBatch) {
+        updates.batch = bulkBatch.trim() || undefined;
+      }
+
+      bulkUpdateMembers(selectedMemberIds, updates, user?.name || 'Admin');
+      setMembers(getMembers());
+      triggerSuccess(`Applied uniform updates to ${selectedMemberIds.length} members.`);
+      setIsBulkEditModalOpen(false);
+      setSelectedMemberIds([]);
+      // Reset form
+      setBulkDivision('');
+      setBulkRole('');
+      setBulkBatch('');
+      setApplyDivision(true);
+      setApplyRole(false);
+      setApplyBatch(false);
+    } catch (err: any) {
+      triggerError(err.message || 'Failed to apply uniform changes.');
+    }
+  };
+
+  const handleBulkExportCSV = () => {
+    if (selectedMemberIds.length === 0) return;
+    const selectedList = members.filter(m => selectedMemberIds.includes(m.id));
+    const header = 'Name,Email,Division,Role,Batch';
+    const rows = selectedList.map(m => 
+      `"${(m.name || '').replace(/"/g, '""')}","${(m.email || '').replace(/"/g, '""')}","${(m.division || '').replace(/"/g, '""')}","${(m.role || '').replace(/"/g, '""')}","${(m.batch || '').replace(/"/g, '""')}"`
+    );
+    const csvContent = [header, ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `leads_members_export_${selectedMemberIds.length}_selected.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    triggerSuccess(`Exported ${selectedMemberIds.length} members to CSV.`);
+  };
+
+  const handleConfirmBulkDelete = () => {
+    if (selectedMemberIds.length === 0) return;
+    try {
+      bulkDeleteMembers(selectedMemberIds, user?.name || 'Admin');
+      setMembers(getMembers());
+      triggerSuccess(`Removed ${selectedMemberIds.length} members from directory.`);
+      setSelectedMemberIds([]);
+      setIsBulkDeleteModalOpen(false);
+    } catch (err: any) {
+      triggerError(err.message || 'Failed to remove selected members.');
+    }
+  };
+
   return (
     <div className="p-6 md:p-8 space-y-6">
       
@@ -503,6 +645,22 @@ export default function DirectoryPage() {
             <table className="min-w-full text-xs text-left">
               <thead>
                 <tr className="text-theme-text-secondary border-b border-theme-border/40 text-xs">
+                  <th className="pb-3.5 pl-2 pr-2 w-10 text-center select-none">
+                    <button
+                      type="button"
+                      onClick={toggleSelectAllPage}
+                      className="p-1 hover:text-accent transition-colors cursor-pointer"
+                      title={allPaginatedSelected ? 'Deselect all on this page' : 'Select all on this page'}
+                    >
+                      {allPaginatedSelected ? (
+                        <CheckSquare className="h-4 w-4 text-accent" />
+                      ) : somePaginatedSelected ? (
+                        <MinusSquare className="h-4 w-4 text-accent" />
+                      ) : (
+                        <Square className="h-4 w-4 opacity-50 hover:opacity-100" />
+                      )}
+                    </button>
+                  </th>
                   <th 
                     onClick={() => toggleSort('name')}
                     className="pb-3.5 font-semibold cursor-pointer hover:text-theme-text-primary select-none"
@@ -535,73 +693,95 @@ export default function DirectoryPage() {
                       Designation / Role <ArrowUpDown className="h-3 w-3" />
                     </span>
                   </th>
-                  <th className="pb-3.5 font-semibold text-right">Actions</th>
+                  <th className="pb-3.5 font-semibold text-right pr-2">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-theme-border/20">
-                {paginatedMembers.map(member => (
-                  <tr key={member.id} className="hover:bg-theme-border/10 transition-all text-xs">
-                    <td className="py-3.5 pr-2 font-bold text-theme-text-primary flex items-center gap-2.5">
-                      <div className="h-8 w-8 bg-accent/15 rounded-xl flex items-center justify-center border border-accent/20 shrink-0">
-                        <span className="text-[11px] font-bold text-accent">
-                          {member.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                        </span>
-                      </div>
-                      <div>
-                        <span>{member.name}</span>
-                        {member.batch && (
-                          <span className="block text-[10px] text-theme-text-secondary font-normal">{member.batch}</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-3.5 pr-2 text-theme-text-secondary">{member.email}</td>
-                    <td className="py-3.5 pr-2">
-                      <span className={`inline-flex items-center text-[10px] font-semibold px-2.5 py-0.5 rounded-full border ${
-                        member.division === 'Advisory Board' ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' :
-                        member.division === 'Core Committee' ? 'bg-accent/15 text-accent border-accent/30' :
-                        member.division === 'Alumni' ? 'bg-purple-500/15 text-purple-400 border-purple-500/30' :
-                        'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                      }`}>
-                        {member.division}
-                      </span>
-                    </td>
-                    <td className="py-3.5 pr-2 text-theme-text-secondary">{member.role}</td>
-                    <td className="py-3.5 text-right">
-                      <div className="flex justify-end items-center gap-1">
+                {paginatedMembers.map(member => {
+                  const isSelected = selectedMemberIds.includes(member.id);
+
+                  return (
+                    <tr 
+                      key={member.id} 
+                      onClick={() => toggleSelectMember(member.id)}
+                      className={`hover:bg-accent/5 transition-all text-xs cursor-pointer select-none ${
+                        isSelected ? 'bg-accent/10 border-l-2 border-l-accent' : ''
+                      }`}
+                    >
+                      <td className="py-3.5 pl-2 pr-2 text-center" onClick={(e) => toggleSelectMember(member.id, e)}>
                         <button
-                          onClick={() => setSelectedStudentForProfile(member.id)}
-                          className="p-1.5 text-accent hover:bg-accent/10 rounded-lg transition-all cursor-pointer flex items-center gap-1"
-                          title="View Student Profile & Outcomes"
+                          type="button"
+                          className="p-1 hover:text-accent transition-colors cursor-pointer"
                         >
-                          <Eye className="h-4 w-4" />
-                          <span className="text-[11px] font-semibold hidden sm:inline">Profile</span>
+                          {isSelected ? (
+                            <CheckSquare className="h-4 w-4 text-accent" />
+                          ) : (
+                            <Square className="h-4 w-4 text-theme-text-secondary/60 hover:text-accent" />
+                          )}
                         </button>
-                        
-                        {isAdmin && (
-                          <>
-                            <button
-                              onClick={() => startEdit(member)}
-                              className="p-1.5 text-theme-text-secondary hover:text-accent hover:bg-theme-border/20 rounded-lg transition-all cursor-pointer"
-                              title="Edit Member"
-                            >
-                              <Edit2 className="h-3.5 w-3.5" />
-                            </button>
-                            
-                            {member.id !== 'm1' && (
+                      </td>
+                      <td className="py-3.5 pr-2 font-bold text-theme-text-primary flex items-center gap-2.5">
+                        <div className="h-8 w-8 bg-accent/15 rounded-xl flex items-center justify-center border border-accent/20 shrink-0">
+                          <span className="text-[11px] font-bold text-accent">
+                            {member.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                          </span>
+                        </div>
+                        <div>
+                          <span>{member.name}</span>
+                          {member.batch && (
+                            <span className="block text-[10px] text-theme-text-secondary font-normal">{member.batch}</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3.5 pr-2 text-theme-text-secondary">{member.email}</td>
+                      <td className="py-3.5 pr-2">
+                        <span className={`inline-flex items-center text-[10px] font-semibold px-2.5 py-0.5 rounded-full border ${
+                          member.division === 'Advisory Board' ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' :
+                          member.division === 'Core Committee' ? 'bg-accent/15 text-accent border-accent/30' :
+                          member.division === 'Alumni' ? 'bg-purple-500/15 text-purple-400 border-purple-500/30' :
+                          'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                        }`}>
+                          {member.division}
+                        </span>
+                      </td>
+                      <td className="py-3.5 pr-2 text-theme-text-secondary">{member.role}</td>
+                      <td className="py-3.5 text-right pr-2" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex justify-end items-center gap-1">
+                          <button
+                            onClick={() => setSelectedStudentForProfile(member.id)}
+                            className="p-1.5 text-accent hover:bg-accent/10 rounded-lg transition-all cursor-pointer flex items-center gap-1"
+                            title="View Student Profile & Outcomes"
+                          >
+                            <Eye className="h-4 w-4" />
+                            <span className="text-[11px] font-semibold hidden sm:inline">Profile</span>
+                          </button>
+                          
+                          {isAdmin && (
+                            <>
                               <button
-                                onClick={() => setDeletingMember(member)}
-                                className="p-1.5 text-danger hover:bg-danger/10 rounded-lg transition-all cursor-pointer"
-                                title="Remove Member"
+                                onClick={() => startEdit(member)}
+                                className="p-1.5 text-theme-text-secondary hover:text-accent hover:bg-theme-border/20 rounded-lg transition-all cursor-pointer"
+                                title="Edit Member"
                               >
-                                <UserMinus className="h-3.5 w-3.5" />
+                                <Edit2 className="h-3.5 w-3.5" />
                               </button>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                              
+                              {member.id !== 'm1' && (
+                                <button
+                                  onClick={() => setDeletingMember(member)}
+                                  className="p-1.5 text-danger hover:bg-danger/10 rounded-lg transition-all cursor-pointer"
+                                  title="Remove Member"
+                                >
+                                  <UserMinus className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -821,11 +1001,234 @@ export default function DirectoryPage() {
         onCancel={() => setDeletingMember(null)}
       />
 
+      {/* Bulk Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={isBulkDeleteModalOpen}
+        title={`Remove ${selectedMemberIds.length} Members`}
+        message={`Are you sure you want to remove all ${selectedMemberIds.length} selected members from the LEADS organization directory? This action cannot be undone.`}
+        confirmLabel={`Remove ${selectedMemberIds.length} Members`}
+        variant="danger"
+        onConfirm={handleConfirmBulkDelete}
+        onCancel={() => setIsBulkDeleteModalOpen(false)}
+      />
+
       {/* Student Profile Modal */}
       <StudentProfileModal
         memberIdOrName={selectedStudentForProfile}
         onClose={() => setSelectedStudentForProfile(null)}
       />
+
+      {/* Floating Bulk Actions Toolbar */}
+      {selectedMemberIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-11/12 max-w-4xl glass-panel bg-theme-card/95 border border-accent/40 shadow-2xl rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 animate-in slide-in-from-bottom-5 duration-300">
+          <div className="flex items-center gap-3">
+            <div className="px-3 py-1.5 bg-accent/20 border border-accent/40 text-accent font-bold rounded-xl text-xs flex items-center gap-2">
+              <CheckSquare className="h-4 w-4" />
+              <span>{selectedMemberIds.length} Selected</span>
+            </div>
+            {selectedMemberIds.length < filteredMembers.length && (
+              <button
+                type="button"
+                onClick={handleSelectAllFiltered}
+                className="text-xs text-accent hover:underline font-semibold cursor-pointer hidden md:inline"
+              >
+                Select all {filteredMembers.length} matching members
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {isAdmin && (
+              <>
+                <div className="relative">
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        handleBulkMoveDivision(e.target.value as MemberDivision);
+                        e.target.value = '';
+                      }
+                    }}
+                    defaultValue=""
+                    className="px-3 py-1.5 bg-theme-background/60 border border-theme-border/50 rounded-xl text-xs font-semibold text-theme-text-primary focus:outline-none focus:border-accent cursor-pointer"
+                  >
+                    <option value="" disabled>Move Division...</option>
+                    <option value="Advisory Board">Advisory Board</option>
+                    <option value="Core Committee">Core Committee</option>
+                    <option value="Training Associate">Training Associate</option>
+                    <option value="Alumni">Alumni</option>
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsBulkEditModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-sm cursor-pointer"
+                  title="Apply uniform standard changes to selected members"
+                >
+                  <Layers className="h-3.5 w-3.5" />
+                  Uniform Bulk Edit
+                </button>
+              </>
+            )}
+
+            <button
+              type="button"
+              onClick={handleBulkExportCSV}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all border border-theme-border/40 cursor-pointer"
+              title="Export selected members to CSV"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Export Selected
+            </button>
+
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setIsBulkDeleteModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-danger/15 hover:bg-danger/25 text-danger border border-danger/30 text-xs font-semibold rounded-xl transition-all cursor-pointer"
+                title="Remove selected members"
+              >
+                <UserMinus className="h-3.5 w-3.5" />
+                Delete ({selectedMemberIds.length})
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={handleClearSelection}
+              className="p-1.5 text-theme-text-secondary hover:text-theme-text-primary hover:bg-theme-border/20 rounded-xl transition-all cursor-pointer"
+              title="Clear Selection"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Uniform Bulk Edit Modal */}
+      {isBulkEditModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="glass-panel w-full max-w-lg rounded-2xl p-6 border border-theme-card-border shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-theme-border/30 pb-4">
+              <div>
+                <h3 className="text-base font-bold text-theme-text-primary flex items-center gap-2">
+                  <Layers className="h-5 w-5 text-accent" />
+                  Uniform Standard Change ({selectedMemberIds.length} Members)
+                </h3>
+                <p className="text-xs text-theme-text-secondary">Apply synchronized updates across all selected members</p>
+              </div>
+              <button
+                onClick={() => setIsBulkEditModalOpen(false)}
+                className="p-1.5 text-theme-text-secondary hover:text-theme-text-primary rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleApplyBulkEdit} className="space-y-4 text-xs">
+              {/* Division Update */}
+              <div className="p-3.5 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2">
+                <label className="flex items-center gap-2 font-semibold text-theme-text-primary cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={applyDivision}
+                    onChange={(e) => setApplyDivision(e.target.checked)}
+                    className="rounded accent-accent h-4 w-4 cursor-pointer"
+                  />
+                  <span>Change Organization Division</span>
+                </label>
+                {applyDivision && (
+                  <select
+                    value={bulkDivision}
+                    onChange={(e) => setBulkDivision(e.target.value as MemberDivision)}
+                    className="w-full px-3 py-2 bg-theme-background/60 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-medium mt-1"
+                    required={applyDivision}
+                  >
+                    <option value="" disabled>Select target division...</option>
+                    <option value="Advisory Board">Advisory Board</option>
+                    <option value="Core Committee">Core Committee</option>
+                    <option value="Training Associate">Training Associate</option>
+                    <option value="Alumni">Alumni</option>
+                  </select>
+                )}
+              </div>
+
+              {/* Designation / Role Update */}
+              <div className="p-3.5 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2">
+                <label className="flex items-center gap-2 font-semibold text-theme-text-primary cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={applyRole}
+                    onChange={(e) => setApplyRole(e.target.checked)}
+                    className="rounded accent-accent h-4 w-4 cursor-pointer"
+                  />
+                  <span>Set Uniform Designation / Role</span>
+                </label>
+                {applyRole && (
+                  <input
+                    type="text"
+                    value={bulkRole}
+                    onChange={(e) => setBulkRole(e.target.value)}
+                    placeholder="e.g. Senior Associate, Event Coordinator"
+                    className="w-full px-3 py-2 bg-theme-background/60 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent mt-1"
+                    required={applyRole}
+                  />
+                )}
+              </div>
+
+              {/* Batch Update */}
+              <div className="p-3.5 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2">
+                <label className="flex items-center gap-2 font-semibold text-theme-text-primary cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={applyBatch}
+                    onChange={(e) => setApplyBatch(e.target.checked)}
+                    className="rounded accent-accent h-4 w-4 cursor-pointer"
+                  />
+                  <span>Set Graduating Class / Batch</span>
+                </label>
+                {applyBatch && (
+                  <input
+                    type="text"
+                    value={bulkBatch}
+                    onChange={(e) => setBulkBatch(e.target.value)}
+                    placeholder="e.g. Class of 2025"
+                    className="w-full px-3 py-2 bg-theme-background/60 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent mt-1"
+                  />
+                )}
+              </div>
+
+              {/* Selected Members Preview */}
+              <div className="space-y-1.5 pt-1">
+                <span className="font-semibold text-theme-text-secondary text-[11px]">Selected Members Preview:</span>
+                <div className="max-h-24 overflow-y-auto flex flex-wrap gap-1 p-2 bg-theme-background/40 border border-theme-border/20 rounded-xl">
+                  {members.filter(m => selectedMemberIds.includes(m.id)).map(m => (
+                    <span key={m.id} className="text-[10px] px-2 py-0.5 bg-accent/15 text-theme-text-primary border border-accent/20 rounded-md">
+                      {m.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-theme-border/30">
+                <button
+                  type="button"
+                  onClick={() => setIsBulkEditModalOpen(false)}
+                  className="px-4 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary font-semibold rounded-xl text-xs cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl text-xs shadow-md shadow-accent/15 cursor-pointer"
+                >
+                  Apply to {selectedMemberIds.length} Members
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

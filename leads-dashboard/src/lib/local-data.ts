@@ -548,6 +548,47 @@ export function deleteMember(id: string): void {
   logAuditEvent('MEMBER_DELETED', 'System / Admin', `Removed member ${target.name} (${target.email})`);
 }
 
+export function bulkUpdateMembers(
+  ids: string[],
+  updates: Partial<Pick<Member, 'division' | 'role' | 'batch' | 'tier'>>,
+  actorName: string
+): Member[] {
+  const current = getMembers();
+  const targetIdSet = new Set(ids);
+  let updatedCount = 0;
+
+  const updated = current.map(m => {
+    if (targetIdSet.has(m.id)) {
+      updatedCount++;
+      return {
+        ...m,
+        ...updates
+      };
+    }
+    return m;
+  });
+
+  saveMembers(updated);
+  const changeSummary = Object.entries(updates)
+    .filter(([_, v]) => v !== undefined && v !== '')
+    .map(([k, v]) => `${k}='${v}'`)
+    .join(', ');
+  logAuditEvent('BULK_MEMBERS_UPDATED', actorName, `Bulk updated ${updatedCount} members with: ${changeSummary}`);
+  return updated;
+}
+
+export function bulkDeleteMembers(ids: string[], actorName: string): Member[] {
+  const current = getMembers();
+  const targetIdSet = new Set(ids);
+  // Protect super user m1
+  targetIdSet.delete('m1');
+
+  const updated = current.filter(m => !targetIdSet.has(m.id));
+  saveMembers(updated);
+  logAuditEvent('BULK_MEMBERS_DELETED', actorName, `Bulk removed ${current.length - updated.length} members`);
+  return updated;
+}
+
 // -------------------------------------------------------------
 // Events
 // -------------------------------------------------------------
