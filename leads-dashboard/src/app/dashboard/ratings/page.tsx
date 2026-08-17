@@ -65,9 +65,12 @@ export default function RatingsPage() {
   const [formError, setFormError] = useState('');
 
   useEffect(() => {
-    setRatings(getRatings());
-    setMembers(getMembers());
-    setTasks(getTasks());
+    const refreshData = () => {
+      setRatings(getRatings());
+      setMembers(getMembers());
+      setTasks(getTasks());
+    };
+    refreshData();
 
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
@@ -77,6 +80,13 @@ export default function RatingsPage() {
         console.error(e);
       }
     }
+
+    window.addEventListener('leads-data-sync', refreshData);
+    window.addEventListener('storage', refreshData);
+    return () => {
+      window.removeEventListener('leads-data-sync', refreshData);
+      window.removeEventListener('storage', refreshData);
+    };
   }, []);
 
   const triggerSuccess = (msg: string) => {

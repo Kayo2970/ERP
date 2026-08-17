@@ -68,10 +68,13 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
   const [successMsg, setSuccessMsg] = useState('');
 
   useEffect(() => {
-    const loadedEvent = getEventById(eventId);
-    setEvent(loadedEvent);
-    setMembers(getMembers());
-    setTasks(getTasks().filter(t => t.eventId === eventId || t.event === loadedEvent?.title));
+    const refreshData = () => {
+      const loadedEvent = getEventById(eventId);
+      setEvent(loadedEvent);
+      setMembers(getMembers());
+      setTasks(getTasks().filter(t => t.eventId === eventId || t.event === loadedEvent?.title));
+    };
+    refreshData();
 
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
@@ -81,6 +84,13 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
         console.error(e);
       }
     }
+
+    window.addEventListener('leads-data-sync', refreshData);
+    window.addEventListener('storage', refreshData);
+    return () => {
+      window.removeEventListener('leads-data-sync', refreshData);
+      window.removeEventListener('storage', refreshData);
+    };
   }, [eventId]);
 
   const triggerSuccess = (msg: string) => {

@@ -40,8 +40,12 @@ export default function EventsPage() {
   const [successMsg, setSuccessMsg] = useState('');
 
   useEffect(() => {
-    setEvents(getEvents());
-    setTasks(getTasks());
+    const refreshData = () => {
+      setEvents(getEvents());
+      setTasks(getTasks());
+    };
+    refreshData();
+
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
       try {
@@ -50,6 +54,13 @@ export default function EventsPage() {
         console.error(e);
       }
     }
+
+    window.addEventListener('leads-data-sync', refreshData);
+    window.addEventListener('storage', refreshData);
+    return () => {
+      window.removeEventListener('leads-data-sync', refreshData);
+      window.removeEventListener('storage', refreshData);
+    };
   }, []);
 
   const triggerSuccess = (msg: string) => {

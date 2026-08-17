@@ -52,8 +52,11 @@ export default function AnnouncementsPage() {
   const [successMsg, setSuccessMsg] = useState('');
 
   useEffect(() => {
-    setAnnouncements(getAnnouncements());
-    setCommittees(getCommittees());
+    const refreshData = () => {
+      setAnnouncements(getAnnouncements());
+      setCommittees(getCommittees());
+    };
+    refreshData();
 
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
@@ -63,6 +66,13 @@ export default function AnnouncementsPage() {
         console.error(e);
       }
     }
+
+    window.addEventListener('leads-data-sync', refreshData);
+    window.addEventListener('storage', refreshData);
+    return () => {
+      window.removeEventListener('leads-data-sync', refreshData);
+      window.removeEventListener('storage', refreshData);
+    };
   }, []);
 
   const triggerSuccess = (msg: string) => {

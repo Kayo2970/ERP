@@ -131,8 +131,8 @@ export default function LoginPage() {
               <label className="block font-semibold text-theme-text-secondary uppercase tracking-wider">
                 Password
               </label>
-              <span className="text-[11px] text-accent">
-                Use any password (e.g. leads2026)
+              <span className="text-[11px] text-theme-text-secondary">
+                Enter your account password
               </span>
             </div>
             <div className="relative">

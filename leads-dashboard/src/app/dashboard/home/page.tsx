@@ -55,26 +55,29 @@ export default function DashboardHome() {
   const [selectedStudentForProfile, setSelectedStudentForProfile] = useState<string | null>(null);
 
   useEffect(() => {
-    const allEvents = getEvents();
-    setEvents(allEvents.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()));
-    setActiveEventsCount(allEvents.filter(e => e.status === 'active').length);
-    
-    const allTasks = getTasks();
-    setTasks(allTasks);
-    
-    setMembersCount(getMembers().length);
-    setAnnouncements(getAnnouncements());
-    
-    // Dynamic Individual Student Leaderboard
-    const studentRanks = getStudentLeaderboard();
-    setLeaderboard(studentRanks.slice(0, 5));
+    const refreshData = () => {
+      const allEvents = getEvents();
+      setEvents(allEvents.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()));
+      setActiveEventsCount(allEvents.filter(e => e.status === 'active').length);
+      
+      const allTasks = getTasks();
+      setTasks(allTasks);
+      
+      setMembersCount(getMembers().length);
+      setAnnouncements(getAnnouncements());
+      
+      // Dynamic Individual Student Leaderboard
+      const studentRanks = getStudentLeaderboard();
+      setLeaderboard(studentRanks.slice(0, 5));
 
-    const ratingsList = getRatings();
-    if (ratingsList.length > 0) {
-      const totalScore = ratingsList.reduce((acc, r) => acc + r.overallScore, 0);
-      setOverallAvgScore(parseFloat((totalScore / ratingsList.length).toFixed(1)));
-    }
-    
+      const ratingsList = getRatings();
+      if (ratingsList.length > 0) {
+        const totalScore = ratingsList.reduce((acc, r) => acc + r.overallScore, 0);
+        setOverallAvgScore(parseFloat((totalScore / ratingsList.length).toFixed(1)));
+      }
+    };
+    refreshData();
+
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
       try {
@@ -83,6 +86,13 @@ export default function DashboardHome() {
         console.error(e);
       }
     }
+
+    window.addEventListener('leads-data-sync', refreshData);
+    window.addEventListener('storage', refreshData);
+    return () => {
+      window.removeEventListener('leads-data-sync', refreshData);
+      window.removeEventListener('storage', refreshData);
+    };
   }, []);
 
   const handleAcknowledge = (id: string) => {

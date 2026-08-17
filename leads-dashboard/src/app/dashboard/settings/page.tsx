@@ -80,23 +80,23 @@ export default function SettingsPage() {
       }
     }
 
-    const updatedUser = { ...user, name: displayName.trim() };
+    const updatedUser = { ...user, name: displayName.trim(), ...(newPassword ? { customPassword: newPassword } : {}) };
     setUser(updatedUser);
     localStorage.setItem('user', JSON.stringify(updatedUser));
 
     // Update in members list as well
     const allMembers = getMembers();
-    const updatedMembers = allMembers.map(m => m.id === user.id ? { ...m, name: displayName.trim() } : m);
+    const updatedMembers = allMembers.map(m => m.id === user.id ? { ...m, name: displayName.trim(), ...(newPassword ? { customPassword: newPassword } : {}) } : m);
     localStorage.setItem('leads_members', JSON.stringify(updatedMembers));
     setMembers(updatedMembers);
 
-    logAuditEvent('ACCOUNT_UPDATED', user.name, 'Updated profile name and security preferences');
+    logAuditEvent('ACCOUNT_UPDATED', user.name, newPassword ? 'Updated profile display name and user password' : 'Updated profile display name');
     setAuditLogs(getAuditLogs());
 
     setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
-    triggerSuccess('Account details and credentials saved successfully.');
+    triggerSuccess(newPassword ? 'Account display details and password updated for current session.' : 'Account display details saved successfully.');
   };
 
   const isSuperAdmin = user && (user.tier === 1 || user.tier === 2);

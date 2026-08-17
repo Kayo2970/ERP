@@ -50,7 +50,10 @@ export default function ReimbursementsPage() {
   const [formError, setFormError] = useState('');
 
   useEffect(() => {
-    setReimbursements(getReimbursements());
+    const refreshData = () => {
+      setReimbursements(getReimbursements());
+    };
+    refreshData();
 
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
@@ -60,6 +63,13 @@ export default function ReimbursementsPage() {
         console.error(e);
       }
     }
+
+    window.addEventListener('leads-data-sync', refreshData);
+    window.addEventListener('storage', refreshData);
+    return () => {
+      window.removeEventListener('leads-data-sync', refreshData);
+      window.removeEventListener('storage', refreshData);
+    };
   }, []);
 
   const triggerSuccess = (msg: string) => {

@@ -89,7 +89,11 @@ export default function DirectoryPage() {
   const [editBatch, setEditBatch] = useState('');
 
   useEffect(() => {
-    setMembers(getMembers());
+    const refreshData = () => {
+      setMembers(getMembers());
+    };
+    refreshData();
+
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
       try {
@@ -98,6 +102,13 @@ export default function DirectoryPage() {
         console.error(e);
       }
     }
+
+    window.addEventListener('leads-data-sync', refreshData);
+    window.addEventListener('storage', refreshData);
+    return () => {
+      window.removeEventListener('leads-data-sync', refreshData);
+      window.removeEventListener('storage', refreshData);
+    };
   }, []);
 
   const triggerSuccess = (msg: string) => {

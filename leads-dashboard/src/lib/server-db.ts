@@ -48,7 +48,7 @@ export async function readDb(): Promise<DbSchema> {
 }
 
 export async function writeDb(data: DbSchema): Promise<void> {
-  // Queue write behind any pending write to prevent races
+  let writeError: unknown = null;
   writeLock = writeLock.then(async () => {
     try {
       const dir = path.dirname(DB_PATH);
@@ -56,10 +56,11 @@ export async function writeDb(data: DbSchema): Promise<void> {
       await fs.writeFile(DB_PATH, JSON.stringify(data, null, 2), 'utf-8');
     } catch (err) {
       console.error('[server-db] Write failed:', err);
-      throw err;
+      writeError = err;
     }
   });
-  return writeLock;
+  await writeLock;
+  if (writeError) throw writeError;
 }
 
 /**
@@ -74,23 +75,32 @@ export async function readCollection<T = any>(key: keyof DbSchema): Promise<T[]>
  * Apply a mutation to a single collection and write the file.
  * The mutator receives the current array and returns the updated array.
  * Uses the write mutex so concurrent calls queue up safely.
+ * Always resolves writeLock so errors don't poison subsequent calls.
  */
 export async function mutateCollection<T = any>(
   key: keyof DbSchema,
   mutator: (current: T[]) => T[]
 ): Promise<T[]> {
-  // Queue behind existing writes
   let result: T[] = [];
+  let mutationError: unknown = null;
+
   writeLock = writeLock.then(async () => {
-    const db = await readDb();
-    const current = (db[key] as T[]) ?? [];
-    const updated = mutator(current);
-    db[key] = updated as any;
-    db.lastUpdated = new Date().toISOString();
-    await fs.mkdir(path.dirname(DB_PATH), { recursive: true });
-    await fs.writeFile(DB_PATH, JSON.stringify(db, null, 2), 'utf-8');
-    result = updated;
+    try {
+      const db = await readDb();
+      const current = (db[key] as T[]) ?? [];
+      const updated = mutator(current);
+      db[key] = updated as any;
+      db.lastUpdated = new Date().toISOString();
+      await fs.mkdir(path.dirname(DB_PATH), { recursive: true });
+      await fs.writeFile(DB_PATH, JSON.stringify(db, null, 2), 'utf-8');
+      result = updated;
+    } catch (err) {
+      mutationError = err;
+    }
   });
+
   await writeLock;
+  if (mutationError) throw mutationError;
   return result;
 }
+

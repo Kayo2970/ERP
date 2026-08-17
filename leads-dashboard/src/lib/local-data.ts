@@ -180,14 +180,14 @@ const initialMembers: Member[] = [
 ];
 
 const initialEvents: EventItem[] = [
-  { 
-    id: 'e1', 
-    title: 'Tech Conclave 2026', 
-    description: 'Annual tech symposium featuring sustainability, robotics showcase, and AI panel discussions.', 
-    startDate: '2026-09-10', 
-    endDate: '2026-09-12', 
+  {
+    id: 'e1',
+    title: 'Tech Conclave 2026',
+    description: 'Annual tech symposium featuring sustainability, robotics showcase, and AI panel discussions.',
+    startDate: '2026-09-10',
+    endDate: '2026-09-12',
     location: 'Ramaiah Technology Campus - Auditorium 1',
-    status: 'active', 
+    status: 'active',
     createdBy: 'Kayomarz Pavri',
     committees: [
       { id: 'c1_1', name: 'Stage & Audio-Visual Committee', leadMemberId: 'm5', leadMemberName: 'Gurutejas C', memberIds: ['m5', 'm8', 'm21'] },
@@ -196,42 +196,42 @@ const initialEvents: EventItem[] = [
       { id: 'c1_4', name: 'Finance & Registrations Committee', leadMemberId: 'm16', leadMemberName: 'Bharvi A Padia', memberIds: ['m16', 'm25'] },
     ]
   },
-  { 
-    id: 'e2', 
-    title: 'Alumni Meet & Innovation Summit 2026', 
-    description: 'Reunion meet for RUAS alumni sharing entrepreneurial journeys with undergraduate leaders.', 
-    startDate: '2026-10-05', 
-    endDate: '2026-10-06', 
+  {
+    id: 'e2',
+    title: 'Alumni Meet & Innovation Summit 2026',
+    description: 'Reunion meet for RUAS alumni sharing entrepreneurial journeys with undergraduate leaders.',
+    startDate: '2026-10-05',
+    endDate: '2026-10-06',
     location: 'Gnanagangothri Campus - Seminar Complex',
-    status: 'planned', 
+    status: 'planned',
     createdBy: 'Dr. Subhadeep Mukherjee',
     committees: [
       { id: 'c2_1', name: 'Alumni Relations Committee', leadMemberId: 'm6', leadMemberName: 'Kunal Bhadauria', memberIds: ['m6', 'm29', 'm30'] },
       { id: 'c2_2', name: 'Operations & Logistics Committee', leadMemberId: 'm14', leadMemberName: 'Laksh Soorya Singh', memberIds: ['m14', 'm22', 'm26'] }
     ]
   },
-  { 
-    id: 'e3', 
-    title: 'Robotics Bootcamp & Hackathon', 
-    description: 'Hands-on bootcamp on ROS, autonomous navigation, and robot assembly.', 
-    startDate: '2026-08-25', 
-    endDate: '2026-08-27', 
+  {
+    id: 'e3',
+    title: 'Robotics Bootcamp & Hackathon',
+    description: 'Hands-on bootcamp on ROS, autonomous navigation, and robot assembly.',
+    startDate: '2026-08-25',
+    endDate: '2026-08-27',
     location: 'Robotics Lab 3',
-    status: 'planned', 
+    status: 'planned',
     createdBy: 'Dr. Kiran Kumar B M',
     committees: [
       { id: 'c3_1', name: 'Technical Mentorship Committee', leadMemberId: 'm18', leadMemberName: 'Shreesha S N', memberIds: ['m18', 'm21', 'm28'] },
       { id: 'c3_2', name: 'Hardware & Kit Logistics', leadMemberId: 'm8', leadMemberName: 'Keerthan J', memberIds: ['m8', 'm31', 'm33'] }
     ]
   },
-  { 
-    id: 'e4', 
-    title: 'Leadership Webinar Series', 
-    description: 'Expert online talks on sustainable leadership and modern engineering practices.', 
-    startDate: '2026-08-15', 
-    endDate: '2026-08-18', 
+  {
+    id: 'e4',
+    title: 'Leadership Webinar Series',
+    description: 'Expert online talks on sustainable leadership and modern engineering practices.',
+    startDate: '2026-08-15',
+    endDate: '2026-08-18',
     location: 'Virtual Zoom / MS Teams Room',
-    status: 'active', 
+    status: 'active',
     createdBy: 'Dr. K. M. Sharath Kumar',
     committees: [
       { id: 'c4_1', name: 'Public Relations & Streaming', leadMemberId: 'm19', leadMemberName: 'Nuthan H', memberIds: ['m19', 'm20', 'm27'] }
@@ -240,95 +240,95 @@ const initialEvents: EventItem[] = [
 ];
 
 const initialTasks: TaskItem[] = [
-  { 
-    id: 't1', 
-    title: 'Prepare Event Budget Spreadsheet', 
-    event: 'Tech Conclave 2026', 
-    eventId: 'e1', 
+  {
+    id: 't1',
+    title: 'Prepare Event Budget Spreadsheet',
+    event: 'Tech Conclave 2026',
+    eventId: 'e1',
     eventCommitteeName: 'Finance & Registrations Committee',
-    assignee: 'Bharvi A Padia', 
+    assignee: 'Bharvi A Padia',
     assigneeId: 'm16',
-    assigneeEmail: 'bharvi.padia@msruas.ac.in', 
-    assigneeType: 'individual', 
-    dueDate: '2026-08-20', 
-    status: 'Completed', 
+    assigneeEmail: 'bharvi.padia@msruas.ac.in',
+    assigneeType: 'individual',
+    dueDate: '2026-08-20',
+    status: 'Completed',
     creatorName: 'Kayomarz Pavri',
     ratingScore: 4.8,
     ratedAt: '2026-08-14'
   },
-  { 
-    id: 't2', 
-    title: 'Coordinate Speaker Panel Invitations', 
-    event: 'Alumni Meet & Innovation Summit 2026', 
-    eventId: 'e2', 
+  {
+    id: 't2',
+    title: 'Coordinate Speaker Panel Invitations',
+    event: 'Alumni Meet & Innovation Summit 2026',
+    eventId: 'e2',
     eventCommitteeName: 'Alumni Relations Committee',
-    assignee: 'Kunal Bhadauria', 
+    assignee: 'Kunal Bhadauria',
     assigneeId: 'm6',
-    assigneeEmail: 'kunal.bhadauria@msruas.ac.in', 
-    assigneeType: 'individual', 
-    dueDate: '2026-08-22', 
-    status: 'In Progress', 
-    creatorName: 'Dr. Subhadeep Mukherjee' 
+    assigneeEmail: 'kunal.bhadauria@msruas.ac.in',
+    assigneeType: 'individual',
+    dueDate: '2026-08-22',
+    status: 'In Progress',
+    creatorName: 'Dr. Subhadeep Mukherjee'
   },
-  { 
-    id: 't3', 
-    title: 'Setup Audio-Visual & Microphones Check', 
-    event: 'Tech Conclave 2026', 
-    eventId: 'e1', 
+  {
+    id: 't3',
+    title: 'Setup Audio-Visual & Microphones Check',
+    event: 'Tech Conclave 2026',
+    eventId: 'e1',
     eventCommitteeName: 'Stage & Audio-Visual Committee',
-    assignee: 'Keerthan J', 
+    assignee: 'Keerthan J',
     assigneeId: 'm8',
-    assigneeEmail: 'keerthan.j@msruas.ac.in', 
-    assigneeType: 'individual', 
-    dueDate: '2026-08-25', 
-    status: 'Completed', 
+    assigneeEmail: 'keerthan.j@msruas.ac.in',
+    assigneeType: 'individual',
+    dueDate: '2026-08-25',
+    status: 'Completed',
     creatorName: 'Dr. Kiran Kumar B M',
     ratingScore: 4.5,
     ratedAt: '2026-08-10'
   },
-  { 
-    id: 't4', 
-    title: 'Compile Participant Feedback Survey Results', 
-    event: 'Leadership Webinar Series', 
-    eventId: 'e4', 
+  {
+    id: 't4',
+    title: 'Compile Participant Feedback Survey Results',
+    event: 'Leadership Webinar Series',
+    eventId: 'e4',
     eventCommitteeName: 'Public Relations & Streaming',
-    assignee: 'Gurutejas C', 
+    assignee: 'Gurutejas C',
     assigneeId: 'm5',
-    assigneeEmail: 'gurutejas.c@msruas.ac.in', 
-    assigneeType: 'individual', 
-    dueDate: '2026-08-18', 
-    status: 'Pending Extension', 
-    creatorName: 'Kayomarz Pavri', 
-    extensionReason: 'Waiting for 15 pending survey responses from participants.' 
+    assigneeEmail: 'gurutejas.c@msruas.ac.in',
+    assigneeType: 'individual',
+    dueDate: '2026-08-18',
+    status: 'Pending Extension',
+    creatorName: 'Kayomarz Pavri',
+    extensionReason: 'Waiting for 15 pending survey responses from participants.'
   },
-  { 
-    id: 't5', 
-    title: 'Finalize Event Banners & Backdrop Graphics', 
+  {
+    id: 't5',
+    title: 'Finalize Event Banners & Backdrop Graphics',
     event: 'Tech Conclave 2026',
     eventId: 'e1',
     eventCommitteeName: 'Design & Media Committee',
-    assignee: 'Arvind Rakshith', 
+    assignee: 'Arvind Rakshith',
     assigneeId: 'm17',
     assigneeEmail: 'arvind.rakshith@msruas.ac.in',
-    assigneeType: 'individual', 
-    dueDate: '2026-08-12', 
-    status: 'Completed', 
+    assigneeType: 'individual',
+    dueDate: '2026-08-12',
+    status: 'Completed',
     creatorName: 'Kunal Bhadauria',
     ratingScore: 5.0,
     ratedAt: '2026-08-12'
   },
-  { 
-    id: 't6', 
-    title: 'Confirm Catering Service Layout & Meal Counts', 
-    event: 'Tech Conclave 2026', 
-    eventId: 'e1', 
+  {
+    id: 't6',
+    title: 'Confirm Catering Service Layout & Meal Counts',
+    event: 'Tech Conclave 2026',
+    eventId: 'e1',
     eventCommitteeName: 'Hospitality & Catering Committee',
-    assignee: 'Bhawen Maroo', 
+    assignee: 'Bhawen Maroo',
     assigneeId: 'm15',
-    assigneeEmail: 'bhawen.maroo@msruas.ac.in', 
-    assigneeType: 'individual', 
-    dueDate: '2026-08-14', 
-    status: 'Completed', 
+    assigneeEmail: 'bhawen.maroo@msruas.ac.in',
+    assigneeType: 'individual',
+    dueDate: '2026-08-14',
+    status: 'Completed',
     creatorName: 'Gurutejas C',
     ratingScore: 4.3,
     ratedAt: '2026-08-15'
@@ -336,77 +336,77 @@ const initialTasks: TaskItem[] = [
 ];
 
 const initialRatings: RatingItem[] = [
-  { 
-    id: 'r1', 
+  {
+    id: 'r1',
     taskId: 't1',
     taskTitle: 'Prepare Event Budget Spreadsheet',
     eventId: 'e1',
     eventName: 'Tech Conclave 2026',
-    targetName: 'Bharvi A Padia', 
-    targetId: 'm16', 
-    raterName: 'Dr. Kiran Kumar B M', 
-    quality: 5, 
-    timeliness: 5, 
-    initiative: 4, 
-    collaboration: 5, 
-    overallScore: 4.8, 
-    notes: 'Flawless financial planning and transparent allocations for conclave.', 
-    quarter: '2026-Q3', 
-    createdAt: '2026-08-14' 
+    targetName: 'Bharvi A Padia',
+    targetId: 'm16',
+    raterName: 'Dr. Kiran Kumar B M',
+    quality: 5,
+    timeliness: 5,
+    initiative: 4,
+    collaboration: 5,
+    overallScore: 4.8,
+    notes: 'Flawless financial planning and transparent allocations for conclave.',
+    quarter: '2026-Q3',
+    createdAt: '2026-08-14'
   },
-  { 
-    id: 'r2', 
+  {
+    id: 'r2',
     taskId: 't5',
     taskTitle: 'Finalize Event Banners & Backdrop Graphics',
     eventId: 'e1',
     eventName: 'Tech Conclave 2026',
-    targetName: 'Arvind Rakshith', 
-    targetId: 'm17', 
-    raterName: 'Dr. Subhadeep Mukherjee', 
-    quality: 5, 
-    timeliness: 5, 
-    initiative: 5, 
-    collaboration: 5, 
-    overallScore: 5.0, 
-    notes: 'Outstanding branding assets delivered ahead of schedule.', 
-    quarter: '2026-Q3', 
-    createdAt: '2026-08-12' 
+    targetName: 'Arvind Rakshith',
+    targetId: 'm17',
+    raterName: 'Dr. Subhadeep Mukherjee',
+    quality: 5,
+    timeliness: 5,
+    initiative: 5,
+    collaboration: 5,
+    overallScore: 5.0,
+    notes: 'Outstanding branding assets delivered ahead of schedule.',
+    quarter: '2026-Q3',
+    createdAt: '2026-08-12'
   },
-  { 
-    id: 'r3', 
+  {
+    id: 'r3',
     taskId: 't3',
     taskTitle: 'Setup Audio-Visual & Microphones Check',
     eventId: 'e1',
     eventName: 'Tech Conclave 2026',
-    targetName: 'Keerthan J', 
-    targetId: 'm8', 
-    raterName: 'Dr. Kiran Kumar B M', 
-    quality: 4, 
-    timeliness: 5, 
-    initiative: 4, 
-    collaboration: 5, 
-    overallScore: 4.5, 
-    notes: 'Handled AV testing and soundboard check smoothly.', 
-    quarter: '2026-Q3', 
-    createdAt: '2026-08-10' 
+    targetName: 'Keerthan J',
+    targetId: 'm8',
+    raterName: 'Dr. Kiran Kumar B M',
+    quality: 4,
+    timeliness: 5,
+    initiative: 4,
+    collaboration: 5,
+    overallScore: 4.5,
+    notes: 'Handled AV testing and soundboard check smoothly.',
+    quarter: '2026-Q3',
+    createdAt: '2026-08-10'
   },
-  { 
-    id: 'r4', 
+  {
+    id: 'r4',
     taskId: 't6',
     taskTitle: 'Confirm Catering Service Layout & Meal Counts',
     eventId: 'e1',
     eventName: 'Tech Conclave 2026',
-    targetName: 'Bhawen Maroo', 
-    targetId: 'm15', 
-    raterName: 'Dr. Subhadeep Mukherjee', 
-    quality: 4, 
-    timeliness: 4, 
-    initiative: 5, 
-    collaboration: 4, 
-    overallScore: 4.3, 
-    notes: 'Vendor negotiations and seating arrangements were well coordinated.', 
-    quarter: '2026-Q3', 
-    createdAt: '2026-08-15' 
+    targetName: 'Bhawen Maroo',
+    targetId: 'm15',
+    raterName: 'Dr. Subhadeep Mukherjee',
+    quality: 4,
+    timeliness: 4,
+    initiative: 5,
+    collaboration: 4,
+    overallScore: 4.3,
+    notes: 'Vendor negotiations and seating arrangements were well coordinated.',
+    quarter: '2026-Q3',
+    createdAt: '2026-08-15'
   },
 ];
 
@@ -636,8 +636,7 @@ export function getMembers(): Member[] {
 export function saveMembers(members: Member[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_members', JSON.stringify(members));
-  // Note: bulk saves (e.g. bulkUpdateMembers) still write to /api/data for simplicity
-  // Individual mutations (addMember, deleteMember) use targeted endpoints
+  // Note: Mutations call targeted per-member endpoints (/api/members, /api/members/[id])
 }
 
 export function addMember(member: Omit<Member, 'id'>): Member {
@@ -827,11 +826,20 @@ export function deleteEventCommittee(eventId: string, committeeId: string, actor
   return event;
 }
 
-export function getCommittees(): string[] {
+export function getEventCommittees(eventId?: string): EventCommittee[] {
   const events = getEvents();
+  if (eventId) {
+    const event = events.find(e => e.id === eventId);
+    return event?.committees || [];
+  }
+  return events.flatMap(e => e.committees || []);
+}
+
+export function getCommittees(eventId?: string): string[] {
+  const committees = getEventCommittees(eventId);
   const names = new Set<string>();
-  events.forEach(e => {
-    (e.committees || []).forEach(c => names.add(c.name));
+  committees.forEach(c => {
+    if (c.name) names.add(c.name);
   });
   if (names.size === 0) {
     return ['Logistics & Venue Committee', 'Technical & AV Committee', 'Design & Media Committee'];
@@ -906,14 +914,40 @@ export function deleteTask(id: string, actorName: string): boolean {
 
 export function canViewTask(
   task: TaskItem, 
-  user: { name: string; email: string; tier: number; division?: string; committee?: string } | null
+  user: { id?: string; name: string; email: string; tier: number; division?: string; committee?: string } | null
 ): boolean {
   if (!user) return false;
   // Tier 1-3 (Super User, Centre Head, Head of Events): see all tasks
   if (user.tier <= 3) return true;
   // Tier 4 (Advisory Board): strategic read-only oversight
   if (user.tier === 4) return true;
-  // Tier 5-6 (Core Committee, Training Associate): see their assigned tasks
+
+  if (task.assigneeType === 'committee') {
+    // Check if user's legacy committee field matches committee name
+    if (user.committee && (
+      user.committee.toLowerCase() === (task.assignee || '').toLowerCase() ||
+      user.committee.toLowerCase() === (task.eventCommitteeName || '').toLowerCase()
+    )) {
+      return true;
+    }
+
+    // Check if user's member ID is assigned to the event committee
+    const memberId = user.id || getMembers().find(m => m.email.toLowerCase() === user.email.toLowerCase())?.id;
+    if (memberId) {
+      const events = getEvents();
+      const targetEvents = task.eventId ? events.filter(e => e.id === task.eventId) : events;
+      const isMember = targetEvents.some(e =>
+        e.committees.some(c =>
+          (c.id === task.eventCommitteeId || c.name.toLowerCase() === (task.assignee || '').toLowerCase()) &&
+          (c.memberIds.includes(memberId) || c.leadMemberId === memberId)
+        )
+      );
+      if (isMember) return true;
+    }
+    return false;
+  }
+
+  // Tier 5-6 (Core Committee, Training Associate): see their assigned individual tasks
   return Boolean(
     (task.assignee && task.assignee.toLowerCase() === user.name.toLowerCase()) ||
     (task.assigneeEmail && task.assigneeEmail.toLowerCase() === user.email.toLowerCase()) ||
@@ -969,10 +1003,10 @@ export function updateRating(id: string, updates: Partial<RatingItem>, actorName
   const idx = ratings.findIndex(r => r.id === id);
   if (idx === -1) return null;
 
-  ratings[idx] = { 
-    ...ratings[idx], 
-    ...updates, 
-    updatedAt: new Date().toISOString().split('T')[0] 
+  ratings[idx] = {
+    ...ratings[idx],
+    ...updates,
+    updatedAt: new Date().toISOString().split('T')[0]
   };
   saveRatings(ratings);
   serverPatch('/api/ratings', id, updates);
@@ -1041,15 +1075,15 @@ export function getStudentProfile(memberIdOrName: string): StudentProfileData | 
   });
 
   const allTasks = getTasks();
-  const memberTasks = allTasks.filter(t => 
-    t.assigneeId === member.id || 
-    t.assignee.toLowerCase() === member.name.toLowerCase() || 
+  const memberTasks = allTasks.filter(t =>
+    t.assigneeId === member.id ||
+    t.assignee.toLowerCase() === member.name.toLowerCase() ||
     (member.email && t.assigneeEmail && t.assigneeEmail.toLowerCase() === member.email.toLowerCase())
   );
 
   const allRatings = getRatings();
-  const memberRatings = allRatings.filter(r => 
-    r.targetId === member.id || 
+  const memberRatings = allRatings.filter(r =>
+    r.targetId === member.id ||
     r.targetName.toLowerCase() === member.name.toLowerCase()
   );
 
@@ -1105,7 +1139,7 @@ export function getStudentLeaderboard(): {
   const members = getMembers();
   // Filter for student contributors: Core Committee, Training Associates, Alumni
   const studentMembers = members.filter(m => m.division !== 'Advisory Board' && m.tier >= 5);
-  
+
   const results = studentMembers.map(m => {
     const profile = getStudentProfile(m.id);
     return {
@@ -1165,9 +1199,9 @@ export function addReimbursement(item: Omit<ReimbursementItem, 'id' | 'status' |
 }
 
 export function updateReimbursementStatus(
-  id: string, 
+  id: string,
   status: ReimbursementItem['status'],
-  reviewerInfo?: { name: string; stage: 'firstPass' | 'final' }
+  reviewerInfo?: { name: string; stage?: 'firstPass' | 'final'; tier?: number }
 ): ReimbursementItem | null {
   const current = getReimbursements();
   const idx = current.findIndex(r => r.id === id);
@@ -1178,12 +1212,16 @@ export function updateReimbursementStatus(
   claim.decidedAt = new Date().toISOString().split('T')[0];
 
   if (reviewerInfo) {
-    if (reviewerInfo.stage === 'firstPass') {
+    const effectiveStage = reviewerInfo.tier !== undefined
+      ? (reviewerInfo.tier <= 3 ? 'final' : 'firstPass')
+      : (reviewerInfo.stage || 'final');
+
+    if (effectiveStage === 'firstPass') {
       claim.firstPassReviewer = reviewerInfo.name;
     } else {
       claim.finalApprover = reviewerInfo.name;
     }
-    logAuditEvent('REIMBURSEMENT_STATUS_UPDATED', reviewerInfo.name, `Updated claim #${claim.id} status to "${status}" (${reviewerInfo.stage})`);
+    logAuditEvent('REIMBURSEMENT_STATUS_UPDATED', reviewerInfo.name, `Updated claim #${claim.id} status to "${status}" (${effectiveStage})`);
   }
 
   saveReimbursements(current);
@@ -1249,10 +1287,10 @@ export function updateAnnouncement(id: string, updates: Partial<AnnouncementItem
   if (idx === -1) return null;
 
   const now = new Date();
-  current[idx] = { 
-    ...current[idx], 
-    ...updates, 
-    editedAt: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}` 
+  current[idx] = {
+    ...current[idx],
+    ...updates,
+    editedAt: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
   };
   saveAnnouncements(current);
   serverPatch('/api/announcements', id, updates);
@@ -1403,8 +1441,8 @@ export function logAuditEvent(action: string, actorName: string, details: string
     timestamp
   };
   current.unshift(newLog);
-  // Keep last 100 logs in localStorage
-  localStorage.setItem('leads_audit_logs', JSON.stringify(current.slice(0, 100)));
+  // Keep last 200 logs in localStorage (aligns with server)
+  localStorage.setItem('leads_audit_logs', JSON.stringify(current.slice(0, 200)));
   // Push to server asynchronously (fire-and-forget)
   serverPost('/api/auditlogs', newLog);
 }

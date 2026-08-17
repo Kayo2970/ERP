@@ -59,9 +59,14 @@ export default function FormsBuilderPage() {
   const [formError, setFormError] = useState('');
 
   useEffect(() => {
+    const refreshData = () => {
+      const loadedForms = getForms();
+      setForms(loadedForms);
+      setSubmissions(getSubmissions());
+    };
+    refreshData();
+
     const loadedForms = getForms();
-    setForms(loadedForms);
-    setSubmissions(getSubmissions());
     if (loadedForms.length > 0) {
       setSelectedFormId(loadedForms[0].id);
     }
@@ -74,6 +79,13 @@ export default function FormsBuilderPage() {
         console.error(e);
       }
     }
+
+    window.addEventListener('leads-data-sync', refreshData);
+    window.addEventListener('storage', refreshData);
+    return () => {
+      window.removeEventListener('leads-data-sync', refreshData);
+      window.removeEventListener('storage', refreshData);
+    };
   }, []);
 
   const triggerNotification = (msg: string) => {

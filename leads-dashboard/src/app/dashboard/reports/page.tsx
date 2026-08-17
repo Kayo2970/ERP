@@ -30,9 +30,19 @@ export default function ReportsPage() {
   const [selectedQuarter, setSelectedQuarter] = useState('ALL');
 
   useEffect(() => {
-    setRatings(getRatings());
-    setMembers(getMembers());
-    setTasks(getTasks());
+    const refreshData = () => {
+      setRatings(getRatings());
+      setMembers(getMembers());
+      setTasks(getTasks());
+    };
+    refreshData();
+
+    window.addEventListener('leads-data-sync', refreshData);
+    window.addEventListener('storage', refreshData);
+    return () => {
+      window.removeEventListener('leads-data-sync', refreshData);
+      window.removeEventListener('storage', refreshData);
+    };
   }, []);
 
   // Filter ratings based on selected division, target member, and quarter

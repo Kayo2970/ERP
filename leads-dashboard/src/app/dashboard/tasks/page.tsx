@@ -59,11 +59,16 @@ export default function TasksPage() {
   const [successMsg, setSuccessMsg] = useState('');
 
   useEffect(() => {
-    setTasks(getTasks());
-    setEvents(getEvents());
-    setCommittees(getCommittees());
+    const refreshData = () => {
+      setTasks(getTasks());
+      setEvents(getEvents());
+      setCommittees(getCommittees());
+      const mList = getMembers();
+      setMembers(mList);
+    };
+    refreshData();
+
     const mList = getMembers();
-    setMembers(mList);
     if (mList.length > 0) {
       setSelectedAssigneeId(mList[0].id);
     }
@@ -76,6 +81,13 @@ export default function TasksPage() {
         console.error(e);
       }
     }
+
+    window.addEventListener('leads-data-sync', refreshData);
+    window.addEventListener('storage', refreshData);
+    return () => {
+      window.removeEventListener('leads-data-sync', refreshData);
+      window.removeEventListener('storage', refreshData);
+    };
   }, []);
 
   const triggerSuccess = (msg: string) => {
