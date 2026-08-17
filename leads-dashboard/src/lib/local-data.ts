@@ -136,9 +136,12 @@ const isBrowser = typeof window !== 'undefined';
 
 export function initializeData() {
   if (!isBrowser) return;
-  if (!localStorage.getItem('leads_members')) {
+  
+  const storedMembers = localStorage.getItem('leads_members');
+  if (!storedMembers || JSON.parse(storedMembers).length < 15) {
     localStorage.setItem('leads_members', JSON.stringify(initialMembers));
   }
+  
   if (!localStorage.getItem('leads_events')) {
     localStorage.setItem('leads_events', JSON.stringify(initialEvents));
   }
@@ -151,7 +154,9 @@ export function initializeData() {
   if (!localStorage.getItem('leads_reimbursements')) {
     localStorage.setItem('leads_reimbursements', JSON.stringify(initialReimbursements));
   }
-  if (!localStorage.getItem('leads_committees')) {
+  
+  const storedCommittees = localStorage.getItem('leads_committees');
+  if (!storedCommittees || JSON.parse(storedCommittees).length < 5) {
     localStorage.setItem('leads_committees', JSON.stringify(initialCommittees));
   }
 }

@@ -258,13 +258,15 @@ export default function DirectoryPage() {
 
   const isAdmin = user && user.tier <= 3; // Tier 1-3 can manage roster
 
-  // Filter members list based on search query
-  const filteredMembers = members.filter(m => 
-    m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    m.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    m.role.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    m.committee.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Filter members list based on search query safely
+  const filteredMembers = members.filter(m => {
+    const q = searchQuery.toLowerCase();
+    const nameMatch = (m.name || '').toLowerCase().includes(q);
+    const emailMatch = (m.email || '').toLowerCase().includes(q);
+    const roleMatch = (m.role || '').toLowerCase().includes(q);
+    const committeeMatch = (m.committee || '').toLowerCase().includes(q);
+    return nameMatch || emailMatch || roleMatch || committeeMatch;
+  });
 
   return (
     <div className="p-6 md:p-8 space-y-6">
