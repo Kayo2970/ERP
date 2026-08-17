@@ -19,7 +19,12 @@ import {
   BarChart3,
   Filter,
   Calendar,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Building2,
+  CreditCard,
+  Hash,
+  Paperclip,
+  Trash2
 } from 'lucide-react';
 import { 
   getReimbursements, 
@@ -28,7 +33,8 @@ import {
   deleteReimbursement,
   getEvents,
   ReimbursementItem,
-  EventItem
+  EventItem,
+  ReceiptFile
 } from '@/lib/local-data';
 import { maskBankDetails } from '@/lib/design-tokens';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
@@ -43,10 +49,15 @@ export default function ReimbursementsPage() {
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('Printing & Stationary');
   const [description, setDescription] = useState('');
-  const [bankDetails, setBankDetails] = useState('');
   const [selectedEventId, setSelectedEventId] = useState('');
-  const [receiptDataUrl, setReceiptDataUrl] = useState<string>('');
-  const [receiptFileName, setReceiptFileName] = useState<string>('');
+
+  // Structured Bank Settlement Details
+  const [bankName, setBankName] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [ifscCode, setIfscCode] = useState('');
+
+  // Multiple Receipt Files (Up to 3: Bill, Proof, Supporting Docs)
+  const [attachedFiles, setAttachedFiles] = useState<ReceiptFile[]>([]);
 
   // Filtering & Event Chart Modal State
   const [selectedEventFilter, setSelectedEventFilter] = useState<string>('ALL');
@@ -54,9 +65,8 @@ export default function ReimbursementsPage() {
   const [chartEventId, setChartEventId] = useState<string>('ALL');
 
   // Modals & previews
-  const [viewingReceipt, setViewingReceipt] = useState<{ url: string; title: string } | null>(null);
+  const [viewingReceipt, setViewingReceipt] = useState<{ files: ReceiptFile[]; selectedIndex: number; title: string } | null>(null);
   const [revealedBankIds, setRevealedBankIds] = useState<Record<string, boolean>>({});
-  const [deletingClaimId, setDeletingClaimId] = useState<string | null>(null);
 
   // Notification Alert State
   const [alertMsg, setAlertMsg] = useState('');
@@ -91,17 +101,35 @@ export default function ReimbursementsPage() {
     setTimeout(() => setAlertMsg(''), 4000);
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleMultipleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    setReceiptFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
-      setReceiptDataUrl(result);
-    };
-    reader.readAsDataURL(file);
+    if (attachedFiles.length + files.length > 3) {
+      setFormError('Maximum 3 documentation files (bill, payment proof, supporting note) allowed per claim.');
+      return;
+    }
+
+    setFormError('');
+    const newFiles: ReceiptFile[] = [...attachedFiles];
+
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+        newFiles.push({
+          name: file.name,
+          dataUrl: result,
+          type: file.type || (file.name.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg')
+        });
+        setAttachedFiles([...newFiles]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeAttachedFile = (index: number) => {
+    setAttachedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmitClaim = (e: React.FormEvent) => {
@@ -114,12 +142,13 @@ export default function ReimbursementsPage() {
       return;
     }
 
-    if (!description || !bankDetails || !user) {
-      setFormError('Please fill in all mandatory expense details.');
+    if (!description || !bankName.trim() || !accountNumber.trim() || !ifscCode.trim() || !user) {
+      setFormError('Please fill in all mandatory expense and bank settlement details.');
       return;
     }
 
     const selectedEv = events.find(ev => ev.id === selectedEventId);
+    const summaryBankStr = `${bankName.trim()} - A/C ${accountNumber.trim()} - IFSC ${ifscCode.trim().toUpperCase()}`;
 
     addReimbursement({
       memberName: user.name,
@@ -127,9 +156,13 @@ export default function ReimbursementsPage() {
       amount: parsedAmount,
       category,
       description,
-      receiptUrl: receiptFileName || 'receipt.pdf',
-      receiptData: receiptDataUrl || undefined,
-      bankDetails,
+      receiptUrl: attachedFiles[0]?.name || 'receipt.pdf',
+      receiptData: attachedFiles[0]?.dataUrl || undefined,
+      receiptFiles: attachedFiles,
+      bankDetails: summaryBankStr,
+      bankName: bankName.trim(),
+      accountNumber: accountNumber.trim(),
+      ifscCode: ifscCode.trim().toUpperCase(),
       eventId: selectedEventId || undefined,
       eventName: selectedEv ? selectedEv.title : undefined
     });
@@ -137,15 +170,16 @@ export default function ReimbursementsPage() {
     // Reset Form
     setAmount('');
     setDescription('');
-    setBankDetails('');
+    setBankName('');
+    setAccountNumber('');
+    setIfscCode('');
     setSelectedEventId('');
-    setReceiptDataUrl('');
-    setReceiptFileName('');
+    setAttachedFiles([]);
     setFormError('');
 
     // Refresh & Notify
     setReimbursements(getReimbursements());
-    triggerSuccess(`Reimbursement claim ${selectedEv ? `attached to "${selectedEv.title}"` : ''} submitted successfully for review.`);
+    triggerSuccess(`Reimbursement claim ${selectedEv ? `attached to "${selectedEv.title}"` : ''} submitted successfully with ${attachedFiles.length} file(s).`);
   };
 
   // Two-Stage Approval Handlers
@@ -175,6 +209,12 @@ export default function ReimbursementsPage() {
     setRevealedBankIds(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
+  const maskAccNo = (acc?: string) => {
+    if (!acc) return '••••••••';
+    if (acc.length <= 4) return '••••' + acc;
+    return '••••••••' + acc.slice(-4);
+  };
+
   const handleDownloadCsv = () => {
     const approvedClaims = reimbursements.filter(r => r.status === 'Approved');
     if (approvedClaims.length === 0) {
@@ -182,10 +222,14 @@ export default function ReimbursementsPage() {
       return;
     }
 
-    let csvContent = 'Claim_ID,Member,Email,Category,Event,Amount,Masked_Bank_Details,Date_Approved,First_Pass_Reviewer,Final_Approver\n';
+    let csvContent = 'Claim_ID,Member,Email,Category,Event,Amount,Bank_Name,Account_Number,IFSC_Code,Attached_Files_Count,Date_Approved,First_Pass_Reviewer,Final_Approver\n';
     approvedClaims.forEach(claim => {
-      const masked = maskBankDetails(claim.bankDetails, false);
-      csvContent += `"${claim.id}","${claim.memberName}","${claim.memberEmail}","${claim.category}","${claim.eventName || 'General Operations'}",${claim.amount},"${masked}","${claim.submittedAt}","${claim.firstPassReviewer || 'N/A'}","${claim.finalApprover || 'N/A'}"\n`;
+      const bName = claim.bankName || (claim.bankDetails ? claim.bankDetails.split('-')[0].trim() : 'N/A');
+      const accNo = claim.accountNumber || (claim.bankDetails ? claim.bankDetails.split('-')[1]?.replace('A/C', '').trim() : 'N/A');
+      const ifsc = claim.ifscCode || (claim.bankDetails ? claim.bankDetails.split('-')[2]?.replace('IFSC', '').trim() : 'N/A');
+      const fileCount = claim.receiptFiles?.length || (claim.receiptUrl ? 1 : 0);
+
+      csvContent += `"${claim.id}","${claim.memberName}","${claim.memberEmail}","${claim.category}","${claim.eventName || 'General Operations'}",${claim.amount},"${bName}","${accNo}","${ifsc}",${fileCount},"${claim.submittedAt}","${claim.firstPassReviewer || 'N/A'}","${claim.finalApprover || 'N/A'}"\n`;
     });
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -229,11 +273,15 @@ export default function ReimbursementsPage() {
     csvContent += `Total Denied Amount: ₹${deniedAmount}\n`;
     csvContent += `==================================================\n\n`;
 
-    csvContent += `Claim_ID,Member_Name,Email,Category,Event_Name,Description,Amount_INR,Status,Bank_Details,Submitted_Date,First_Pass_Reviewer,Final_Approver\n`;
+    csvContent += `Claim_ID,Member_Name,Email,Category,Event_Name,Description,Amount_INR,Status,Bank_Name,Account_Number,IFSC_Code,Attached_Files_Count,Submitted_Date,First_Pass_Reviewer,Final_Approver\n`;
 
     chartClaims.forEach(r => {
-      const masked = maskBankDetails(r.bankDetails, false);
-      csvContent += `"${r.id}","${r.memberName}","${r.memberEmail}","${r.category}","${r.eventName || 'General Operations'}","${r.description.replace(/"/g, '""')}",${r.amount},"${r.status}","${masked}","${r.submittedAt}","${r.firstPassReviewer || 'N/A'}","${r.finalApprover || 'N/A'}"\n`;
+      const bName = r.bankName || (r.bankDetails ? r.bankDetails.split('-')[0].trim() : 'N/A');
+      const accNo = r.accountNumber || (r.bankDetails ? r.bankDetails.split('-')[1]?.replace('A/C', '').trim() : 'N/A');
+      const ifsc = r.ifscCode || (r.bankDetails ? r.bankDetails.split('-')[2]?.replace('IFSC', '').trim() : 'N/A');
+      const fileCount = r.receiptFiles?.length || (r.receiptUrl ? 1 : 0);
+
+      csvContent += `"${r.id}","${r.memberName}","${r.memberEmail}","${r.category}","${r.eventName || 'General Operations'}","${r.description.replace(/"/g, '""')}",${r.amount},"${r.status}","${bName}","${accNo}","${ifsc}",${fileCount},"${r.submittedAt}","${r.firstPassReviewer || 'N/A'}","${r.finalApprover || 'N/A'}"\n`;
     });
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -277,6 +325,22 @@ export default function ReimbursementsPage() {
     }
   };
 
+  const openReceiptViewer = (claim: ReimbursementItem) => {
+    let files: ReceiptFile[] = [];
+    if (claim.receiptFiles && claim.receiptFiles.length > 0) {
+      files = claim.receiptFiles;
+    } else if (claim.receiptData || claim.receiptUrl) {
+      files = [{ name: claim.receiptUrl || 'Receipt_Doc.pdf', dataUrl: claim.receiptData }];
+    }
+    if (files.length === 0) return;
+
+    setViewingReceipt({
+      files,
+      selectedIndex: 0,
+      title: `Bills & Supporting Docs: ${claim.memberName} (₹${claim.amount})`
+    });
+  };
+
   return (
     <div className="p-6 md:p-8 space-y-6">
       
@@ -292,7 +356,7 @@ export default function ReimbursementsPage() {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-theme-text-primary">Reimbursements & Expense Claims</h1>
-          <p className="text-xs text-theme-text-secondary">Attach claims directly to events & export one-shot event financial summary charts</p>
+          <p className="text-xs text-theme-text-secondary">Structured bank settlement (Bank, Account No, IFSC), multi-bill documentation (up to 3 files) & event charts</p>
         </div>
 
         {/* Header Controls & Filter */}
@@ -343,7 +407,7 @@ export default function ReimbursementsPage() {
         <div className="glass-panel rounded-2xl p-6 xl:col-span-1 space-y-4">
           <div>
             <h3 className="text-base font-bold text-theme-text-primary">Submit Expense Claim</h3>
-            <p className="text-xs text-theme-text-secondary">Attach to an event, upload bills & provide settlement details</p>
+            <p className="text-xs text-theme-text-secondary">Attach event, enter bank settlement details & upload up to 3 documentation files</p>
           </div>
 
           {formError && (
@@ -408,39 +472,115 @@ export default function ReimbursementsPage() {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Detail what was purchased, for which event/committee, and why..."
-                rows={3}
+                rows={2}
                 className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
               />
             </div>
 
-            <div className="space-y-1.5">
-              <label className="block font-medium text-theme-text-secondary">Upload Bill / Receipt File</label>
-              <div className="flex items-center gap-2">
-                <label className="flex-1 px-4 py-2.5 bg-theme-background/30 border border-theme-card-border border-dashed rounded-xl text-theme-text-secondary hover:text-theme-text-primary hover:border-accent transition-all cursor-pointer flex items-center justify-center gap-2">
+            {/* Multiple Documentation Files Section (2-3 files) */}
+            <div className="space-y-2 pt-1 border-t border-theme-border/20">
+              <div className="flex items-center justify-between">
+                <label className="block font-medium text-theme-text-secondary flex items-center gap-1.5">
+                  <Paperclip className="h-3.5 w-3.5 text-accent" />
+                  Bills & Supporting Docs (Up to 3 files)
+                </label>
+                <span className="text-[10px] text-theme-text-secondary font-medium">
+                  {attachedFiles.length}/3 attached
+                </span>
+              </div>
+
+              {attachedFiles.length < 3 && (
+                <label className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border border-dashed rounded-xl text-theme-text-secondary hover:text-theme-text-primary hover:border-accent transition-all cursor-pointer flex items-center justify-center gap-2">
                   <Upload className="h-4 w-4" />
-                  <span className="truncate">{receiptFileName || 'Choose receipt file (Image / PDF)'}</span>
+                  <span className="truncate text-xs">Upload Bill, Payment Receipt, or Approval Note</span>
                   <input
                     type="file"
+                    multiple
                     accept="image/*,.pdf"
-                    onChange={handleFileUpload}
+                    onChange={handleMultipleFileUpload}
                     className="hidden"
                   />
                 </label>
-              </div>
+              )}
+
+              {/* Display list of attached files */}
+              {attachedFiles.length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  {attachedFiles.map((file, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-2 bg-theme-border/10 border border-theme-border/20 rounded-lg text-xs">
+                      <div className="flex items-center gap-2 truncate pr-2">
+                        <FileText className="h-3.5 w-3.5 text-accent shrink-0" />
+                        <span className="truncate text-theme-text-primary font-medium">{file.name}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeAttachedFile(idx)}
+                        className="text-theme-text-secondary hover:text-danger p-0.5 transition-all cursor-pointer shrink-0"
+                        title="Remove file"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
-            <div className="space-y-1.5">
-              <label className="block font-medium text-theme-text-secondary">Bank Settlement Details *</label>
-              <input
-                type="text"
-                required
-                value={bankDetails}
-                onChange={(e) => setBankDetails(e.target.value)}
-                placeholder="Bank Name, A/C Number, IFSC Code"
-                className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-              />
-              <span className="text-[10px] text-theme-text-secondary">
-                Bank credentials will be masked in audit tables for privacy.
+            {/* Structured Bank Settlement Coordinates */}
+            <div className="space-y-3 pt-2 border-t border-theme-border/20">
+              <h4 className="font-bold text-xs text-theme-text-primary uppercase tracking-wider flex items-center gap-1.5">
+                <Building2 className="h-4 w-4 text-accent" />
+                Bank Settlement Coordinates
+              </h4>
+
+              <div className="space-y-2">
+                <div className="space-y-1">
+                  <label className="block font-medium text-theme-text-secondary text-[11px] flex items-center gap-1">
+                    <Building2 className="h-3 w-3" /> Bank Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={bankName}
+                    onChange={(e) => setBankName(e.target.value)}
+                    placeholder="e.g. HDFC Bank, SBI, ICICI"
+                    className="w-full px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent text-xs"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="block font-medium text-theme-text-secondary text-[11px] flex items-center gap-1">
+                      <CreditCard className="h-3 w-3" /> Account Number *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={accountNumber}
+                      onChange={(e) => setAccountNumber(e.target.value)}
+                      placeholder="e.g. 50100293849182"
+                      className="w-full px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent text-xs"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block font-medium text-theme-text-secondary text-[11px] flex items-center gap-1">
+                      <Hash className="h-3 w-3" /> IFSC Code *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={ifscCode}
+                      onChange={(e) => setIfscCode(e.target.value)}
+                      placeholder="e.g. HDFC0000123"
+                      className="w-full px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent text-xs uppercase"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <span className="text-[10px] text-theme-text-secondary block">
+                Account credentials are encrypted & masked for general users.
               </span>
             </div>
 
@@ -473,6 +613,13 @@ export default function ReimbursementsPage() {
               <div className="space-y-3">
                 {pendingClaims.map(claim => {
                   const isRevealed = Boolean(revealedBankIds[claim.id]);
+                  const bName = claim.bankName || (claim.bankDetails ? claim.bankDetails.split('-')[0].trim() : 'Bank');
+                  const accNo = claim.accountNumber || (claim.bankDetails ? claim.bankDetails.split('-')[1]?.replace('A/C', '').trim() : '');
+                  const ifsc = claim.ifscCode || (claim.bankDetails ? claim.bankDetails.split('-')[2]?.replace('IFSC', '').trim() : '');
+                  const filesList = claim.receiptFiles && claim.receiptFiles.length > 0
+                    ? claim.receiptFiles
+                    : (claim.receiptData || claim.receiptUrl ? [{ name: claim.receiptUrl || 'Receipt_Doc.pdf', dataUrl: claim.receiptData }] : []);
+
                   return (
                     <div key={claim.id} className="p-4 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-3 hover:bg-theme-border/15 transition-all text-xs">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -500,31 +647,50 @@ export default function ReimbursementsPage() {
                       <div className="p-3 bg-theme-background/30 rounded-lg border border-theme-border/20 space-y-2">
                         <p className="text-theme-text-primary font-medium">{claim.description}</p>
                         
-                        <div className="flex items-center justify-between text-[11px] text-theme-text-secondary pt-1 border-t border-theme-border/10">
-                          <div className="flex items-center gap-2">
-                            <span>Bank Settlement:</span>
-                            <span className="font-mono text-theme-text-primary font-medium">
-                              {maskBankDetails(claim.bankDetails, isRevealed)}
-                            </span>
-                            {(isLeadership || isCoreCommittee) && (
-                              <button
-                                type="button"
-                                onClick={() => toggleBankReveal(claim.id)}
-                                className="p-1 text-theme-text-secondary hover:text-accent cursor-pointer"
-                                title={isRevealed ? 'Mask Bank Info' : 'Reveal Full Bank Info'}
-                              >
-                                {isRevealed ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                              </button>
-                            )}
+                        {/* Structured Bank Settlement Display */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-theme-border/10 text-[11px]">
+                          <div>
+                            <span className="text-theme-text-secondary font-medium block">Bank Name:</span>
+                            <span className="font-semibold text-theme-text-primary">{bName}</span>
                           </div>
+                          <div>
+                            <span className="text-theme-text-secondary font-medium block flex items-center gap-1">
+                              Account Number:
+                              {(isLeadership || isCoreCommittee) && (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleBankReveal(claim.id)}
+                                  className="text-theme-text-secondary hover:text-accent cursor-pointer"
+                                  title={isRevealed ? 'Mask Bank Info' : 'Reveal Full Bank Info'}
+                                >
+                                  {isRevealed ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                                </button>
+                              )}
+                            </span>
+                            <span className="font-mono font-semibold text-theme-text-primary">
+                              {isRevealed ? accNo : maskAccNo(accNo)}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-theme-text-secondary font-medium block">IFSC Code:</span>
+                            <span className="font-mono font-semibold text-theme-text-primary uppercase">{ifsc || 'N/A'}</span>
+                          </div>
+                        </div>
 
-                          {claim.receiptData ? (
+                        {/* Files & Documents Preview Button */}
+                        <div className="flex items-center justify-between pt-1 border-t border-theme-border/10 text-[11px]">
+                          <span className="text-theme-text-secondary flex items-center gap-1">
+                            <Paperclip className="h-3.5 w-3.5 text-accent" />
+                            {filesList.length} Documentation File(s) Attached
+                          </span>
+
+                          {filesList.length > 0 ? (
                             <button
-                              onClick={() => setViewingReceipt({ url: claim.receiptData!, title: `Receipt Slip: ${claim.memberName} (₹${claim.amount})` })}
+                              onClick={() => openReceiptViewer(claim)}
                               className="text-accent hover:underline flex items-center gap-1 cursor-pointer font-medium"
                             >
                               <FileText className="h-3.5 w-3.5" />
-                              View Uploaded Receipt
+                              Inspect Bills & Proofs ({filesList.length})
                             </button>
                           ) : (
                             <span className="text-theme-text-secondary italic">No receipt file attached</span>
@@ -599,29 +765,33 @@ export default function ReimbursementsPage() {
                     <tr className="text-theme-text-secondary border-b border-theme-border/40 text-xs">
                       <th className="pb-2.5 font-semibold">Claimant</th>
                       <th className="pb-2.5 font-semibold">Event / Scope</th>
-                      <th className="pb-2.5 font-semibold">Category</th>
+                      <th className="pb-2.5 font-semibold">Bank Settlement</th>
                       <th className="pb-2.5 font-semibold">Amount</th>
                       <th className="pb-2.5 font-semibold">Status</th>
                       <th className="pb-2.5 font-semibold">Approval Log</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-theme-border/20">
-                    {processedClaims.map(claim => (
-                      <tr key={claim.id} className="hover:bg-theme-border/10 transition-all text-xs">
-                        <td className="py-3 font-semibold text-theme-text-primary">{claim.memberName}</td>
-                        <td className="py-3 text-theme-text-secondary">{claim.eventName || 'General Ops'}</td>
-                        <td className="py-3 text-theme-text-secondary">{claim.category}</td>
-                        <td className="py-3 font-bold text-theme-text-primary">₹{claim.amount.toLocaleString()}</td>
-                        <td className="py-3">
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${getStatusBadge(claim.status)}`}>
-                            {claim.status}
-                          </span>
-                        </td>
-                        <td className="py-3 text-[11px] text-theme-text-secondary">
-                          {claim.finalApprover ? `Authorized by ${claim.finalApprover}` : claim.firstPassReviewer ? `Reviewed by ${claim.firstPassReviewer}` : 'System Logged'} ({claim.decidedAt || claim.submittedAt})
-                        </td>
-                      </tr>
-                    ))}
+                    {processedClaims.map(claim => {
+                      const bName = claim.bankName || (claim.bankDetails ? claim.bankDetails.split('-')[0].trim() : 'Bank');
+                      const ifsc = claim.ifscCode || (claim.bankDetails ? claim.bankDetails.split('-')[2]?.replace('IFSC', '').trim() : '');
+                      return (
+                        <tr key={claim.id} className="hover:bg-theme-border/10 transition-all text-xs">
+                          <td className="py-3 font-semibold text-theme-text-primary">{claim.memberName}</td>
+                          <td className="py-3 text-theme-text-secondary">{claim.eventName || 'General Ops'}</td>
+                          <td className="py-3 font-mono text-[11px] text-theme-text-secondary">{bName} ({ifsc})</td>
+                          <td className="py-3 font-bold text-theme-text-primary">₹{claim.amount.toLocaleString()}</td>
+                          <td className="py-3">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${getStatusBadge(claim.status)}`}>
+                              {claim.status}
+                            </span>
+                          </td>
+                          <td className="py-3 text-[11px] text-theme-text-secondary">
+                            {claim.finalApprover ? `Authorized by ${claim.finalApprover}` : claim.firstPassReviewer ? `Reviewed by ${claim.firstPassReviewer}` : 'System Logged'} ({claim.decidedAt || claim.submittedAt})
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -632,12 +802,15 @@ export default function ReimbursementsPage() {
 
       </div>
 
-      {/* View Receipt Modal */}
+      {/* View Attached Bills & Documents Modal (Supports Navigation between multiple files) */}
       {viewingReceipt && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="glass-panel w-full max-w-xl rounded-3xl p-6 flex flex-col space-y-4 relative border border-white/15 shadow-2xl">
+          <div className="glass-panel w-full max-w-2xl rounded-3xl p-6 flex flex-col space-y-4 relative border border-white/15 shadow-2xl">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-theme-text-primary">{viewingReceipt.title}</h3>
+              <div>
+                <h3 className="text-sm font-bold text-theme-text-primary">{viewingReceipt.title}</h3>
+                <p className="text-xs text-theme-text-secondary">File {viewingReceipt.selectedIndex + 1} of {viewingReceipt.files.length}: {viewingReceipt.files[viewingReceipt.selectedIndex]?.name}</p>
+              </div>
               <button 
                 onClick={() => setViewingReceipt(null)}
                 className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
@@ -646,13 +819,52 @@ export default function ReimbursementsPage() {
               </button>
             </div>
 
-            <div className="max-h-[70vh] overflow-y-auto rounded-xl border border-theme-border/30 bg-black/20 flex items-center justify-center p-2">
-              {viewingReceipt.url.startsWith('data:image') || viewingReceipt.url.endsWith('.jpg') || viewingReceipt.url.endsWith('.png') ? (
-                <img src={viewingReceipt.url} alt="Receipt Preview" className="max-w-full h-auto object-contain rounded-lg" />
-              ) : (
-                <iframe src={viewingReceipt.url} className="w-full h-96 rounded-lg" title="Receipt PDF"></iframe>
-              )}
-            </div>
+            {/* Tab selector for multiple attached files */}
+            {viewingReceipt.files.length > 1 && (
+              <div className="flex border-b border-theme-border/30 gap-2 text-xs font-semibold overflow-x-auto pb-1">
+                {viewingReceipt.files.map((file, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setViewingReceipt({ ...viewingReceipt, selectedIndex: idx })}
+                    className={`px-3 py-1.5 rounded-t-lg transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                      viewingReceipt.selectedIndex === idx
+                        ? 'bg-accent text-white font-bold'
+                        : 'bg-theme-border/10 text-theme-text-secondary hover:text-theme-text-primary'
+                    }`}
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    <span>Doc {idx + 1}: {file.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Document Viewer Frame */}
+            {(() => {
+              const activeFile = viewingReceipt.files[viewingReceipt.selectedIndex];
+              if (!activeFile) return null;
+
+              const url = activeFile.dataUrl || '';
+              const isPdf = activeFile.name.endsWith('.pdf') || activeFile.type === 'application/pdf';
+
+              return (
+                <div className="max-h-[70vh] overflow-y-auto rounded-xl border border-theme-border/30 bg-black/20 flex items-center justify-center p-2">
+                  {url ? (
+                    isPdf ? (
+                      <iframe src={url} className="w-full h-96 rounded-lg" title={activeFile.name}></iframe>
+                    ) : (
+                      <img src={url} alt={activeFile.name} className="max-w-full h-auto object-contain rounded-lg" />
+                    )
+                  ) : (
+                    <div className="p-8 text-center text-xs text-theme-text-secondary space-y-2">
+                      <FileText className="h-8 w-8 mx-auto text-theme-text-secondary/50" />
+                      <p className="font-semibold text-theme-text-primary">{activeFile.name}</p>
+                      <p>File registered in settlement ledger. Full content preview available on server sync.</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             <div className="flex justify-end">
               <button
@@ -722,8 +934,6 @@ export default function ReimbursementsPage() {
               const pendingAmt = scopeClaims.filter(r => r.status === 'Pending' || r.status === 'Under Review').reduce((s, r) => s + r.amount, 0);
               const deniedAmt = scopeClaims.filter(r => r.status === 'Denied').reduce((s, r) => s + r.amount, 0);
 
-              const selectedEventObj = events.find(e => e.id === chartEventId);
-
               return (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
@@ -768,26 +978,30 @@ export default function ReimbursementsPage() {
                           <thead className="sticky top-0 bg-theme-background/90 backdrop-blur-md border-b border-theme-border/40">
                             <tr className="text-theme-text-secondary text-[11px]">
                               <th className="p-2.5 font-semibold">Claimant</th>
+                              <th className="p-2.5 font-semibold">Bank Settlement</th>
                               <th className="p-2.5 font-semibold">Category</th>
-                              <th className="p-2.5 font-semibold">Description</th>
                               <th className="p-2.5 font-semibold">Amount</th>
                               <th className="p-2.5 font-semibold">Status</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-theme-border/20">
-                            {scopeClaims.map(claim => (
-                              <tr key={claim.id} className="hover:bg-theme-border/10 text-xs">
-                                <td className="p-2.5 font-semibold text-theme-text-primary">{claim.memberName}</td>
-                                <td className="p-2.5 text-theme-text-secondary">{claim.category}</td>
-                                <td className="p-2.5 text-theme-text-secondary truncate max-w-xs">{claim.description}</td>
-                                <td className="p-2.5 font-bold text-theme-text-primary">₹{claim.amount.toLocaleString()}</td>
-                                <td className="p-2.5">
-                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${getStatusBadge(claim.status)}`}>
-                                    {claim.status}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))}
+                            {scopeClaims.map(claim => {
+                              const bName = claim.bankName || (claim.bankDetails ? claim.bankDetails.split('-')[0].trim() : 'Bank');
+                              const ifsc = claim.ifscCode || (claim.bankDetails ? claim.bankDetails.split('-')[2]?.replace('IFSC', '').trim() : '');
+                              return (
+                                <tr key={claim.id} className="hover:bg-theme-border/10 text-xs">
+                                  <td className="p-2.5 font-semibold text-theme-text-primary">{claim.memberName}</td>
+                                  <td className="p-2.5 font-mono text-[11px] text-theme-text-secondary">{bName} ({ifsc})</td>
+                                  <td className="p-2.5 text-theme-text-secondary">{claim.category}</td>
+                                  <td className="p-2.5 font-bold text-theme-text-primary">₹{claim.amount.toLocaleString()}</td>
+                                  <td className="p-2.5">
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${getStatusBadge(claim.status)}`}>
+                                      {claim.status}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>

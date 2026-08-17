@@ -73,6 +73,12 @@ export interface RatingItem {
   updatedAt?: string;
 }
 
+export interface ReceiptFile {
+  name: string;
+  dataUrl?: string;
+  type?: string;
+}
+
 export interface ReimbursementItem {
   id: string;
   memberName: string;
@@ -81,9 +87,13 @@ export interface ReimbursementItem {
   category: string;
   description: string;
   receiptUrl?: string;
-  receiptData?: string; // Base64 data URL for preview/persistence
+  receiptData?: string; // Legacy fallback
+  receiptFiles?: ReceiptFile[]; // Up to 3 attached bills & supporting documents
   status: 'Pending' | 'Under Review' | 'Approved' | 'Denied';
-  bankDetails: string;
+  bankDetails: string; // Summary string formatted for legacy/display
+  bankName?: string;
+  accountNumber?: string;
+  ifscCode?: string;
   submittedAt: string;
   firstPassReviewer?: string;
   finalApprover?: string;
@@ -413,8 +423,50 @@ const initialRatings: RatingItem[] = [
 ];
 
 const initialReimbursements: ReimbursementItem[] = [
-  { id: 'rem1', memberName: 'Gurutejas C', memberEmail: 'gurutejas.c@msruas.ac.in', amount: 4500, category: 'Printing & Stationary', description: 'Banners and feedback card prints for Tech Conclave.', receiptUrl: 'receipt_tech.pdf', status: 'Pending', bankDetails: 'HDFC BANK - A/C 50100293849182 - IFSC HDFC0000123', submittedAt: '2026-08-15', eventId: 'e1', eventName: 'Tech Conclave 2026' },
-  { id: 'rem2', memberName: 'Kunal Bhadauria', memberEmail: 'kunal.bhadauria@msruas.ac.in', amount: 1200, category: 'Catering / Refreshments', description: 'Snacks for speaker panel preliminary meet.', receiptUrl: 'receipt_catering.jpg', status: 'Approved', bankDetails: 'SBI - A/C 30928349182 - IFSC SBIN0004921', submittedAt: '2026-08-10', firstPassReviewer: 'Gurutejas C', finalApprover: 'Dr. Subhadeep Mukherjee', decidedAt: '2026-08-11', eventId: 'e1', eventName: 'Tech Conclave 2026' },
+  { 
+    id: 'rem1', 
+    memberName: 'Gurutejas C', 
+    memberEmail: 'gurutejas.c@msruas.ac.in', 
+    amount: 4500, 
+    category: 'Printing & Stationary', 
+    description: 'Banners and feedback card prints for Tech Conclave.', 
+    receiptUrl: 'receipt_tech.pdf', 
+    receiptFiles: [
+      { name: 'Banner_Print_Invoice.pdf' },
+      { name: 'Feedback_Card_Receipt.jpg' }
+    ],
+    status: 'Pending', 
+    bankDetails: 'HDFC BANK - A/C 50100293849182 - IFSC HDFC0000123',
+    bankName: 'HDFC BANK',
+    accountNumber: '50100293849182',
+    ifscCode: 'HDFC0000123',
+    submittedAt: '2026-08-15', 
+    eventId: 'e1', 
+    eventName: 'Tech Conclave 2026' 
+  },
+  { 
+    id: 'rem2', 
+    memberName: 'Kunal Bhadauria', 
+    memberEmail: 'kunal.bhadauria@msruas.ac.in', 
+    amount: 1200, 
+    category: 'Catering / Refreshments', 
+    description: 'Snacks for speaker panel preliminary meet.', 
+    receiptUrl: 'receipt_catering.jpg', 
+    receiptFiles: [
+      { name: 'Catering_Bill.jpg' }
+    ],
+    status: 'Approved', 
+    bankDetails: 'SBI - A/C 30928349182 - IFSC SBIN0004921',
+    bankName: 'State Bank of India (SBI)',
+    accountNumber: '30928349182',
+    ifscCode: 'SBIN0004921',
+    submittedAt: '2026-08-10', 
+    firstPassReviewer: 'Gurutejas C', 
+    finalApprover: 'Dr. Subhadeep Mukherjee', 
+    decidedAt: '2026-08-11', 
+    eventId: 'e1', 
+    eventName: 'Tech Conclave 2026' 
+  },
 ];
 
 const initialAnnouncements: AnnouncementItem[] = [
