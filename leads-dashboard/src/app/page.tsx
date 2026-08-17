@@ -3,15 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShieldAlert, LogIn, Mail, Lock } from 'lucide-react';
-
-const mockUsers = [
-  { name: 'Kayomarz Pavri', email: 'kayomarz.pavri@msruas.ac.in', role: 'Super User', tier: 1 },
-  { name: 'Dr. Subhadeep Mukherjee', email: 'subhadeep.mukherjee@msruas.ac.in', role: 'Centre Head', tier: 2 },
-  { name: 'Dr. Kiran Kumar B M', email: 'kiran.kumar@msruas.ac.in', role: 'Head of Events', tier: 3 },
-  { name: 'Dr. K. M. Sharath Kumar', email: 'sharath.kumar@msruas.ac.in', role: 'Advisory Board', tier: 4 },
-  { name: 'Gurutejas C', email: 'gurutejas.c@msruas.ac.in', role: 'Core Committee', tier: 5 },
-  { name: 'Kunal Bhadauria', email: 'kunal.bhadauria@msruas.ac.in', role: 'Training Associate', tier: 6 },
-];
+import { getMembers } from '@/lib/local-data';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -26,7 +18,8 @@ export default function LoginPage() {
     setIsLoading(true);
 
     const trimmedEmail = email.trim().toLowerCase();
-    const matchedUser = mockUsers.find(u => u.email.toLowerCase() === trimmedEmail);
+    const membersList = getMembers();
+    const matchedUser = membersList.find(u => u.email.toLowerCase() === trimmedEmail);
 
     // If empty or invalid, show the spec-defined error
     if (!matchedUser) {
