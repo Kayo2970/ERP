@@ -602,6 +602,11 @@ export async function syncWithServer(): Promise<boolean> {
       if (Array.isArray(data.auditLogs)) {
         localStorage.setItem('leads_audit_logs', JSON.stringify(data.auditLogs));
       }
+      // Notify every open page in this tab to re-read localStorage and re-render.
+      // The native 'storage' event only fires in OTHER tabs/windows — it never
+      // fires in the tab that made the write, so this custom event is the only
+      // signal same-tab pages get that a poll just pulled in fresh server data.
+      window.dispatchEvent(new Event('leads-data-sync'));
       return true;
     }
   } catch (err) {
