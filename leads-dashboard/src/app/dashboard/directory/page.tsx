@@ -107,7 +107,7 @@ export default function DirectoryPage() {
   };
 
   const handleDownloadTemplate = () => {
-    const csvContent = 'Name,Email,Role_Tier,Committee\nJohn Doe,john.doe@msruas.ac.in,6,Organizing Committee\nJane Smith,jane.smith@msruas.ac.in,5,Senior Student Leadership';
+    const csvContent = 'Name,Email,Committee,Role\nJohn Doe,john.doe@msruas.ac.in,Organizing Committee,Training Associate\nJane Smith,jane.smith@msruas.ac.in,Senior Student Leadership,Core Committee';
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -139,18 +139,18 @@ export default function DirectoryPage() {
         }
 
         const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-        const expectedHeaders = ['name', 'email', 'role_tier', 'committee'];
+        const expectedHeaders = ['name', 'email', 'committee', 'role'];
         const hasAllHeaders = expectedHeaders.every(eh => headers.includes(eh));
         
         if (!hasAllHeaders) {
-          triggerError('Invalid CSV headers. Required: Name, Email, Role_Tier, Committee');
+          triggerError('Invalid CSV headers. Required: Name, Email, Committee, Role');
           return;
         }
 
         const nameIndex = headers.indexOf('name');
         const emailIndex = headers.indexOf('email');
-        const tierIndex = headers.indexOf('role_tier');
         const committeeIndex = headers.indexOf('committee');
+        const roleIndex = headers.indexOf('role');
 
         const rolesMap: { [key: number]: string } = {
           1: 'Super User',
@@ -174,16 +174,26 @@ export default function DirectoryPage() {
 
           const mName = values[nameIndex];
           const mEmail = values[emailIndex];
-          const mTier = parseInt(values[tierIndex]);
           const mCommittee = values[committeeIndex];
+          const mRole = values[roleIndex];
 
-          if (!mName || !mEmail || isNaN(mTier)) continue;
+          if (!mName || !mEmail || !mRole) continue;
+
+          // Map string designation to Role Tier
+          const mRoleLower = mRole.toLowerCase();
+          let mTier = 6;
+          if (mRoleLower.includes('super')) mTier = 1;
+          else if (mRoleLower.includes('centre') || mRoleLower.includes('center') || mRoleLower.includes('head')) mTier = 2;
+          else if (mRoleLower.includes('event')) mTier = 3;
+          else if (mRoleLower.includes('advisory') || mRoleLower.includes('advisor')) mTier = 4;
+          else if (mRoleLower.includes('core')) mTier = 5;
+          else if (mRoleLower.includes('training') || mRoleLower.includes('associate')) mTier = 6;
 
           const newMember: Member = {
             id: 'm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
             name: mName,
             email: mEmail,
-            role: rolesMap[mTier] || 'Training Associate',
+            role: rolesMap[mTier],
             tier: mTier,
             committee: mCommittee
           };
@@ -421,7 +431,7 @@ export default function DirectoryPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Role Tier</label>
+                  <label className="block font-medium text-theme-text-secondary">Designation / Role</label>
                   <select
                     value={roleTier}
                     onChange={(e) => setRoleTier(parseInt(e.target.value))}
@@ -503,7 +513,7 @@ export default function DirectoryPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Role Tier (Privilege Level)</label>
+                  <label className="block font-medium text-theme-text-secondary">Designation / Role</label>
                   <select
                      value={editRoleTier}
                      onChange={(e) => setEditRoleTier(parseInt(e.target.value))}
