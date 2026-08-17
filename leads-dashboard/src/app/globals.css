@@ -80,6 +80,10 @@ body {
   background-repeat: no-repeat;
 }
 
-.dark.bg-space-theme, .dark .bg-space-theme {
-  background-image: url('/images/body-bg-dark.jpg');
+.dark.bg-space-theme, .dark .bg-space-theme, .dark body {
+  background-image: url('/images/sung-jinwoo-dark.jpg');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
 }
