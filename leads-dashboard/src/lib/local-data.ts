@@ -74,7 +74,7 @@ const initialMembers: Member[] = [
   { id: 'm3', name: 'Dr. Kiran Kumar B M', email: 'kiran.kumar@msruas.ac.in', role: 'Head of Events', tier: 3, committee: 'Executive Council' },
   { id: 'm4', name: 'Dr. K. M. Sharath Kumar', email: 'sharath.kumar@msruas.ac.in', role: 'Advisory Board', tier: 4, committee: 'Executive Council' },
   { id: 'm5', name: 'Gurutejas C', email: 'gurutejas.c@msruas.ac.in', role: 'Core Committee', tier: 5, committee: 'Senior Student Leadership' },
-  { id: 'm6', name: 'Kunal Bhadauria', email: 'kunal.bhadauria@msruas.ac.in', role: 'Training Associate', tier: 6, committee: 'Organizing Committee' },
+  { id: 'm6', name: 'Kunal Bhadauria', email: 'kunal.bhadauria@msruas.ac.in', role: 'Core Committee', tier: 5, committee: 'Organizing Committee' },
   { id: 'm7', name: 'Dr. Hari Krishna S', email: 'hari.krishna@msruas.ac.in', role: 'Advisory Board', tier: 4, committee: 'Executive Council' },
   { id: 'm8', name: 'Keerthan J', email: 'keerthan.j@msruas.ac.in', role: 'Training Associate', tier: 6, committee: 'Organizing Committee' },
   { id: 'm9', name: 'Dr. Kuldeep Kumar Raina', email: 'kuldeep.raina@msruas.ac.in', role: 'Centre Head', tier: 2, committee: 'Executive Council' },
