@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ShieldAlert, LogIn, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { getMembers, logAuditEvent } from '@/lib/local-data';
@@ -76,7 +77,11 @@ export default function LoginPage() {
       <div className="glass-panel w-full max-w-md rounded-3xl p-8 flex flex-col space-y-7 relative overflow-hidden transition-all duration-300 border border-white/15 shadow-2xl">
         
         {/* Brand Header */}
-        <div className="flex flex-col items-center text-center space-y-3">
+        <Link 
+          href="/" 
+          className="flex flex-col items-center text-center space-y-3 hover:opacity-90 transition-all cursor-pointer select-none"
+          title="LEADS Home"
+        >
           <div className="h-16 w-16 flex items-center justify-center">
             <img 
               src="/images/leads-short-logo.png" 
@@ -92,7 +97,7 @@ export default function LoginPage() {
               Sign in with your MSRUAS email to continue
             </p>
           </div>
-        </div>
+        </Link>
 
         {/* Error Alert Box */}
         {error && (

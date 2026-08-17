@@ -176,8 +176,12 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     <div className="min-h-screen bg-space-theme flex flex-col md:flex-row transition-all duration-300">
       {/* Sidebar - Desktop */}
       <aside className="hidden md:flex flex-col w-64 glass-panel bg-theme-sidebar/80 border-r border-theme-sidebar-border h-screen sticky top-0 z-40">
-        {/* Brand Logo */}
-        <div className="h-16 flex items-center px-6 border-b border-theme-border/30 gap-3">
+        {/* Brand Logo Link to Dashboard Home */}
+        <Link 
+          href="/dashboard/home" 
+          className="h-16 flex items-center px-6 border-b border-theme-border/30 gap-3 hover:opacity-90 transition-all cursor-pointer select-none"
+          title="Return to Dashboard Home"
+        >
           <div className="h-8 w-8 flex items-center justify-center">
             <img 
               src="/images/leads-short-logo.png" 
@@ -189,7 +193,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             <h1 className="font-semibold text-theme-text-primary text-sm tracking-wide">LEADS Next Gen</h1>
             <p className="text-[10px] text-theme-text-secondary font-medium tracking-wider uppercase">MSRUAS Portal</p>
           </div>
-        </div>
+        </Link>
 
         {/* Sidebar Nav links grouped by section */}
         <nav className="flex-1 px-4 py-5 space-y-5 overflow-y-auto">
@@ -246,7 +250,11 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
       {/* Mobile Header / Nav */}
       <header className="md:hidden flex items-center justify-between h-16 px-4 glass-panel bg-theme-sidebar/80 border-b border-theme-sidebar-border sticky top-0 z-40 w-full">
-        <div className="flex items-center gap-2.5">
+        <Link 
+          href="/dashboard/home" 
+          className="flex items-center gap-2.5 hover:opacity-90 transition-all cursor-pointer select-none"
+          title="Return to Dashboard Home"
+        >
           <div className="h-7 w-7 flex items-center justify-center">
             <img 
               src="/images/leads-short-logo.png" 
@@ -255,7 +263,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             />
           </div>
           <span className="font-semibold text-sm text-theme-text-primary">LEADS Next Gen</span>
-        </div>
+        </Link>
 
         <div className="flex items-center gap-2">
           <button
