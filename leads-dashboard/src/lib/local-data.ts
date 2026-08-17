@@ -88,6 +88,8 @@ export interface ReimbursementItem {
   firstPassReviewer?: string;
   finalApprover?: string;
   decidedAt?: string;
+  eventId?: string;
+  eventName?: string;
 }
 
 export interface AnnouncementItem {
@@ -411,8 +413,8 @@ const initialRatings: RatingItem[] = [
 ];
 
 const initialReimbursements: ReimbursementItem[] = [
-  { id: 'rem1', memberName: 'Gurutejas C', memberEmail: 'gurutejas.c@msruas.ac.in', amount: 4500, category: 'Printing & Stationary', description: 'Banners and feedback card prints for Tech Conclave.', receiptUrl: 'receipt_tech.pdf', status: 'Pending', bankDetails: 'HDFC BANK - A/C 50100293849182 - IFSC HDFC0000123', submittedAt: '2026-08-15' },
-  { id: 'rem2', memberName: 'Kunal Bhadauria', memberEmail: 'kunal.bhadauria@msruas.ac.in', amount: 1200, category: 'Catering / Refreshments', description: 'Snacks for speaker panel preliminary meet.', receiptUrl: 'receipt_catering.jpg', status: 'Approved', bankDetails: 'SBI - A/C 30928349182 - IFSC SBIN0004921', submittedAt: '2026-08-10', firstPassReviewer: 'Gurutejas C', finalApprover: 'Dr. Subhadeep Mukherjee', decidedAt: '2026-08-11' },
+  { id: 'rem1', memberName: 'Gurutejas C', memberEmail: 'gurutejas.c@msruas.ac.in', amount: 4500, category: 'Printing & Stationary', description: 'Banners and feedback card prints for Tech Conclave.', receiptUrl: 'receipt_tech.pdf', status: 'Pending', bankDetails: 'HDFC BANK - A/C 50100293849182 - IFSC HDFC0000123', submittedAt: '2026-08-15', eventId: 'e1', eventName: 'Tech Conclave 2026' },
+  { id: 'rem2', memberName: 'Kunal Bhadauria', memberEmail: 'kunal.bhadauria@msruas.ac.in', amount: 1200, category: 'Catering / Refreshments', description: 'Snacks for speaker panel preliminary meet.', receiptUrl: 'receipt_catering.jpg', status: 'Approved', bankDetails: 'SBI - A/C 30928349182 - IFSC SBIN0004921', submittedAt: '2026-08-10', firstPassReviewer: 'Gurutejas C', finalApprover: 'Dr. Subhadeep Mukherjee', decidedAt: '2026-08-11', eventId: 'e1', eventName: 'Tech Conclave 2026' },
 ];
 
 const initialAnnouncements: AnnouncementItem[] = [
