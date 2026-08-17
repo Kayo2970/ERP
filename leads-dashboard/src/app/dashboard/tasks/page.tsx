@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Plus, X, Calendar, User, Briefcase, CheckCircle2, FileClock, AlertCircle } from 'lucide-react';
+import { Plus, X, Calendar, User, Briefcase, CheckCircle2, FileClock, Users } from 'lucide-react';
 import { getTasks, getEvents, getMembers, addTask, updateTaskStatus, TaskItem, EventItem, Member } from '@/lib/local-data';
 
 export default function TasksPage() {
@@ -13,15 +13,21 @@ export default function TasksPage() {
 
   // Form State
   const [title, setTitle] = useState('');
-  const [selectedEventId, setSelectedEventId] = useState('');
+  const [selectedEventId, setSelectedEventId] = useState('standalone');
+  const [assigneeType, setAssigneeType] = useState<'individual' | 'committee'>('individual');
   const [selectedAssigneeId, setSelectedAssigneeId] = useState('');
+  const [selectedCommittee, setSelectedCommittee] = useState('Organizing Committee');
   const [dueDate, setDueDate] = useState('');
   const [status, setStatus] = useState<TaskItem['status']>('Assigned');
 
   useEffect(() => {
     setTasks(getTasks());
     setEvents(getEvents());
-    setMembers(getMembers());
+    const mList = getMembers();
+    setMembers(mList);
+    if (mList.length > 0) {
+      setSelectedAssigneeId(mList[0].id);
+    }
     
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
@@ -31,27 +37,48 @@ export default function TasksPage() {
 
   const handleCreateTask = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !selectedEventId || !selectedAssigneeId || !dueDate) return;
+    if (!title || !dueDate) return;
 
-    const event = events.find(e => e.id === selectedEventId);
-    const member = members.find(m => m.id === selectedAssigneeId);
+    let eventTitle = 'Standalone';
+    let eventIdVal = undefined;
 
-    if (!event || !member) return;
+    if (selectedEventId !== 'standalone') {
+      const eventObj = events.find(ev => ev.id === selectedEventId);
+      if (eventObj) {
+        eventTitle = eventObj.title;
+        eventIdVal = eventObj.id;
+      }
+    }
+
+    let assigneeName = '';
+    let assigneeEmailVal = undefined;
+
+    if (assigneeType === 'individual') {
+      const memberObj = members.find(m => m.id === selectedAssigneeId);
+      if (memberObj) {
+        assigneeName = memberObj.name;
+        assigneeEmailVal = memberObj.email;
+      }
+    } else {
+      assigneeName = selectedCommittee;
+    }
 
     addTask({
       title,
-      event: event.title,
-      eventId: event.id,
-      assignee: member.name,
-      assigneeEmail: member.email,
+      event: eventTitle,
+      eventId: eventIdVal,
+      assignee: assigneeName,
+      assigneeEmail: assigneeEmailVal,
+      assigneeType,
       dueDate,
       status
     });
 
     // Reset Form & Close Modal
     setTitle('');
-    setSelectedEventId('');
-    setSelectedAssigneeId('');
+    setSelectedEventId('standalone');
+    setAssigneeType('individual');
+    if (members.length > 0) setSelectedAssigneeId(members[0].id);
     setDueDate('');
     setStatus('Assigned');
     setIsModalOpen(false);
@@ -69,6 +96,12 @@ export default function TasksPage() {
   const displayedTasks = tasks.filter(task => {
     if (!user) return true;
     if (user.tier <= 3) return true; // Super User, Centre Head, Head of Events see all
+    
+    if (task.assigneeType === 'committee') {
+      // If assigned to a committee, check if user belongs to that committee
+      return user.committee === task.assignee || user.committee === 'All Committees';
+    }
+
     if (user.tier === 5) {
       // Core Committee see their own tasks plus tasks related to their committee
       return task.assigneeEmail === user.email || task.event === 'Tech Conclave 2026';
@@ -101,16 +134,11 @@ export default function TasksPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-theme-text-primary">Task Management</h1>
-          <p className="text-xs text-theme-text-secondary">Assign tasks, track completion, and manage deadlines</p>
+          <p className="text-xs text-theme-text-secondary">Assign standalone or event-linked tasks, and track completions</p>
         </div>
         {canCreate && (
           <button
-            onClick={() => {
-              // Pre-select first event and member if lists are available
-              if (events.length > 0) setSelectedEventId(events[0].id);
-              if (members.length > 0) setSelectedAssigneeId(members[0].id);
-              setIsModalOpen(true);
-            }}
+            onClick={() => setIsModalOpen(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer"
           >
             <Plus className="h-4 w-4" />
@@ -142,13 +170,19 @@ export default function TasksPage() {
                 {displayedTasks.map(task => (
                   <tr key={task.id} className="hover:bg-theme-border/10 transition-all">
                     <td className="py-4 pr-2 font-medium text-theme-text-primary">{task.title}</td>
-                    <td className="py-4 pr-2 text-theme-text-secondary flex items-center gap-1.5 mt-0.5">
-                      <Briefcase className="h-3.5 w-3.5 text-accent" />
-                      {task.event}
+                    <td className="py-4 pr-2 text-theme-text-secondary">
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <Briefcase className="h-3.5 w-3.5 text-accent" />
+                        <span>{task.event || 'Standalone'}</span>
+                      </div>
                     </td>
                     <td className="py-4 pr-2 text-theme-text-secondary">
                       <div className="flex items-center gap-1.5">
-                        <User className="h-3.5 w-3.5 text-theme-text-secondary" />
+                        {task.assigneeType === 'committee' ? (
+                          <Users className="h-3.5 w-3.5 text-warning" />
+                        ) : (
+                          <User className="h-3.5 w-3.5 text-theme-text-secondary" />
+                        )}
                         <span>{task.assignee}</span>
                       </div>
                     </td>
@@ -159,14 +193,15 @@ export default function TasksPage() {
                       </span>
                     </td>
                     <td className="py-4 text-right">
-                      {task.status === 'Assigned' && task.assigneeEmail === user?.email ? (
+                      {/* Check if current user is assigned or belongs to committee */}
+                      {task.status === 'Assigned' && (task.assigneeEmail === user?.email || (task.assigneeType === 'committee' && user?.committee === task.assignee)) ? (
                         <button
                           onClick={() => handleStatusChange(task.id, 'In Progress')}
                           className="px-3 py-1.5 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-lg transition-all cursor-pointer shadow-md shadow-accent/15"
                         >
                           Acknowledge
                         </button>
-                      ) : task.status === 'In Progress' && task.assigneeEmail === user?.email ? (
+                      ) : task.status === 'In Progress' && (task.assigneeEmail === user?.email || (task.assigneeType === 'committee' && user?.committee === task.assignee)) ? (
                         <div className="flex justify-end gap-1.5">
                           <button 
                             onClick={() => handleStatusChange(task.id, 'Completed')}
@@ -244,24 +279,65 @@ export default function TasksPage() {
                   onChange={(e) => setSelectedEventId(e.target.value)}
                   className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                 >
+                  <option value="standalone">None (Standalone Task)</option>
                   {events.map(ev => (
-                    <option key={ev.id} value={ev.id}>{ev.title} ({ev.status})</option>
+                    <option key={ev.id} value={ev.id}>{ev.title}</option>
                   ))}
                 </select>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="block font-medium text-theme-text-secondary">Assignee</label>
-                <select
-                  value={selectedAssigneeId}
-                  onChange={(e) => setSelectedAssigneeId(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                >
-                  {members.map(mem => (
-                    <option key={mem.id} value={mem.id}>{mem.name} ({mem.role})</option>
-                  ))}
-                </select>
+              <div className="space-y-2">
+                <label className="block font-medium text-theme-text-secondary">Assignee Type</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 text-theme-text-primary cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name="assigneeType" 
+                      checked={assigneeType === 'individual'} 
+                      onChange={() => setAssigneeType('individual')} 
+                    />
+                    <span>Individual Member</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-theme-text-primary cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name="assigneeType" 
+                      checked={assigneeType === 'committee'} 
+                      onChange={() => setAssigneeType('committee')} 
+                    />
+                    <span>Committee / Group</span>
+                  </label>
+                </div>
               </div>
+
+              {assigneeType === 'individual' ? (
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">Assignee Member</label>
+                  <select
+                    value={selectedAssigneeId}
+                    onChange={(e) => setSelectedAssigneeId(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  >
+                    {members.map(mem => (
+                      <option key={mem.id} value={mem.id}>{mem.name} ({mem.role})</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">Assignee Committee</label>
+                  <select
+                    value={selectedCommittee}
+                    onChange={(e) => setSelectedCommittee(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  >
+                    <option value="Executive Council">Executive Council</option>
+                    <option value="Senior Student Leadership">Senior Student Leadership</option>
+                    <option value="Organizing Committee">Organizing Committee</option>
+                    <option value="All Committees">All Committees</option>
+                  </select>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
