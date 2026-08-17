@@ -1,0 +1,413 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2026-08-18T02:35:00.000Z",
+  "members": [
+    { "id": "m1", "name": "Kayomarz Pavri", "email": "kayomarz.pavri@msruas.ac.in", "role": "Super User", "tier": 1, "division": "Core Committee" },
+    { "id": "m2", "name": "Dr. Subhadeep Mukherjee", "email": "subhadeep.mukherjee@msruas.ac.in", "role": "Centre Head", "tier": 2, "division": "Advisory Board" },
+    { "id": "m3", "name": "Dr. Kiran Kumar B M", "email": "kiran.kumar@msruas.ac.in", "role": "Head of Events", "tier": 3, "division": "Advisory Board" },
+    { "id": "m4", "name": "Dr. K. M. Sharath Kumar", "email": "sharath.kumar@msruas.ac.in", "role": "Advisory Board Member", "tier": 4, "division": "Advisory Board" },
+    { "id": "m5", "name": "Gurutejas C", "email": "gurutejas.c@msruas.ac.in", "role": "President & Student Lead", "tier": 5, "division": "Core Committee" },
+    { "id": "m6", "name": "Kunal Bhadauria", "email": "kunal.bhadauria@msruas.ac.in", "role": "Vice President", "tier": 5, "division": "Core Committee" },
+    { "id": "m7", "name": "Dr. Hari Krishna S", "email": "hari.krishna@msruas.ac.in", "role": "Faculty Advisor", "tier": 4, "division": "Advisory Board" },
+    { "id": "m8", "name": "Keerthan J", "email": "keerthan.j@msruas.ac.in", "role": "Junior Coordinator", "tier": 6, "division": "Training Associate" },
+    { "id": "m9", "name": "Dr. Kuldeep Kumar Raina", "email": "kuldeep.raina@msruas.ac.in", "role": "Vice Chancellor / Advisory Patron", "tier": 2, "division": "Advisory Board" },
+    { "id": "m10", "name": "Dr. Pallabi Mund", "email": "pallabi.mund@msruas.ac.in", "role": "Associate Advisor", "tier": 3, "division": "Advisory Board" },
+    { "id": "m11", "name": "Dr. Ajay R", "email": "ajay.r@msruas.ac.in", "role": "Faculty Advisor", "tier": 3, "division": "Advisory Board" },
+    { "id": "m12", "name": "Ms. Sujata Bijwe", "email": "sujata.bijwe@msruas.ac.in", "role": "Faculty Advisor", "tier": 3, "division": "Advisory Board" },
+    { "id": "m13", "name": "Abhijit Arya", "email": "abhijit.arya@msruas.ac.in", "role": "General Secretary", "tier": 5, "division": "Core Committee" },
+    { "id": "m14", "name": "Laksh Soorya Singh", "email": "laksh.singh@msruas.ac.in", "role": "Operations Lead", "tier": 5, "division": "Core Committee" },
+    { "id": "m15", "name": "Bhawen Maroo", "email": "bhawen.maroo@msruas.ac.in", "role": "Logistics Head", "tier": 5, "division": "Core Committee" },
+    { "id": "m16", "name": "Bharvi A Padia", "email": "bharvi.padia@msruas.ac.in", "role": "Finance Head", "tier": 5, "division": "Core Committee" },
+    { "id": "m17", "name": "Arvind Rakshith", "email": "arvind.rakshith@msruas.ac.in", "role": "Design & Media Lead", "tier": 5, "division": "Core Committee" },
+    { "id": "m18", "name": "Shreesha S N", "email": "shreesha.sn@msruas.ac.in", "role": "Technical Head", "tier": 5, "division": "Core Committee" },
+    { "id": "m19", "name": "Nuthan H", "email": "nuthan.h@msruas.ac.in", "role": "Public Relations Lead", "tier": 5, "division": "Core Committee" },
+    { "id": "m20", "name": "S Bhavya Shree", "email": "bhavya.shree@msruas.ac.in", "role": "Training Coordinator", "tier": 6, "division": "Training Associate" },
+    { "id": "m21", "name": "Shriram SG", "email": "shriram.sg@msruas.ac.in", "role": "Technical Associate", "tier": 6, "division": "Training Associate" },
+    { "id": "m22", "name": "Manoj Petakamsetty", "email": "manoj.petakamsetty@msruas.ac.in", "role": "Events Associate", "tier": 6, "division": "Training Associate" },
+    { "id": "m23", "name": "Sudev Mitra", "email": "sudev.mitra@msruas.ac.in", "role": "Media Associate", "tier": 6, "division": "Training Associate" },
+    { "id": "m24", "name": "Jyotsna Karn", "email": "jyotsna.karn@msruas.ac.in", "role": "Hospitality Associate", "tier": 6, "division": "Training Associate" },
+    { "id": "m25", "name": "Shravya T", "email": "shravya.t@msruas.ac.in", "role": "Documentation Associate", "tier": 6, "division": "Training Associate" },
+    { "id": "m26", "name": "P Koushik Reddy", "email": "koushik.reddy@msruas.ac.in", "role": "Logistics Associate", "tier": 6, "division": "Training Associate" },
+    { "id": "m27", "name": "Sadiya Sawood", "email": "sadiya.sawood@msruas.ac.in", "role": "PR Associate", "tier": 6, "division": "Training Associate" },
+    { "id": "m28", "name": "Syed Furqaan Ahmed", "email": "furqaan.ahmed@msruas.ac.in", "role": "Technical Associate", "tier": 6, "division": "Training Associate" },
+    { "id": "m29", "name": "Kayomarz M Pavri", "email": "kayomarz.m@msruas.ac.in", "role": "Alumni Mentor (Former President)", "tier": 7, "division": "Alumni", "batch": "Batch of 2024" },
+    { "id": "m30", "name": "Nimisha K M", "email": "nimisha.km@msruas.ac.in", "role": "Alumni Mentor (Former Tech Lead)", "tier": 7, "division": "Alumni", "batch": "Batch of 2025" },
+    { "id": "m31", "name": "Aravind Manashetti", "email": "aravind.manashetti@msruas.ac.in", "role": "Training Associate", "tier": 6, "division": "Training Associate" },
+    { "id": "m32", "name": "Shwetha S", "email": "shwetha.s@msruas.ac.in", "role": "Training Associate", "tier": 6, "division": "Training Associate" },
+    { "id": "m33", "name": "Kishan KP", "email": "kishan.kp@msruas.ac.in", "role": "Training Associate", "tier": 6, "division": "Training Associate" },
+    { "id": "m34", "name": "Yash Chandak", "email": "yash.chandak@msruas.ac.in", "role": "Training Associate", "tier": 6, "division": "Training Associate" },
+    { "id": "m35", "name": "Niyati Chawra", "email": "niyati.chawra@msruas.ac.in", "role": "Training Associate", "tier": 6, "division": "Training Associate" }
+  ],
+  "events": [
+    {
+      "id": "e1",
+      "title": "Tech Conclave 2026",
+      "description": "Annual tech symposium featuring sustainability, robotics showcase, and AI panel discussions.",
+      "startDate": "2026-09-10",
+      "endDate": "2026-09-12",
+      "location": "Ramaiah Technology Campus - Auditorium 1",
+      "status": "active",
+      "createdBy": "Kayomarz Pavri",
+      "committees": [
+        { "id": "c1_1", "name": "Stage & Audio-Visual Committee", "leadMemberId": "m5", "leadMemberName": "Gurutejas C", "memberIds": ["m5", "m8", "m21"] },
+        { "id": "c1_2", "name": "Hospitality & Catering Committee", "leadMemberId": "m15", "leadMemberName": "Bhawen Maroo", "memberIds": ["m15", "m24", "m26"] },
+        { "id": "c1_3", "name": "Design & Media Committee", "leadMemberId": "m17", "leadMemberName": "Arvind Rakshith", "memberIds": ["m17", "m23", "m27"] },
+        { "id": "c1_4", "name": "Finance & Registrations Committee", "leadMemberId": "m16", "leadMemberName": "Bharvi A Padia", "memberIds": ["m16", "m25"] }
+      ]
+    },
+    {
+      "id": "e2",
+      "title": "Alumni Meet & Innovation Summit 2026",
+      "description": "Reunion meet for RUAS alumni sharing entrepreneurial journeys with undergraduate leaders.",
+      "startDate": "2026-10-05",
+      "endDate": "2026-10-06",
+      "location": "Gnanagangothri Campus - Seminar Complex",
+      "status": "planned",
+      "createdBy": "Dr. Subhadeep Mukherjee",
+      "committees": [
+        { "id": "c2_1", "name": "Alumni Relations Committee", "leadMemberId": "m6", "leadMemberName": "Kunal Bhadauria", "memberIds": ["m6", "m29", "m30"] },
+        { "id": "c2_2", "name": "Operations & Logistics Committee", "leadMemberId": "m14", "leadMemberName": "Laksh Soorya Singh", "memberIds": ["m14", "m22", "m26"] }
+      ]
+    },
+    {
+      "id": "e3",
+      "title": "Robotics Bootcamp & Hackathon",
+      "description": "Hands-on bootcamp on ROS, autonomous navigation, and robot assembly.",
+      "startDate": "2026-08-25",
+      "endDate": "2026-08-27",
+      "location": "Robotics Lab 3",
+      "status": "planned",
+      "createdBy": "Dr. Kiran Kumar B M",
+      "committees": [
+        { "id": "c3_1", "name": "Technical Mentorship Committee", "leadMemberId": "m18", "leadMemberName": "Shreesha S N", "memberIds": ["m18", "m21", "m28"] },
+        { "id": "c3_2", "name": "Hardware & Kit Logistics", "leadMemberId": "m8", "leadMemberName": "Keerthan J", "memberIds": ["m8", "m31", "m33"] }
+      ]
+    },
+    {
+      "id": "e4",
+      "title": "Leadership Webinar Series",
+      "description": "Expert online talks on sustainable leadership and modern engineering practices.",
+      "startDate": "2026-08-15",
+      "endDate": "2026-08-18",
+      "location": "Virtual Zoom / MS Teams Room",
+      "status": "active",
+      "createdBy": "Dr. K. M. Sharath Kumar",
+      "committees": [
+        { "id": "c4_1", "name": "Public Relations & Streaming", "leadMemberId": "m19", "leadMemberName": "Nuthan H", "memberIds": ["m19", "m20", "m27"] }
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t1",
+      "title": "Prepare Event Budget Spreadsheet",
+      "event": "Tech Conclave 2026",
+      "eventId": "e1",
+      "eventCommitteeName": "Finance & Registrations Committee",
+      "assignee": "Bharvi A Padia",
+      "assigneeId": "m16",
+      "assigneeEmail": "bharvi.padia@msruas.ac.in",
+      "assigneeType": "individual",
+      "dueDate": "2026-08-20",
+      "status": "Completed",
+      "creatorName": "Kayomarz Pavri",
+      "ratingScore": 4.8,
+      "ratedAt": "2026-08-14"
+    },
+    {
+      "id": "t2",
+      "title": "Coordinate Speaker Panel Invitations",
+      "event": "Alumni Meet & Innovation Summit 2026",
+      "eventId": "e2",
+      "eventCommitteeName": "Alumni Relations Committee",
+      "assignee": "Kunal Bhadauria",
+      "assigneeId": "m6",
+      "assigneeEmail": "kunal.bhadauria@msruas.ac.in",
+      "assigneeType": "individual",
+      "dueDate": "2026-08-22",
+      "status": "In Progress",
+      "creatorName": "Dr. Subhadeep Mukherjee"
+    },
+    {
+      "id": "t3",
+      "title": "Setup Audio-Visual & Microphones Check",
+      "event": "Tech Conclave 2026",
+      "eventId": "e1",
+      "eventCommitteeName": "Stage & Audio-Visual Committee",
+      "assignee": "Keerthan J",
+      "assigneeId": "m8",
+      "assigneeEmail": "keerthan.j@msruas.ac.in",
+      "assigneeType": "individual",
+      "dueDate": "2026-08-25",
+      "status": "Completed",
+      "creatorName": "Dr. Kiran Kumar B M",
+      "ratingScore": 4.5,
+      "ratedAt": "2026-08-10"
+    },
+    {
+      "id": "t4",
+      "title": "Compile Participant Feedback Survey Results",
+      "event": "Leadership Webinar Series",
+      "eventId": "e4",
+      "eventCommitteeName": "Public Relations & Streaming",
+      "assignee": "Gurutejas C",
+      "assigneeId": "m5",
+      "assigneeEmail": "gurutejas.c@msruas.ac.in",
+      "assigneeType": "individual",
+      "dueDate": "2026-08-18",
+      "status": "Pending Extension",
+      "creatorName": "Kayomarz Pavri",
+      "extensionReason": "Waiting for 15 pending survey responses from participants."
+    },
+    {
+      "id": "t5",
+      "title": "Finalize Event Banners & Backdrop Graphics",
+      "event": "Tech Conclave 2026",
+      "eventId": "e1",
+      "eventCommitteeName": "Design & Media Committee",
+      "assignee": "Arvind Rakshith",
+      "assigneeId": "m17",
+      "assigneeEmail": "arvind.rakshith@msruas.ac.in",
+      "assigneeType": "individual",
+      "dueDate": "2026-08-12",
+      "status": "Completed",
+      "creatorName": "Kunal Bhadauria",
+      "ratingScore": 5.0,
+      "ratedAt": "2026-08-12"
+    },
+    {
+      "id": "t6",
+      "title": "Confirm Catering Service Layout & Meal Counts",
+      "event": "Tech Conclave 2026",
+      "eventId": "e1",
+      "eventCommitteeName": "Hospitality & Catering Committee",
+      "assignee": "Bhawen Maroo",
+      "assigneeId": "m15",
+      "assigneeEmail": "bhawen.maroo@msruas.ac.in",
+      "assigneeType": "individual",
+      "dueDate": "2026-08-14",
+      "status": "Completed",
+      "creatorName": "Gurutejas C",
+      "ratingScore": 4.3,
+      "ratedAt": "2026-08-15"
+    }
+  ],
+  "ratings": [
+    {
+      "id": "r1",
+      "taskId": "t1",
+      "taskTitle": "Prepare Event Budget Spreadsheet",
+      "eventId": "e1",
+      "eventName": "Tech Conclave 2026",
+      "targetName": "Bharvi A Padia",
+      "targetId": "m16",
+      "raterName": "Dr. Kiran Kumar B M",
+      "quality": 5,
+      "timeliness": 5,
+      "initiative": 4,
+      "collaboration": 5,
+      "overallScore": 4.8,
+      "notes": "Flawless financial planning and transparent allocations for conclave.",
+      "quarter": "2026-Q3",
+      "createdAt": "2026-08-14"
+    },
+    {
+      "id": "r2",
+      "taskId": "t5",
+      "taskTitle": "Finalize Event Banners & Backdrop Graphics",
+      "eventId": "e1",
+      "eventName": "Tech Conclave 2026",
+      "targetName": "Arvind Rakshith",
+      "targetId": "m17",
+      "raterName": "Dr. Subhadeep Mukherjee",
+      "quality": 5,
+      "timeliness": 5,
+      "initiative": 5,
+      "collaboration": 5,
+      "overallScore": 5.0,
+      "notes": "Outstanding branding assets delivered ahead of schedule.",
+      "quarter": "2026-Q3",
+      "createdAt": "2026-08-12"
+    },
+    {
+      "id": "r3",
+      "taskId": "t3",
+      "taskTitle": "Setup Audio-Visual & Microphones Check",
+      "eventId": "e1",
+      "eventName": "Tech Conclave 2026",
+      "targetName": "Keerthan J",
+      "targetId": "m8",
+      "raterName": "Dr. Kiran Kumar B M",
+      "quality": 4,
+      "timeliness": 5,
+      "initiative": 4,
+      "collaboration": 5,
+      "overallScore": 4.5,
+      "notes": "Handled AV testing and soundboard check smoothly.",
+      "quarter": "2026-Q3",
+      "createdAt": "2026-08-10"
+    },
+    {
+      "id": "r4",
+      "taskId": "t6",
+      "taskTitle": "Confirm Catering Service Layout & Meal Counts",
+      "eventId": "e1",
+      "eventName": "Tech Conclave 2026",
+      "targetName": "Bhawen Maroo",
+      "targetId": "m15",
+      "raterName": "Dr. Subhadeep Mukherjee",
+      "quality": 4,
+      "timeliness": 4,
+      "initiative": 5,
+      "collaboration": 4,
+      "overallScore": 4.3,
+      "notes": "Vendor negotiations and seating arrangements were well coordinated.",
+      "quarter": "2026-Q3",
+      "createdAt": "2026-08-15"
+    }
+  ],
+  "reimbursements": [
+    {
+      "id": "rem1",
+      "memberName": "Gurutejas C",
+      "memberEmail": "gurutejas.c@msruas.ac.in",
+      "amount": 4500,
+      "category": "Printing & Stationary",
+      "description": "Banners and feedback card prints for Tech Conclave.",
+      "receiptUrl": "receipt_tech.pdf",
+      "status": "Pending",
+      "bankDetails": "HDFC BANK - A/C 50100293849182 - IFSC HDFC0000123",
+      "submittedAt": "2026-08-15"
+    },
+    {
+      "id": "rem2",
+      "memberName": "Kunal Bhadauria",
+      "memberEmail": "kunal.bhadauria@msruas.ac.in",
+      "amount": 1200,
+      "category": "Catering / Refreshments",
+      "description": "Snacks for speaker panel preliminary meet.",
+      "receiptUrl": "receipt_catering.jpg",
+      "status": "Approved",
+      "bankDetails": "SBI - A/C 30928349182 - IFSC SBIN0004921",
+      "submittedAt": "2026-08-10",
+      "firstPassReviewer": "Gurutejas C",
+      "finalApprover": "Dr. Subhadeep Mukherjee",
+      "decidedAt": "2026-08-11"
+    }
+  ],
+  "announcements": [
+    {
+      "id": "a1",
+      "title": "Tech Conclave 2026 Core Planning Briefing",
+      "content": "All event committee leads and student organizers are requested to join the final walkthrough in Seminar Hall 2 at 4:30 PM.",
+      "scope": "Core Committee",
+      "authorName": "Kayomarz Pavri",
+      "publishedAt": "2026-08-16 10:30"
+    },
+    {
+      "id": "a2",
+      "title": "Q3 Financial Reconciliation Window Open",
+      "content": "Submit all outstanding reimbursement slips and bills before the 25th of August for leadership sign-off.",
+      "scope": "All Members",
+      "authorName": "Dr. Subhadeep Mukherjee",
+      "publishedAt": "2026-08-14 15:00"
+    },
+    {
+      "id": "a3",
+      "title": "Advisory Board Strategic Review Meeting",
+      "content": "Review of event calendar and academic integration scheduled for next Monday with the executive leadership team.",
+      "scope": "Advisory Board",
+      "authorName": "Dr. K. M. Sharath Kumar",
+      "publishedAt": "2026-08-12 11:15"
+    }
+  ],
+  "forms": [
+    {
+      "id": "f1",
+      "slug": "tech-conclave-registration",
+      "title": "Tech Conclave 2026 Participant Registration",
+      "description": "Register for panel sessions, workshops, and student innovation showcase.",
+      "committee": "Tech Conclave 2026",
+      "createdBy": "Kayomarz Pavri",
+      "createdAt": "2026-08-10",
+      "isSample": true,
+      "status": "active",
+      "fields": [
+        { "id": "field_name", "label": "Full Name", "type": "text", "required": true },
+        { "id": "field_email", "label": "University / Institute Email", "type": "email", "required": true },
+        { "id": "field_dept", "label": "Department / Faculty", "type": "text", "required": true },
+        { "id": "field_track", "label": "Preferred Track", "type": "select", "options": ["AI & Robotics", "Sustainable Engineering", "Design & UI/UX"], "required": true },
+        { "id": "field_notes", "label": "Special Accommodation / Questions", "type": "textarea", "required": false }
+      ]
+    },
+    {
+      "id": "f2",
+      "slug": "robotics-bootcamp-rsvp",
+      "title": "Robotics Bootcamp RSVP & Kit Request",
+      "description": "Confirm participation and kit allocation for hands-on ROS sessions.",
+      "committee": "Robotics Bootcamp",
+      "createdBy": "Gurutejas C",
+      "createdAt": "2026-08-12",
+      "isSample": true,
+      "status": "active",
+      "fields": [
+        { "id": "field_name", "label": "Full Name", "type": "text", "required": true },
+        { "id": "field_email", "label": "University Email", "type": "email", "required": true },
+        { "id": "field_exp", "label": "ROS Experience Level", "type": "select", "options": ["Beginner", "Intermediate", "Advanced"], "required": true },
+        { "id": "field_hardware", "label": "Requires Hardware Kit Checkout", "type": "checkbox", "required": false }
+      ]
+    }
+  ],
+  "submissions": [
+    {
+      "id": "sub1",
+      "formId": "f1",
+      "slug": "tech-conclave-registration",
+      "data": {
+        "Full Name": "Rahul Verma",
+        "University / Institute Email": "rahul.v@msruas.ac.in",
+        "Department / Faculty": "Department of Mechanical & Automated Systems",
+        "Preferred Track": "AI & Robotics",
+        "Special Accommodation / Questions": "Requesting front-row seating for keynote session."
+      },
+      "submittedAt": "2026-08-11 14:20",
+      "isSample": true
+    },
+    {
+      "id": "sub2",
+      "formId": "f1",
+      "slug": "tech-conclave-registration",
+      "data": {
+        "Full Name": "Sneha Kulkarni",
+        "University / Institute Email": "sneha.k@msruas.ac.in",
+        "Department / Faculty": "Faculty of Art and Design",
+        "Preferred Track": "Design & UI/UX"
+      },
+      "submittedAt": "2026-08-12 09:45",
+      "isSample": true
+    },
+    {
+      "id": "sub3",
+      "formId": "f2",
+      "slug": "robotics-bootcamp-rsvp",
+      "data": {
+        "Full Name": "Tanmay Deshmukh",
+        "University Email": "tanmay.d@msruas.ac.in",
+        "ROS Experience Level": "Intermediate",
+        "Requires Hardware Kit Checkout": true
+      },
+      "submittedAt": "2026-08-13 16:10",
+      "isSample": true
+    }
+  ],
+  "auditLogs": [
+    {
+      "id": "log1",
+      "action": "SYSTEM_INIT",
+      "actorName": "System",
+      "actorEmail": "system@msruas.ac.in",
+      "details": "LEADS ERP database initialized with dynamic organizational divisions and persistent file storage.",
+      "timestamp": "2026-08-18 02:35"
+    }
+  ]
+}

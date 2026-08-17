@@ -489,6 +489,82 @@ const initialSubmissions: FormSubmissionItem[] = [
 ];
 
 // -------------------------------------------------------------
+// Server Sync & Disk Persistence Helpers
+// -------------------------------------------------------------
+
+let syncTimeout: any = null;
+
+export async function syncWithServer(): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  try {
+    const res = await fetch('/api/data', { cache: 'no-store' });
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (data && typeof data === 'object') {
+      if (Array.isArray(data.members) && data.members.length > 0) {
+        localStorage.setItem('leads_members', JSON.stringify(data.members));
+      }
+      if (Array.isArray(data.events) && data.events.length > 0) {
+        localStorage.setItem('leads_events', JSON.stringify(data.events));
+      }
+      if (Array.isArray(data.tasks) && data.tasks.length > 0) {
+        localStorage.setItem('leads_tasks', JSON.stringify(data.tasks));
+      }
+      if (Array.isArray(data.ratings) && data.ratings.length > 0) {
+        localStorage.setItem('leads_ratings', JSON.stringify(data.ratings));
+      }
+      if (Array.isArray(data.reimbursements) && data.reimbursements.length > 0) {
+        localStorage.setItem('leads_reimbursements', JSON.stringify(data.reimbursements));
+      }
+      if (Array.isArray(data.announcements) && data.announcements.length > 0) {
+        localStorage.setItem('leads_announcements', JSON.stringify(data.announcements));
+      }
+      if (Array.isArray(data.forms) && data.forms.length > 0) {
+        localStorage.setItem('leads_custom_forms', JSON.stringify(data.forms));
+      }
+      if (Array.isArray(data.submissions) && data.submissions.length > 0) {
+        localStorage.setItem('leads_form_submissions', JSON.stringify(data.submissions));
+      }
+      if (Array.isArray(data.auditLogs) && data.auditLogs.length > 0) {
+        localStorage.setItem('leads_audit_logs', JSON.stringify(data.auditLogs));
+      }
+      return true;
+    }
+  } catch (err) {
+    console.warn('Server sync skipped (offline or initial boot):', err);
+  }
+  return false;
+}
+
+export function flushToServer(): void {
+  if (typeof window === 'undefined') return;
+  if (syncTimeout) clearTimeout(syncTimeout);
+
+  syncTimeout = setTimeout(async () => {
+    try {
+      const payload = {
+        members: getMembers(),
+        events: getEvents(),
+        tasks: getTasks(),
+        ratings: getRatings(),
+        reimbursements: getReimbursements(),
+        announcements: getAnnouncements(),
+        forms: getForms(),
+        submissions: getSubmissions(),
+        auditLogs: getAuditLogs(),
+      };
+      await fetch('/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch (err) {
+      console.warn('Failed to flush updates to server JSON store:', err);
+    }
+  }, 300);
+}
+
+// -------------------------------------------------------------
 // Storage & Accessors
 // -------------------------------------------------------------
 
@@ -519,6 +595,7 @@ export function getMembers(): Member[] {
 export function saveMembers(members: Member[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_members', JSON.stringify(members));
+  flushToServer();
 }
 
 export function addMember(member: Omit<Member, 'id'>): Member {
@@ -620,6 +697,7 @@ export function getEventById(id: string): EventItem | null {
 export function saveEvents(events: EventItem[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_events', JSON.stringify(events));
+  flushToServer();
 }
 
 export function addEvent(event: Omit<EventItem, 'id' | 'committees'> & { committees?: EventCommittee[] }): EventItem {
@@ -731,6 +809,7 @@ export function getTasks(): TaskItem[] {
 export function saveTasks(tasks: TaskItem[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_tasks', JSON.stringify(tasks));
+  flushToServer();
 }
 
 export function addTask(task: Omit<TaskItem, 'id' | 'status'> & { status?: TaskItem['status'] }): TaskItem {
@@ -810,6 +889,7 @@ export function getRatings(): RatingItem[] {
 export function saveRatings(ratings: RatingItem[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_ratings', JSON.stringify(ratings));
+  flushToServer();
 }
 
 export function addRating(rating: Omit<RatingItem, 'id' | 'createdAt'>): RatingItem {
@@ -1012,6 +1092,7 @@ export function getReimbursements(): ReimbursementItem[] {
 export function saveReimbursements(reimbursements: ReimbursementItem[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_reimbursements', JSON.stringify(reimbursements));
+  flushToServer();
 }
 
 export function addReimbursement(item: Omit<ReimbursementItem, 'id' | 'status' | 'submittedAt'>): ReimbursementItem {
@@ -1086,6 +1167,7 @@ export function getAnnouncements(): AnnouncementItem[] {
 export function saveAnnouncements(announcements: AnnouncementItem[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_announcements', JSON.stringify(announcements));
+  flushToServer();
 }
 
 export function addAnnouncement(item: Omit<AnnouncementItem, 'id' | 'publishedAt'>): AnnouncementItem {
@@ -1152,6 +1234,7 @@ export function getForms(): PublicFormItem[] {
 export function saveForms(forms: PublicFormItem[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_custom_forms', JSON.stringify(forms));
+  flushToServer();
 }
 
 export function addForm(form: Omit<PublicFormItem, 'id' | 'createdAt'>): PublicFormItem {
@@ -1221,6 +1304,7 @@ export function addSubmission(sub: Omit<FormSubmissionItem, 'id' | 'submittedAt'
   current.unshift(newSub);
   if (typeof window !== 'undefined') {
     localStorage.setItem('leads_form_submissions', JSON.stringify(current));
+    flushToServer();
   }
   logAuditEvent('FORM_SUBMITTED', 'Public Respondent', `New response submitted for form slug "${sub.slug}"`);
   return newSub;
@@ -1260,5 +1344,6 @@ export function logAuditEvent(action: string, actorName: string, details: string
   current.unshift(newLog);
   // Keep last 100 logs
   localStorage.setItem('leads_audit_logs', JSON.stringify(current.slice(0, 100)));
+  flushToServer();
 }
 
