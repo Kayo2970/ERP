@@ -8,14 +8,16 @@ export async function PATCH(
   try {
     const { id } = await params;
     const updates = await request.json();
-    let found = false;
-    const updated = await mutateCollection('members', (current) =>
-      current.map((m: any) => {
-        if (m.id === id) { found = true; return { ...m, ...updates }; }
-        return m;
-      })
-    );
-    if (!found) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    // Upsert: if this id isn't in the server's collection yet (e.g. client-bundled
+    // sample/seed data never POSTed), create it instead of 404ing and silently
+    // dropping the edit.
+    const updated = await mutateCollection('members', (current) => {
+      const idx = current.findIndex((m: any) => m.id === id);
+      if (idx === -1) return [...current, { id, ...updates }];
+      const next = [...current];
+      next[idx] = { ...next[idx], ...updates };
+      return next;
+    });
     return NextResponse.json(updated.find((m: any) => m.id === id));
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 });

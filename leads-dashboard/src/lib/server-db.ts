@@ -5,6 +5,16 @@
  */
 import fs from 'fs/promises';
 import path from 'path';
+import {
+  initialMembers,
+  initialEvents,
+  initialTasks,
+  initialRatings,
+  initialReimbursements,
+  initialAnnouncements,
+  initialForms,
+  initialSubmissions,
+} from './local-data';
 
 export const DB_PATH = path.join(process.cwd(), 'data', 'database.json');
 
@@ -36,14 +46,44 @@ const EMPTY_DB: DbSchema = {
   auditLogs: [],
 };
 
+// The same bundled demo dataset the client shows before its first server sync
+// (see the initialX exports in local-data.ts), persisted as real records on
+// this server's very first boot. Without this, that demo data only ever
+// exists inside each browser's own bundle — never actually written to
+// data/database.json — so editing or deleting one of those "sample" rows
+// (e.g. denying a demo reimbursement claim) 404s against a collection that
+// never had it, and the edit is silently lost instead of persisting.
+const SEED_DB: DbSchema = {
+  members: initialMembers,
+  events: initialEvents,
+  tasks: initialTasks,
+  ratings: initialRatings,
+  reimbursements: initialReimbursements,
+  announcements: initialAnnouncements,
+  forms: initialForms,
+  submissions: initialSubmissions,
+  auditLogs: [],
+};
+
 export async function readDb(): Promise<DbSchema> {
   try {
     const raw = await fs.readFile(DB_PATH, 'utf-8');
     const parsed = JSON.parse(raw);
     // Ensure all expected collections exist
     return { ...EMPTY_DB, ...parsed };
-  } catch {
-    return { ...EMPTY_DB };
+  } catch (err: any) {
+    if (err?.code !== 'ENOENT') return { ...EMPTY_DB };
+    // First boot: data/database.json doesn't exist yet. Seed it with the demo
+    // dataset and persist immediately, so it's real server data from here on
+    // (not just a client-side fallback that vanishes the moment it's edited).
+    const seeded: DbSchema = { ...SEED_DB, lastUpdated: new Date().toISOString() };
+    try {
+      await fs.mkdir(path.dirname(DB_PATH), { recursive: true });
+      await fs.writeFile(DB_PATH, JSON.stringify(seeded, null, 2), 'utf-8');
+    } catch (writeErr) {
+      console.error('[server-db] First-boot seed write failed:', writeErr);
+    }
+    return seeded;
   }
 }
 
