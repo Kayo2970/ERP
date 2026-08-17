@@ -39,8 +39,12 @@ export default function LoginPage() {
         
         {/* Brand Header */}
         <div className="flex flex-col items-center text-center space-y-3">
-          <div className="h-14 w-14 bg-accent rounded-2xl flex items-center justify-center shadow-lg shadow-accent/20 border border-white/10">
-            <span className="text-white font-bold text-2xl">L</span>
+          <div className="h-16 w-16 flex items-center justify-center">
+            <img 
+              src="/images/leads-short-logo.png" 
+              alt="LEADS Logo" 
+              className="h-full w-full object-contain filter drop-shadow-[0_4px_10px_rgba(46,117,182,0.35)]"
+            />
           </div>
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-white">

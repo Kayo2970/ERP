@@ -86,8 +86,12 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       <aside className="hidden md:flex flex-col w-64 glass-panel bg-theme-sidebar/80 border-r border-theme-sidebar-border h-screen sticky top-0 z-40">
         {/* Brand Logo */}
         <div className="h-16 flex items-center px-6 border-b border-theme-border/30 gap-3">
-          <div className="h-8 w-8 bg-accent rounded-lg flex items-center justify-center shadow-lg shadow-accent/20">
-            <span className="text-white font-bold text-sm">L</span>
+          <div className="h-8 w-8 flex items-center justify-center">
+            <img 
+              src="/images/leads-short-logo.png" 
+              alt="LEADS Logo" 
+              className="h-full w-full object-contain"
+            />
           </div>
           <div>
             <h1 className="font-semibold text-theme-text-primary text-sm tracking-wide">LEADS Next Gen</h1>
@@ -142,8 +146,12 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       {/* Mobile Header / Nav */}
       <header className="md:hidden flex items-center justify-between h-16 px-4 glass-panel bg-theme-sidebar/80 border-b border-theme-sidebar-border sticky top-0 z-40 w-full">
         <div className="flex items-center gap-2">
-          <div className="h-7 w-7 bg-accent rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-xs">L</span>
+          <div className="h-7 w-7 flex items-center justify-center">
+            <img 
+              src="/images/leads-short-logo.png" 
+              alt="LEADS Logo" 
+              className="h-full w-full object-contain"
+            />
           </div>
           <span className="font-semibold text-sm text-theme-text-primary">LEADS Next Gen</span>
         </div>

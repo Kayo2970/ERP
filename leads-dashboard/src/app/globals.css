@@ -80,6 +80,6 @@ body {
   background-repeat: no-repeat;
 }
 
-.dark .bg-space-theme {
+.dark.bg-space-theme, .dark .bg-space-theme {
   background-image: url('/images/body-bg-dark.jpg');
 }
