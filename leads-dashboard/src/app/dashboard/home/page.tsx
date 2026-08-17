@@ -28,11 +28,13 @@ import {
   getAnnouncements, 
   updateTaskStatus, 
   canViewTask, 
+  getStudentLeaderboard,
   TaskItem, 
   EventItem,
   AnnouncementItem
 } from '@/lib/local-data';
 import { getRatingColor } from '@/lib/design-tokens';
+import { StudentProfileModal } from '@/components/student-profile-modal';
 
 export default function DashboardHome() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
@@ -50,6 +52,7 @@ export default function DashboardHome() {
   const [selectedDay, setSelectedDay] = useState<number | null>(10); // Default to 10th
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [overallAvgScore, setOverallAvgScore] = useState<number>(4.8);
+  const [selectedStudentForProfile, setSelectedStudentForProfile] = useState<string | null>(null);
 
   useEffect(() => {
     const allEvents = getEvents();
@@ -62,34 +65,11 @@ export default function DashboardHome() {
     setMembersCount(getMembers().length);
     setAnnouncements(getAnnouncements());
     
-    // Dynamic Leaderboard calculation from actual ratings
+    // Dynamic Individual Student Leaderboard
+    const studentRanks = getStudentLeaderboard();
+    setLeaderboard(studentRanks.slice(0, 5));
+
     const ratingsList = getRatings();
-    const totalsMap: Record<string, { total: number; count: number; role: string }> = {};
-    
-    ratingsList.forEach(r => {
-      const key = r.targetName;
-      if (!totalsMap[key]) {
-        totalsMap[key] = { 
-          total: 0, 
-          count: 0, 
-          role: 'Member Evaluation'
-        };
-      }
-      totalsMap[key].total += r.overallScore;
-      totalsMap[key].count += 1;
-    });
-
-    const calculated = Object.keys(totalsMap).map(name => {
-      const item = totalsMap[name];
-      return {
-        name,
-        role: item.role,
-        score: Math.round((item.total / item.count) * 10) / 10
-      };
-    }).sort((a, b) => b.score - a.score);
-
-    setLeaderboard(calculated.slice(0, 4));
-
     if (ratingsList.length > 0) {
       const totalScore = ratingsList.reduce((acc, r) => acc + r.overallScore, 0);
       setOverallAvgScore(parseFloat((totalScore / ratingsList.length).toFixed(1)));
@@ -395,51 +375,53 @@ export default function DashboardHome() {
         {/* Top Performers Leaderboard */}
         <div className="glass-panel rounded-2xl p-6 flex flex-col space-y-4">
           <div>
-            <h3 className="text-base font-bold text-theme-text-primary">Performance Leaderboard</h3>
-            <p className="text-xs text-theme-text-secondary">Ranked by authenticated peer and advisor evaluations</p>
+            <h3 className="text-base font-bold text-theme-text-primary">Student Performance Leaderboard</h3>
+            <p className="text-xs text-theme-text-secondary">Individual student contributor rankings based on task evaluations</p>
           </div>
 
-          <div className="flex-1 space-y-3">
+          <div className="flex-1 space-y-2.5">
             {leaderboard.length === 0 ? (
               <div className="text-center py-10 text-theme-text-secondary text-xs">
-                No evaluation scores submitted yet. Visit Ratings to evaluate committee members.
+                No evaluation scores submitted yet. Visit Ratings to evaluate student tasks.
               </div>
             ) : (
               leaderboard.map((perf, index) => {
                 const rankIcons = [
-                  <Crown key="crown" className="h-5 w-5 text-amber-400 shrink-0" />,
-                  <Award key="award2" className="h-5 w-5 text-slate-300 shrink-0" />,
-                  <Award key="award3" className="h-5 w-5 text-amber-600 shrink-0" />,
+                  <Crown key="crown" className="h-4 w-4 text-amber-400 shrink-0" />,
+                  <Award key="award2" className="h-4 w-4 text-slate-300 shrink-0" />,
+                  <Award key="award3" className="h-4 w-4 text-amber-600 shrink-0" />,
                 ];
 
                 const colorTokens = getRatingColor(perf.score);
 
                 return (
                   <div 
-                    key={perf.name} 
-                    className="flex items-center justify-between p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl hover:bg-theme-border/20 transition-all text-xs"
+                    key={perf.id || perf.name} 
+                    onClick={() => setSelectedStudentForProfile(perf.id || perf.name)}
+                    className="flex items-center justify-between p-3 bg-theme-border/10 border border-theme-border/20 rounded-2xl hover:bg-accent/10 hover:border-accent/30 transition-all text-xs cursor-pointer group"
+                    title="Click to view student profile and outcomes"
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-5 flex justify-center">
                         {index < 3 ? rankIcons[index] : <span className="font-bold text-theme-text-secondary">#{index + 1}</span>}
                       </div>
 
-                      <div className={`h-8 w-8 rounded-lg flex items-center justify-center border font-bold text-xs ${
-                        perf.type === 'committee'
-                          ? 'bg-success/15 border-success/20 text-success'
-                          : 'bg-accent/15 border-accent/20 text-accent'
-                      }`}>
+                      <div className="h-8 w-8 rounded-xl flex items-center justify-center border font-bold text-xs bg-accent/15 border-accent/20 text-accent group-hover:scale-105 transition-transform">
                         {perf.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
                       </div>
 
                       <div>
-                        <h4 className="font-semibold text-theme-text-primary text-xs leading-snug">{perf.name}</h4>
-                        <p className="text-[10px] text-theme-text-secondary">{perf.role}</p>
+                        <h4 className="font-bold text-theme-text-primary text-xs leading-snug group-hover:text-accent transition-colors">{perf.name}</h4>
+                        <div className="flex items-center gap-1.5 text-[10px] text-theme-text-secondary">
+                          <span className="font-medium">{perf.division}</span>
+                          <span>&middot;</span>
+                          <span>{perf.completedTasks} tasks done</span>
+                        </div>
                       </div>
                     </div>
 
                     <div className={`flex items-center gap-1 px-2.5 py-1 rounded-xl font-bold text-xs border ${colorTokens.bg} ${colorTokens.text} ${colorTokens.border}`}>
-                      <span>{perf.score.toFixed(1)}</span>
+                      <span>{perf.score > 0 ? perf.score.toFixed(1) : '—'}</span>
                       <Star className="h-3 w-3 fill-current" />
                     </div>
                   </div>
@@ -603,6 +585,12 @@ export default function DashboardHome() {
         </div>
 
       </div>
+
+      {/* Student Profile Modal */}
+      <StudentProfileModal
+        memberIdOrName={selectedStudentForProfile}
+        onClose={() => setSelectedStudentForProfile(null)}
+      />
 
     </div>
   );

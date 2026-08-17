@@ -38,6 +38,7 @@ import {
 } from '@/lib/local-data';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
+import { StudentProfileModal } from '@/components/student-profile-modal';
 
 export default function EventDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -63,6 +64,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
   const [taskDueDate, setTaskDueDate] = useState('');
 
   const [deletingCommitteeId, setDeletingCommitteeId] = useState<string | null>(null);
+  const [selectedStudentForProfile, setSelectedStudentForProfile] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
 
   useEffect(() => {
@@ -287,13 +289,16 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                         <span className="text-[11px] text-theme-text-secondary italic">No students assigned</span>
                       ) : (
                         assignedStudents.map(s => (
-                          <span 
+                          <button
                             key={s.id}
-                            className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-accent/15 text-theme-text-primary border border-accent/25"
+                            type="button"
+                            onClick={() => setSelectedStudentForProfile(s.id)}
+                            className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-accent/15 hover:bg-accent/25 text-theme-text-primary border border-accent/25 transition-all cursor-pointer"
+                            title="Click to view student profile"
                           >
                             <User className="h-2.5 w-2.5 text-accent" />
                             {s.name}
-                          </span>
+                          </button>
                         ))
                       )}
                     </div>
@@ -612,6 +617,12 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
         variant="danger"
         onConfirm={handleConfirmDeleteCommittee}
         onCancel={() => setDeletingCommitteeId(null)}
+      />
+
+      {/* Student Profile Modal */}
+      <StudentProfileModal
+        memberIdOrName={selectedStudentForProfile}
+        onClose={() => setSelectedStudentForProfile(null)}
       />
 
     </div>

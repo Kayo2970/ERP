@@ -18,7 +18,8 @@ import {
   Award,
   GraduationCap,
   ShieldCheck,
-  UserCheck
+  UserCheck,
+  Eye
 } from 'lucide-react';
 import { 
   getMembers, 
@@ -29,6 +30,7 @@ import {
   MemberDivision
 } from '@/lib/local-data';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
+import { StudentProfileModal } from '@/components/student-profile-modal';
 
 export default function DirectoryPage() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -38,6 +40,7 @@ export default function DirectoryPage() {
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deletingMember, setDeletingMember] = useState<Member | null>(null);
+  const [selectedStudentForProfile, setSelectedStudentForProfile] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Pagination & Sorting State
@@ -532,7 +535,7 @@ export default function DirectoryPage() {
                       Designation / Role <ArrowUpDown className="h-3 w-3" />
                     </span>
                   </th>
-                  {isAdmin && <th className="pb-3.5 font-semibold text-right">Actions</th>}
+                  <th className="pb-3.5 font-semibold text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-theme-border/20">
@@ -563,29 +566,40 @@ export default function DirectoryPage() {
                       </span>
                     </td>
                     <td className="py-3.5 pr-2 text-theme-text-secondary">{member.role}</td>
-                    {isAdmin && (
-                      <td className="py-3.5 text-right">
-                        <div className="flex justify-end gap-1">
-                          <button
-                            onClick={() => startEdit(member)}
-                            className="p-1.5 text-accent hover:bg-accent/10 rounded-md transition-all cursor-pointer"
-                            title="Edit Member"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </button>
-                          
-                          {member.id !== 'm1' ? (
+                    <td className="py-3.5 text-right">
+                      <div className="flex justify-end items-center gap-1">
+                        <button
+                          onClick={() => setSelectedStudentForProfile(member.id)}
+                          className="p-1.5 text-accent hover:bg-accent/10 rounded-lg transition-all cursor-pointer flex items-center gap-1"
+                          title="View Student Profile & Outcomes"
+                        >
+                          <Eye className="h-4 w-4" />
+                          <span className="text-[11px] font-semibold hidden sm:inline">Profile</span>
+                        </button>
+                        
+                        {isAdmin && (
+                          <>
                             <button
-                              onClick={() => setDeletingMember(member)}
-                              className="p-1.5 text-danger hover:bg-danger/10 rounded-md transition-all cursor-pointer"
-                              title="Remove Member"
+                              onClick={() => startEdit(member)}
+                              className="p-1.5 text-theme-text-secondary hover:text-accent hover:bg-theme-border/20 rounded-lg transition-all cursor-pointer"
+                              title="Edit Member"
                             >
-                              <UserMinus className="h-4 w-4" />
+                              <Edit2 className="h-3.5 w-3.5" />
                             </button>
-                          ) : null}
-                        </div>
-                      </td>
-                    )}
+                            
+                            {member.id !== 'm1' && (
+                              <button
+                                onClick={() => setDeletingMember(member)}
+                                className="p-1.5 text-danger hover:bg-danger/10 rounded-lg transition-all cursor-pointer"
+                                title="Remove Member"
+                              >
+                                <UserMinus className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -805,6 +819,12 @@ export default function DirectoryPage() {
         variant="danger"
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeletingMember(null)}
+      />
+
+      {/* Student Profile Modal */}
+      <StudentProfileModal
+        memberIdOrName={selectedStudentForProfile}
+        onClose={() => setSelectedStudentForProfile(null)}
       />
 
     </div>

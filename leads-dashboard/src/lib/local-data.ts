@@ -828,6 +828,129 @@ export function getRatableTasks(): TaskItem[] {
 }
 
 // -------------------------------------------------------------
+// Student Profiles & Individual Outcomes Aggregation
+// -------------------------------------------------------------
+
+export interface StudentProfileData {
+  member: Member;
+  assignedEvents: { event: EventItem; committee: EventCommittee }[];
+  tasks: TaskItem[];
+  ratings: RatingItem[];
+  stats: {
+    totalTasks: number;
+    completedTasks: number;
+    completionRate: number;
+    averageRating: number;
+    qualityAvg: number;
+    timelinessAvg: number;
+    initiativeAvg: number;
+    collaborationAvg: number;
+    totalEvents: number;
+  };
+}
+
+export function getStudentProfile(memberIdOrName: string): StudentProfileData | null {
+  const members = getMembers();
+  const member = members.find(m => m.id === memberIdOrName || m.name.toLowerCase() === memberIdOrName.toLowerCase());
+  if (!member) return null;
+
+  const events = getEvents();
+  const assignedEvents: { event: EventItem; committee: EventCommittee }[] = [];
+  events.forEach(event => {
+    (event.committees || []).forEach(comm => {
+      if (comm.memberIds.includes(member.id) || comm.memberIds.includes(member.name)) {
+        assignedEvents.push({ event, committee: comm });
+      }
+    });
+  });
+
+  const allTasks = getTasks();
+  const memberTasks = allTasks.filter(t => 
+    t.assigneeId === member.id || 
+    t.assignee.toLowerCase() === member.name.toLowerCase() || 
+    (member.email && t.assigneeEmail && t.assigneeEmail.toLowerCase() === member.email.toLowerCase())
+  );
+
+  const allRatings = getRatings();
+  const memberRatings = allRatings.filter(r => 
+    r.targetId === member.id || 
+    r.targetName.toLowerCase() === member.name.toLowerCase()
+  );
+
+  const totalTasks = memberTasks.length;
+  const completedTasks = memberTasks.filter(t => t.status === 'Completed').length;
+  const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+  let qualitySum = 0, timelinessSum = 0, initiativeSum = 0, collaborationSum = 0, overallSum = 0;
+  memberRatings.forEach(r => {
+    qualitySum += r.quality;
+    timelinessSum += r.timeliness;
+    initiativeSum += r.initiative;
+    collaborationSum += r.collaboration;
+    overallSum += r.overallScore;
+  });
+
+  const ratingCount = memberRatings.length;
+  const averageRating = ratingCount > 0 ? parseFloat((overallSum / ratingCount).toFixed(1)) : 0;
+  const qualityAvg = ratingCount > 0 ? parseFloat((qualitySum / ratingCount).toFixed(1)) : 0;
+  const timelinessAvg = ratingCount > 0 ? parseFloat((timelinessSum / ratingCount).toFixed(1)) : 0;
+  const initiativeAvg = ratingCount > 0 ? parseFloat((initiativeSum / ratingCount).toFixed(1)) : 0;
+  const collaborationAvg = ratingCount > 0 ? parseFloat((collaborationSum / ratingCount).toFixed(1)) : 0;
+
+  return {
+    member,
+    assignedEvents,
+    tasks: memberTasks,
+    ratings: memberRatings,
+    stats: {
+      totalTasks,
+      completedTasks,
+      completionRate,
+      averageRating,
+      qualityAvg,
+      timelinessAvg,
+      initiativeAvg,
+      collaborationAvg,
+      totalEvents: assignedEvents.length
+    }
+  };
+}
+
+export function getStudentLeaderboard(): {
+  id: string;
+  name: string;
+  role: string;
+  division: string;
+  score: number;
+  completedTasks: number;
+  totalTasks: number;
+  ratingsCount: number;
+}[] {
+  const members = getMembers();
+  // Filter for student contributors: Core Committee, Training Associates, Alumni
+  const studentMembers = members.filter(m => m.division !== 'Advisory Board' && m.tier >= 5);
+  
+  const results = studentMembers.map(m => {
+    const profile = getStudentProfile(m.id);
+    return {
+      id: m.id,
+      name: m.name,
+      role: m.role,
+      division: m.division,
+      score: profile?.stats.averageRating || 0,
+      completedTasks: profile?.stats.completedTasks || 0,
+      totalTasks: profile?.stats.totalTasks || 0,
+      ratingsCount: profile?.ratings.length || 0,
+    };
+  });
+
+  return results.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return b.completedTasks - a.completedTasks;
+  });
+}
+
+// -------------------------------------------------------------
 // Reimbursements (Two-Stage Approval)
 // -------------------------------------------------------------
 
@@ -1097,3 +1220,4 @@ export function logAuditEvent(action: string, actorName: string, details: string
   // Keep last 100 logs
   localStorage.setItem('leads_audit_logs', JSON.stringify(current.slice(0, 100)));
 }
+
