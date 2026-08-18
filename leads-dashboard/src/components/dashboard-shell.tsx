@@ -26,9 +26,10 @@ import {
   ChevronDown,
   ShieldAlert,
   ShieldCheck,
-  Sparkles
+  Sparkles,
+  Palette
 } from 'lucide-react';
-import { getAnnouncements, getTasks, TaskItem, AnnouncementItem, syncWithServer, logAuditEvent } from '@/lib/local-data';
+import { getAnnouncements, getTasks, getDesigns, TaskItem, AnnouncementItem, syncWithServer, logAuditEvent } from '@/lib/local-data';
 
 interface SidebarItem {
   name: string;
@@ -49,6 +50,7 @@ const navSections: NavSection[] = [
       { name: 'Events', href: '/dashboard/events', icon: Calendar },
       { name: 'Tasks', href: '/dashboard/tasks', icon: CheckSquare },
       { name: 'Ratings', href: '/dashboard/ratings', icon: Star },
+      { name: 'Design Portal', href: '/dashboard/designs', icon: Palette },
     ],
   },
   {
@@ -205,7 +207,16 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         syncWithServer().catch(() => {}); // silent — offline is OK
       }, 7000);
 
-      // Load dynamic notifications from recent announcements and tasks
+      // Load dynamic notifications from recent announcements, tasks, and proofread requests
+      const proofreadNotifs = getDesigns()
+        .filter(d => d.proofreadRequested && d.assignedProofreaderEmail === parsedUser.email && d.review?.status === 'Pending Proofread')
+        .map(d => ({
+          id: 'pf_' + d.id,
+          title: `Proofreading Request: ${d.title}`,
+          time: `From ${d.designerName}`,
+          read: false
+        }));
+
       const recentAnnounce = getAnnouncements().slice(0, 3).map(a => ({
         id: a.id,
         title: `Announcement: ${a.title}`,
@@ -218,7 +229,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         time: `Due ${t.dueDate}`,
         read: false
       }));
-      setNotifications([...recentAnnounce, ...recentTasks]);
+      setNotifications([...proofreadNotifs, ...recentAnnounce, ...recentTasks]);
 
       return () => clearInterval(pollInterval);
     } catch (e) {

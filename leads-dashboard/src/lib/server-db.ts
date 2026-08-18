@@ -14,6 +14,7 @@ import {
   initialAnnouncements,
   initialForms,
   initialSubmissions,
+  initialDesigns,
 } from './local-data';
 
 export const DB_PATH = path.join(process.cwd(), 'data', 'database.json');
@@ -30,6 +31,7 @@ export interface DbSchema {
   announcements: any[];
   forms: any[];
   submissions: any[];
+  designs: any[];
   auditLogs: any[];
   lastUpdated?: string;
 }
@@ -43,16 +45,10 @@ const EMPTY_DB: DbSchema = {
   announcements: [],
   forms: [],
   submissions: [],
+  designs: [],
   auditLogs: [],
 };
 
-// The same bundled demo dataset the client shows before its first server sync
-// (see the initialX exports in local-data.ts), persisted as real records on
-// this server's very first boot. Without this, that demo data only ever
-// exists inside each browser's own bundle — never actually written to
-// data/database.json — so editing or deleting one of those "sample" rows
-// (e.g. denying a demo reimbursement claim) 404s against a collection that
-// never had it, and the edit is silently lost instead of persisting.
 const SEED_DB: DbSchema = {
   members: initialMembers,
   events: initialEvents,
@@ -62,20 +58,43 @@ const SEED_DB: DbSchema = {
   announcements: initialAnnouncements,
   forms: initialForms,
   submissions: initialSubmissions,
+  designs: initialDesigns,
   auditLogs: [],
 };
+
+/**
+ * 30-Day Storage Retention Cleanup Helper:
+ * Checks design items past 30 days, marks them as expired, and purges heavy file payloads.
+ */
+function processDesignRetention(designs: any[]): any[] {
+  if (!Array.isArray(designs)) return [];
+  const nowMs = Date.now();
+
+  return designs.map(item => {
+    if (!item.expiresAt) return item;
+    const expiresMs = new Date(item.expiresAt).getTime();
+    if (nowMs > expiresMs) {
+      return {
+        ...item,
+        isExpired: true,
+        fileData: undefined, // Purge file data payload after 30 days
+      };
+    }
+    return item;
+  });
+}
 
 export async function readDb(): Promise<DbSchema> {
   try {
     const raw = await fs.readFile(DB_PATH, 'utf-8');
     const parsed = JSON.parse(raw);
-    // Ensure all expected collections exist
-    return { ...EMPTY_DB, ...parsed };
+    const db: DbSchema = { ...EMPTY_DB, ...parsed };
+    if (Array.isArray(db.designs)) {
+      db.designs = processDesignRetention(db.designs);
+    }
+    return db;
   } catch (err: any) {
     if (err?.code !== 'ENOENT') return { ...EMPTY_DB };
-    // First boot: data/database.json doesn't exist yet. Seed it with the demo
-    // dataset and persist immediately, so it's real server data from here on
-    // (not just a client-side fallback that vanishes the moment it's edited).
     const seeded: DbSchema = { ...SEED_DB, lastUpdated: new Date().toISOString() };
     try {
       await fs.mkdir(path.dirname(DB_PATH), { recursive: true });

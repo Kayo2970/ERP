@@ -143,6 +143,39 @@ export interface FormSubmissionItem {
   isSample?: boolean;
 }
 
+export interface DesignProofreadReview {
+  proofreaderId: string;
+  proofreaderName: string;
+  status: 'Pending Proofread' | 'Proofread Approved' | 'Changes Requested';
+  comments?: string;
+  reviewedAt?: string;
+}
+
+export interface DesignSubmissionItem {
+  id: string;
+  title: string;
+  description?: string;
+  category: 'Poster' | 'Banner' | 'Social Media' | 'Brochure' | 'Certificates' | 'Other';
+  fileData?: string;      // Data URL / Base64 representation of file
+  fileName: string;
+  fileSize: number;       // Size in bytes (must be <= 25 * 1024 * 1024)
+  fileType: string;       // MIME type (e.g. image/png, application/pdf)
+  designerId: string;
+  designerName: string;
+  designerEmail: string;
+  submittedAt: string;    // ISO timestamp
+  expiresAt: string;      // ISO timestamp (submittedAt + 30 days)
+  isExpired?: boolean;
+  proofreadRequested: boolean;
+  assignedProofreaderId?: string;
+  assignedProofreaderName?: string;
+  assignedProofreaderEmail?: string;
+  review?: DesignProofreadReview;
+  eventId?: string;
+  eventName?: string;
+  isSample?: boolean;
+}
+
 export interface AuditLogItem {
   id: string;
   action: string;
@@ -155,41 +188,41 @@ export interface AuditLogItem {
 
 // Initial mock data matching leadership website and division structure
 export const initialMembers: Member[] = [
-  { id: 'm1', name: 'Kayomarz Pavri', email: 'kayomarz.pavri@msruas.ac.in', role: 'Super User', tier: 1, division: 'Core Committee' },
-  { id: 'm2', name: 'Dr. Subhadeep Mukherjee', email: 'subhadeep.mukherjee@msruas.ac.in', role: 'Centre Head', tier: 2, division: 'Advisory Board' },
-  { id: 'm3', name: 'Dr. Kiran Kumar B M', email: 'kiran.kumar@msruas.ac.in', role: 'Head of Events', tier: 3, division: 'Advisory Board' },
-  { id: 'm4', name: 'Dr. K. M. Sharath Kumar', email: 'sharath.kumar@msruas.ac.in', role: 'Advisory Board Member', tier: 4, division: 'Advisory Board' },
-  { id: 'm5', name: 'Gurutejas C', email: 'gurutejas.c@msruas.ac.in', role: 'President & Student Lead', tier: 5, division: 'Core Committee' },
-  { id: 'm6', name: 'Kunal Bhadauria', email: 'kunal.bhadauria@msruas.ac.in', role: 'Vice President', tier: 5, division: 'Core Committee' },
-  { id: 'm7', name: 'Dr. Hari Krishna S', email: 'hari.krishna@msruas.ac.in', role: 'Faculty Advisor', tier: 4, division: 'Advisory Board' },
-  { id: 'm8', name: 'Keerthan J', email: 'keerthan.j@msruas.ac.in', role: 'Junior Coordinator', tier: 6, division: 'Training Associate' },
-  { id: 'm9', name: 'Dr. Kuldeep Kumar Raina', email: 'kuldeep.raina@msruas.ac.in', role: 'Vice Chancellor / Advisory Patron', tier: 2, division: 'Advisory Board' },
-  { id: 'm10', name: 'Dr. Pallabi Mund', email: 'pallabi.mund@msruas.ac.in', role: 'Associate Advisor', tier: 3, division: 'Advisory Board' },
-  { id: 'm11', name: 'Dr. Ajay R', email: 'ajay.r@msruas.ac.in', role: 'Faculty Advisor', tier: 3, division: 'Advisory Board' },
-  { id: 'm12', name: 'Ms. Sujata Bijwe', email: 'sujata.bijwe@msruas.ac.in', role: 'Faculty Advisor', tier: 3, division: 'Advisory Board' },
-  { id: 'm13', name: 'Abhijit Arya', email: 'abhijit.arya@msruas.ac.in', role: 'General Secretary', tier: 5, division: 'Core Committee' },
-  { id: 'm14', name: 'Laksh Soorya Singh', email: 'laksh.singh@msruas.ac.in', role: 'Operations Lead', tier: 5, division: 'Core Committee' },
-  { id: 'm15', name: 'Bhawen Maroo', email: 'bhawen.maroo@msruas.ac.in', role: 'Logistics Head', tier: 5, division: 'Core Committee' },
-  { id: 'm16', name: 'Bharvi A Padia', email: 'bharvi.padia@msruas.ac.in', role: 'Finance Head', tier: 5, division: 'Core Committee' },
-  { id: 'm17', name: 'Arvind Rakshith', email: 'arvind.rakshith@msruas.ac.in', role: 'Design & Media Lead', tier: 5, division: 'Core Committee' },
-  { id: 'm18', name: 'Shreesha S N', email: 'shreesha.sn@msruas.ac.in', role: 'Technical Head', tier: 5, division: 'Core Committee' },
-  { id: 'm19', name: 'Nuthan H', email: 'nuthan.h@msruas.ac.in', role: 'Public Relations Lead', tier: 5, division: 'Core Committee' },
-  { id: 'm20', name: 'S Bhavya Shree', email: 'bhavya.shree@msruas.ac.in', role: 'Training Coordinator', tier: 6, division: 'Training Associate' },
-  { id: 'm21', name: 'Shriram SG', email: 'shriram.sg@msruas.ac.in', role: 'Technical Associate', tier: 6, division: 'Training Associate' },
-  { id: 'm22', name: 'Manoj Petakamsetty', email: 'manoj.petakamsetty@msruas.ac.in', role: 'Events Associate', tier: 6, division: 'Training Associate' },
-  { id: 'm23', name: 'Sudev Mitra', email: 'sudev.mitra@msruas.ac.in', role: 'Media Associate', tier: 6, division: 'Training Associate' },
-  { id: 'm24', name: 'Jyotsna Karn', email: 'jyotsna.karn@msruas.ac.in', role: 'Hospitality Associate', tier: 6, division: 'Training Associate' },
-  { id: 'm25', name: 'Shravya T', email: 'shravya.t@msruas.ac.in', role: 'Documentation Associate', tier: 6, division: 'Training Associate' },
-  { id: 'm26', name: 'P Koushik Reddy', email: 'koushik.reddy@msruas.ac.in', role: 'Logistics Associate', tier: 6, division: 'Training Associate' },
-  { id: 'm27', name: 'Sadiya Sawood', email: 'sadiya.sawood@msruas.ac.in', role: 'PR Associate', tier: 6, division: 'Training Associate' },
-  { id: 'm28', name: 'Syed Furqaan Ahmed', email: 'furqaan.ahmed@msruas.ac.in', role: 'Technical Associate', tier: 6, division: 'Training Associate' },
-  { id: 'm29', name: 'Kayomarz M Pavri', email: 'kayomarz.m@msruas.ac.in', role: 'Alumni Mentor (Former President)', tier: 7, division: 'Alumni', batch: 'Batch of 2024' },
-  { id: 'm30', name: 'Nimisha K M', email: 'nimisha.km@msruas.ac.in', role: 'Alumni Mentor (Former Tech Lead)', tier: 7, division: 'Alumni', batch: 'Batch of 2025' },
-  { id: 'm31', name: 'Aravind Manashetti', email: 'aravind.manashetti@msruas.ac.in', role: 'Training Associate', tier: 6, division: 'Training Associate' },
-  { id: 'm32', name: 'Shwetha S', email: 'shwetha.s@msruas.ac.in', role: 'Training Associate', tier: 6, division: 'Training Associate' },
-  { id: 'm33', name: 'Kishan KP', email: 'kishan.kp@msruas.ac.in', role: 'Training Associate', tier: 6, division: 'Training Associate' },
-  { id: 'm34', name: 'Yash Chandak', email: 'yash.chandak@msruas.ac.in', role: 'Training Associate', tier: 6, division: 'Training Associate' },
-  { id: 'm35', name: 'Niyati Chawra', email: 'niyati.chawra@msruas.ac.in', role: 'Training Associate', tier: 6, division: 'Training Associate' },
+  { id: 'm1', name: 'Kayomarz Pavri', email: 'kayomarz.pavri@msruas.ac.in', role: 'Super User', tier: 1, division: 'Core Committee', department: 'Design and Social Media' },
+  { id: 'm2', name: 'Dr. Subhadeep Mukherjee', email: 'subhadeep.mukherjee@msruas.ac.in', role: 'Centre Head', tier: 2, division: 'Advisory Board', department: 'Faculty Oversight' },
+  { id: 'm3', name: 'Dr. Kiran Kumar B M', email: 'kiran.kumar@msruas.ac.in', role: 'Head of Events', tier: 3, division: 'Advisory Board', department: 'Faculty Oversight' },
+  { id: 'm4', name: 'Dr. K. M. Sharath Kumar', email: 'sharath.kumar@msruas.ac.in', role: 'Advisory Board Member', tier: 4, division: 'Advisory Board', department: 'Faculty Advisory' },
+  { id: 'm5', name: 'Gurutejas C', email: 'gurutejas.c@msruas.ac.in', role: 'Past President & Executive Lead', tier: 5, division: 'Core Committee', department: 'Executive Council' },
+  { id: 'm6', name: 'Kunal Bhadauria', email: 'kunal.bhadauria@msruas.ac.in', role: 'Vice President', tier: 5, division: 'Core Committee', department: 'Executive Council' },
+  { id: 'm7', name: 'Dr. Hari Krishna S', email: 'hari.krishna@msruas.ac.in', role: 'Faculty Advisor', tier: 4, division: 'Advisory Board', department: 'Faculty Advisory' },
+  { id: 'm8', name: 'Keerthan J', email: 'keerthan.j@msruas.ac.in', role: 'Junior Coordinator', tier: 6, division: 'Training Associate', department: 'Operations and Logistics' },
+  { id: 'm9', name: 'Dr. Kuldeep Kumar Raina', email: 'kuldeep.raina@msruas.ac.in', role: 'Vice Chancellor / Advisory Patron', tier: 2, division: 'Advisory Board', department: 'Faculty Oversight' },
+  { id: 'm10', name: 'Dr. Pallabi Mund', email: 'pallabi.mund@msruas.ac.in', role: 'Associate Advisor', tier: 3, division: 'Advisory Board', department: 'Faculty Advisory' },
+  { id: 'm11', name: 'Dr. Ajay R', email: 'ajay.r@msruas.ac.in', role: 'Faculty Advisor', tier: 3, division: 'Advisory Board', department: 'Faculty Advisory' },
+  { id: 'm12', name: 'Ms. Sujata Bijwe', email: 'sujata.bijwe@msruas.ac.in', role: 'Faculty Advisor', tier: 3, division: 'Advisory Board', department: 'Faculty Advisory' },
+  { id: 'm13', name: 'Abhijit Arya', email: 'abhijit.arya@msruas.ac.in', role: 'General Secretary', tier: 5, division: 'Core Committee', department: 'Secretariat' },
+  { id: 'm14', name: 'Laksh Soorya Singh', email: 'laksh.singh@msruas.ac.in', role: 'Operations Lead', tier: 5, division: 'Core Committee', department: 'Operations and Logistics' },
+  { id: 'm15', name: 'Bhawen Maroo', email: 'bhawen.maroo@msruas.ac.in', role: 'Logistics Head', tier: 5, division: 'Core Committee', department: 'Operations and Logistics' },
+  { id: 'm16', name: 'Bharvi A Padia', email: 'bharvi.padia@msruas.ac.in', role: 'Finance Head', tier: 5, division: 'Core Committee', department: 'Finance and Sponsorship' },
+  { id: 'm17', name: 'Arvind Rakshith', email: 'arvind.rakshith@msruas.ac.in', role: 'Design & Media Lead', tier: 5, division: 'Core Committee', department: 'Design and Social Media' },
+  { id: 'm18', name: 'Shreesha S N', email: 'shreesha.sn@msruas.ac.in', role: 'Technical Head', tier: 5, division: 'Core Committee', department: 'Research & Development' },
+  { id: 'm19', name: 'Nuthan H', email: 'nuthan.h@msruas.ac.in', role: 'President', tier: 5, division: 'Core Committee', department: 'Executive Council' },
+  { id: 'm20', name: 'S Bhavya Shree', email: 'bhavya.shree@msruas.ac.in', role: 'General Secretary', tier: 5, division: 'Core Committee', department: 'Secretariat' },
+  { id: 'm21', name: 'Shriram SG', email: 'shriram.sg@msruas.ac.in', role: 'General Secretary', tier: 5, division: 'Core Committee', department: 'Secretariat' },
+  { id: 'm22', name: 'Manoj Petakamsetty', email: 'manoj.petakamsetty@msruas.ac.in', role: 'General Secretary', tier: 5, division: 'Core Committee', department: 'Secretariat' },
+  { id: 'm23', name: 'Sudev Mitra', email: 'sudev.mitra@msruas.ac.in', role: 'Chief Coordinator', tier: 5, division: 'Core Committee', department: 'Coordination' },
+  { id: 'm24', name: 'Jyotsna Karn', email: 'jyotsna.karn@msruas.ac.in', role: 'Chief Coordinator', tier: 5, division: 'Core Committee', department: 'Coordination' },
+  { id: 'm25', name: 'Shravya T', email: 'shravya.t@msruas.ac.in', role: 'Chief Coordinator', tier: 5, division: 'Core Committee', department: 'Coordination' },
+  { id: 'm26', name: 'P Koushik Reddy', email: 'koushik.reddy@msruas.ac.in', role: 'Chief Coordinator', tier: 5, division: 'Core Committee', department: 'Coordination' },
+  { id: 'm27', name: 'Sadiya Sawood', email: 'sadiya.sawood@msruas.ac.in', role: 'Head Leadership and Development', tier: 5, division: 'Core Committee', department: 'Leadership and Development' },
+  { id: 'm28', name: 'Syed Furqaan Ahmed', email: 'furqaan.ahmed@msruas.ac.in', role: 'Head Research & Development', tier: 5, division: 'Core Committee', department: 'Research & Development' },
+  { id: 'm29', name: 'Kayomarz M Pavri', email: 'kayomarz.m@msruas.ac.in', role: 'Head Design and Social Media', tier: 5, division: 'Core Committee', department: 'Design and Social Media' },
+  { id: 'm30', name: 'Nimisha K M', email: 'nimisha.km@msruas.ac.in', role: 'Head Sustainability and Innovation', tier: 5, division: 'Core Committee', department: 'Sustainability and Innovation' },
+  { id: 'm31', name: 'Aravind Manashetti', email: 'aravind.manashetti@msruas.ac.in', role: 'Head Finance and Sponsorship', tier: 5, division: 'Core Committee', department: 'Finance and Sponsorship' },
+  { id: 'm32', name: 'Shwetha S', email: 'shwetha.s@msruas.ac.in', role: 'Head Design and Social Media', tier: 5, division: 'Core Committee', department: 'Design and Social Media' },
+  { id: 'm33', name: 'Kishan KP', email: 'kishan.kp@msruas.ac.in', role: 'Head Marketing and Branding', tier: 5, division: 'Core Committee', department: 'Marketing and Branding' },
+  { id: 'm34', name: 'Yash Chandak', email: 'yash.chandak@msruas.ac.in', role: 'Head Operations and Logistics', tier: 5, division: 'Core Committee', department: 'Operations and Logistics' },
+  { id: 'm35', name: 'Niyati Chawra', email: 'niyati.chawra@msruas.ac.in', role: 'Head Leadership and Development', tier: 5, division: 'Core Committee', department: 'Leadership and Development' },
 ];
 
 export const initialEvents: EventItem[] = [
@@ -538,8 +571,87 @@ export const initialSubmissions: FormSubmissionItem[] = [
       field_name: 'Rohan Verma',
       field_email: 'rohan.v@msruas.ac.in',
       field_dept: 'Mechanical & Manufacturing',
-      field_track: 'Sustainable Engineering',
+    field_track: 'Sustainable Engineering',
     }
+  }
+];
+
+export const initialDesigns: DesignSubmissionItem[] = [
+  {
+    id: 'des_1',
+    title: 'Tech Conclave 2026 Main Stage Backdrop & Banner',
+    description: 'High-res stage design banner for auditorium entrance and backdrop screen.',
+    category: 'Banner',
+    fileName: 'tech_conclave_stage_banner_v2.png',
+    fileSize: 4850000, // 4.85 MB
+    fileType: 'image/png',
+    designerId: 'm17',
+    designerName: 'Arvind Rakshith',
+    designerEmail: 'arvind.rakshith@msruas.ac.in',
+    submittedAt: '2026-08-15T10:30:00.000Z',
+    expiresAt: '2026-09-14T10:30:00.000Z',
+    isExpired: false,
+    proofreadRequested: true,
+    assignedProofreaderId: 'm5',
+    assignedProofreaderName: 'Gurutejas C',
+    assignedProofreaderEmail: 'gurutejas.c@msruas.ac.in',
+    review: {
+      proofreaderId: 'm5',
+      proofreaderName: 'Gurutejas C',
+      status: 'Pending Proofread',
+      comments: 'Please verify speaker designation spelling and sponsor logo placement.'
+    },
+    eventId: 'e1',
+    eventName: 'Tech Conclave 2026',
+    isSample: true,
+  },
+  {
+    id: 'des_2',
+    title: 'Alumni Meet & Summit Invitation Brochure',
+    description: '4-page printable brochure PDF for alumni reunion invitation.',
+    category: 'Brochure',
+    fileName: 'alumni_summit_brochure_print.pdf',
+    fileSize: 12400000, // 12.4 MB
+    fileType: 'application/pdf',
+    designerId: 'm23',
+    designerName: 'Sudev Mitra',
+    designerEmail: 'sudev.mitra@msruas.ac.in',
+    submittedAt: '2026-08-14T16:00:00.000Z',
+    expiresAt: '2026-09-13T16:00:00.000Z',
+    isExpired: false,
+    proofreadRequested: true,
+    assignedProofreaderId: 'm2',
+    assignedProofreaderName: 'Dr. Subhadeep Mukherjee',
+    assignedProofreaderEmail: 'subhadeep.mukherjee@msruas.ac.in',
+    review: {
+      proofreaderId: 'm2',
+      proofreaderName: 'Dr. Subhadeep Mukherjee',
+      status: 'Proofread Approved',
+      comments: 'Text content and faculty titles checked and approved for printing.',
+      reviewedAt: '2026-08-16T11:20:00.000Z'
+    },
+    eventId: 'e2',
+    eventName: 'Alumni Meet & Innovation Summit 2026',
+    isSample: true,
+  },
+  {
+    id: 'des_3',
+    title: 'Robotics Bootcamp Social Media Instagram Carousel',
+    description: 'Square promo carousel posts detailing workshop timeline and kit setup.',
+    category: 'Social Media',
+    fileName: 'robotics_bootcamp_carousel.png',
+    fileSize: 8200000, // 8.2 MB
+    fileType: 'image/png',
+    designerId: 'm17',
+    designerName: 'Arvind Rakshith',
+    designerEmail: 'arvind.rakshith@msruas.ac.in',
+    submittedAt: '2026-08-12T09:15:00.000Z',
+    expiresAt: '2026-09-11T09:15:00.000Z',
+    isExpired: false,
+    proofreadRequested: false,
+    eventId: 'e3',
+    eventName: 'Robotics Bootcamp & Hackathon',
+    isSample: true,
   }
 ];
 
@@ -551,15 +663,8 @@ export const initialSubmissions: FormSubmissionItem[] = [
  * Write a collection fetched from the server into localStorage, verbatim —
  * including a legitimately empty array. The bundled sample data is never
  * written here; it only ever appears as each getX()'s own in-memory fallback
- * before the first sync resolves (see below). Writing samples from here too
- * used to fight that: a real, empty server collection would get permanently
- * re-padded with stale samples on every poll, silently undoing any edit or
- * delete made against what the server actually has. (A "only seed on this
- * browser's first-ever hydration" variant was tried and reverted — React's
- * dev-mode double-invoked effects fire syncWithServer() twice concurrently,
- * and the second call would see the first call's just-written key and decide
- * it's no longer "first," immediately overwriting the seeded sample with the
- * real empty array anyway. Simpler and race-free to never seed here at all.)
+ * before the first sync resolves (see below) — that's the true first-run/offline experience. Once a sync
+ * resolves, even to an empty collection, that's what's shown from then on.
  */
 function hydrateCollection(key: string, serverArray: unknown): void {
   if (!Array.isArray(serverArray)) return;
@@ -589,6 +694,7 @@ export async function syncWithServer(): Promise<boolean> {
       hydrateCollection('leads_announcements', data.announcements);
       hydrateCollection('leads_custom_forms', data.forms);
       hydrateCollection('leads_form_submissions', data.submissions);
+      hydrateCollection('leads_designs', data.designs);
       if (Array.isArray(data.auditLogs)) {
         localStorage.setItem('leads_audit_logs', JSON.stringify(data.auditLogs));
       }
@@ -1529,4 +1635,111 @@ export function logAuditEvent(action: string, actorName: string, details: string
   // Push to server asynchronously (fire-and-forget)
   serverPost('/api/auditlogs', newLog);
 }
+
+// -------------------------------------------------------------
+// Design Portal & Proofreading Workflow
+// -------------------------------------------------------------
+
+export function getDesigns(): DesignSubmissionItem[] {
+  if (typeof window === 'undefined') return initialDesigns;
+  const saved = localStorage.getItem('leads_designs');
+  if (saved) {
+    try {
+      const items: DesignSubmissionItem[] = JSON.parse(saved);
+      const now = new Date().getTime();
+      return items.map(item => {
+        const expiresAtMs = new Date(item.expiresAt).getTime();
+        if (now > expiresAtMs && !item.isExpired) {
+          return { ...item, isExpired: true };
+        }
+        return item;
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  return initialDesigns;
+}
+
+export function saveDesigns(designs: DesignSubmissionItem[]): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem('leads_designs', JSON.stringify(designs));
+}
+
+export function addDesign(design: Omit<DesignSubmissionItem, 'id' | 'submittedAt' | 'expiresAt' | 'isExpired'>): DesignSubmissionItem {
+  if (design.fileSize > 25 * 1024 * 1024) {
+    throw new Error('File size exceeds the 25 MB limit.');
+  }
+
+  const current = getDesigns();
+  const now = new Date();
+  const submittedAt = now.toISOString();
+  const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  const newDesign: DesignSubmissionItem = {
+    ...design,
+    id: 'des_' + Date.now(),
+    submittedAt,
+    expiresAt,
+    isExpired: false,
+    review: design.proofreadRequested && design.assignedProofreaderId ? {
+      proofreaderId: design.assignedProofreaderId,
+      proofreaderName: design.assignedProofreaderName || 'Proofreader',
+      status: 'Pending Proofread',
+    } : undefined
+  };
+
+  current.unshift(newDesign);
+  saveDesigns(current);
+  serverPost('/api/designs', newDesign);
+  
+  const proofreadMsg = design.proofreadRequested ? ` (Requested proofread from ${design.assignedProofreaderName})` : '';
+  logAuditEvent('DESIGN_SUBMITTED', design.designerName, `Submitted design "${design.title}" (${(design.fileSize / (1024 * 1024)).toFixed(2)} MB)${proofreadMsg}`, design.designerEmail);
+  
+  return newDesign;
+}
+
+export function updateDesignReview(
+  id: string,
+  reviewStatus: 'Proofread Approved' | 'Changes Requested',
+  comments: string,
+  reviewerName: string
+): DesignSubmissionItem | null {
+  const current = getDesigns();
+  const idx = current.findIndex(d => d.id === id);
+  if (idx === -1) return null;
+
+  const item = current[idx];
+  const updatedReview: DesignProofreadReview = {
+    proofreaderId: item.assignedProofreaderId || 'reviewer',
+    proofreaderName: reviewerName,
+    status: reviewStatus,
+    comments,
+    reviewedAt: new Date().toISOString()
+  };
+
+  current[idx] = {
+    ...item,
+    review: updatedReview
+  };
+
+  saveDesigns(current);
+  serverPatch('/api/designs', id, current[idx]);
+  logAuditEvent('DESIGN_PROOFREAD_UPDATED', reviewerName, `Updated proofread review for design "${item.title}" to ${reviewStatus}`);
+  
+  return current[idx];
+}
+
+export function deleteDesign(id: string, actorName: string): boolean {
+  const current = getDesigns();
+  const target = current.find(d => d.id === id);
+  if (!target) return false;
+
+  const updated = current.filter(d => d.id !== id);
+  saveDesigns(updated);
+  serverDelete('/api/designs', id);
+  logAuditEvent('DESIGN_DELETED', actorName, `Deleted design submission "${target.title}"`);
+  return true;
+}
+
 

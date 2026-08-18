@@ -236,6 +236,7 @@ export default function DirectoryPage() {
         const emailIndex = headers.indexOf('email');
         const divisionIndex = headers.indexOf('division');
         const roleIndex = headers.indexOf('role');
+        const deptIndex = headers.indexOf('department');
         const batchIndex = headers.indexOf('batch');
 
         if (nameIndex === -1 || emailIndex === -1) {
@@ -263,6 +264,7 @@ export default function DirectoryPage() {
           const mEmail = values[emailIndex]?.toLowerCase();
           const mDivStr = divisionIndex !== -1 ? values[divisionIndex] : '';
           const mRole = roleIndex !== -1 ? values[roleIndex] : '';
+          const mDept = deptIndex !== -1 ? values[deptIndex] : '';
           const mBatch = batchIndex !== -1 ? values[batchIndex] : '';
 
           if (!mName || !mEmail) continue;
@@ -274,10 +276,23 @@ export default function DirectoryPage() {
 
           let mDivision: MemberDivision = 'Training Associate';
           const divLower = mDivStr.toLowerCase();
-          if (divLower.includes('advisor') || divLower.includes('board')) mDivision = 'Advisory Board';
-          else if (divLower.includes('core')) mDivision = 'Core Committee';
-          else if (divLower.includes('alumni')) mDivision = 'Alumni';
-          else mDivision = 'Training Associate';
+          const roleLower = mRole.toLowerCase();
+
+          if (divLower.includes('advisor') || divLower.includes('board')) {
+            mDivision = 'Advisory Board';
+          } else if (
+            divLower.includes('core') || 
+            roleLower.startsWith('head') || 
+            roleLower.includes('president') || 
+            roleLower.includes('secretary') || 
+            roleLower.includes('chief coordinator')
+          ) {
+            mDivision = 'Core Committee';
+          } else if (divLower.includes('alumni')) {
+            mDivision = 'Alumni';
+          } else {
+            mDivision = 'Training Associate';
+          }
 
           const mTier = getTierForDivision(mDivision);
 
@@ -288,6 +303,7 @@ export default function DirectoryPage() {
               role: mRole || mDivision,
               tier: mTier,
               division: mDivision,
+              department: mDept || undefined,
               batch: mDivision === 'Alumni' ? mBatch : undefined
             });
             seenEmails.add(mEmail);
