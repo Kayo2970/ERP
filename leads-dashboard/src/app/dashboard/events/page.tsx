@@ -16,6 +16,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { getEvents, addEvent, updateEvent, deleteEvent, getTasks, EventItem, TaskItem } from '@/lib/local-data';
+import { canManageTasksAndEvents } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -145,7 +146,7 @@ export default function EventsPage() {
     triggerSuccess('Event removed from system.');
   };
 
-  const canManage = user && (user.tier <= 3 || user.tier === 5);
+  const canManage = canManageTasksAndEvents(user);
 
   const getStatusBadge = (eventStatus: EventItem['status']) => {
     switch (eventStatus) {

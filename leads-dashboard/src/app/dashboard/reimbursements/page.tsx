@@ -37,6 +37,7 @@ import {
   ReceiptFile
 } from '@/lib/local-data';
 import { maskBankDetails } from '@/lib/design-tokens';
+import { canReviewReimbursementFirstPass, canApproveReimbursementFinal } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -295,8 +296,8 @@ export default function ReimbursementsPage() {
     document.body.removeChild(link);
   };
 
-  const isLeadership = user && user.tier <= 3; // Super User, Centre Head, Head of Events
-  const isCoreCommittee = user && user.tier === 5; // Tier 5
+  const isLeadership = canApproveReimbursementFinal(user); // Super User, Centre Head, Head of Events
+  const isCoreCommittee = canReviewReimbursementFirstPass(user); // Non-Head Core Committee only — Heads submit but don't triage
 
   const displayedClaims = reimbursements.filter(r => {
     // Role filter

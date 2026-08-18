@@ -26,11 +26,11 @@ import {
   updateTask,
   updateTaskStatus, 
   deleteTask,
-  canViewTask,
-  TaskItem, 
-  EventItem, 
-  Member 
+  TaskItem,
+  EventItem,
+  Member
 } from '@/lib/local-data';
+import { canViewTaskExtended, canManageTasksAndEvents } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -238,8 +238,8 @@ export default function TasksPage() {
   };
 
   // Filter tasks based on shared permission helper
-  const displayedTasks = tasks.filter(task => canViewTask(task, user));
-  const canManage = user && (user.tier <= 3 || user.tier === 5);
+  const displayedTasks = tasks.filter(task => canViewTaskExtended(task, user));
+  const canManage = canManageTasksAndEvents(user);
 
   const getStatusBadge = (status: TaskItem['status']) => {
     switch (status) {

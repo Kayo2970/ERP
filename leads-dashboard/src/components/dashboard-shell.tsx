@@ -30,6 +30,7 @@ import {
   Palette
 } from 'lucide-react';
 import { getAnnouncements, getTasks, getDesigns, TaskItem, AnnouncementItem, syncWithServer, logAuditEvent } from '@/lib/local-data';
+import { canViewTaskExtended, getAnnouncementScopeMatch } from '@/lib/permissions';
 
 interface SidebarItem {
   name: string;
@@ -47,6 +48,7 @@ const navSections: NavSection[] = [
     title: 'Workspace',
     items: [
       { name: 'Dashboard', href: '/dashboard/home', icon: LayoutDashboard },
+      { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
       { name: 'Events', href: '/dashboard/events', icon: Calendar },
       { name: 'Tasks', href: '/dashboard/tasks', icon: CheckSquare },
       { name: 'Ratings', href: '/dashboard/ratings', icon: Star },
@@ -76,6 +78,7 @@ export const TEST_PERSONAS = [
     tier: 1,
     division: 'Core Committee',
     committee: 'All Committees',
+    department: 'Design and Social Media',
     badge: 'Super Admin',
     color: 'bg-danger/10 text-danger border-danger/30'
   },
@@ -86,6 +89,7 @@ export const TEST_PERSONAS = [
     tier: 2,
     division: 'Advisory Board',
     committee: 'Faculty Oversight',
+    department: 'Faculty Oversight',
     badge: 'Faculty Lead',
     color: 'bg-purple-500/10 text-purple-400 border-purple-500/30'
   },
@@ -96,6 +100,7 @@ export const TEST_PERSONAS = [
     tier: 3,
     division: 'Core Committee',
     committee: 'Core Committee',
+    department: 'Faculty Oversight',
     badge: 'Executive',
     color: 'bg-accent/10 text-accent border-accent/30'
   },
@@ -106,6 +111,7 @@ export const TEST_PERSONAS = [
     tier: 4,
     division: 'Advisory Board',
     committee: 'Faculty Advisory',
+    department: 'Faculty Advisory',
     badge: 'Advisor',
     color: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30'
   },
@@ -116,6 +122,7 @@ export const TEST_PERSONAS = [
     tier: 5,
     division: 'Core Committee',
     committee: 'Core Committee',
+    department: 'Executive Council',
     badge: 'Student Lead',
     color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
   },
@@ -126,8 +133,20 @@ export const TEST_PERSONAS = [
     tier: 5,
     division: 'Core Committee',
     committee: 'Core Committee',
+    department: 'Executive Council',
     badge: 'Leadership',
     color: 'bg-blue-500/10 text-blue-400 border-blue-500/30'
+  },
+  {
+    name: 'Arjun Mehta',
+    email: 'arjun.mehta@msruas.ac.in',
+    role: 'Head Design and Social Media',
+    tier: 5,
+    division: 'Core Committee',
+    committee: 'Design and Social Media',
+    department: 'Design and Social Media',
+    badge: 'Department Head',
+    color: 'bg-pink-500/10 text-pink-400 border-pink-500/30'
   },
   {
     name: 'Rohan Deshmukh',
@@ -136,6 +155,7 @@ export const TEST_PERSONAS = [
     tier: 6,
     division: 'Training Associate',
     committee: 'Technical & Platform',
+    department: 'Design and Social Media',
     badge: 'Associate',
     color: 'bg-amber-500/10 text-amber-400 border-amber-500/30'
   },
@@ -146,6 +166,7 @@ export const TEST_PERSONAS = [
     tier: 4,
     division: 'Alumni',
     committee: 'Mentorship Circle',
+    department: 'Alumni Relations',
     badge: 'Alumni',
     color: 'bg-teal-500/10 text-teal-400 border-teal-500/30'
   }
@@ -217,18 +238,24 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           read: false
         }));
 
-      const recentAnnounce = getAnnouncements().slice(0, 3).map(a => ({
-        id: a.id,
-        title: `Announcement: ${a.title}`,
-        time: a.publishedAt,
-        read: false
-      }));
-      const recentTasks = getTasks().slice(0, 2).map(t => ({
-        id: t.id,
-        title: `Task assigned: ${t.title}`,
-        time: `Due ${t.dueDate}`,
-        read: false
-      }));
+      const recentAnnounce = getAnnouncements()
+        .filter(a => getAnnouncementScopeMatch(a.scope, parsedUser))
+        .slice(0, 3)
+        .map(a => ({
+          id: a.id,
+          title: `Announcement: ${a.title}`,
+          time: a.publishedAt,
+          read: false
+        }));
+      const recentTasks = getTasks()
+        .filter(t => canViewTaskExtended(t, parsedUser))
+        .slice(0, 2)
+        .map(t => ({
+          id: t.id,
+          title: `Task assigned: ${t.title}`,
+          time: `Due ${t.dueDate}`,
+          read: false
+        }));
       setNotifications([...proofreadNotifs, ...recentAnnounce, ...recentTasks]);
 
       return () => clearInterval(pollInterval);
@@ -260,7 +287,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       role: persona.role,
       tier: persona.tier,
       division: persona.division || 'Core Committee',
-      committee: persona.committee || 'All Committees'
+      committee: persona.committee || 'All Committees',
+      department: persona.department
     };
     localStorage.setItem('user', JSON.stringify(newUserData));
     setUser(newUserData);

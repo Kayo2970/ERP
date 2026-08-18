@@ -36,6 +36,7 @@ import {
   Member, 
   TaskItem 
 } from '@/lib/local-data';
+import { canManageTasksAndEvents } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 import { StudentProfileModal } from '@/components/student-profile-modal';
@@ -169,7 +170,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
     triggerSuccess('Event deliverable task assigned.');
   };
 
-  const isLeadership = user && (user.tier <= 3 || user.tier === 5);
+  const isLeadership = canManageTasksAndEvents(user);
 
   if (!event) {
     return (

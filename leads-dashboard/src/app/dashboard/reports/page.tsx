@@ -18,6 +18,7 @@ import {
 } from 'recharts';
 import { getRatings, getMembers, getTasks, RatingItem, Member, TaskItem } from '@/lib/local-data';
 import { getRatingColor } from '@/lib/design-tokens';
+import { canViewRating } from '@/lib/permissions';
 import { BarChart3, Users, User, Download, Printer, Filter, Star, Info, Layers, CheckSquare } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -25,6 +26,7 @@ export default function ReportsPage() {
   const [ratings, setRatings] = useState<RatingItem[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [user, setUser] = useState<any>(null);
   const [selectedDivision, setSelectedDivision] = useState<string>('ALL');
   const [selectedTarget, setSelectedTarget] = useState('All');
   const [selectedQuarter, setSelectedQuarter] = useState('ALL');
@@ -37,6 +39,15 @@ export default function ReportsPage() {
     };
     refreshData();
 
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
     window.addEventListener('leads-data-sync', refreshData);
     window.addEventListener('storage', refreshData);
     return () => {
@@ -45,8 +56,9 @@ export default function ReportsPage() {
     };
   }, []);
 
-  // Filter ratings based on selected division, target member, and quarter
+  // Filter ratings based on viewer's access, then selected division, target member, and quarter
   const filteredRatings = ratings.filter(r => {
+    if (!canViewRating(r, user)) return false;
     // If division filter is active, check the target member's division
     if (selectedDivision !== 'ALL') {
       const member = members.find(m => m.name.toLowerCase() === r.targetName.toLowerCase() || m.id === r.targetId);

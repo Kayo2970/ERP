@@ -33,8 +33,9 @@ import {
   DesignSubmissionItem, 
   Member, 
   EventItem,
-  syncWithServer 
+  syncWithServer
 } from '@/lib/local-data';
+import { canViewAllDesigns } from '@/lib/permissions';
 
 export default function DesignPortalPage() {
   const [designs, setDesigns] = useState<DesignSubmissionItem[]>([]);
@@ -225,10 +226,15 @@ export default function DesignPortalPage() {
       return d.designerEmail === user?.email;
     }
     if (activeTab === 'proofread') {
-      return d.assignedProofreaderEmail === user?.email || user?.tier <= 3;
+      return d.assignedProofreaderEmail === user?.email || canViewAllDesigns(user);
     }
     if (activeTab === 'expired') {
       return d.isExpired;
+    }
+
+    // Default "all" tab: plain designers only see their own + anything assigned to them
+    if (!canViewAllDesigns(user)) {
+      return d.designerEmail === user?.email || d.assignedProofreaderEmail === user?.email;
     }
 
     return true;
@@ -864,7 +870,7 @@ export default function DesignPortalPage() {
               )}
 
               {/* Reviewer Action Controls */}
-              {(selectedDesign.assignedProofreaderEmail === user?.email || user?.tier <= 3) ? (
+              {(selectedDesign.assignedProofreaderEmail === user?.email || canViewAllDesigns(user)) ? (
                 <form onSubmit={handleSaveReview} className="space-y-3 text-xs bg-muted/20 p-4 rounded-xl border border-border">
                   <p className="font-medium text-foreground">Update Proofreading Decision:</p>
 
