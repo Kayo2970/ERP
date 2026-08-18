@@ -15,6 +15,14 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "LEADS All-in-One Dashboard",
   description: "Private internal management system for the LEADS Next Gen Centre at MSRUAS, Bengaluru.",
+  icons: {
+    icon: [
+      { url: "/images/leads-short-logo.png", type: "image/png" },
+      { url: "/favicon.ico" },
+    ],
+    shortcut: "/images/leads-short-logo.png",
+    apple: "/images/leads-short-logo.png",
+  },
 };
 
 export default function RootLayout({
