@@ -31,6 +31,7 @@ import {
   RatingItem 
 } from '@/lib/local-data';
 import { getRatingColor } from '@/lib/design-tokens';
+import { canViewRating } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -196,7 +197,9 @@ export default function RatingsPage() {
 
   // Filtered ratings history
   const filteredRatingsHistory = ratings.filter(r => {
-    const matchesSearch = 
+    if (!canViewRating(r, user)) return false;
+
+    const matchesSearch =
       r.targetName.toLowerCase().includes(historySearchQuery.toLowerCase()) ||
       r.taskTitle.toLowerCase().includes(historySearchQuery.toLowerCase()) ||
       (r.eventName && r.eventName.toLowerCase().includes(historySearchQuery.toLowerCase())) ||

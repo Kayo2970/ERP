@@ -27,6 +27,7 @@ import {
   FormField,
   FormSubmissionItem 
 } from '@/lib/local-data';
+import { canBuildForms } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -197,7 +198,7 @@ export default function FormsBuilderPage() {
   };
 
   // PRD Gating: Super User (Tier 1) and Core Committee (Tier 5)
-  const canBuild = user && (user.tier === 1 || user.tier === 5);
+  const canBuild = canBuildForms(user);
 
   const selectedForm = forms.find(f => f.id === selectedFormId) || forms[0];
   const selectedSubmissions = selectedForm ? submissions.filter(s => s.formId === selectedForm.id || s.slug === selectedForm.slug) : [];

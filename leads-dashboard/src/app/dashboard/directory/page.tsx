@@ -38,6 +38,7 @@ import {
 } from '@/lib/local-data';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { StudentProfileModal } from '@/components/student-profile-modal';
+import { canViewFullDirectory, canEditDirectory } from '@/lib/permissions';
 
 export default function DirectoryPage() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -351,7 +352,8 @@ export default function DirectoryPage() {
     }
   };
 
-  const isAdmin = user && (user.tier <= 3 || user.tier === 1);
+  const isAdmin = canEditDirectory(user);
+  const canViewRoster = canViewFullDirectory(user);
 
   // Filter members list based on division tab and search query
   const filteredMembers = members
@@ -505,9 +507,24 @@ export default function DirectoryPage() {
     }
   };
 
+  if (user && !canViewRoster) {
+    return (
+      <div className="p-6 md:p-8 space-y-6">
+        <div>
+          <h1 className="text-xl font-bold text-theme-text-primary">My Profile</h1>
+          <p className="text-xs text-theme-text-secondary">The full organization directory is limited to Core Committee, Advisory Board, and Head designations.</p>
+        </div>
+        <StudentProfileModal
+          memberIdOrName={user.id || user.name}
+          onClose={() => {}}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 md:p-8 space-y-6">
-      
+
       {/* Notifications */}
       {successMsg && (
         <div className="flex items-center gap-3 p-4 bg-success/15 border border-success/20 rounded-2xl text-theme-text-primary text-xs animate-in fade-in duration-300">

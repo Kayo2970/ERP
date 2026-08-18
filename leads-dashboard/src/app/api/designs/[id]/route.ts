@@ -9,18 +9,18 @@ export async function PATCH(
     const { id } = await params;
     const body = await request.json();
 
+    // Upsert: if this id isn't in the server's collection yet (e.g. client-bundled
+    // sample/seed data never POSTed), create it instead of silently dropping the
+    // edit — same fix already applied to every other collection's [id] route.
     const updated = await mutateCollection('designs', (current) => {
       const idx = current.findIndex((d: any) => d.id === id);
-      if (idx === -1) return current;
-      current[idx] = { ...current[idx], ...body };
-      return [...current];
+      if (idx === -1) return [...current, { id, ...body }];
+      const next = [...current];
+      next[idx] = { ...next[idx], ...body };
+      return next;
     });
 
     const target = updated.find((d: any) => d.id === id);
-    if (!target) {
-      return NextResponse.json({ error: 'Design submission not found' }, { status: 404 });
-    }
-
     return NextResponse.json(target);
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

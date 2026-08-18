@@ -26,6 +26,7 @@ import {
   AnnouncementItem, 
   Member 
 } from '@/lib/local-data';
+import { canCreateAnnouncement } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -184,7 +185,7 @@ export default function AnnouncementsPage() {
     triggerSuccess('Announcement retracted.');
   };
 
-  const canPublish = user && (user.tier <= 3 || user.tier === 5);
+  const canPublish = canCreateAnnouncement(user);
 
   return (
     <div className="p-6 md:p-8 space-y-6">
