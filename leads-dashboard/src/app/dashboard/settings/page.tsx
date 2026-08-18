@@ -16,7 +16,7 @@ import {
   Moon,
   Save
 } from 'lucide-react';
-import { getAuditLogs, getMembers, Member, AuditLogItem, logAuditEvent } from '@/lib/local-data';
+import { getAuditLogs, getMembers, updateMember, Member, AuditLogItem } from '@/lib/local-data';
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<'account' | 'roles' | 'audit'>('account');
@@ -80,17 +80,17 @@ export default function SettingsPage() {
       }
     }
 
-    const updatedUser = { ...user, name: displayName.trim(), ...(newPassword ? { customPassword: newPassword } : {}) };
+    const changes = { name: displayName.trim(), ...(newPassword ? { customPassword: newPassword } : {}) };
+    const updatedMember = updateMember(user.id, changes, user.name);
+    if (!updatedMember) {
+      triggerError('Could not find your member record to update.');
+      return;
+    }
+
+    const updatedUser = { ...user, ...changes };
     setUser(updatedUser);
     localStorage.setItem('user', JSON.stringify(updatedUser));
-
-    // Update in members list as well
-    const allMembers = getMembers();
-    const updatedMembers = allMembers.map(m => m.id === user.id ? { ...m, name: displayName.trim(), ...(newPassword ? { customPassword: newPassword } : {}) } : m);
-    localStorage.setItem('leads_members', JSON.stringify(updatedMembers));
-    setMembers(updatedMembers);
-
-    logAuditEvent('ACCOUNT_UPDATED', user.name, newPassword ? 'Updated profile display name and user password' : 'Updated profile display name');
+    setMembers(getMembers());
     setAuditLogs(getAuditLogs());
 
     setCurrentPassword('');

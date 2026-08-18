@@ -26,11 +26,11 @@ import {
   Layers,
   Sparkles
 } from 'lucide-react';
-import { 
-  getMembers, 
-  saveMembers, 
-  addMember, 
-  deleteMember, 
+import {
+  getMembers,
+  addMember,
+  updateMember,
+  deleteMember,
   bulkUpdateMembers,
   bulkDeleteMembers,
   Member,
@@ -185,17 +185,15 @@ export default function DirectoryPage() {
 
     const calculatedTier = getTierForDivision(editDivision, editingMember.tier);
 
-    const updated = currentMembers.map(m => m.id === editingMember.id ? {
-      ...m,
+    updateMember(editingMember.id, {
       name: editName.trim(),
       email: editEmail.toLowerCase().trim(),
       role: editRole.trim() || editDivision,
       tier: calculatedTier,
       division: editDivision,
       batch: editDivision === 'Alumni' ? editBatch.trim() : undefined
-    } : m);
+    }, user?.name || 'Admin');
 
-    saveMembers(updated);
     setEditingMember(null);
     setMembers(getMembers());
     triggerSuccess('Member details and division updated.');
@@ -245,7 +243,12 @@ export default function DirectoryPage() {
           return;
         }
 
-        const currentMembers = getMembers();
+        // Track emails seen so far (existing roster + rows already imported this
+        // pass) so both cross-roster AND within-file duplicates are caught, while
+        // each new row still goes through addMember() so it actually reaches the
+        // server — a manual push + single saveMembers() call at the end (the old
+        // approach) only ever wrote localStorage, never the server.
+        const seenEmails = new Set(getMembers().map(m => m.email.toLowerCase()));
         let importCount = 0;
         let duplicateCount = 0;
 
@@ -264,7 +267,7 @@ export default function DirectoryPage() {
 
           if (!mName || !mEmail) continue;
 
-          if (currentMembers.some(m => m.email.toLowerCase() === mEmail)) {
+          if (seenEmails.has(mEmail)) {
             duplicateCount++;
             continue;
           }
@@ -278,22 +281,23 @@ export default function DirectoryPage() {
 
           const mTier = getTierForDivision(mDivision);
 
-          const newMember: Member = {
-            id: 'm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-            name: mName,
-            email: mEmail,
-            role: mRole || mDivision,
-            tier: mTier,
-            division: mDivision,
-            batch: mDivision === 'Alumni' ? mBatch : undefined
-          };
-
-          currentMembers.push(newMember);
-          importCount++;
+          try {
+            addMember({
+              name: mName,
+              email: mEmail,
+              role: mRole || mDivision,
+              tier: mTier,
+              division: mDivision,
+              batch: mDivision === 'Alumni' ? mBatch : undefined
+            });
+            seenEmails.add(mEmail);
+            importCount++;
+          } catch {
+            duplicateCount++;
+          }
         }
 
         if (importCount > 0) {
-          saveMembers(currentMembers);
           setMembers(getMembers());
           triggerSuccess(`Successfully imported ${importCount} new members. ${duplicateCount > 0 ? `(${duplicateCount} duplicate emails skipped)` : ''}`);
         } else if (duplicateCount > 0) {
