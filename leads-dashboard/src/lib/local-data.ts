@@ -10,6 +10,7 @@ export interface Member {
   committee?: string; // Legacy fallback
   department?: string;
   batch?: string; // e.g. "Class of 2025" for Alumni
+  customPassword?: string; // Set via Settings → Account; demo-only, not hashed
 }
 
 export interface EventCommittee {
@@ -760,6 +761,20 @@ export function bulkDeleteMembers(ids: string[], actorName: string): Member[] {
   Array.from(targetIdSet).forEach(id => serverDelete('/api/members', id));
   logAuditEvent('BULK_MEMBERS_DELETED', actorName, `Bulk removed ${current.length - updated.length} members`);
   return updated;
+}
+
+export function updateMember(id: string, updates: Partial<Member>, actorName: string): Member | null {
+  const current = getMembers();
+  const idx = current.findIndex(m => m.id === id);
+  if (idx === -1) return null;
+
+  current[idx] = { ...current[idx], ...updates };
+  saveMembers(current);
+  // Send the full merged member, not just the diff, so a server-side upsert (a
+  // client-only sample member that was never POSTed) creates a complete record.
+  serverPatch('/api/members', id, current[idx]);
+  logAuditEvent('MEMBER_UPDATED', actorName, `Updated member details for ${current[idx].name}`);
+  return current[idx];
 }
 
 // -------------------------------------------------------------
