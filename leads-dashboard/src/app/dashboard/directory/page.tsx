@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   Plus, 
   Download, 
@@ -41,6 +42,7 @@ import { StudentProfileModal } from '@/components/student-profile-modal';
 import { canViewFullDirectory, canEditDirectory } from '@/lib/permissions';
 
 export default function DirectoryPage() {
+  const router = useRouter();
   const [members, setMembers] = useState<Member[]>([]);
   const [user, setUser] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -516,7 +518,7 @@ export default function DirectoryPage() {
         </div>
         <StudentProfileModal
           memberIdOrName={user.id || user.name}
-          onClose={() => {}}
+          onClose={() => router.push('/dashboard/home')}
         />
       </div>
     );

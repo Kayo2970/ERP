@@ -46,10 +46,11 @@ export function isTrainingAssociateTier(user: SessionUser): boolean {
   return !!user && user.tier === 6;
 }
 
-/** Resolve the full Member record for a session user (persona objects are a subset of Member). */
-function resolveMember(user: SessionUser): Member | undefined {
+/** Resolve the full Member record for a session user (persona objects are a subset of Member).
+ *  Takes the already-fetched members array so callers that also need it for a second lookup
+ *  (e.g. the task/rating target) don't pay for a second localStorage read + parse. */
+function resolveMember(user: SessionUser, members: Member[]): Member | undefined {
   if (!user) return undefined;
-  const members = getMembers();
   return (
     (user.id && members.find(m => m.id === user.id)) ||
     members.find(m => m.email.toLowerCase() === user.email.toLowerCase())
@@ -85,11 +86,11 @@ export function canViewTaskExtended(task: TaskItem, user: SessionUser): boolean 
   if (canViewTask(task as any, user as any)) return true;
   if (!user || !isHeadRole(user)) return false;
 
-  const department = user.department || resolveMember(user)?.department;
+  const members = getMembers();
+  const department = user.department || resolveMember(user, members)?.department;
   if (!department) return false;
 
   if (task.assigneeType === 'individual') {
-    const members = getMembers();
     const assigneeMember = task.assigneeId
       ? members.find(m => m.id === task.assigneeId)
       : members.find(m =>
@@ -116,9 +117,9 @@ export function canViewRating(rating: RatingItem, user: SessionUser): boolean {
   if (isOwn) return true;
 
   if (isHeadRole(user)) {
-    const department = user.department || resolveMember(user)?.department;
-    if (!department) return false;
     const members = getMembers();
+    const department = user.department || resolveMember(user, members)?.department;
+    if (!department) return false;
     const targetMember = members.find(m => m.id === rating.targetId) ||
       members.find(m => m.name.toLowerCase() === rating.targetName.toLowerCase());
     return targetMember?.department === department;
