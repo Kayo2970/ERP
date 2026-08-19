@@ -18,15 +18,29 @@ import {
   Building2,
   CreditCard,
   Hash,
-  Receipt
+  Receipt,
+  Mail,
+  Send,
+  Eye,
+  RefreshCw,
+  FileText
 } from 'lucide-react';
-import { getAuditLogs, getMembers, updateMember, Member, AuditLogItem } from '@/lib/local-data';
+import { getAuditLogs, getMembers, updateMember, Member, AuditLogItem, getEmailLogs } from '@/lib/local-data';
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<'account' | 'reimbursement' | 'roles' | 'audit'>('account');
+  const [activeTab, setActiveTab] = useState<'account' | 'reimbursement' | 'roles' | 'audit' | 'emails'>('account');
   const [user, setUser] = useState<any>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
+  const [emailLogs, setEmailLogs] = useState<any[]>([]);
+  const [emailFilter, setEmailFilter] = useState<string>('ALL');
+  const [previewEmail, setPreviewEmail] = useState<any | null>(null);
+
+  // Test Email state
+  const [testTo, setTestTo] = useState('');
+  const [testSubject, setTestSubject] = useState('');
+  const [testBody, setTestBody] = useState('');
+  const [isSendingTest, setIsSendingTest] = useState(false);
 
   // Account form state
   const [displayName, setDisplayName] = useState('');
@@ -47,6 +61,7 @@ export default function SettingsPage() {
     const allMembers = getMembers();
     setMembers(allMembers);
     setAuditLogs(getAuditLogs());
+    fetchEmails();
 
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
@@ -58,11 +73,17 @@ export default function SettingsPage() {
         setSavedBankName(u.bankName || me?.bankName || '');
         setSavedAccountNumber(u.accountNumber || me?.accountNumber || '');
         setSavedIfscCode(u.ifscCode || me?.ifscCode || '');
+        setTestTo(u.email || '');
       } catch (e) {
         console.error(e);
       }
     }
   }, []);
+
+  const fetchEmails = async () => {
+    const logs = await getEmailLogs();
+    setEmailLogs(logs);
+  };
 
   const triggerSuccess = (msg: string) => {
     setSuccessMsg(msg);
@@ -119,6 +140,40 @@ export default function SettingsPage() {
     triggerSuccess('Account profile and reimbursement settlement bank coordinates saved successfully.');
   };
 
+  const handleSendTestEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!testTo.trim() || !testSubject.trim() || !testBody.trim()) {
+      triggerError('Please fill in recipient, subject, and body for test email.');
+      return;
+    }
+
+    setIsSendingTest(true);
+    try {
+      const res = await fetch('/api/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: testTo.trim(),
+          subject: testSubject.trim(),
+          bodyText: testBody.trim(),
+          category: 'SYSTEM',
+        }),
+      });
+      if (res.ok) {
+        triggerSuccess(`Test email dispatched successfully to ${testTo.trim()}`);
+        setTestSubject('');
+        setTestBody('');
+        fetchEmails();
+      } else {
+        triggerError('Failed to dispatch test email.');
+      }
+    } catch (err: any) {
+      triggerError(err.message || 'Error dispatching test email.');
+    } finally {
+      setIsSendingTest(false);
+    }
+  };
+
   const isSuperAdmin = user && (user.tier === 1 || user.tier === 2);
 
   const rolePrivileges = [
@@ -130,13 +185,18 @@ export default function SettingsPage() {
     { tier: 6, role: 'Training Associate', access: 'Assigned deliverable execution, task acknowledgment, and personal claim submissions.' },
   ];
 
+  const filteredEmailLogs = emailLogs.filter(log => {
+    if (emailFilter === 'ALL') return true;
+    return log.category === emailFilter;
+  });
+
   return (
     <div className="p-6 md:p-8 space-y-6">
       
       {/* Notifications */}
       {successMsg && (
-        <div className="flex items-center gap-3 p-4 bg-success/15 border border-success/20 rounded-2xl text-theme-text-primary text-xs animate-in fade-in duration-300">
-          <CheckCircle2 className="h-5 w-5 text-success shrink-0" />
+        <div className="flex items-center gap-3 p-4 bg-emerald-500/15 border border-emerald-500/20 rounded-2xl text-emerald-300 text-xs animate-in fade-in duration-300">
+          <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
           <span>{successMsg}</span>
         </div>
       )}
@@ -150,14 +210,14 @@ export default function SettingsPage() {
       {/* Header section */}
       <div>
         <h1 className="text-xl font-bold text-theme-text-primary">System Settings & Governance</h1>
-        <p className="text-xs text-theme-text-secondary">Configure your profile credentials, saved reimbursement settlement bank details, inspect role privileges, and review audit records</p>
+        <p className="text-xs text-theme-text-secondary">Configure your profile credentials, saved reimbursement settlement bank details, inspect role privileges, manage email dispatcher, and review audit records</p>
       </div>
 
       {/* Tabs navigation */}
       <div className="flex border-b border-theme-border/30 gap-4 text-xs font-semibold overflow-x-auto">
         <button
           onClick={() => setActiveTab('account')}
-          className={`pb-3 flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
+          className={`pb-3 flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'account'
               ? 'text-accent border-b-2 border-accent'
               : 'text-theme-text-secondary hover:text-theme-text-primary'
@@ -181,7 +241,7 @@ export default function SettingsPage() {
 
         <button
           onClick={() => setActiveTab('roles')}
-          className={`pb-3 flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
+          className={`pb-3 flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'roles'
               ? 'text-accent border-b-2 border-accent'
               : 'text-theme-text-secondary hover:text-theme-text-primary'
@@ -191,13 +251,28 @@ export default function SettingsPage() {
           Roles & Permissions Matrix
         </button>
 
+        <button
+          onClick={() => {
+            setActiveTab('emails');
+            fetchEmails();
+          }}
+          className={`pb-3 flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === 'emails'
+              ? 'text-accent border-b-2 border-accent'
+              : 'text-theme-text-secondary hover:text-theme-text-primary'
+          }`}
+        >
+          <Mail className="h-4 w-4" />
+          Email Logs & Dispatcher ({emailLogs.length})
+        </button>
+
         {isSuperAdmin && (
           <button
             onClick={() => {
               setActiveTab('audit');
               setAuditLogs(getAuditLogs());
             }}
-            className={`pb-3 flex items-center gap-2 transition-all cursor-pointer ${
+            className={`pb-3 flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'audit'
                 ? 'text-accent border-b-2 border-accent'
                 : 'text-theme-text-secondary hover:text-theme-text-primary'
@@ -379,7 +454,7 @@ export default function SettingsPage() {
 
             <div className="text-[11px] text-theme-text-secondary space-y-1">
               <p>MSRUAS LEADS Next Gen Portal</p>
-              <p>Build version: v2026.8.18-stable</p>
+              <p>Build version: v2026.8.19-email-sync</p>
             </div>
           </div>
         </div>
@@ -492,7 +567,168 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Tab 3: Security & Audit Trail */}
+      {/* Tab 3: Email Logs & Dispatcher Inspector */}
+      {activeTab === 'emails' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Sent Emails History */}
+            <div className="glass-panel rounded-2xl p-6 lg:col-span-2 space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-theme-border/30 pb-4">
+                <div>
+                  <h3 className="text-base font-bold text-theme-text-primary">Sent Email Notifications</h3>
+                  <p className="text-xs text-theme-text-secondary">Live dispatches for OTP resets, announcements, tasks, and event rosters</p>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={fetchEmails}
+                    className="p-2 bg-theme-background/40 hover:bg-theme-background/70 border border-theme-border/40 rounded-xl text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
+                    title="Refresh Email Logs"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  </button>
+                  <select
+                    value={emailFilter}
+                    onChange={(e) => setEmailFilter(e.target.value)}
+                    className="px-3 py-1.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-xs text-theme-text-primary focus:outline-none focus:border-accent"
+                  >
+                    <option value="ALL">All Categories ({emailLogs.length})</option>
+                    <option value="AUTH_OTP">Password Reset OTP</option>
+                    <option value="ANNOUNCEMENT">Announcements</option>
+                    <option value="TASK_ASSIGNMENT">Task Assignments</option>
+                    <option value="EVENT_ROSTER">Event Roster Updates</option>
+                    <option value="SYSTEM">System Alerts</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                {filteredEmailLogs.length === 0 ? (
+                  <div className="text-center py-12 text-theme-text-secondary text-xs space-y-2">
+                    <Mail className="h-8 w-8 mx-auto text-theme-text-secondary/40" />
+                    <p>No email logs found for category &ldquo;{emailFilter}&rdquo;.</p>
+                  </div>
+                ) : (
+                  <table className="min-w-full text-xs text-left">
+                    <thead>
+                      <tr className="text-theme-text-secondary border-b border-theme-border/40 text-xs">
+                        <th className="pb-3 font-semibold">Category</th>
+                        <th className="pb-3 font-semibold">Recipient</th>
+                        <th className="pb-3 font-semibold">Subject</th>
+                        <th className="pb-3 font-semibold">Sent At</th>
+                        <th className="pb-3 font-semibold text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-theme-border/20">
+                      {filteredEmailLogs.map(log => (
+                        <tr key={log.id} className="hover:bg-theme-border/10 transition-all text-xs">
+                          <td className="py-3 pr-2 whitespace-nowrap">
+                            <span className={`font-semibold px-2 py-0.5 rounded text-[10px] uppercase border ${
+                              log.category === 'AUTH_OTP'
+                                ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                                : log.category === 'ANNOUNCEMENT'
+                                ? 'bg-sky-500/15 text-sky-400 border-sky-500/30'
+                                : log.category === 'TASK_ASSIGNMENT'
+                                ? 'bg-purple-500/15 text-purple-400 border-purple-500/30'
+                                : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                            }`}>
+                              {log.category.replace('_', ' ')}
+                            </span>
+                          </td>
+                          <td className="py-3 pr-2 font-mono font-medium text-theme-text-primary whitespace-nowrap">{log.to}</td>
+                          <td className="py-3 pr-2 text-theme-text-primary max-w-xs truncate" title={log.subject}>
+                            {log.subject}
+                          </td>
+                          <td className="py-3 pr-2 text-theme-text-secondary whitespace-nowrap font-mono text-[11px]">
+                            {new Date(log.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                          </td>
+                          <td className="py-3 text-right">
+                            <button
+                              onClick={() => setPreviewEmail(log)}
+                              className="px-2.5 py-1 bg-accent/15 hover:bg-accent/30 text-accent rounded-lg transition-all font-medium text-[11px] flex items-center gap-1 ml-auto cursor-pointer"
+                            >
+                              <Eye className="h-3 w-3" />
+                              Preview
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+
+            {/* Test Email Dispatcher Panel */}
+            <div className="glass-panel rounded-2xl p-6 space-y-4 h-fit">
+              <div>
+                <h3 className="text-sm font-bold text-theme-text-primary flex items-center gap-2">
+                  <Send className="h-4 w-4 text-accent" />
+                  Test Email Dispatcher
+                </h3>
+                <p className="text-[11px] text-theme-text-secondary mt-1">
+                  Send a test notification to verify recipient inbox delivery
+                </p>
+              </div>
+
+              <form onSubmit={handleSendTestEmail} className="space-y-3.5 text-xs">
+                <div className="space-y-1">
+                  <label className="block font-medium text-theme-text-secondary">Recipient Email</label>
+                  <input
+                    type="email"
+                    required
+                    value={testTo}
+                    onChange={(e) => setTestTo(e.target.value)}
+                    placeholder="name@msruas.ac.in"
+                    className="w-full px-3.5 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block font-medium text-theme-text-secondary">Subject Line</label>
+                  <input
+                    type="text"
+                    required
+                    value={testSubject}
+                    onChange={(e) => setTestSubject(e.target.value)}
+                    placeholder="[Test] LEADS System Verification"
+                    className="w-full px-3.5 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block font-medium text-theme-text-secondary">Email Message</label>
+                  <textarea
+                    rows={3}
+                    required
+                    value={testBody}
+                    onChange={(e) => setTestBody(e.target.value)}
+                    placeholder="Write test message body here..."
+                    className="w-full px-3.5 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent text-xs resize-none"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSendingTest}
+                  className="w-full py-2.5 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 text-xs"
+                >
+                  {isSendingTest ? (
+                    <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                  ) : (
+                    <>
+                      <Send className="h-3.5 w-3.5" />
+                      Dispatch Email
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 4: Security & Audit Trail */}
       {activeTab === 'audit' && isSuperAdmin && (
         <div className="glass-panel rounded-2xl p-6 space-y-4">
           <div className="flex items-center justify-between">
@@ -540,6 +776,43 @@ export default function SettingsPage() {
                 </tbody>
               </table>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Rendered Email Preview Modal */}
+      {previewEmail && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="glass-panel w-full max-w-2xl rounded-3xl p-6 flex flex-col space-y-4 max-h-[90vh] border border-white/20 shadow-2xl relative overflow-hidden">
+            <div className="flex items-center justify-between border-b border-theme-border/40 pb-3">
+              <div className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-accent" />
+                <div>
+                  <h3 className="text-sm font-bold text-theme-text-primary">Rendered Email Dispatch Preview</h3>
+                  <p className="text-[11px] text-theme-text-secondary">To: {previewEmail.to}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setPreviewEmail(null)}
+                className="text-theme-text-secondary hover:text-theme-text-primary text-sm p-1 rounded-lg hover:bg-white/10 transition-all cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="overflow-y-auto rounded-2xl border border-white/10 bg-slate-950 p-4">
+              <div dangerouslySetInnerHTML={{ __html: previewEmail.bodyHtml }} />
+            </div>
+
+            <div className="flex justify-between items-center text-[11px] text-theme-text-secondary pt-2 border-t border-theme-border/20">
+              <span className="font-mono">ID: {previewEmail.id}</span>
+              <button
+                onClick={() => setPreviewEmail(null)}
+                className="px-4 py-2 bg-white/10 hover:bg-white/20 text-theme-text-primary font-medium rounded-xl transition-all cursor-pointer text-xs"
+              >
+                Close Preview
+              </button>
+            </div>
           </div>
         </div>
       )}

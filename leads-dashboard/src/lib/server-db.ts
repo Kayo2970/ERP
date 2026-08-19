@@ -33,6 +33,8 @@ export interface DbSchema {
   submissions: any[];
   designs: any[];
   auditLogs: any[];
+  emails: any[];
+  passwordResets: any[];
   lastUpdated?: string;
 }
 
@@ -47,6 +49,8 @@ const EMPTY_DB: DbSchema = {
   submissions: [],
   designs: [],
   auditLogs: [],
+  emails: [],
+  passwordResets: [],
 };
 
 const SEED_DB: DbSchema = {
@@ -60,6 +64,8 @@ const SEED_DB: DbSchema = {
   submissions: initialSubmissions,
   designs: initialDesigns,
   auditLogs: [],
+  emails: [],
+  passwordResets: [],
 };
 
 /**

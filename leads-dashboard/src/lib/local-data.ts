@@ -1331,4 +1331,70 @@ export function deleteDesign(id: string, actorName: string): boolean {
   return true;
 }
 
+/**
+ * Client Helper: Request a 5-minute password reset OTP
+ */
+export async function requestPasswordReset(email: string): Promise<{ success: boolean; message?: string; error?: string; expiresAt?: number }> {
+  try {
+    const res = await fetch('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Failed to send reset code.' };
+    }
+    return { success: true, message: data.message, expiresAt: data.expiresAt };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Network error requesting password reset.' };
+  }
+}
+
+/**
+ * Client Helper: Submit OTP and set new password
+ */
+export async function submitPasswordReset(email: string, otp: string, newPassword: string): Promise<{ success: boolean; message?: string; error?: string }> {
+  try {
+    const res = await fetch('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, otp, newPassword }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Failed to reset password.' };
+    }
+    
+    // Refresh local members cache if matching member is cached
+    const currentMembers = getMembers();
+    const updatedMembers = currentMembers.map(m => {
+      if (m.email.toLowerCase() === email.trim().toLowerCase()) {
+        return { ...m, customPassword: newPassword };
+      }
+      return m;
+    });
+    saveMembers(updatedMembers);
+
+    return { success: true, message: data.message };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Network error submitting password reset.' };
+  }
+}
+
+/**
+ * Client Helper: Fetch sent email logs from database
+ */
+export async function getEmailLogs(): Promise<any[]> {
+  try {
+    const res = await fetch('/api/email');
+    if (!res.ok) return [];
+    return await res.json();
+  } catch (e) {
+    console.error('Error fetching email logs:', e);
+    return [];
+  }
+}
+
+
 
