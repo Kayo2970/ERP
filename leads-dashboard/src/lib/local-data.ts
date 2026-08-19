@@ -11,6 +11,9 @@ export interface Member {
   department?: string;
   batch?: string; // e.g. "Class of 2025" for Alumni
   customPassword?: string; // Set via Settings → Account; demo-only, not hashed
+  bankName?: string;
+  accountNumber?: string;
+  ifscCode?: string;
 }
 
 export interface EventCommittee {

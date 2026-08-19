@@ -32,6 +32,8 @@ import {
   updateReimbursementStatus, 
   deleteReimbursement,
   getEvents,
+  getMembers,
+  Member,
   ReimbursementItem,
   EventItem,
   ReceiptFile
@@ -89,7 +91,18 @@ export default function ReimbursementsPage() {
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
       try {
-        setUser(JSON.parse(savedUser));
+        const u = JSON.parse(savedUser);
+        setUser(u);
+
+        const allMembers = getMembers();
+        const me = allMembers.find((m: Member) => m.id === u.id || m.email?.toLowerCase() === u.email?.toLowerCase());
+        const defaultBank = u.bankName || me?.bankName || '';
+        const defaultAcc = u.accountNumber || me?.accountNumber || '';
+        const defaultIfsc = u.ifscCode || me?.ifscCode || '';
+
+        if (defaultBank) setBankName(defaultBank);
+        if (defaultAcc) setAccountNumber(defaultAcc);
+        if (defaultIfsc) setIfscCode(defaultIfsc);
       } catch (e) {
         console.error(e);
       }
@@ -548,10 +561,18 @@ export default function ReimbursementsPage() {
 
             {/* Structured Bank Settlement Coordinates */}
             <div className="space-y-3 pt-2 border-t border-theme-border/20">
-              <h4 className="font-bold text-xs text-theme-text-primary uppercase tracking-wider flex items-center gap-1.5">
-                <Building2 className="h-4 w-4 text-accent" />
-                Bank Settlement Coordinates
-              </h4>
+              <div className="flex items-center justify-between">
+                <h4 className="font-bold text-xs text-theme-text-primary uppercase tracking-wider flex items-center gap-1.5">
+                  <Building2 className="h-4 w-4 text-accent" />
+                  Bank Settlement Coordinates
+                </h4>
+                {user && (user.bankName || bankName) && (
+                  <span className="text-[10px] text-accent bg-accent/10 px-2 py-0.5 rounded-md font-medium flex items-center gap-1 border border-accent/20">
+                    <CheckCircle2 className="h-3 w-3" />
+                    Auto-filled from Settings
+                  </span>
+                )}
+              </div>
 
               <div className="space-y-2">
                 <div className="space-y-1">
