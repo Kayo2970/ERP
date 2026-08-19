@@ -12,7 +12,7 @@
  * There is no session-scoped "current user" object here; every function takes the
  * user explicitly so it works the same in pages, modals, and background sync code.
  */
-import { Member, TaskItem, RatingItem, getMembers, canViewTask } from './local-data';
+import { Member, TaskItem, RatingItem, ReimbursementItem, getMembers, canViewTask } from './local-data';
 
 export type SessionUser = {
   id?: string;
@@ -22,6 +22,7 @@ export type SessionUser = {
   division?: string;
   committee?: string;
   department?: string;
+  role?: string;
 } | null | undefined;
 
 /** True for any member whose role string contains the word "Head" (case-insensitive) —
@@ -29,6 +30,25 @@ export type SessionUser = {
 export function isHeadRole(user: SessionUser): boolean {
   const role = (user as any)?.role;
   return !!user && typeof role === 'string' && /\bhead\b/i.test(role);
+}
+
+/** Check if user holds the tag of Sector Head (Centre Head / Sector Head / Department Head / Base Leadership). */
+export function isSectorHead(user: SessionUser): boolean {
+  if (!user) return false;
+  const role = (user as any)?.role || '';
+  const isSectorOrCentreHead = /\b(sector|centre|center)\s+head\b/i.test(role);
+  const isGeneralHead = isHeadRole(user) && !/\bfinance\b/i.test(role);
+  return user.tier <= 2 || isSectorOrCentreHead || isGeneralHead;
+}
+
+/** Check if user holds the tag of Finance Head (Finance Head / Finance Lead / Finance Department). */
+export function isFinanceHead(user: SessionUser): boolean {
+  if (!user) return false;
+  const role = (user as any)?.role || '';
+  const dept = user.department || resolveMember(user)?.department || '';
+  const isFinanceRole = /\bfinance\b/i.test(role);
+  const isFinanceDept = /\bfinance\b/i.test(dept);
+  return user.tier === 1 || isFinanceRole || isFinanceDept;
 }
 
 /** Tier 1-3: Super User, Centre Head, Head of Events — full organizational access. */
@@ -56,18 +76,54 @@ function resolveMember(user: SessionUser): Member | undefined {
   );
 }
 
-/**
- * Reimbursement first-pass review (Core Committee triage before leadership's final call).
- * Heads submit reimbursement requests like anyone else, but do not get first-pass review
- * rights just because they happen to sit at tier 5 — that stays with non-Head Core Committee.
- */
-export function canReviewReimbursementFirstPass(user: SessionUser): boolean {
-  return isCoreCommitteeTier(user) && !isHeadRole(user);
+/** Sector Head first-stage approval permission. */
+export function canApproveAsSectorHead(user: SessionUser): boolean {
+  return isSectorHead(user);
 }
 
-/** Final approve/deny — stays with base leadership (tier <= 3), unchanged. */
+/** Finance Head second-stage approval permission. */
+export function canApproveAsFinanceHead(user: SessionUser): boolean {
+  return isFinanceHead(user);
+}
+
+/** Backwards-compatibility wrapper for first-pass (Sector Head) review. */
+export function canReviewReimbursementFirstPass(user: SessionUser): boolean {
+  return isSectorHead(user);
+}
+
+/** Backwards-compatibility wrapper for final (Finance Head) approval. */
 export function canApproveReimbursementFinal(user: SessionUser): boolean {
-  return isBaseLeadership(user);
+  return isFinanceHead(user);
+}
+
+/**
+ * Visibility rule for reimbursement claims:
+ * - Claimant sees their own claims.
+ * - Super User sees all.
+ * - Sector Head sees all claims (including 'Pending' claims awaiting Sector Head approval).
+ * - Finance Head sees claims ONLY AFTER Sector Head has approved them ('Under Review', 'Approved', 'Denied').
+ *   Pending claims do NOT reflect on Finance Head's dashboard until Sector Head approves!
+ */
+export function canViewReimbursement(claim: ReimbursementItem, user: SessionUser): boolean {
+  if (!user) return false;
+
+  // Claimant always sees their own claims
+  if (user.email && claim.memberEmail.toLowerCase() === user.email.toLowerCase()) {
+    return true;
+  }
+
+  // Super User sees all
+  if (user.tier === 1) return true;
+
+  // Sector Head sees all claims, including stage-1 Pending claims
+  if (isSectorHead(user)) return true;
+
+  // Finance Head sees claims ONLY AFTER Sector Head approval ('Under Review', 'Approved', 'Denied')
+  if (isFinanceHead(user)) {
+    return claim.status !== 'Pending';
+  }
+
+  return false;
 }
 
 /** Tasks/events creation & management — leadership, Core Committee, and any Head (incl. tier-3 Heads). */

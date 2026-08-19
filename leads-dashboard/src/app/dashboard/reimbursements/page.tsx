@@ -37,7 +37,13 @@ import {
   ReceiptFile
 } from '@/lib/local-data';
 import { maskBankDetails } from '@/lib/design-tokens';
-import { canReviewReimbursementFirstPass, canApproveReimbursementFinal } from '@/lib/permissions';
+import { 
+  canApproveAsSectorHead, 
+  canApproveAsFinanceHead, 
+  canViewReimbursement,
+  isSectorHead,
+  isFinanceHead
+} from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -183,25 +189,25 @@ export default function ReimbursementsPage() {
     triggerSuccess(`Reimbursement claim ${selectedEv ? `attached to "${selectedEv.title}"` : ''} submitted successfully with ${attachedFiles.length} file(s).`);
   };
 
-  // Two-Stage Approval Handlers
-  const handleCoreFirstPass = (id: string, approve: boolean) => {
+  // Two-Stage Approval Handlers (Sector Head Stage 1 -> Finance Head Stage 2)
+  const handleSectorHeadApproval = (id: string, approve: boolean) => {
     if (approve) {
-      updateReimbursementStatus(id, 'Under Review', { name: user.name, stage: 'firstPass', tier: user.tier });
-      triggerSuccess('First-pass review complete: Recommended for Centre Head sign-off.');
+      updateReimbursementStatus(id, 'Under Review', { name: user?.name || 'Sector Head', stage: 'firstPass', tier: user?.tier });
+      triggerSuccess('Sector Head approval granted. Claim forwarded to Finance Head dashboard.');
     } else {
-      updateReimbursementStatus(id, 'Denied', { name: user.name, stage: 'firstPass', tier: user.tier });
-      triggerSuccess('Claim denied during Core Committee first-pass review.');
+      updateReimbursementStatus(id, 'Denied', { name: user?.name || 'Sector Head', stage: 'firstPass', tier: user?.tier });
+      triggerSuccess('Claim rejected by Sector Head.');
     }
     setReimbursements(getReimbursements());
   };
 
-  const handleFinalApproval = (id: string, approve: boolean) => {
+  const handleFinanceHeadApproval = (id: string, approve: boolean) => {
     if (approve) {
-      updateReimbursementStatus(id, 'Approved', { name: user.name, stage: 'final', tier: user.tier });
-      triggerSuccess('Final Centre Head approval granted. Ready for payment disbursement.');
+      updateReimbursementStatus(id, 'Approved', { name: user?.name || 'Finance Head', stage: 'final', tier: user?.tier });
+      triggerSuccess('Finance Head approval granted. Reimbursement claim processed & approved.');
     } else {
-      updateReimbursementStatus(id, 'Denied', { name: user.name, stage: 'final', tier: user.tier });
-      triggerSuccess('Claim denied by leadership.');
+      updateReimbursementStatus(id, 'Denied', { name: user?.name || 'Finance Head', stage: 'final', tier: user?.tier });
+      triggerSuccess('Claim rejected by Finance Head.');
     }
     setReimbursements(getReimbursements());
   };
@@ -296,12 +302,12 @@ export default function ReimbursementsPage() {
     document.body.removeChild(link);
   };
 
-  const isLeadership = canApproveReimbursementFinal(user); // Super User, Centre Head, Head of Events
-  const isCoreCommittee = canReviewReimbursementFirstPass(user); // Non-Head Core Committee only — Heads submit but don't triage
+  const canSectorApprove = canApproveAsSectorHead(user);
+  const canFinanceApprove = canApproveAsFinanceHead(user);
 
   const displayedClaims = reimbursements.filter(r => {
-    // Role filter
-    if (user && !isLeadership && !isCoreCommittee && r.memberEmail !== user.email) {
+    // Role & stage visibility filter
+    if (user && !canViewReimbursement(r, user)) {
       return false;
     }
     // Event filter
@@ -318,11 +324,24 @@ export default function ReimbursementsPage() {
       case 'Pending':
         return 'bg-amber-500/15 text-amber-500 border border-amber-500/30';
       case 'Under Review':
-        return 'bg-accent/15 text-accent border border-accent/30';
+        return 'bg-blue-500/15 text-blue-400 border border-blue-500/30';
       case 'Approved':
         return 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30';
       case 'Denied':
         return 'bg-red-500/15 text-red-500 border border-red-500/30';
+    }
+  };
+
+  const getStatusLabel = (status: ReimbursementItem['status']) => {
+    switch (status) {
+      case 'Pending':
+        return 'Pending Sector Head Approval';
+      case 'Under Review':
+        return 'Approved by Sector Head → Awaiting Finance Approval';
+      case 'Approved':
+        return 'Approved & Payment Processed';
+      case 'Denied':
+        return 'Rejected';
     }
   };
 
@@ -390,7 +409,7 @@ export default function ReimbursementsPage() {
             <span>Event Expense Chart</span>
           </button>
 
-          {(isLeadership || isCoreCommittee) && (
+          {(canSectorApprove || canFinanceApprove) && (
             <button
               onClick={handleDownloadCsv}
               className="flex items-center gap-1.5 px-4 py-2 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer"
@@ -628,8 +647,13 @@ export default function ReimbursementsPage() {
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-bold text-sm text-theme-text-primary">{claim.memberName}</span>
                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${getStatusBadge(claim.status)}`}>
-                              {claim.status}
+                              {getStatusLabel(claim.status)}
                             </span>
+                            {claim.firstPassReviewer && (
+                              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                Sector Head: {claim.firstPassReviewer}
+                              </span>
+                            )}
                             {claim.eventName && (
                               <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/20 flex items-center gap-1">
                                 <Calendar className="h-3 w-3" />
@@ -657,7 +681,7 @@ export default function ReimbursementsPage() {
                           <div>
                             <span className="text-theme-text-secondary font-medium block flex items-center gap-1">
                               Account Number:
-                              {(isLeadership || isCoreCommittee) && (
+                              {(canSectorApprove || canFinanceApprove || user?.tier === 1) && (
                                 <button
                                   type="button"
                                   onClick={() => toggleBankReveal(claim.id)}
@@ -699,44 +723,44 @@ export default function ReimbursementsPage() {
                         </div>
                       </div>
 
-                      {/* Action buttons based on role */}
+                      {/* Action buttons based on role & stage */}
                       <div className="flex justify-end gap-2 pt-2 border-t border-theme-border/20">
-                        {/* Stage 1: Core Committee review */}
-                        {isCoreCommittee && claim.status === 'Pending' && (
+                        {/* Stage 1: Sector Head approval (Pending claims) */}
+                        {(canSectorApprove || user?.tier === 1) && claim.status === 'Pending' && (
                           <>
                             <button
-                              onClick={() => handleCoreFirstPass(claim.id, true)}
-                              className="px-3 py-1.5 bg-accent hover:bg-primary-light text-white font-semibold rounded-lg transition-all text-xs cursor-pointer flex items-center gap-1"
+                              onClick={() => handleSectorHeadApproval(claim.id, true)}
+                              className="px-3 py-1.5 bg-accent hover:bg-primary-light text-white font-semibold rounded-lg transition-all text-xs cursor-pointer flex items-center gap-1 shadow-sm"
                             >
                               <Check className="h-3.5 w-3.5" />
-                              Recommend Approval (Pass to Head)
+                              Approve (Pass to Finance Head)
                             </button>
                             <button
-                              onClick={() => handleCoreFirstPass(claim.id, false)}
-                              className="px-3 py-1.5 bg-danger hover:bg-danger/90 text-white font-semibold rounded-lg transition-all text-xs cursor-pointer flex items-center gap-1"
+                              onClick={() => handleSectorHeadApproval(claim.id, false)}
+                              className="px-3 py-1.5 bg-danger hover:bg-danger/90 text-white font-semibold rounded-lg transition-all text-xs cursor-pointer flex items-center gap-1 shadow-sm"
                             >
                               <X className="h-3.5 w-3.5" />
-                              Deny Claim
+                              Reject Claim
                             </button>
                           </>
                         )}
 
-                        {/* Stage 2: Centre Head / Super User Final Approval */}
-                        {isLeadership && (
+                        {/* Stage 2: Finance Head approval (Under Review claims post Sector Head approval) */}
+                        {(canFinanceApprove || user?.tier === 1) && claim.status === 'Under Review' && (
                           <>
                             <button
-                              onClick={() => handleFinalApproval(claim.id, true)}
-                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg transition-all text-xs cursor-pointer flex items-center gap-1"
+                              onClick={() => handleFinanceHeadApproval(claim.id, true)}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg transition-all text-xs cursor-pointer flex items-center gap-1 shadow-sm"
                             >
                               <Check className="h-3.5 w-3.5" />
-                              {claim.status === 'Under Review' ? 'Final Approve & Pay' : 'Direct Approve'}
+                              Final Approve & Process Payment
                             </button>
                             <button
-                              onClick={() => handleFinalApproval(claim.id, false)}
-                              className="px-3 py-1.5 bg-danger hover:bg-danger/90 text-white font-semibold rounded-lg transition-all text-xs cursor-pointer flex items-center gap-1"
+                              onClick={() => handleFinanceHeadApproval(claim.id, false)}
+                              className="px-3 py-1.5 bg-danger hover:bg-danger/90 text-white font-semibold rounded-lg transition-all text-xs cursor-pointer flex items-center gap-1 shadow-sm"
                             >
                               <X className="h-3.5 w-3.5" />
-                              Deny Claim
+                              Reject Claim
                             </button>
                           </>
                         )}

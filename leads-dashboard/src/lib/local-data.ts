@@ -479,6 +479,27 @@ export const initialReimbursements: ReimbursementItem[] = [
     eventName: 'Tech Conclave 2026' 
   },
   { 
+    id: 'rem3', 
+    memberName: 'Keerthan J', 
+    memberEmail: 'keerthan.j@msruas.ac.in', 
+    amount: 2800, 
+    category: 'Travel & Logistics', 
+    description: 'Local conveyance & transport for workshop equipment.', 
+    receiptUrl: 'conveyance_receipt.pdf', 
+    receiptFiles: [
+      { name: 'Transport_Bill.pdf' }
+    ],
+    status: 'Under Review', 
+    bankDetails: 'ICICI BANK - A/C 40291029384 - IFSC ICIC0000492',
+    bankName: 'ICICI BANK',
+    accountNumber: '40291029384',
+    ifscCode: 'ICIC0000492',
+    submittedAt: '2026-08-16', 
+    firstPassReviewer: 'Dr. Subhadeep Mukherjee',
+    eventId: 'e1', 
+    eventName: 'Tech Conclave 2026' 
+  },
+  { 
     id: 'rem2', 
     memberName: 'Kunal Bhadauria', 
     memberEmail: 'kunal.bhadauria@msruas.ac.in', 
@@ -495,8 +516,8 @@ export const initialReimbursements: ReimbursementItem[] = [
     accountNumber: '30928349182',
     ifscCode: 'SBIN0004921',
     submittedAt: '2026-08-10', 
-    firstPassReviewer: 'Gurutejas C', 
-    finalApprover: 'Dr. Subhadeep Mukherjee', 
+    firstPassReviewer: 'Dr. Subhadeep Mukherjee', 
+    finalApprover: 'Bharvi A Padia', 
     decidedAt: '2026-08-11', 
     eventId: 'e1', 
     eventName: 'Tech Conclave 2026' 
