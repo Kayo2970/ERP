@@ -1,3 +1,4 @@
+import nodemailer, { Transporter } from 'nodemailer';
 import { mutateCollection, readCollection } from './server-db';
 
 export interface EmailLog {
@@ -19,84 +20,55 @@ export interface SendEmailPayload {
   category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM';
 }
 
+let transporter: Transporter | null = null;
+
 /**
- * Dispatch an email notification and persist it to database.json under `emails` collection.
- * Automatically sends real external emails via API if RESEND_API_KEY or SENDGRID_API_KEY is configured in .env.local!
+ * The app never talks to Gmail (or any external mail API) directly — it hands
+ * every message to Postfix running locally on this box, which is the thing
+ * actually authenticated to relay through the org's Google Workspace account
+ * (see /etc/postfix/sasl_passwd on the VPS; that credential never touches
+ * this app or its env). SMTP_HOST/SMTP_PORT let a non-standard local setup
+ * override the default; no auth is sent because Postfix only accepts
+ * unauthenticated submission from localhost (mynetworks = 127.0.0.0/8).
+ */
+function getTransporter(): Transporter {
+  if (!transporter) {
+    transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || 'localhost',
+      port: Number(process.env.SMTP_PORT) || 25,
+      secure: false,
+      pool: true,
+      maxConnections: 3,
+      connectionTimeout: 4000,
+      greetingTimeout: 4000,
+      socketTimeout: 8000,
+    });
+  }
+  return transporter;
+}
+
+/**
+ * Dispatch an email notification through the local mail server and persist
+ * the attempt to database.json under the `emails` collection. `status`
+ * reflects whether the local Postfix submission actually succeeded — this
+ * function never claims 'SENT' for a message that wasn't actually handed off.
  */
 export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog> {
   const bodyHtml = payload.bodyHtml || `<p style="font-family: sans-serif; color: #1e293b; line-height: 1.6;">${payload.bodyText.replace(/\n/g, '<br/>')}</p>`;
-  let status: 'SENT' | 'FAILED' = 'SENT';
+  let status: 'SENT' | 'FAILED' = 'FAILED';
 
-  // 1. Resend API Integration (Recommended)
-  if (process.env.RESEND_API_KEY) {
-    try {
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: process.env.EMAIL_FROM || 'LEADS Centre <onboarding@resend.dev>',
-          to: [payload.to],
-          subject: payload.subject,
-          html: bodyHtml,
-          text: payload.bodyText,
-        }),
-      });
-      if (!res.ok) {
-        const errorData = await res.json();
-        console.error('[email-service] Resend API error:', errorData);
-      }
-    } catch (err) {
-      console.error('[email-service] Resend API network exception:', err);
-    }
-  }
-
-  // 2. SendGrid API Integration (Alternative)
-  else if (process.env.SENDGRID_API_KEY) {
-    try {
-      const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          personalizations: [{ to: [{ email: payload.to }] }],
-          from: { email: process.env.EMAIL_FROM || 'no-reply@msruas.ac.in', name: 'LEADS Centre' },
-          subject: payload.subject,
-          content: [
-            { type: 'text/plain', value: payload.bodyText },
-            { type: 'text/html', value: bodyHtml },
-          ],
-        }),
-      });
-      if (!res.ok) {
-        console.error('[email-service] SendGrid API error:', await res.text());
-      }
-    } catch (err) {
-      console.error('[email-service] SendGrid API exception:', err);
-    }
-  }
-
-  // 3. Custom Internal Email Webhook API
-  else if (process.env.EMAIL_WEBHOOK_URL) {
-    try {
-      await fetch(process.env.EMAIL_WEBHOOK_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: payload.to,
-          subject: payload.subject,
-          bodyText: payload.bodyText,
-          bodyHtml,
-          category: payload.category,
-        }),
-      });
-    } catch (err) {
-      console.error('[email-service] Custom Email Webhook exception:', err);
-    }
+  try {
+    const from = `${process.env.ANNOUNCEMENT_FROM_NAME || 'LEADS Next Gen Centre'} <${process.env.ANNOUNCEMENT_FROM_EMAIL || 'leads@msruas.ac.in'}>`;
+    await getTransporter().sendMail({
+      from,
+      to: payload.to,
+      subject: payload.subject,
+      text: payload.bodyText,
+      html: bodyHtml,
+    });
+    status = 'SENT';
+  } catch (err) {
+    console.error(`[email-service] Failed to send to ${payload.to}:`, err instanceof Error ? err.message : err);
   }
 
   const newEmail: EmailLog = {
