@@ -1,15 +1,16 @@
 @import "tailwindcss";
 
 :root {
-  --background: #F5F7FA;
-  --foreground: #1A1A1A;
-  --card-bg: rgba(255, 255, 255, 0.7);
-  --card-border: rgba(255, 255, 255, 0.5);
-  --text-primary: #1A1A1A;
-  --text-secondary: #6B7280;
-  --border-color: rgba(0, 0, 0, 0.08);
-  --sidebar-bg: rgba(255, 255, 255, 0.6);
-  --sidebar-border: rgba(0, 0, 0, 0.06);
+  --background: #EEF2F7;
+  --foreground: #0F172A;
+  --card-bg: rgba(255, 255, 255, 0.88);
+  --card-border: rgba(15, 23, 42, 0.10);
+  --text-primary: #0F172A;
+  --text-secondary: #4B5563;
+  --border-color: rgba(15, 23, 42, 0.12);
+  --sidebar-bg: rgba(255, 255, 255, 0.90);
+  --sidebar-border: rgba(15, 23, 42, 0.10);
+  --page-gradient: linear-gradient(90deg, #DCE6F5 0%, #EEF3FA 25%, #FBFDFF 50%, #EEF3FA 75%, #DCE6F5 100%);
 }
 
 .dark {
@@ -22,6 +23,7 @@
   --border-color: rgba(255, 255, 255, 0.08);
   --sidebar-bg: rgba(11, 27, 46, 0.75);
   --sidebar-border: rgba(255, 255, 255, 0.05);
+  --page-gradient: linear-gradient(90deg, #020617 0%, #081528 25%, #0F284B 50%, #081528 75%, #020617 100%);
 }
 
 @theme {
@@ -51,7 +53,9 @@
 }
 
 body {
-  background-color: var(--background);
+  background: var(--page-gradient);
+  background-attachment: fixed;
+  background-size: cover;
   color: var(--foreground);
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   min-height: 100vh;
@@ -64,30 +68,25 @@ body {
   -webkit-backdrop-filter: blur(16px);
   background-color: var(--card-bg);
   border: 1px solid var(--card-border);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.03);
+  box-shadow: 0 8px 32px 0 rgba(15, 23, 42, 0.06);
 }
 
 .dark .glass-panel {
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25);
 }
 
-/* Background Theme Layouts - Side-to-Side Dark Navy Blue to Black Gradient */
-.bg-space-theme, body {
-  background: linear-gradient(90deg, #020617 0%, #081528 25%, #0F284B 50%, #081528 75%, #020617 100%) !important;
-  background-attachment: fixed !important;
-  background-size: cover !important;
-}
-
-.dark.bg-space-theme, .dark .bg-space-theme, .dark body {
-  background: linear-gradient(90deg, #020617 0%, #081528 25%, #0F284B 50%, #081528 75%, #020617 100%) !important;
-  background-attachment: fixed !important;
-  background-size: cover !important;
+/* Background Theme Layout — side-to-side gradient, themed via --page-gradient
+   (a light, airy version in :root; the original dark navy-to-black one in .dark). */
+.bg-space-theme {
+  background: var(--page-gradient);
+  background-attachment: fixed;
+  background-size: cover;
 }
 
 @media (max-width: 768px) {
-  .bg-space-theme, body, .dark.bg-space-theme, .dark .bg-space-theme, .dark body {
-    background: linear-gradient(90deg, #020617 0%, #081528 25%, #0F284B 50%, #081528 75%, #020617 100%) !important;
-    background-attachment: fixed !important;
+  .bg-space-theme, body {
+    background: var(--page-gradient);
+    background-attachment: fixed;
   }
 }
 
