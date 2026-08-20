@@ -26,12 +26,14 @@ import {
   getMembers, 
   getTasks, 
   getRatableTasks,
+  getEvents,
   Member, 
   TaskItem, 
-  RatingItem 
+  RatingItem,
+  EventItem 
 } from '@/lib/local-data';
 import { getRatingColor } from '@/lib/design-tokens';
-import { canViewRating } from '@/lib/permissions';
+import { canViewRating, canEvaluateEventStudent } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -39,6 +41,7 @@ export default function RatingsPage() {
   const [ratings, setRatings] = useState<RatingItem[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [events, setEvents] = useState<EventItem[]>([]);
   const [user, setUser] = useState<any>(null);
 
   // Search & Filter state
@@ -70,6 +73,7 @@ export default function RatingsPage() {
       setRatings(getRatings());
       setMembers(getMembers());
       setTasks(getTasks());
+      setEvents(getEvents());
     };
     refreshData();
 
@@ -96,6 +100,15 @@ export default function RatingsPage() {
   };
 
   const openEvaluationForTask = (task: TaskItem) => {
+    const linkedEvent = events.find(ev => ev.id === task.eventId || ev.title === task.event);
+    const eventCampus = linkedEvent?.campus || task.eventCampus || 'GG Campus';
+
+    if (!canEvaluateEventStudent(user, eventCampus)) {
+      setAlertMsg(`Campus Evaluation Rule: Events Head for ${user?.role || 'your campus'} cannot evaluate student performance for ${eventCampus} events.`);
+      setTimeout(() => setAlertMsg(''), 5000);
+      return;
+    }
+
     setEditingRating(null);
     setSelectedTask(task);
     setQuality(5);
@@ -130,6 +143,15 @@ export default function RatingsPage() {
     }
 
     if (!user) return;
+
+    if (selectedTask) {
+      const linkedEvent = events.find(ev => ev.id === selectedTask.eventId || ev.title === selectedTask.event);
+      const eventCampus = linkedEvent?.campus || selectedTask.eventCampus || 'GG Campus';
+      if (!canEvaluateEventStudent(user, eventCampus)) {
+        setFormError(`Campus Evaluation Constraint: Evaluators from ${user.role} are not authorized to evaluate student performance for a ${eventCampus} event.`);
+        return;
+      }
+    }
 
     const overall = parseFloat(((quality + timeliness + initiative + collaboration) / 4).toFixed(1));
 
@@ -257,49 +279,71 @@ export default function RatingsPage() {
                 No active or completed deliverables currently queued.
               </div>
             ) : (
-              ratableTasks.map(task => (
-                <div 
-                  key={task.id} 
-                  className="p-3.5 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2 hover:bg-theme-border/15 transition-all text-xs"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <h4 className="font-bold text-xs text-theme-text-primary line-clamp-1">{task.title}</h4>
-                      <p className="text-[10px] text-theme-text-secondary mt-0.5">
-                        Assignee: <strong className="text-theme-text-primary">{task.assignee}</strong>
-                      </p>
-                      {task.event && (
-                        <span className="text-[10px] text-accent block mt-0.5">{task.event}</span>
-                      )}
-                    </div>
-                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
-                      task.status === 'Completed' ? 'bg-success/15 text-success' : 'bg-primary/15 text-primary-light'
-                    }`}>
-                      {task.status}
-                    </span>
-                  </div>
+              ratableTasks.map(task => {
+                const linkedEvent = events.find(ev => ev.id === task.eventId || ev.title === task.event);
+                const eventCampus = linkedEvent?.campus || task.eventCampus || 'GG Campus';
+                const canEval = canEvaluateEventStudent(user, eventCampus);
 
-                  {task.ratingScore ? (
-                    <div className="flex items-center justify-between pt-1 border-t border-theme-border/20 text-[11px]">
-                      <span className="text-theme-text-secondary">Evaluated Score:</span>
-                      <span className="font-bold text-accent flex items-center gap-1">
-                        <Star className="h-3 w-3 fill-accent" />
-                        {task.ratingScore.toFixed(1)}/5.0
+                return (
+                  <div 
+                    key={task.id} 
+                    className={`p-3.5 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2 hover:bg-theme-border/15 transition-all text-xs ${!canEval ? 'opacity-75' : ''}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h4 className="font-bold text-xs text-theme-text-primary line-clamp-1">{task.title}</h4>
+                        <p className="text-[10px] text-theme-text-secondary mt-0.5">
+                          Assignee: <strong className="text-theme-text-primary">{task.assignee}</strong>
+                        </p>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          {task.event && (
+                            <span className="text-[10px] text-accent font-semibold">{task.event}</span>
+                          )}
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 bg-accent/10 text-accent rounded border border-accent/20">
+                            {eventCampus}
+                          </span>
+                        </div>
+                      </div>
+                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                        task.status === 'Completed' ? 'bg-success/15 text-success' : 'bg-primary/15 text-primary-light'
+                      }`}>
+                        {task.status}
                       </span>
                     </div>
-                  ) : isAdmin ? (
-                    <button
-                      onClick={() => openEvaluationForTask(task)}
-                      className="w-full py-1.5 bg-accent hover:bg-primary-light text-white text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 mt-1"
-                    >
-                      <Award className="h-3.5 w-3.5" />
-                      Evaluate Performance
-                    </button>
-                  ) : (
-                    <span className="text-[10px] text-theme-text-secondary italic block pt-1">Awaiting advisor evaluation</span>
-                  )}
-                </div>
-              ))
+
+                    {task.ratingScore ? (
+                      <div className="flex items-center justify-between pt-1 border-t border-theme-border/20 text-[11px]">
+                        <span className="text-theme-text-secondary">Evaluated Score:</span>
+                        <span className="font-bold text-accent flex items-center gap-1">
+                          <Star className="h-3 w-3 fill-accent" />
+                          {task.ratingScore.toFixed(1)}/5.0
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="pt-1 border-t border-theme-border/20 flex items-center justify-between">
+                        {!canEval ? (
+                          <span className="text-[10px] text-warning font-medium italic">
+                            Blocked: {eventCampus} evaluation restricted
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-theme-text-secondary">Pending Evaluation</span>
+                        )}
+                        <button
+                          disabled={!canEval}
+                          onClick={() => openEvaluationForTask(task)}
+                          className={`px-3 py-1 text-[11px] font-medium rounded-lg cursor-pointer transition-all ${
+                            canEval 
+                              ? 'bg-accent/15 text-accent hover:bg-accent/25 border border-accent/20' 
+                              : 'bg-theme-border/20 text-theme-text-secondary cursor-not-allowed opacity-50'
+                          }`}
+                        >
+                          Evaluate Performance
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
         </div>

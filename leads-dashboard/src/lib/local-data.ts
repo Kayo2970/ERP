@@ -33,6 +33,7 @@ export interface EventItem {
   endDate: string;
   status: 'planned' | 'active' | 'completed' | 'archived';
   location?: string;
+  campus?: 'GG Campus' | 'RTC Campus' | 'Both Campuses';
   committees: EventCommittee[];
   createdBy?: string;
   // Group Policy approval workflow — set only when the creator/editor's grant came
@@ -57,6 +58,7 @@ export interface TaskItem {
   title: string;
   event?: string;
   eventId?: string;
+  eventCampus?: 'GG Campus' | 'RTC Campus' | 'Both Campuses';
   eventCommitteeId?: string;
   eventCommitteeName?: string;
   assignee: string;
@@ -194,6 +196,10 @@ export interface DesignSubmissionItem {
   assignedProofreaderName?: string;
   assignedProofreaderEmail?: string;
   review?: DesignProofreadReview;
+  styleStatus?: 'Pending' | 'Style Approved' | 'Style Rejected';
+  styleFeedback?: string;
+  styleDecidedBy?: string;
+  styleDecidedAt?: string;
   eventId?: string;
   eventName?: string;
   isSample?: boolean;
@@ -1504,6 +1510,32 @@ export function updateDesignReview(
   serverPatch('/api/designs', id, current[idx]);
   logAuditEvent('DESIGN_PROOFREAD_UPDATED', reviewerName, `Updated proofread review for design "${item.title}" to ${reviewStatus}`);
   
+  return current[idx];
+}
+
+export function updateDesignStyleReview(
+  id: string,
+  styleStatus: 'Style Approved' | 'Style Rejected',
+  styleFeedback: string,
+  reviewerName: string
+): DesignSubmissionItem | null {
+  const current = getDesigns();
+  const idx = current.findIndex(d => d.id === id);
+  if (idx === -1) return null;
+
+  const item = current[idx];
+  current[idx] = {
+    ...item,
+    styleStatus,
+    styleFeedback,
+    styleDecidedBy: reviewerName,
+    styleDecidedAt: new Date().toISOString()
+  };
+
+  saveDesigns(current);
+  serverPatch('/api/designs', id, current[idx]);
+  logAuditEvent('DESIGN_STYLE_REVIEW_UPDATED', reviewerName, `Design Head updated style review for design "${item.title}" to ${styleStatus}`);
+
   return current[idx];
 }
 

@@ -97,6 +97,69 @@ export function isTrainingAssociateTier(user: SessionUser): boolean {
   return !!user && user.tier === 6;
 }
 
+/** Check if user is Events Head for GG Campus. */
+export function isEventsHeadGgCampus(user: SessionUser): boolean {
+  if (!user) return false;
+  const role = ((user as any)?.role || '').toLowerCase();
+  const committee = ((user as any)?.committee || '').toLowerCase();
+  return (role.includes('events head') && role.includes('gg')) || 
+         (role.includes('events') && role.includes('gg campus')) ||
+         (committee.includes('gg campus') && isHeadRole(user));
+}
+
+/** Check if user is Events Head for RTC Campus. */
+export function isEventsHeadRtcCampus(user: SessionUser): boolean {
+  if (!user) return false;
+  const role = ((user as any)?.role || '').toLowerCase();
+  const committee = ((user as any)?.committee || '').toLowerCase();
+  return (role.includes('events head') && role.includes('rtc')) || 
+         (role.includes('events') && role.includes('rtc campus')) ||
+         (committee.includes('rtc campus') && isHeadRole(user));
+}
+
+/**
+ * Campus evaluation rule enforcement:
+ * When an event is created, a campus is selected ('GG Campus' or 'RTC Campus').
+ * ONLY the Events Head of that specific campus (or Super User / Centre Head) can evaluate students.
+ * An RTC Events Head CANNOT give an evaluation for GG Campus events, and vice versa.
+ */
+export function canEvaluateEventStudent(user: SessionUser, eventCampus?: string): boolean {
+  if (!user) return false;
+  // Super User (tier 1) and Centre Head (tier <= 2) can evaluate any event across campuses
+  if (user.tier <= 2) return true;
+
+  if (!eventCampus || eventCampus === 'Both Campuses') {
+    return isHeadRole(user) || isBaseLeadership(user);
+  }
+
+  const isGgHead = isEventsHeadGgCampus(user);
+  const isRtcHead = isEventsHeadRtcCampus(user);
+
+  if (eventCampus === 'GG Campus') {
+    // Explicit RTC Events Head cannot evaluate GG Campus events
+    if (isRtcHead) return false;
+    return isGgHead || isBaseLeadership(user);
+  }
+
+  if (eventCampus === 'RTC Campus') {
+    // Explicit GG Events Head cannot evaluate RTC Campus events
+    if (isGgHead) return false;
+    return isRtcHead || isBaseLeadership(user);
+  }
+
+  return isHeadRole(user) || isBaseLeadership(user);
+}
+
+/** Check if user is a Design Head (Head role + Design department/role). */
+export function isDesignHead(user: SessionUser): boolean {
+  if (!user) return false;
+  if (user.tier <= 2) return true; // Super User and Centre Head have design review authority
+  const role = ((user as any)?.role || '').toLowerCase();
+  const dept = (user.department || resolveMember(user)?.department || '').toLowerCase();
+  const isDesign = role.includes('design') || dept.includes('design');
+  return isHeadRole(user) && isDesign;
+}
+
 /** Resolve the full Member record for a session user (persona objects are a subset of Member). */
 function resolveMember(user: SessionUser): Member | undefined {
   if (!user) return undefined;
@@ -438,7 +501,24 @@ export function canCreateAnnouncement(user: SessionUser): boolean {
  * the page's own "proofread" tab). Leadership and any Head see every submission.
  */
 export function canViewAllDesigns(user: SessionUser): boolean {
-  return isBaseLeadership(user) || isHeadRole(user) || hasCapability(user, 'VIEW_ALL_DESIGNS');
+  return isBaseLeadership(user) || isDesignHead(user) || hasCapability(user, 'VIEW_ALL_DESIGNS');
+}
+
+/** Task extension request permission: own task or a team member in department (for Heads). */
+export function canRequestTaskExtension(task: TaskItem, user: SessionUser): boolean {
+  if (!user) return false;
+  if (user.id && task.assigneeId === user.id) return true;
+  if (user.email && task.assigneeEmail?.toLowerCase() === user.email.toLowerCase()) return true;
+  if (user.name && task.assignee.toLowerCase() === user.name.toLowerCase()) return true;
+
+  if (isHeadRole(user)) {
+    const department = user.department || resolveMember(user)?.department;
+    if (!department) return false;
+    const members = getMembers();
+    const assigneeMember = members.find(m => m.id === task.assigneeId || m.name.toLowerCase() === task.assignee.toLowerCase());
+    return assigneeMember?.department === department;
+  }
+  return false;
 }
 
 /**

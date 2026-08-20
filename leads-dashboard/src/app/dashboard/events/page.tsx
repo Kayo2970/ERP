@@ -44,6 +44,7 @@ export default function EventsPage() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [location, setLocation] = useState('');
+  const [campus, setCampus] = useState<'GG Campus' | 'RTC Campus' | 'Both Campuses'>('GG Campus');
   const [status, setStatus] = useState<EventItem['status']>('planned');
   const [formError, setFormError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -198,6 +199,7 @@ export default function EventsPage() {
     setStartDate('');
     setEndDate('');
     setLocation('');
+    setCampus('GG Campus');
     setStatus('planned');
     setFormError('');
     setIsCreateModalOpen(true);
@@ -210,6 +212,7 @@ export default function EventsPage() {
     setStartDate(event.startDate);
     setEndDate(event.endDate);
     setLocation(event.location || '');
+    setCampus(event.campus || 'GG Campus');
     setStatus(event.status);
     setFormError('');
   };
@@ -235,6 +238,7 @@ export default function EventsPage() {
         startDate,
         endDate,
         location: location.trim(),
+        campus,
         status,
       };
       const approval = getEventApprovalRequirement(user, 'EDIT');
@@ -258,6 +262,7 @@ export default function EventsPage() {
         startDate,
         endDate,
         location: location.trim(),
+        campus,
         status,
         createdBy: user?.name || 'User',
         committees: [
@@ -447,9 +452,14 @@ export default function EventsPage() {
               >
                 <div className="space-y-3.5">
                   <div className="flex items-center justify-between">
-                    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full capitalize ${getStatusBadge(effectiveStatus)}`}>
-                      {effectiveStatus}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full capitalize ${getStatusBadge(effectiveStatus)}`}>
+                        {effectiveStatus}
+                      </span>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-accent/15 text-accent border border-accent/20">
+                        {event.campus || 'GG Campus'}
+                      </span>
+                    </div>
                     <span className="text-[11px] text-accent font-semibold flex items-center gap-1">
                       <Users className="h-3.5 w-3.5" />
                       {(event.committees || []).length} Committees
@@ -596,15 +606,29 @@ export default function EventsPage() {
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <label className="block font-medium text-theme-text-secondary">Venue / Campus Location</label>
-                <input
-                  type="text"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  placeholder="e.g. Auditorium 2 / Robotics Lab Complex"
-                  className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">Venue / Location</label>
+                  <input
+                    type="text"
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                    placeholder="e.g. Auditorium 2"
+                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">Host Campus *</label>
+                  <select
+                    value={campus || 'GG Campus'}
+                    onChange={(e) => setCampus(e.target.value as any)}
+                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-semibold text-accent"
+                  >
+                    <option value="GG Campus">GG Campus</option>
+                    <option value="RTC Campus">RTC Campus</option>
+                    <option value="Both Campuses">Both Campuses</option>
+                  </select>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
