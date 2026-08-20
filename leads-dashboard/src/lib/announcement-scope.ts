@@ -13,7 +13,7 @@
  */
 import type { Member, EventItem } from './local-data';
 
-const DIVISION_SCOPES = ['Advisory Board', 'Core Committee', 'Training Associate', 'Alumni'];
+const DIVISION_SCOPES = ['Advisory Board', 'Core Committee', 'Training Associate', 'Alumni', 'Faculty'];
 
 /** Pure, server-and-client-safe: given a scope string, the full member list, and
  *  the full event list, returns the members that scope actually targets. This is

@@ -127,6 +127,8 @@ export default function AnnouncementsPage() {
         recipients = allMembers.filter(m => m.tier === 5);
       } else if (scope === 'Training Associate') {
         recipients = allMembers.filter(m => m.tier === 6);
+      } else if (scope === 'Faculty') {
+        recipients = allMembers.filter(m => m.division === 'Faculty');
       } else if (scope === 'Executive Council') {
         recipients = allMembers.filter(m => m.committee === 'Executive Council');
       } else {
@@ -318,6 +320,7 @@ export default function AnnouncementsPage() {
                   <option value="Advisory Board">Advisory Board (Tier 4)</option>
                   <option value="Core Committee">Core Committee (Tier 5)</option>
                   <option value="Training Associate">Training Associates (Tier 6)</option>
+                  <option value="Faculty">Faculty</option>
                   <option value="Executive Council">Executive Council (Leadership)</option>
                   {committees.map(c => (
                     <option key={c} value={c}>{c}</option>
