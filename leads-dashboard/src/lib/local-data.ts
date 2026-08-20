@@ -35,6 +35,21 @@ export interface EventItem {
   location?: string;
   committees: EventCommittee[];
   createdBy?: string;
+  // Group Policy approval workflow — set only when the creator/editor's grant came
+  // from a policy tag marked "requires approval." Absent/'approved' means normal,
+  // immediately-effective events (every event created before this feature, and
+  // every one created by someone with a built-in or non-approval-gated grant).
+  approvalStatus?: 'pending_create' | 'pending_edit' | 'approved' | 'rejected';
+  pendingChange?: Partial<EventItem>; // for pending_edit: the proposed diff, applied on approval
+  approverType?: 'CENTER_HEAD' | 'SPECIFIC_MEMBER' | 'POLICY_TAG';
+  approverMemberId?: string;
+  approverPolicyTagId?: string;
+  approvalPolicyName?: string;
+  submittedBy?: string;
+  submittedByEmail?: string;
+  decidedBy?: string;
+  decidedAt?: string;
+  rejectionReason?: string;
 }
 
 export interface TaskItem {
@@ -212,6 +227,18 @@ export interface GroupPolicy {
   targetDesignationKeyword?: string; // substring match against Member.role, case-insensitive
   targetMemberIds: string[]; // explicit individual overrides
   enabled: boolean;
+  // If set, restricts members matching this policy's targeting to seeing only
+  // events they created or are listed on a committee for, instead of the default
+  // (unrestricted) visibility every member has today. Purely restrictive — never
+  // grants visibility beyond the default, only narrows it for the targeted group.
+  eventVisibilityScope?: 'OWN_ONLY';
+  // If set, any capability this policy grants only takes effect once a designated
+  // approver signs off — the grantee's action lands in a pending state instead of
+  // applying immediately. See permissions.ts's getApprovalRequirement().
+  requiresApproval?: boolean;
+  approverType?: 'CENTER_HEAD' | 'SPECIFIC_MEMBER' | 'POLICY_TAG';
+  approverMemberId?: string; // when approverType === 'SPECIFIC_MEMBER'
+  approverPolicyTagId?: string; // when approverType === 'POLICY_TAG' — id of another GroupPolicy
   createdBy: string;
   createdAt: string;
   updatedAt?: string;
@@ -585,6 +612,76 @@ export function deleteEvent(id: string, actorName: string): boolean {
   serverDelete('/api/events', id);
   logAuditEvent('EVENT_DELETED', actorName, `Deleted event: ${target.title}`);
   return true;
+}
+
+/**
+ * Submit an edit to an already-approved event for sign-off instead of applying it
+ * immediately — used when the editor's EVENTS_EDIT grant came from an
+ * approval-required Group Policy. The event keeps showing its last-approved values
+ * to everyone else until the change is approved (merged in) or rejected (discarded).
+ */
+export function submitEventEdit(
+  id: string,
+  changes: Partial<EventItem>,
+  submittedBy: string,
+  submittedByEmail: string,
+  approval: { approverType?: GroupPolicy['approverType']; approverMemberId?: string; approverPolicyTagId?: string; policyName?: string }
+): EventItem | null {
+  const events = getEvents();
+  const target = events.find(e => e.id === id);
+  if (!target) return null;
+
+  const result = updateEvent(id, {
+    pendingChange: changes,
+    approvalStatus: 'pending_edit',
+    approverType: approval.approverType,
+    approverMemberId: approval.approverMemberId,
+    approverPolicyTagId: approval.approverPolicyTagId,
+    approvalPolicyName: approval.policyName,
+    submittedBy,
+    submittedByEmail,
+  }, submittedBy);
+  logAuditEvent('EVENT_EDIT_SUBMITTED', submittedBy, `Submitted an edit to event "${target.title}" for approval`, submittedByEmail);
+  return result;
+}
+
+/** Approve a pending event creation or edit. For a pending edit, merges the staged
+ *  pendingChange into the record; for a pending creation, simply marks it approved. */
+export function approveEvent(id: string, actorName: string): EventItem | null {
+  const events = getEvents();
+  const target = events.find(e => e.id === id);
+  if (!target) return null;
+
+  const isEdit = target.approvalStatus === 'pending_edit';
+  const result = updateEvent(id, {
+    ...(isEdit ? target.pendingChange : {}),
+    approvalStatus: 'approved',
+    pendingChange: undefined,
+    decidedBy: actorName,
+    decidedAt: new Date().toISOString(),
+  }, actorName);
+  logAuditEvent('EVENT_APPROVED', actorName, `Approved ${isEdit ? 'an edit to' : 'the creation of'} event "${target.title}"`);
+  return result;
+}
+
+/** Reject a pending event creation or edit. A rejected creation is marked
+ *  'rejected' (kept for audit, hidden from general view). A rejected edit simply
+ *  discards the staged pendingChange — the original approved event stands. */
+export function rejectEvent(id: string, actorName: string, reason?: string): EventItem | null {
+  const events = getEvents();
+  const target = events.find(e => e.id === id);
+  if (!target) return null;
+
+  const isEdit = target.approvalStatus === 'pending_edit';
+  const result = updateEvent(id, {
+    approvalStatus: isEdit ? 'approved' : 'rejected',
+    pendingChange: undefined,
+    decidedBy: actorName,
+    decidedAt: new Date().toISOString(),
+    rejectionReason: reason,
+  }, actorName);
+  logAuditEvent('EVENT_REJECTED', actorName, `Rejected ${isEdit ? 'an edit to' : 'the creation of'} event "${target.title}"${reason ? `: ${reason}` : ''}`);
+  return result;
 }
 
 /**

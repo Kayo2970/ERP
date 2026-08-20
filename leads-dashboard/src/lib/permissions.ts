@@ -12,7 +12,7 @@
  * There is no session-scoped "current user" object here; every function takes the
  * user explicitly so it works the same in pages, modals, and background sync code.
  */
-import { Member, TaskItem, RatingItem, ReimbursementItem, GroupPolicy, getMembers, getGroupPolicies, canViewTask } from './local-data';
+import { Member, TaskItem, RatingItem, ReimbursementItem, GroupPolicy, EventItem, getMembers, getGroupPolicies, canViewTask } from './local-data';
 
 export type SessionUser = {
   id?: string;
@@ -79,14 +79,23 @@ function resolveMember(user: SessionUser): Member | undefined {
 /**
  * Group Policy Management — dynamic, Super User-managed access control.
  *
- * A fixed catalog of grantable capabilities. Every capability key here maps
- * 1:1 to an existing `can*` check below via `hasCapability()`, so a Group
- * Policy tag granting e.g. "MANAGE_TASKS_EVENTS" has the exact same effect
- * as the hardcoded tier/role rules already covering that action — it's an
- * additional grant path, never a replacement for the existing rules.
+ * A fixed catalog of grantable capabilities, split at resource+action grain
+ * (Events and Tasks each get CREATE/EDIT/DELETE/VIEW_ALL) so a policy can grant
+ * exactly one slice of access — e.g. "create events" without also granting
+ * "delete events" or "view everyone's events." Every capability key here maps
+ * to an existing `can*` check below via `hasCapability()`, so a Group Policy
+ * grant has the exact same effect as the hardcoded tier/role rules already
+ * covering that action — it's an additional grant path, never a replacement.
  */
 export const CAPABILITY_CATALOG: { key: string; label: string; description: string }[] = [
-  { key: 'MANAGE_TASKS_EVENTS', label: 'Manage Tasks & Events', description: 'Create, edit, and delete tasks and events.' },
+  { key: 'EVENTS_CREATE', label: 'Create Events', description: 'Create new events and their sub-committees.' },
+  { key: 'EVENTS_EDIT', label: 'Edit Events', description: "Edit any existing event's details." },
+  { key: 'EVENTS_DELETE', label: 'Delete Events', description: 'Delete any event.' },
+  { key: 'EVENTS_VIEW_ALL', label: 'View All Events', description: 'See every event, not just ones created by or listing this person.' },
+  { key: 'TASKS_CREATE', label: 'Create Tasks', description: 'Assign new tasks to individuals or committees.' },
+  { key: 'TASKS_EDIT', label: 'Edit Tasks', description: 'Edit any existing task.' },
+  { key: 'TASKS_DELETE', label: 'Delete Tasks', description: 'Delete any task.' },
+  { key: 'TASKS_VIEW_ALL', label: 'View All Tasks', description: "See every task, not just this person's own or their department's." },
   { key: 'EDIT_DIRECTORY', label: 'Edit Member Directory', description: 'Add, edit, remove, and bulk-manage member records.' },
   { key: 'VIEW_FULL_DIRECTORY', label: 'View Full Directory', description: 'See the entire member roster, not just their own profile.' },
   { key: 'BUILD_FORMS', label: 'Build Public Forms', description: 'Create and edit public-facing forms.' },
@@ -120,6 +129,57 @@ export function hasCapability(user: SessionUser, capability: string): boolean {
   if (!member) return false;
   const policies = getGroupPolicies().filter(p => p.enabled !== false);
   return policies.some(p => p.capabilities?.includes(capability) && memberMatchesPolicy(member, p));
+}
+
+export interface ApprovalRequirement {
+  requiresApproval: boolean;
+  approverType?: GroupPolicy['approverType'];
+  approverMemberId?: string;
+  approverPolicyTagId?: string;
+  approverName?: string; // human-readable, for the "submitted for approval from X" toast
+  policyName?: string;
+}
+
+function resolveApproverName(policy: GroupPolicy): string {
+  if (policy.approverType === 'SPECIFIC_MEMBER' && policy.approverMemberId) {
+    return getMembers().find(m => m.id === policy.approverMemberId)?.name || 'the designated approver';
+  }
+  if (policy.approverType === 'POLICY_TAG' && policy.approverPolicyTagId) {
+    const tagPolicy = getGroupPolicies().find(p => p.id === policy.approverPolicyTagId);
+    return tagPolicy ? `anyone holding "${tagPolicy.name}"` : 'the designated approver';
+  }
+  return 'the Center Head';
+}
+
+/**
+ * Whether `user` acting under `capability` needs sign-off before their action takes
+ * effect, and who from. `builtInGranted` is whether the user already has this
+ * capability through a hardcoded tier/role rule (in which case approval never
+ * applies — approval only ever gates access that came SOLELY from a policy tag).
+ * If the user holds the capability through multiple matching policies and at least
+ * one of them doesn't require approval, that non-approval grant wins (the more
+ * permissive path is used) — approval is only imposed when EVERY grant path demands it.
+ */
+export function getApprovalRequirement(user: SessionUser, capability: string, builtInGranted: boolean): ApprovalRequirement {
+  if (builtInGranted || !user) return { requiresApproval: false };
+  const member = resolveMember(user);
+  if (!member) return { requiresApproval: false };
+
+  const policies = getGroupPolicies().filter(
+    p => p.enabled !== false && p.capabilities?.includes(capability) && memberMatchesPolicy(member, p)
+  );
+  if (policies.length === 0) return { requiresApproval: false };
+  if (policies.some(p => !p.requiresApproval)) return { requiresApproval: false };
+
+  const policy = policies[0];
+  return {
+    requiresApproval: true,
+    approverType: policy.approverType || 'CENTER_HEAD',
+    approverMemberId: policy.approverMemberId,
+    approverPolicyTagId: policy.approverPolicyTagId,
+    approverName: resolveApproverName(policy),
+    policyName: policy.name,
+  };
 }
 
 /** Sector Head first-stage approval permission. */
@@ -172,18 +232,105 @@ export function canViewReimbursement(claim: ReimbursementItem, user: SessionUser
   return false;
 }
 
-/** Tasks/events creation & management — leadership, Core Committee, and any Head (incl. tier-3 Heads). */
-export function canManageTasksAndEvents(user: SessionUser): boolean {
-  return isBaseLeadership(user) || isCoreCommitteeTier(user) || isHeadRole(user) || hasCapability(user, 'MANAGE_TASKS_EVENTS');
+/** Event creation — leadership, Core Committee, any Head, or an EVENTS_CREATE grant. */
+export function canCreateEvent(user: SessionUser): boolean {
+  return isBaseLeadership(user) || isCoreCommitteeTier(user) || isHeadRole(user) || hasCapability(user, 'EVENTS_CREATE');
+}
+
+/** Event editing — same baseline as creation, or an EVENTS_EDIT grant. */
+export function canEditEvent(user: SessionUser): boolean {
+  return isBaseLeadership(user) || isCoreCommitteeTier(user) || isHeadRole(user) || hasCapability(user, 'EVENTS_EDIT');
+}
+
+/** Event deletion — base leadership only by default, or an EVENTS_DELETE grant. */
+export function canDeleteEvent(user: SessionUser): boolean {
+  return isBaseLeadership(user) || hasCapability(user, 'EVENTS_DELETE');
+}
+
+/** Umbrella check for "can this user manage events at all" — gates the events UI's
+ *  create button and per-row edit/delete affordances the same way the old single
+ *  canManageTasksAndEvents() did, now backed by the finer create/edit/delete checks. */
+export function canManageEvents(user: SessionUser): boolean {
+  return canCreateEvent(user) || canEditEvent(user) || canDeleteEvent(user);
+}
+
+/**
+ * Per-event visibility. The DEFAULT is unchanged from before this feature existed —
+ * every member sees every event — UNLESS the Super User has explicitly created a
+ * Group Policy targeting this member with `eventVisibilityScope: 'OWN_ONLY'`, in
+ * which case they only see events they created or are listed on a committee for.
+ * This is deliberately restrictive-by-opt-in only: nothing narrows for anyone until
+ * a policy is built for them, so existing behavior never regresses on its own.
+ */
+export function canViewEvent(event: EventItem, user: SessionUser): boolean {
+  if (!user) return false;
+  if (isBaseLeadership(user) || isHeadRole(user) || hasCapability(user, 'EVENTS_VIEW_ALL')) return true;
+
+  const member = resolveMember(user);
+  if (!member) return true; // fail-open: an unresolvable session shouldn't lose access it always had
+
+  const policies = getGroupPolicies().filter(p => p.enabled !== false && memberMatchesPolicy(member, p));
+  const restricting = policies.find(p => p.eventVisibilityScope === 'OWN_ONLY');
+  if (!restricting) return true; // default: unrestricted, exactly as before this feature
+
+  if (event.createdBy && (event.createdBy === user.name || event.createdBy === user.email)) return true;
+  return (event.committees || []).some(c => (c.memberIds || []).includes(member.id));
+}
+
+/** Whether `user` acting under `action` (create/edit) needs approval, and from whom. */
+export function getEventApprovalRequirement(user: SessionUser, action: 'CREATE' | 'EDIT'): ApprovalRequirement {
+  const capability = action === 'CREATE' ? 'EVENTS_CREATE' : 'EVENTS_EDIT';
+  const builtIn = isBaseLeadership(user) || isCoreCommitteeTier(user) || isHeadRole(user);
+  return getApprovalRequirement(user, capability, builtIn);
+}
+
+/** Whether `user` is the resolved approver for a specific pending event (create or edit). */
+export function canApprovePendingEvent(event: EventItem, user: SessionUser): boolean {
+  if (!user) return false;
+  if (user.tier === 1) return true;
+  if (event.approvalStatus !== 'pending_create' && event.approvalStatus !== 'pending_edit') return false;
+
+  const member = resolveMember(user);
+  if (!member) return false;
+
+  if (event.approverType === 'SPECIFIC_MEMBER') return member.id === event.approverMemberId;
+  if (event.approverType === 'POLICY_TAG' && event.approverPolicyTagId) {
+    const tagPolicy = getGroupPolicies().find(p => p.id === event.approverPolicyTagId);
+    return !!tagPolicy && memberMatchesPolicy(member, tagPolicy);
+  }
+  return isSectorHead(user); // CENTER_HEAD (default)
+}
+
+/** Task creation — leadership, Core Committee, any Head, or a TASKS_CREATE grant. */
+export function canCreateTask(user: SessionUser): boolean {
+  return isBaseLeadership(user) || isCoreCommitteeTier(user) || isHeadRole(user) || hasCapability(user, 'TASKS_CREATE');
+}
+
+/** Task editing — same baseline as creation, or a TASKS_EDIT grant. */
+export function canEditTask(user: SessionUser): boolean {
+  return isBaseLeadership(user) || isCoreCommitteeTier(user) || isHeadRole(user) || hasCapability(user, 'TASKS_EDIT');
+}
+
+/** Task deletion — base leadership only by default, or a TASKS_DELETE grant. */
+export function canDeleteTask(user: SessionUser): boolean {
+  return isBaseLeadership(user) || hasCapability(user, 'TASKS_DELETE');
+}
+
+/** Umbrella check replacing the old canManageTasksAndEvents() for the Tasks page. */
+export function canManageTasks(user: SessionUser): boolean {
+  return canCreateTask(user) || canEditTask(user) || canDeleteTask(user);
 }
 
 /**
  * Extended task visibility: wraps the existing `canViewTask` (individual assignee /
  * event-committee membership) and adds department-scoped visibility for Heads, so a
  * Head sees every task assigned to a member of their own department, not just tasks
- * they personally own or committees they sit on.
+ * they personally own or committees they sit on. A TASKS_VIEW_ALL grant sees every
+ * task outright — purely additive, since Tasks already default to "own only" for
+ * everyone without one of these grants.
  */
 export function canViewTaskExtended(task: TaskItem, user: SessionUser): boolean {
+  if (hasCapability(user, 'TASKS_VIEW_ALL')) return true;
   if (canViewTask(task as any, user as any)) return true;
   if (!user || !isHeadRole(user)) return false;
 

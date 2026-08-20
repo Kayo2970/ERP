@@ -12,13 +12,17 @@ import {
   Trash2,
   CheckCircle2,
   ShieldAlert,
+  ShieldCheck,
   ArrowRight,
   Sparkles,
   Download,
-  Upload
+  Upload,
+  Clock,
+  Check,
+  Ban
 } from 'lucide-react';
-import { getEvents, addEvent, updateEvent, deleteEvent, getTasks, getEffectiveEventStatus, EventItem, TaskItem } from '@/lib/local-data';
-import { canManageTasksAndEvents } from '@/lib/permissions';
+import { getEvents, addEvent, updateEvent, deleteEvent, approveEvent, rejectEvent, submitEventEdit, getTasks, getEffectiveEventStatus, EventItem, TaskItem } from '@/lib/local-data';
+import { canCreateEvent, canEditEvent, canDeleteEvent, canManageEvents, canViewEvent, canApprovePendingEvent, getEventApprovalRequirement } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -31,6 +35,8 @@ export default function EventsPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
   const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
+  const [rejectingEventId, setRejectingEventId] = useState<string | null>(null);
+  const [rejectionReasonInput, setRejectionReasonInput] = useState('');
 
   // Form State
   const [title, setTitle] = useState('');
@@ -223,18 +229,30 @@ export default function EventsPage() {
     }
 
     if (editingEvent) {
-      updateEvent(editingEvent.id, {
+      const changes = {
         title: title.trim(),
         description: description.trim(),
         startDate,
         endDate,
         location: location.trim(),
         status,
-      }, user?.name || 'User');
-      triggerSuccess('Event details updated successfully.');
+      };
+      const approval = getEventApprovalRequirement(user, 'EDIT');
+      if (approval.requiresApproval) {
+        submitEventEdit(editingEvent.id, changes, user?.name || 'User', user?.email || '', {
+          approverType: approval.approverType,
+          approverMemberId: approval.approverMemberId,
+          approverPolicyTagId: approval.approverPolicyTagId,
+          policyName: approval.policyName,
+        });
+        triggerSuccess(`Edit submitted for approval from ${approval.approverName}. It will apply once approved.`);
+      } else {
+        updateEvent(editingEvent.id, changes, user?.name || 'User');
+        triggerSuccess('Event details updated successfully.');
+      }
       setEditingEvent(null);
     } else {
-      addEvent({
+      const newEventBase = {
         title: title.trim(),
         description: description.trim(),
         startDate,
@@ -247,12 +265,43 @@ export default function EventsPage() {
           { id: 'c_' + Date.now() + '_2', name: 'Technical & AV Committee', memberIds: [] },
           { id: 'c_' + Date.now() + '_3', name: 'Design & Media Committee', memberIds: [] }
         ]
-      });
-      triggerSuccess('New event created with its own directory and sub-committees.');
+      };
+      const approval = getEventApprovalRequirement(user, 'CREATE');
+      if (approval.requiresApproval) {
+        addEvent({
+          ...newEventBase,
+          approvalStatus: 'pending_create',
+          approverType: approval.approverType,
+          approverMemberId: approval.approverMemberId,
+          approverPolicyTagId: approval.approverPolicyTagId,
+          approvalPolicyName: approval.policyName,
+          submittedBy: user?.name,
+          submittedByEmail: user?.email,
+        });
+        triggerSuccess(`Event submitted for approval from ${approval.approverName}. It will go live once approved.`);
+      } else {
+        addEvent(newEventBase);
+        triggerSuccess('New event created with its own directory and sub-committees.');
+      }
       setIsCreateModalOpen(false);
     }
 
     setEvents(getEvents());
+  };
+
+  const handleApproveEvent = (id: string) => {
+    approveEvent(id, user?.name || 'User');
+    setEvents(getEvents());
+    triggerSuccess('Approved. The change is now live.');
+  };
+
+  const handleConfirmReject = () => {
+    if (!rejectingEventId) return;
+    rejectEvent(rejectingEventId, user?.name || 'User', rejectionReasonInput || undefined);
+    setEvents(getEvents());
+    setRejectingEventId(null);
+    setRejectionReasonInput('');
+    triggerSuccess('Rejected.');
   };
 
   const handleConfirmDelete = () => {
@@ -263,7 +312,8 @@ export default function EventsPage() {
     triggerSuccess('Event removed from system.');
   };
 
-  const canManage = canManageTasksAndEvents(user);
+  const canManage = canManageEvents(user);
+  const canCreate = canCreateEvent(user);
 
   const getStatusBadge = (eventStatus: EventItem['status']) => {
     switch (eventStatus) {
@@ -278,13 +328,28 @@ export default function EventsPage() {
     }
   };
 
+  // Visibility: a pending/rejected submission is only shown to its submitter, its
+  // resolved approver, and the Super User — everyone else sees nothing of it until
+  // it's approved. Once approved (or for events created before this feature, which
+  // carry no approvalStatus at all), the normal own/listed-vs-all rule from
+  // canViewEvent applies.
+  const canSeeApprovalMeta = (event: EventItem) =>
+    user?.tier === 1 || event.submittedByEmail === user?.email || canApprovePendingEvent(event, user);
+
+  const visibleEvents = events.filter(event => {
+    if (event.approvalStatus === 'pending_create' || event.approvalStatus === 'rejected') {
+      return canSeeApprovalMeta(event);
+    }
+    return canViewEvent(event, user);
+  });
+
   // Upcoming/active events first (soonest start date first), then events whose end
   // date has already passed — those sort most-recently-ended first, and their
   // status badge shows "completed" even if it's still stored as "planned"/"active"
   // (nothing ever auto-transitioned it before), so the grid reads as a real
   // upcoming-vs-past view instead of an arbitrary jumble.
   const statusRank = (s: EventItem['status']) => (s === 'archived' ? 2 : s === 'completed' ? 1 : 0);
-  const sortedEvents = [...events].sort((a, b) => {
+  const sortedEvents = [...visibleEvents].sort((a, b) => {
     const aStatus = getEffectiveEventStatus(a);
     const bStatus = getEffectiveEventStatus(b);
     const rankDiff = statusRank(aStatus) - statusRank(bStatus);
@@ -345,25 +410,27 @@ export default function EventsPage() {
               className="hidden"
             />
 
-            <button
-              onClick={handleOpenCreate}
-              className="flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer"
-            >
-              <Plus className="h-4 w-4" />
-              Create New Event
-            </button>
+            {canCreate && (
+              <button
+                onClick={handleOpenCreate}
+                className="flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer"
+              >
+                <Plus className="h-4 w-4" />
+                Create New Event
+              </button>
+            )}
           </div>
         )}
       </div>
 
       {/* Grid of Events Cards */}
-      {events.length === 0 ? (
+      {visibleEvents.length === 0 ? (
         <EmptyState
           icon={Calendar}
           title="No events scheduled"
           description="Create your first symposium, workshop, or conference milestone."
-          actionLabel={canManage ? "Create Event" : undefined}
-          onAction={canManage ? handleOpenCreate : undefined}
+          actionLabel={canCreate ? "Create Event" : undefined}
+          onAction={canCreate ? handleOpenCreate : undefined}
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -388,7 +455,44 @@ export default function EventsPage() {
                       {(event.committees || []).length} Committees
                     </span>
                   </div>
-                  
+
+                  {(event.approvalStatus === 'pending_create' || event.approvalStatus === 'pending_edit') && canSeeApprovalMeta(event) && (
+                    <div className="flex items-center justify-between gap-2 p-2.5 bg-warning/10 border border-warning/25 rounded-xl text-[11px]">
+                      <div className="flex items-center gap-1.5 text-warning font-semibold">
+                        <Clock className="h-3.5 w-3.5 shrink-0" />
+                        <span>
+                          {event.approvalStatus === 'pending_edit' ? 'Edit awaiting approval' : 'Awaiting approval'}
+                          {event.submittedBy ? ` from ${event.submittedBy === user?.name ? 'you' : event.submittedBy}` : ''}
+                        </span>
+                      </div>
+                      {canApprovePendingEvent(event, user) && (
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => handleApproveEvent(event.id)}
+                            className="p-1 hover:bg-success/15 rounded-md text-success cursor-pointer"
+                            title="Approve"
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setRejectingEventId(event.id)}
+                            className="p-1 hover:bg-danger/15 rounded-md text-danger cursor-pointer"
+                            title="Reject"
+                          >
+                            <Ban className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {event.approvalStatus === 'rejected' && canSeeApprovalMeta(event) && (
+                    <div className="flex items-center gap-1.5 p-2.5 bg-danger/10 border border-danger/25 rounded-xl text-[11px] text-danger font-semibold">
+                      <Ban className="h-3.5 w-3.5 shrink-0" />
+                      <span>Rejected by {event.decidedBy || 'approver'}{event.rejectionReason ? `: ${event.rejectionReason}` : ''}</span>
+                    </div>
+                  )}
+
                   <div className="space-y-1.5">
                     <Link 
                       href={`/dashboard/events/${event.id}`}
@@ -424,22 +528,26 @@ export default function EventsPage() {
                     <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
                   </Link>
                   
-                  {canManage && (
+                  {(canEditEvent(user) || canDeleteEvent(user)) && (
                     <div className="flex items-center gap-1">
-                      <button 
-                        onClick={() => handleOpenEdit(event)}
-                        className="p-1.5 hover:bg-theme-border/30 rounded-lg transition-all text-theme-text-secondary hover:text-accent cursor-pointer"
-                        title="Edit Event Settings"
-                      >
-                        <Edit2 className="h-3.5 w-3.5" />
-                      </button>
-                      <button 
-                        onClick={() => setDeletingEventId(event.id)}
-                        className="p-1.5 hover:bg-danger/10 rounded-lg transition-all text-danger cursor-pointer"
-                        title="Delete Event"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      {canEditEvent(user) && (
+                        <button
+                          onClick={() => handleOpenEdit(event)}
+                          className="p-1.5 hover:bg-theme-border/30 rounded-lg transition-all text-theme-text-secondary hover:text-accent cursor-pointer"
+                          title="Edit Event Settings"
+                        >
+                          <Edit2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {canDeleteEvent(user) && (
+                        <button
+                          onClick={() => setDeletingEventId(event.id)}
+                          className="p-1.5 hover:bg-danger/10 rounded-lg transition-all text-danger cursor-pointer"
+                          title="Delete Event"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -569,6 +677,42 @@ export default function EventsPage() {
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeletingEventId(null)}
       />
+
+      {/* Reject Pending Approval Modal */}
+      {rejectingEventId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="glass-panel w-full max-w-md rounded-3xl p-6 flex flex-col space-y-4 relative border border-white/15 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-theme-text-primary flex items-center gap-2">
+                <Ban className="h-4.5 w-4.5 text-danger" />
+                Reject Submission
+              </h2>
+              <button
+                onClick={() => { setRejectingEventId(null); setRejectionReasonInput(''); }}
+                className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-1.5 text-xs">
+              <label className="block font-medium text-theme-text-secondary">Reason (optional)</label>
+              <textarea
+                value={rejectionReasonInput}
+                onChange={(e) => setRejectionReasonInput(e.target.value)}
+                rows={3}
+                placeholder="Let the submitter know why this was rejected..."
+                className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent resize-none"
+              />
+            </div>
+            <button
+              onClick={handleConfirmReject}
+              className="w-full py-3 bg-danger hover:bg-danger/90 text-white font-semibold text-xs rounded-xl transition-all shadow-md cursor-pointer"
+            >
+              Confirm Rejection
+            </button>
+          </div>
+        </div>
+      )}
 
     </div>
   );

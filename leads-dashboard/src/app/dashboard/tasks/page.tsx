@@ -31,7 +31,7 @@ import {
   EventItem,
   Member
 } from '@/lib/local-data';
-import { canViewTaskExtended, canManageTasksAndEvents } from '@/lib/permissions';
+import { canViewTaskExtended, canManageTasks } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -259,7 +259,7 @@ export default function TasksPage() {
 
   // Filter tasks based on shared permission helper
   const displayedTasks = tasks.filter(task => canViewTaskExtended(task, user));
-  const canManage = canManageTasksAndEvents(user);
+  const canManage = canManageTasks(user);
 
   const selectedAssigneeMember = members.find(m => m.id === selectedAssigneeId);
   const filteredAssignees = members.filter(m => {
