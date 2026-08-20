@@ -34,6 +34,7 @@ import {
   deleteMember,
   bulkUpdateMembers,
   bulkDeleteMembers,
+  logAuditEvent,
   Member,
   MemberDivision
 } from '@/lib/local-data';
@@ -93,6 +94,7 @@ export default function DirectoryPage() {
   const [editDepartment, setEditDepartment] = useState('');
   const [editProgram, setEditProgram] = useState('');
   const [editBatch, setEditBatch] = useState('');
+  const [editTierOverride, setEditTierOverride] = useState<number>(6);
 
   useEffect(() => {
     const refreshData = () => {
@@ -128,6 +130,16 @@ export default function DirectoryPage() {
     setSuccessMsg('');
     setTimeout(() => setErrorMsg(''), 4000);
   };
+
+  const TIER_LABELS = [
+    { tier: 1, label: 'Super User' },
+    { tier: 2, label: 'Executive Leadership' },
+    { tier: 3, label: 'Senior Leadership / Head of Events' },
+    { tier: 4, label: 'Advisory Board' },
+    { tier: 5, label: 'Core Committee' },
+    { tier: 6, label: 'Training Associate' },
+    { tier: 7, label: 'Alumni' },
+  ];
 
   const getTierForDivision = (div: MemberDivision, currentTier?: number): number => {
     if (div === 'Advisory Board') return currentTier && currentTier <= 4 ? currentTier : 4;
@@ -181,6 +193,7 @@ export default function DirectoryPage() {
     setEditDepartment(member.department || '');
     setEditProgram(member.program || '');
     setEditBatch(member.batch || '');
+    setEditTierOverride(member.tier || 6);
   };
 
   const handleUpdateMember = (e: React.FormEvent) => {
@@ -196,18 +209,32 @@ export default function DirectoryPage() {
       return;
     }
 
-    const calculatedTier = getTierForDivision(editDivision, editingMember.tier);
+    // Only the Super User can hand-set an exact access tier, independent of
+    // division — everyone else's tier stays auto-derived from division, same
+    // as before this control existed.
+    const isSuperUser = user?.tier === 1;
+    const finalTier = isSuperUser ? editTierOverride : getTierForDivision(editDivision, editingMember.tier);
+    const tierChanged = isSuperUser && finalTier !== editingMember.tier;
 
     updateMember(editingMember.id, {
       name: editName.trim(),
       email: editEmail.toLowerCase().trim(),
       role: editRole.trim() || editDivision,
-      tier: calculatedTier,
+      tier: finalTier,
       division: editDivision,
       department: editDepartment.trim() || undefined,
       program: editProgram.trim() || undefined,
       batch: editDivision === 'Alumni' ? editBatch.trim() : undefined
     }, user?.name || 'Admin');
+
+    if (tierChanged) {
+      logAuditEvent(
+        'MEMBER_ACCESS_LEVEL_CHANGED',
+        user?.name || 'Admin',
+        `Changed ${editName.trim()}'s access tier from ${editingMember.tier} to ${finalTier}`,
+        user?.email
+      );
+    }
 
     setEditingMember(null);
     setMembers(getMembers());
@@ -1119,6 +1146,27 @@ export default function DirectoryPage() {
                   />
                 </div>
               </div>
+
+              {user?.tier === 1 && (
+                <div className="space-y-1.5 p-3 bg-warning/5 border border-warning/20 rounded-xl">
+                  <label className="flex items-center gap-1.5 font-medium text-warning">
+                    <ShieldAlert className="h-3.5 w-3.5" />
+                    Access Tier (Super User Override)
+                  </label>
+                  <select
+                    value={editTierOverride}
+                    onChange={(e) => setEditTierOverride(parseInt(e.target.value, 10))}
+                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-warning/30 rounded-xl text-theme-text-primary focus:outline-none focus:border-warning"
+                  >
+                    {TIER_LABELS.map(({ tier, label }) => (
+                      <option key={tier} value={tier}>Tier {tier} — {label}</option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-theme-text-secondary">
+                    Overrides the tier this member's division would normally assign. Takes effect immediately across every module — tasks, events, reimbursement approvals, and any Group Policy targeting by tier.
+                  </p>
+                </div>
+              )}
 
               {editDivision === 'Alumni' && (
                 <div className="space-y-1.5">
