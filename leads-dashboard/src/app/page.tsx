@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ShieldAlert, LogIn, Mail, Lock, Eye, EyeOff, KeyRound, CheckCircle2, Clock, ArrowLeft, Send } from 'lucide-react';
 import { logAuditEvent, requestPasswordReset, submitPasswordReset } from '@/lib/local-data';
+import { TermsModal } from '@/components/terms-modal';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,6 +15,7 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [themeLoaded, setThemeLoaded] = useState(false);
+  const [isTermsOpen, setIsTermsOpen] = useState(false);
 
   // Forgot Password Modal state
   const [showForgotModal, setShowForgotModal] = useState(false);
@@ -457,10 +459,25 @@ export default function LoginPage() {
       )}
 
       {/* Footer Info */}
-      <footer className="mt-6 text-center text-[11px] text-theme-text-secondary space-y-0.5">
-        <p>© 2026 LEADS Next Gen Centre, MSRUAS.</p>
-        <p>Private Internal System · Authorised Access Only</p>
+      <footer className="mt-6 text-center text-[11px] text-theme-text-secondary space-y-1 max-w-lg px-4">
+        <p>
+          By visiting or using this portal, you agree to our{' '}
+          <button
+            type="button"
+            onClick={() => setIsTermsOpen(true)}
+            className="font-semibold text-accent underline hover:text-primary-light transition-colors cursor-pointer"
+          >
+            Terms & Conditions
+          </button>.
+        </p>
+        <p className="text-[10px]">
+          All Intellectual Property, Copyrights & Development Licensing belong exclusively to <strong>Kayomarz Pavri</strong>.
+        </p>
+        <p className="text-[10px] opacity-75">&copy; 2026 LEADS Next Gen Centre &middot; MSRUAS Internal Operations Portal</p>
       </footer>
+
+      {/* Terms & Conditions Modal */}
+      <TermsModal isOpen={isTermsOpen} onClose={() => setIsTermsOpen(false)} />
     </div>
   );
 }
