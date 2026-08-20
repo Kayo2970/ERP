@@ -33,6 +33,7 @@ export interface EventItem {
   endDate: string;
   status: 'planned' | 'active' | 'completed' | 'archived';
   location?: string;
+  campus?: 'GG Campus' | 'RTC Campus' | 'Both Campuses';
   committees: EventCommittee[];
   createdBy?: string;
   // Group Policy approval workflow — set only when the creator/editor's grant came
@@ -57,6 +58,7 @@ export interface TaskItem {
   title: string;
   event?: string;
   eventId?: string;
+  eventCampus?: 'GG Campus' | 'RTC Campus' | 'Both Campuses';
   eventCommitteeId?: string;
   eventCommitteeName?: string;
   assignee: string;
@@ -194,6 +196,10 @@ export interface DesignSubmissionItem {
   assignedProofreaderName?: string;
   assignedProofreaderEmail?: string;
   review?: DesignProofreadReview;
+  styleStatus?: 'Pending' | 'Style Approved' | 'Style Rejected';
+  styleFeedback?: string;
+  styleDecidedBy?: string;
+  styleDecidedAt?: string;
   eventId?: string;
   eventName?: string;
   isSample?: boolean;
@@ -293,7 +299,7 @@ const initialMembersRaw: Member[] = [
   { id: 'm7', name: 'Dr. Hari Krishna S', email: 'hari.krishna@msruas.ac.in', role: 'Faculty Advisor', tier: 4, division: 'Advisory Board', department: 'Faculty Advisory' },
   { id: 'm8', name: 'Keerthan J', email: 'keerthan.j@msruas.ac.in', role: 'Junior Coordinator', tier: 6, division: 'Training Associate', department: 'Operations and Logistics' },
   { id: 'm9', name: 'Dr. Kuldeep Kumar Raina', email: 'kuldeep.raina@msruas.ac.in', role: 'Vice Chancellor / Advisory Patron', tier: 2, division: 'Advisory Board', department: 'Faculty Oversight' },
-  { id: 'm10', name: 'Dr. Pallabi Mund', email: 'pallabi.mund@msruas.ac.in', role: 'Associate Advisor', tier: 3, division: 'Advisory Board', department: 'Faculty Advisory' },
+  { id: 'm10', name: 'Dr. Pallabi Mund', email: 'pallabi.mund@msruas.ac.in', role: 'Head of Events GG Campus', tier: 3, division: 'Advisory Board', department: 'Events' },
   { id: 'm11', name: 'Dr. Ajay R', email: 'ajay.r@msruas.ac.in', role: 'Faculty Advisor', tier: 3, division: 'Advisory Board', department: 'Faculty Advisory' },
   { id: 'm12', name: 'Ms. Sujata Bijwe', email: 'sujata.bijwe@msruas.ac.in', role: 'Faculty Advisor', tier: 3, division: 'Advisory Board', department: 'Faculty Advisory' },
   { id: 'm13', name: 'Abhijit Arya', email: 'abhijit.arya@msruas.ac.in', role: 'General Secretary', tier: 5, division: 'Core Committee', department: 'Secretariat' },
@@ -934,6 +940,55 @@ export function saveRatings(ratings: RatingItem[]): void {
   localStorage.setItem('leads_ratings', JSON.stringify(ratings));
 }
 
+function propagateCommitteeRating(task: TaskItem, parentRating: RatingItem): void {
+  const events = getEvents();
+  const event = events.find(e => e.id === task.eventId || e.title === task.event);
+  if (!event) return;
+
+  const committee = (event.committees || []).find(
+    c => c.id === task.eventCommitteeId || c.name.toLowerCase() === task.assignee.toLowerCase()
+  );
+  if (!committee || !committee.memberIds || committee.memberIds.length === 0) return;
+
+  const members = getMembers();
+  const ratings = getRatings();
+  let updated = false;
+
+  committee.memberIds.forEach(mId => {
+    const memberObj = members.find(m => m.id === mId || m.name.toLowerCase() === mId.toLowerCase());
+    if (!memberObj) return;
+
+    const alreadyRated = ratings.some(r => r.taskId === task.id && (r.targetId === memberObj.id || r.targetName.toLowerCase() === memberObj.name.toLowerCase()));
+    if (alreadyRated) return;
+
+    const studentRating: RatingItem = {
+      id: 'r_comm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      taskId: task.id,
+      taskTitle: task.title,
+      eventId: task.eventId,
+      eventName: task.event,
+      targetId: memberObj.id,
+      targetName: memberObj.name,
+      raterName: parentRating.raterName,
+      quality: parentRating.quality,
+      timeliness: parentRating.timeliness,
+      initiative: parentRating.initiative,
+      collaboration: parentRating.collaboration,
+      overallScore: parentRating.overallScore,
+      notes: `[Committee Evaluation: ${committee.name}] ${parentRating.notes || ''}`.trim(),
+      quarter: parentRating.quarter || '2026-Q3',
+      createdAt: parentRating.createdAt
+    };
+    ratings.unshift(studentRating);
+    serverPost('/api/ratings', studentRating);
+    updated = true;
+  });
+
+  if (updated) {
+    saveRatings(ratings);
+  }
+}
+
 export function addRating(rating: Omit<RatingItem, 'id' | 'createdAt'>): RatingItem {
   const ratings = getRatings();
   const newRating: RatingItem = {
@@ -948,6 +1003,11 @@ export function addRating(rating: Omit<RatingItem, 'id' | 'createdAt'>): RatingI
   // Update task with rating metadata
   if (rating.taskId) {
     updateTask(rating.taskId, { ratingScore: rating.overallScore, ratedAt: newRating.createdAt }, rating.raterName);
+
+    const task = getTasks().find(t => t.id === rating.taskId);
+    if (task && (task.assigneeType === 'committee' || task.eventCommitteeId)) {
+      propagateCommitteeRating(task, newRating);
+    }
   }
 
   logAuditEvent('RATING_SUBMITTED', rating.raterName, `Evaluated task performance (${rating.overallScore}/5.0) for ${rating.targetName} on "${rating.taskTitle}"`);
@@ -1027,11 +1087,17 @@ export function getStudentProfile(memberIdOrName: string): StudentProfileData | 
   });
 
   const allTasks = getTasks();
-  const memberTasks = allTasks.filter(t =>
-    t.assigneeId === member.id ||
-    t.assignee.toLowerCase() === member.name.toLowerCase() ||
-    (member.email && t.assigneeEmail && t.assigneeEmail.toLowerCase() === member.email.toLowerCase())
-  );
+  const memberTasks = allTasks.filter(t => {
+    if (t.assigneeId === member.id || t.assignee.toLowerCase() === member.name.toLowerCase()) return true;
+    if (member.email && t.assigneeEmail && t.assigneeEmail.toLowerCase() === member.email.toLowerCase()) return true;
+    if (t.assigneeType === 'committee' || t.eventCommitteeId) {
+      return assignedEvents.some(ae =>
+        ae.committee.id === t.eventCommitteeId ||
+        ae.committee.name.toLowerCase() === t.assignee.toLowerCase()
+      );
+    }
+    return false;
+  });
 
   const allRatings = getRatings();
   const memberRatings = allRatings.filter(r =>
@@ -1487,6 +1553,32 @@ export function updateDesignReview(
   serverPatch('/api/designs', id, current[idx]);
   logAuditEvent('DESIGN_PROOFREAD_UPDATED', reviewerName, `Updated proofread review for design "${item.title}" to ${reviewStatus}`);
   
+  return current[idx];
+}
+
+export function updateDesignStyleReview(
+  id: string,
+  styleStatus: 'Style Approved' | 'Style Rejected',
+  styleFeedback: string,
+  reviewerName: string
+): DesignSubmissionItem | null {
+  const current = getDesigns();
+  const idx = current.findIndex(d => d.id === id);
+  if (idx === -1) return null;
+
+  const item = current[idx];
+  current[idx] = {
+    ...item,
+    styleStatus,
+    styleFeedback,
+    styleDecidedBy: reviewerName,
+    styleDecidedAt: new Date().toISOString()
+  };
+
+  saveDesigns(current);
+  serverPatch('/api/designs', id, current[idx]);
+  logAuditEvent('DESIGN_STYLE_REVIEW_UPDATED', reviewerName, `Design Head updated style review for design "${item.title}" to ${styleStatus}`);
+
   return current[idx];
 }
 

@@ -28,7 +28,7 @@ import {
   EventItem,
   Member
 } from '@/lib/local-data';
-import { canViewTaskExtended, canManageTasks } from '@/lib/permissions';
+import { canViewTaskExtended, canManageTasks, canRequestTaskExtension, isHeadRole } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -261,7 +261,15 @@ export default function TasksPage() {
   const selectedAssigneeMember = members.find(m => m.id === selectedAssigneeId);
   const filteredAssignees = members.filter(m => {
     const q = assigneeQuery.toLowerCase();
-    return !q || m.name.toLowerCase().includes(q) || m.role.toLowerCase().includes(q) || m.email.toLowerCase().includes(q);
+    const matchesQuery = !q || m.name.toLowerCase().includes(q) || m.role.toLowerCase().includes(q) || m.email.toLowerCase().includes(q);
+    if (!matchesQuery) return false;
+
+    // For Department Heads (tier > 3), prioritize department members and training associates
+    if (user && isHeadRole(user) && user.tier > 3) {
+      const dept = user.department;
+      return m.tier === 6 || m.department === dept;
+    }
+    return true;
   });
 
   const handleSelectAssignee = (member: Member) => {
@@ -424,12 +432,15 @@ export default function TasksPage() {
                       >
                         Complete
                       </button>
-                      <button
-                        onClick={() => setExtensionTask(task)}
-                        className="px-2 py-1 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary font-semibold rounded-lg transition-all text-[11px] cursor-pointer"
-                      >
-                        Extend
-                      </button>
+                      {canRequestTaskExtension(task, user) && (
+                        <button
+                          onClick={() => setExtensionTask(task)}
+                          className="px-2 py-1 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary font-semibold rounded-lg transition-all text-[11px] cursor-pointer"
+                          title="Request deadline extension for self or department team member"
+                        >
+                          Extend
+                        </button>
+                      )}
                     </>
                   )}
                   {task.status === 'Completed' && (

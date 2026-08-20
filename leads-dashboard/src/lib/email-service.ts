@@ -1,5 +1,5 @@
 import nodemailer, { Transporter } from 'nodemailer';
-import { mutateCollection } from './server-db';
+import { mutateCollection, readCollection } from './server-db';
 
 export interface EmailLog {
   id: string;
@@ -7,7 +7,7 @@ export interface EmailLog {
   subject: string;
   bodyText: string;
   bodyHtml: string;
-  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM';
+  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE';
   status: 'SENT' | 'FAILED';
   sentAt: string;
 }
@@ -17,54 +17,153 @@ export interface SendEmailPayload {
   subject: string;
   bodyText: string;
   bodyHtml?: string;
-  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM';
+  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE';
 }
 
-let transporter: Transporter | null = null;
+export interface EmailSettings {
+  id: string; // 'default'
+  provider: 'gmail' | 'outlook' | 'custom' | 'local_postfix';
+  smtpHost: string;
+  smtpPort: number;
+  secure: boolean;
+  authUser: string;
+  authPass: string;
+  fromName: string;
+  fromEmail: string;
+  replyTo?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+}
 
-/**
- * The app never talks to Gmail (or any external mail API) directly — it hands
- * every message to Postfix running locally on this box, which is the thing
- * actually authenticated to relay through the org's Google Workspace account
- * (see /etc/postfix/sasl_passwd on the VPS; that credential never touches
- * this app or its env). SMTP_HOST/SMTP_PORT let a non-standard local setup
- * override the default; no auth is sent because Postfix only accepts
- * unauthenticated submission from localhost (mynetworks = 127.0.0.0/8).
- */
-function getTransporter(): Transporter {
-  if (!transporter) {
-    transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'localhost',
-      port: Number(process.env.SMTP_PORT) || 25,
-      secure: false,
-      pool: true,
-      maxConnections: 3,
-      connectionTimeout: 4000,
-      greetingTimeout: 4000,
-      socketTimeout: 8000,
-    });
+export const DEFAULT_EMAIL_SETTINGS: EmailSettings = {
+  id: 'default',
+  provider: 'gmail',
+  smtpHost: 'smtp.gmail.com',
+  smtpPort: 587,
+  secure: false,
+  authUser: process.env.ANNOUNCEMENT_FROM_EMAIL || 'leads@msruas.ac.in',
+  authPass: process.env.SMTP_PASS || '',
+  fromName: process.env.ANNOUNCEMENT_FROM_NAME || 'LEADS Next Gen Centre',
+  fromEmail: process.env.ANNOUNCEMENT_FROM_EMAIL || 'leads@msruas.ac.in',
+  replyTo: process.env.ANNOUNCEMENT_FROM_EMAIL || 'leads@msruas.ac.in',
+  updatedAt: new Date().toISOString(),
+};
+
+export async function getEmailSettings(): Promise<EmailSettings> {
+  try {
+    const list = await readCollection<EmailSettings>('emailSettings');
+    if (list && list.length > 0) {
+      return { ...DEFAULT_EMAIL_SETTINGS, ...list[0] };
+    }
+  } catch (e) {
+    console.error('[email-service] Failed to read emailSettings collection:', e);
   }
-  return transporter;
+  return DEFAULT_EMAIL_SETTINGS;
 }
 
-/**
- * Dispatch an email notification through the local mail server and persist
- * the attempt to database.json under the `emails` collection. `status`
- * reflects whether the local Postfix submission actually succeeded — this
- * function never claims 'SENT' for a message that wasn't actually handed off.
- */
+export async function updateEmailSettings(settings: Partial<EmailSettings>, actorName: string): Promise<EmailSettings> {
+  const current = await getEmailSettings();
+  const updated: EmailSettings = {
+    ...current,
+    ...settings,
+    updatedAt: new Date().toISOString(),
+    updatedBy: actorName,
+  };
+
+  await mutateCollection<EmailSettings>('emailSettings', () => [updated]);
+  return updated;
+}
+
+async function buildTransporter(): Promise<{ transporter: Transporter; settings: EmailSettings }> {
+  const settings = await getEmailSettings();
+  
+  let host = settings.smtpHost;
+  let port = settings.smtpPort;
+  let secure = settings.secure;
+  let auth: { user: string; pass: string } | undefined = undefined;
+
+  const cleanedPass = (settings.authPass || '').replace(/\s+/g, '');
+
+  if (settings.provider === 'gmail') {
+    host = 'smtp.gmail.com';
+    port = settings.smtpPort || 587;
+    if (settings.authUser && settings.authPass) {
+      auth = { user: settings.authUser.trim(), pass: cleanedPass };
+    }
+  } else if (settings.provider === 'outlook') {
+    host = 'smtp.office365.com';
+    port = settings.smtpPort || 587;
+    if (settings.authUser && settings.authPass) {
+      auth = { user: settings.authUser.trim(), pass: cleanedPass };
+    }
+  } else if (settings.provider === 'custom') {
+    host = settings.smtpHost || 'smtp.gmail.com';
+    port = settings.smtpPort || 587;
+    if (settings.authUser && settings.authPass) {
+      auth = { user: settings.authUser.trim(), pass: cleanedPass };
+    }
+  } else if (settings.provider === 'local_postfix') {
+    host = process.env.SMTP_HOST || 'localhost';
+    port = Number(process.env.SMTP_PORT) || 25;
+    secure = false;
+    auth = undefined;
+  }
+
+  const t = nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth,
+    pool: true,
+    maxConnections: 3,
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 10000,
+  });
+
+  return { transporter: t, settings };
+}
+
+export async function testEmailConnection(testRecipient: string): Promise<{ success: boolean; message: string }> {
+  try {
+    const { transporter: t, settings } = await buildTransporter();
+    await t.verify();
+    
+    const from = `${settings.fromName || 'LEADS Next Gen Centre'} <${settings.fromEmail || 'leads@msruas.ac.in'}>`;
+    await t.sendMail({
+      from,
+      to: testRecipient,
+      subject: `[LEADS Test Email] SMTP Client Verification`,
+      text: `Hello,\n\nThis is a test notification verifying that your LEADS Dashboard email client and SMTP server (${settings.provider.toUpperCase()} @ ${settings.smtpHost}) are properly configured and operational.\n\nSent at: ${new Date().toLocaleString()}`,
+      html: `<div style="font-family: sans-serif; padding: 20px; background: #0f172a; color: #f8fafc; border-radius: 12px; border: 1px solid #334155;">
+        <h3 style="color: #38bdf8; margin-top: 0;">✅ SMTP Connection & Email Client Verified</h3>
+        <p style="color: #cbd5e1;">Your LEADS Dashboard email server settings are operational.</p>
+        <p style="font-size: 12px; color: #94a3b8;"><strong>Provider:</strong> ${settings.provider.toUpperCase()} | <strong>Host:</strong> ${settings.smtpHost}:${settings.smtpPort}</p>
+        <p style="font-size: 11px; color: #64748b; margin-bottom: 0;">Timestamp: ${new Date().toLocaleString()}</p>
+      </div>`,
+    });
+
+    return { success: true, message: `SMTP verification successful! Test message delivered to ${testRecipient}.` };
+  } catch (err: any) {
+    console.error('[email-service] SMTP Connection Test Failed:', err);
+    return { success: false, message: err?.message || 'Failed to establish connection to SMTP server.' };
+  }
+}
+
 export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog> {
   const bodyHtml = payload.bodyHtml || `<p style="font-family: sans-serif; color: #1e293b; line-height: 1.6;">${payload.bodyText.replace(/\n/g, '<br/>')}</p>`;
   let status: 'SENT' | 'FAILED' = 'FAILED';
 
   try {
-    const from = `${process.env.ANNOUNCEMENT_FROM_NAME || 'LEADS Next Gen Centre'} <${process.env.ANNOUNCEMENT_FROM_EMAIL || 'leads@msruas.ac.in'}>`;
-    await getTransporter().sendMail({
+    const { transporter: t, settings } = await buildTransporter();
+    const from = `${settings.fromName || 'LEADS Next Gen Centre'} <${settings.fromEmail || 'leads@msruas.ac.in'}>`;
+    await t.sendMail({
       from,
       to: payload.to,
       subject: payload.subject,
       text: payload.bodyText,
       html: bodyHtml,
+      replyTo: settings.replyTo || settings.fromEmail,
     });
     status = 'SENT';
   } catch (err) {

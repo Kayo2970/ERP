@@ -92,6 +92,92 @@ export function isCoreCommitteeTier(user: SessionUser): boolean {
   return !!user && user.tier === getAccessLevelSettings().coreCommitteeTier;
 }
 
+/** Check if user is Centre Head (Super User tier 1, or tier <= 2 / Centre Head designation). */
+export function isCentreHead(user: SessionUser): boolean {
+  if (!user) return false;
+  if (user.tier === 1) return true;
+  const role = ((user as any)?.role || '').toLowerCase();
+  const settings = getAccessLevelSettings();
+  return user.tier <= settings.sectorHeadMaxTier || anyKeywordMatches(role, settings.sectorHeadKeywords);
+}
+
+/** Check if user holds the designation of Head of Events (or Events Head). */
+export function isHeadOfEvents(user: SessionUser): boolean {
+  if (!user) return false;
+  const role = ((user as any)?.role || '').toLowerCase();
+  return role.includes('head of event') || role.includes('head of events') || role.includes('events head');
+}
+
+/** Check if user is Events Head for GG Campus. */
+export function isEventsHeadGgCampus(user: SessionUser): boolean {
+  if (!user) return false;
+  const role = ((user as any)?.role || '').toLowerCase();
+  const committee = ((user as any)?.committee || '').toLowerCase();
+  return (role.includes('events head') && role.includes('gg')) || 
+         (role.includes('head of events') && role.includes('gg')) ||
+         (role.includes('events') && role.includes('gg campus')) ||
+         (committee.includes('gg campus') && isHeadOfEvents(user));
+}
+
+/** Check if user is Events Head for RTC Campus. */
+export function isEventsHeadRtcCampus(user: SessionUser): boolean {
+  if (!user) return false;
+  const role = ((user as any)?.role || '').toLowerCase();
+  const committee = ((user as any)?.committee || '').toLowerCase();
+  return (role.includes('events head') && role.includes('rtc')) || 
+         (role.includes('head of events') && role.includes('rtc')) ||
+         (role.includes('events') && role.includes('rtc campus')) ||
+         (committee.includes('rtc campus') && isHeadOfEvents(user));
+}
+
+/**
+ * Strict evaluation rule enforcement:
+ * ONLY TWO designations are authorized to evaluate student performance or committee deliverables:
+ * 1) Centre Head (evaluates any event across all campuses)
+ * 2) Head of Events (must match event campus: GG Events Head evaluates GG events, RTC Events Head evaluates RTC events)
+ * All other roles and designations are strictly prohibited from submitting ratings!
+ */
+export function canEvaluateEventStudent(user: SessionUser, eventCampus?: string): boolean {
+  if (!user) return false;
+
+  const centreHead = isCentreHead(user);
+  const eventsHead = isHeadOfEvents(user);
+
+  // Strictly block anyone who is neither Centre Head nor Head of Events
+  if (!centreHead && !eventsHead) {
+    return false;
+  }
+
+  // Centre Head can evaluate across all campuses
+  if (centreHead) return true;
+
+  // Head of Events must obey campus rules
+  const isGgHead = isEventsHeadGgCampus(user);
+  const isRtcHead = isEventsHeadRtcCampus(user);
+
+  if (eventCampus === 'GG Campus') {
+    if (isRtcHead) return false;
+    return isGgHead || eventsHead;
+  }
+
+  if (eventCampus === 'RTC Campus') {
+    if (isGgHead) return false;
+    return isRtcHead || eventsHead;
+  }
+
+  return eventsHead;
+}
+
+/** Check if user is a Design Head (Head role + Design department/role). */
+export function isDesignHead(user: SessionUser): boolean {
+  if (!user) return false;
+  if (user.tier <= 2) return true; // Super User and Centre Head have design review authority
+  const role = ((user as any)?.role || '').toLowerCase();
+  const dept = (user.department || resolveMember(user)?.department || '').toLowerCase();
+  const isDesign = role.includes('design') || dept.includes('design');
+  return isHeadRole(user) && isDesign;
+}
+
 /** Resolve the full Member record for a session user (persona objects are a subset of Member). */
 function resolveMember(user: SessionUser): Member | undefined {
   if (!user) return undefined;
@@ -423,7 +509,24 @@ export function canCreateAnnouncement(user: SessionUser): boolean {
  * the page's own "proofread" tab). Leadership and any Head see every submission.
  */
 export function canViewAllDesigns(user: SessionUser): boolean {
-  return isBaseLeadership(user) || isHeadRole(user) || hasCapability(user, 'VIEW_ALL_DESIGNS');
+  return isBaseLeadership(user) || isDesignHead(user) || hasCapability(user, 'VIEW_ALL_DESIGNS');
+}
+
+/** Task extension request permission: own task or a team member in department (for Heads). */
+export function canRequestTaskExtension(task: TaskItem, user: SessionUser): boolean {
+  if (!user) return false;
+  if (user.id && task.assigneeId === user.id) return true;
+  if (user.email && task.assigneeEmail?.toLowerCase() === user.email.toLowerCase()) return true;
+  if (user.name && task.assignee.toLowerCase() === user.name.toLowerCase()) return true;
+
+  if (isHeadRole(user)) {
+    const department = user.department || resolveMember(user)?.department;
+    if (!department) return false;
+    const members = getMembers();
+    const assigneeMember = members.find(m => m.id === task.assigneeId || m.name.toLowerCase() === task.assignee.toLowerCase());
+    return assigneeMember?.department === department;
+  }
+  return false;
 }
 
 /**

@@ -19,12 +19,14 @@ import {
   X,
   Send,
   Lock,
-  Download
+  Download,
+  Sparkles
 } from 'lucide-react';
 import {
   getDesigns,
   addDesign,
   updateDesignReview,
+  updateDesignStyleReview,
   deleteDesign,
   getMembers,
   getEvents,
@@ -32,7 +34,7 @@ import {
   Member,
   EventItem
 } from '@/lib/local-data';
-import { canViewAllDesigns } from '@/lib/permissions';
+import { canViewAllDesigns, isDesignHead } from '@/lib/permissions';
 
 export default function DesignPortalPage() {
   const [designs, setDesigns] = useState<DesignSubmissionItem[]>([]);
@@ -65,6 +67,20 @@ export default function DesignPortalPage() {
   // Proofread Review form state inside Inspector Modal
   const [reviewStatus, setReviewStatus] = useState<'Proofread Approved' | 'Changes Requested'>('Proofread Approved');
   const [reviewComments, setReviewComments] = useState('');
+
+  // Design Head Style Review form state inside Inspector Modal
+  const [styleStatus, setStyleStatus] = useState<'Style Approved' | 'Style Rejected'>('Style Approved');
+  const [styleFeedback, setStyleFeedback] = useState('');
+
+  const handleSaveStyleReview = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedDesign || !user) return;
+    const updated = updateDesignStyleReview(selectedDesign.id, styleStatus, styleFeedback, user.name);
+    if (updated) {
+      setSelectedDesign(updated);
+      setDesigns(getDesigns());
+    }
+  };
 
   const refreshData = () => {
     setDesigns(getDesigns());
@@ -923,6 +939,96 @@ export default function DesignPortalPage() {
                 <div className="p-3 bg-muted/20 rounded-lg text-xs text-muted-foreground flex items-center gap-2">
                   <Lock className="h-4 w-4 text-muted-foreground" />
                   Only the assigned proofreader ({selectedDesign.assignedProofreaderName || 'assigned member'}) or Tier 1–3 leadership can submit a proofread decision for this design.
+                </div>
+              )}
+            </div>
+
+            {/* Design Head Style Evaluation Section */}
+            <div className="border-t border-border pt-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold flex items-center gap-2 text-foreground">
+                  <Sparkles className="h-4 w-4 text-accent" />
+                  Design Style & Aesthetics Approval (Design Head)
+                </h3>
+                {selectedDesign.styleStatus && (
+                  <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
+                    selectedDesign.styleStatus === 'Style Approved'
+                      ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/20'
+                      : selectedDesign.styleStatus === 'Style Rejected'
+                      ? 'bg-rose-500/15 text-rose-500 border border-rose-500/20'
+                      : 'bg-amber-500/15 text-amber-500 border border-amber-500/20'
+                  }`}>
+                    {selectedDesign.styleStatus}
+                  </span>
+                )}
+              </div>
+
+              {selectedDesign.styleFeedback && (
+                <div className="bg-muted/30 p-3 rounded-lg border border-border space-y-1 text-xs">
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span className="font-semibold text-foreground">Design Head Style Notes:</span>
+                    <span className="font-mono text-[10px]">{selectedDesign.styleDecidedAt?.split('T')[0]} ({selectedDesign.styleDecidedBy})</span>
+                  </div>
+                  <p className="text-muted-foreground italic">"{selectedDesign.styleFeedback}"</p>
+                </div>
+              )}
+
+              {isDesignHead(user) ? (
+                <form onSubmit={handleSaveStyleReview} className="space-y-3 text-xs bg-accent/5 p-4 rounded-xl border border-accent/20">
+                  <p className="font-medium text-foreground">Submit Design Style Decision:</p>
+
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer font-medium">
+                      <input
+                        type="radio"
+                        name="styleStatus"
+                        checked={styleStatus === 'Style Approved'}
+                        onChange={() => setStyleStatus('Style Approved')}
+                        className="text-accent focus:ring-accent"
+                      />
+                      <span className="text-emerald-500 font-semibold flex items-center gap-1">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Approve Style
+                      </span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer font-medium">
+                      <input
+                        type="radio"
+                        name="styleStatus"
+                        checked={styleStatus === 'Style Rejected'}
+                        onChange={() => setStyleStatus('Style Rejected')}
+                        className="text-accent focus:ring-accent"
+                      />
+                      <span className="text-rose-500 font-semibold flex items-center gap-1">
+                        <AlertCircle className="h-3.5 w-3.5" /> Reject Style
+                      </span>
+                    </label>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-medium text-foreground">Style Feedback & Guidelines Compliance</label>
+                    <textarea
+                      rows={2}
+                      required
+                      placeholder="Feedback on typography, color scheme, design alignment..."
+                      value={styleFeedback}
+                      onChange={e => setStyleFeedback(e.target.value)}
+                      className="w-full bg-background border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent text-xs"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-2 rounded-lg bg-accent text-accent-foreground font-medium hover:opacity-90 text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Save Style Decision
+                  </button>
+                </form>
+              ) : (
+                <div className="p-3 bg-muted/20 rounded-lg text-xs text-muted-foreground flex items-center gap-2">
+                  <Lock className="h-4 w-4 text-muted-foreground" />
+                  Only a member with the designation of Design Head or Centre Head can approve or reject designs based on design style.
                 </div>
               )}
             </div>
