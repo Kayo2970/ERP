@@ -80,7 +80,9 @@ export interface RatingItem {
 
 export interface ReceiptFile {
   name: string;
-  dataUrl?: string;
+  dataUrl?: string; // legacy: inline base64 — new uploads use url/storageKey instead
+  url?: string; // servable path under /api/files, backed by a real file on disk
+  storageKey?: string; // path relative to data/uploads
   type?: string;
 }
 
@@ -160,7 +162,9 @@ export interface DesignSubmissionItem {
   title: string;
   description?: string;
   category: 'Poster' | 'Banner' | 'Social Media' | 'Brochure' | 'Certificates' | 'Other';
-  fileData?: string;      // Data URL / Base64 representation of file
+  fileData?: string;      // legacy: inline base64 — new uploads use fileUrl/storageKey instead
+  fileUrl?: string;       // servable path under /api/files, backed by a real file on disk
+  storageKey?: string;    // path relative to data/uploads
   fileName: string;
   fileSize: number;       // Size in bytes (must be <= 25 * 1024 * 1024)
   fileType: string;       // MIME type (e.g. image/png, application/pdf)

@@ -890,7 +890,7 @@ export default function ReimbursementsPage() {
               const activeFile = viewingReceipt.files[viewingReceipt.selectedIndex];
               if (!activeFile) return null;
 
-              const url = activeFile.dataUrl || '';
+              const url = activeFile.url || activeFile.dataUrl || '';
               const isPdf = activeFile.name.endsWith('.pdf') || activeFile.type === 'application/pdf';
 
               return (
@@ -912,7 +912,22 @@ export default function ReimbursementsPage() {
               );
             })()}
 
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+              {(() => {
+                const activeFile = viewingReceipt.files[viewingReceipt.selectedIndex];
+                const url = activeFile?.url || activeFile?.dataUrl;
+                if (!url) return null;
+                return (
+                  <a
+                    href={activeFile.url ? `${activeFile.url}?download=1` : url}
+                    download={activeFile.name}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all cursor-pointer"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Download
+                  </a>
+                );
+              })()}
               <button
                 onClick={() => setViewingReceipt(null)}
                 className="px-4 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer"

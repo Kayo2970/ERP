@@ -18,6 +18,7 @@
  */
 import fs from 'fs/promises';
 import path from 'path';
+import { deleteStoredFile, saveBase64File } from './file-storage';
 import {
   initialMembers,
   initialEvents,
@@ -147,7 +148,10 @@ function ensureMigrated(): Promise<void> {
 
 /**
  * 30-Day Storage Retention Cleanup Helper:
- * Checks design items past 30 days, marks them as expired, and purges heavy file payloads.
+ * Checks design items past 30 days, marks them as expired, and purges the stored
+ * file — both the legacy inline base64 payload (if the record predates the
+ * disk-backed storage migration) and, for newer records, the actual file on disk
+ * referenced by storageKey.
  */
 function processDesignRetention(designs: any[]): any[] {
   if (!Array.isArray(designs)) return [];
@@ -157,18 +161,112 @@ function processDesignRetention(designs: any[]): any[] {
     if (!item.expiresAt) return item;
     const expiresMs = new Date(item.expiresAt).getTime();
     if (nowMs > expiresMs) {
+      if (!item.isExpired && item.storageKey) {
+        // Best-effort, not awaited — this function stays synchronous and never
+        // blocks a read waiting on a delete that only needs to happen once.
+        deleteStoredFile(item.storageKey).catch(() => {});
+      }
       return {
         ...item,
         isExpired: true,
-        fileData: undefined, // Purge file data payload after 30 days
+        fileData: undefined, // Purge legacy inline payload after 30 days
+        fileUrl: undefined,
+        storageKey: undefined,
       };
     }
     return item;
   });
 }
 
+/**
+ * One-time, idempotent migration of any legacy inline-base64 file payloads
+ * (designs.json's fileData, reimbursements.json's receiptFiles[].dataUrl /
+ * receiptData) out to real files under data/uploads/, rewriting the JSON
+ * records to reference them via storageKey/url instead. Safe to run on every
+ * boot — a record that's already migrated has no dataUrl/fileData left to act
+ * on, so it's skipped. Cached in module scope like ensureMigrated().
+ */
+let fileMigrationPromise: Promise<void> | null = null;
+function ensureFilesMigrated(): Promise<void> {
+  if (!fileMigrationPromise) {
+    fileMigrationPromise = (async () => {
+      await migrateDesignFilesToDisk();
+      await migrateReimbursementFilesToDisk();
+    })();
+  }
+  return fileMigrationPromise;
+}
+
+async function migrateDesignFilesToDisk(): Promise<void> {
+  let designs: any[];
+  try {
+    designs = JSON.parse(await fs.readFile(collectionPath('designs'), 'utf-8'));
+  } catch {
+    return; // no file yet — nothing to migrate
+  }
+  if (!Array.isArray(designs)) return;
+
+  let changed = false;
+  for (const item of designs) {
+    if (typeof item.fileData === 'string' && item.fileData.startsWith('data:')) {
+      try {
+        const stored = await saveBase64File('designs', item.id, 0, item.fileName || 'file', item.fileData);
+        item.fileUrl = stored.url;
+        item.storageKey = stored.storageKey;
+        delete item.fileData;
+        changed = true;
+      } catch (err) {
+        console.error('[server-db] Failed to migrate design file to disk for', item.id, err);
+      }
+    }
+  }
+  if (changed) await writeCollectionFile('designs', designs);
+}
+
+async function migrateReimbursementFilesToDisk(): Promise<void> {
+  let items: any[];
+  try {
+    items = JSON.parse(await fs.readFile(collectionPath('reimbursements'), 'utf-8'));
+  } catch {
+    return;
+  }
+  if (!Array.isArray(items)) return;
+
+  let changed = false;
+  for (const item of items) {
+    const files = Array.isArray(item.receiptFiles) ? item.receiptFiles : [];
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      if (f && typeof f.dataUrl === 'string' && f.dataUrl.startsWith('data:')) {
+        try {
+          const stored = await saveBase64File('reimbursements', item.id, i, f.name || 'file', f.dataUrl);
+          f.url = stored.url;
+          f.storageKey = stored.storageKey;
+          delete f.dataUrl;
+          changed = true;
+        } catch (err) {
+          console.error('[server-db] Failed to migrate receipt file to disk for', item.id, i, err);
+        }
+      }
+    }
+    // Legacy single-file shape predating receiptFiles[] entirely.
+    if (files.length === 0 && typeof item.receiptData === 'string' && item.receiptData.startsWith('data:')) {
+      try {
+        const stored = await saveBase64File('reimbursements', item.id, 0, item.receiptUrl || 'receipt.pdf', item.receiptData);
+        item.receiptFiles = [{ name: item.receiptUrl || 'receipt.pdf', url: stored.url, storageKey: stored.storageKey }];
+        delete item.receiptData;
+        changed = true;
+      } catch (err) {
+        console.error('[server-db] Failed to migrate legacy receipt for', item.id, err);
+      }
+    }
+  }
+  if (changed) await writeCollectionFile('reimbursements', items);
+}
+
 async function readCollectionFile<T = any>(key: keyof DbSchema): Promise<T[]> {
   await ensureMigrated();
+  await ensureFilesMigrated();
   try {
     const raw = await fs.readFile(collectionPath(key), 'utf-8');
     const parsed = JSON.parse(raw);
