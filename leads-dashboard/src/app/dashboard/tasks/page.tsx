@@ -1,21 +1,22 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { 
-  Plus, 
-  X, 
-  Calendar, 
-  User, 
-  Briefcase, 
-  CheckCircle2, 
-  FileClock, 
-  Users, 
-  Edit2, 
-  Trash2, 
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  Plus,
+  X,
+  Calendar,
+  User,
+  Briefcase,
+  CheckCircle2,
+  FileClock,
+  Users,
+  Edit2,
+  Trash2,
   AlertCircle,
   Clock,
   ShieldCheck,
-  ShieldAlert
+  ShieldAlert,
+  Search
 } from 'lucide-react';
 import { 
   getTasks, 
@@ -58,6 +59,11 @@ export default function TasksPage() {
   const [status, setStatus] = useState<TaskItem['status']>('Assigned');
   const [successMsg, setSuccessMsg] = useState('');
 
+  // Searchable assignee combobox
+  const [assigneeQuery, setAssigneeQuery] = useState('');
+  const [isAssigneeDropdownOpen, setIsAssigneeDropdownOpen] = useState(false);
+  const assigneeDropdownRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const refreshData = () => {
       setTasks(getTasks());
@@ -90,6 +96,16 @@ export default function TasksPage() {
     };
   }, []);
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (assigneeDropdownRef.current && !assigneeDropdownRef.current.contains(event.target as Node)) {
+        setIsAssigneeDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const triggerSuccess = (msg: string) => {
     setSuccessMsg(msg);
     setTimeout(() => setSuccessMsg(''), 4000);
@@ -103,6 +119,8 @@ export default function TasksPage() {
     setSelectedCommittee(committees[0] || 'Organizing Committee');
     setDueDate('');
     setStatus('Assigned');
+    setAssigneeQuery('');
+    setIsAssigneeDropdownOpen(false);
     setIsCreateModalOpen(true);
   };
 
@@ -119,6 +137,8 @@ export default function TasksPage() {
     }
     setDueDate(task.dueDate);
     setStatus(task.status);
+    setAssigneeQuery('');
+    setIsAssigneeDropdownOpen(false);
   };
 
   const handleSaveTask = (e: React.FormEvent) => {
@@ -240,6 +260,18 @@ export default function TasksPage() {
   // Filter tasks based on shared permission helper
   const displayedTasks = tasks.filter(task => canViewTaskExtended(task, user));
   const canManage = canManageTasksAndEvents(user);
+
+  const selectedAssigneeMember = members.find(m => m.id === selectedAssigneeId);
+  const filteredAssignees = members.filter(m => {
+    const q = assigneeQuery.toLowerCase();
+    return !q || m.name.toLowerCase().includes(q) || m.role.toLowerCase().includes(q) || m.email.toLowerCase().includes(q);
+  });
+
+  const handleSelectAssignee = (member: Member) => {
+    setSelectedAssigneeId(member.id);
+    setAssigneeQuery('');
+    setIsAssigneeDropdownOpen(false);
+  };
 
   const getStatusBadge = (status: TaskItem['status']) => {
     switch (status) {
@@ -519,17 +551,47 @@ export default function TasksPage() {
                 </div>
 
                 {assigneeType === 'individual' ? (
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5" ref={assigneeDropdownRef}>
                     <label className="block font-medium text-theme-text-secondary">Select Assignee</label>
-                    <select
-                      value={selectedAssigneeId}
-                      onChange={(e) => setSelectedAssigneeId(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                    >
-                      {members.map(m => (
-                        <option key={m.id} value={m.id}>{m.name} ({m.role})</option>
-                      ))}
-                    </select>
+                    <div className="relative">
+                      <div className="flex items-center gap-2 px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl focus-within:border-accent">
+                        <Search className="h-3.5 w-3.5 text-theme-text-secondary shrink-0" />
+                        <input
+                          type="text"
+                          value={isAssigneeDropdownOpen ? assigneeQuery : (selectedAssigneeMember ? `${selectedAssigneeMember.name} (${selectedAssigneeMember.role})` : '')}
+                          onFocus={() => {
+                            setAssigneeQuery('');
+                            setIsAssigneeDropdownOpen(true);
+                          }}
+                          onChange={(e) => {
+                            setAssigneeQuery(e.target.value);
+                            setIsAssigneeDropdownOpen(true);
+                          }}
+                          placeholder="Type a name, role, or email to search..."
+                          className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-theme-text-primary placeholder-theme-text-secondary"
+                        />
+                      </div>
+
+                      {isAssigneeDropdownOpen && (
+                        <div className="absolute left-0 right-0 mt-1.5 max-h-56 overflow-y-auto glass-panel rounded-xl border border-white/15 shadow-2xl z-10 divide-y divide-theme-border/20 animate-in fade-in zoom-in-95 duration-150">
+                          {filteredAssignees.length === 0 ? (
+                            <div className="text-center py-4 text-theme-text-secondary">No matching members.</div>
+                          ) : (
+                            filteredAssignees.map(m => (
+                              <button
+                                key={m.id}
+                                type="button"
+                                onClick={() => handleSelectAssignee(m)}
+                                className={`w-full flex items-center justify-between gap-2 text-left px-3 py-2 hover:bg-theme-border/20 transition-all cursor-pointer ${m.id === selectedAssigneeId ? 'bg-accent/10' : ''}`}
+                              >
+                                <span className="font-medium text-theme-text-primary">{m.name}</span>
+                                <span className="text-theme-text-secondary shrink-0">{m.role}</span>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-1.5">
