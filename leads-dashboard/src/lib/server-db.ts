@@ -28,6 +28,7 @@ import {
   initialForms,
   initialSubmissions,
   initialDesigns,
+  initialGroupPolicies,
 } from './local-data';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -45,6 +46,7 @@ export interface DbSchema {
   forms: any[];
   submissions: any[];
   designs: any[];
+  groupPolicies: any[];
   auditLogs: any[];
   emails: any[];
   passwordResets: any[];
@@ -61,6 +63,7 @@ const EMPTY_DB: DbSchema = {
   forms: [],
   submissions: [],
   designs: [],
+  groupPolicies: [],
   auditLogs: [],
   emails: [],
   passwordResets: [],
@@ -76,6 +79,7 @@ const SEED_DB: DbSchema = {
   forms: initialForms,
   submissions: initialSubmissions,
   designs: initialDesigns,
+  groupPolicies: initialGroupPolicies,
   auditLogs: [],
   emails: [],
   passwordResets: [],
