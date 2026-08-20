@@ -53,6 +53,7 @@ export interface DbSchema {
   auditLogs: any[];
   emails: any[];
   passwordResets: any[];
+  emailSettings: any[];
   lastUpdated?: string;
 }
 
@@ -71,6 +72,7 @@ const EMPTY_DB: DbSchema = {
   auditLogs: [],
   emails: [],
   passwordResets: [],
+  emailSettings: [],
 };
 
 const SEED_DB: DbSchema = {
@@ -88,6 +90,21 @@ const SEED_DB: DbSchema = {
   auditLogs: [],
   emails: [],
   passwordResets: [],
+  emailSettings: [
+    {
+      id: 'default',
+      provider: 'gmail',
+      smtpHost: 'smtp.gmail.com',
+      smtpPort: 587,
+      secure: false,
+      authUser: 'leads@msruas.ac.in',
+      authPass: '',
+      fromName: 'LEADS Next Gen Centre',
+      fromEmail: 'leads@msruas.ac.in',
+      replyTo: 'leads@msruas.ac.in',
+      updatedAt: new Date().toISOString()
+    }
+  ],
 };
 
 const COLLECTION_KEYS = Object.keys(EMPTY_DB) as (keyof DbSchema)[];

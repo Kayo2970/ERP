@@ -29,7 +29,10 @@ import {
   UserCog,
   Search,
   Undo2,
-  DatabaseBackup
+  RefreshCw,
+  DatabaseBackup,
+  Mail,
+  ChevronDown
 } from 'lucide-react';
 import { getAnnouncements, getTasks, getDesigns, getMembers, logAuditEvent, Member, TaskItem, AnnouncementItem, syncWithServer } from '@/lib/local-data';
 import { canViewTaskExtended, getAnnouncementScopeMatch } from '@/lib/permissions';
@@ -68,6 +71,7 @@ const navSections: NavSection[] = [
       { name: 'Directory', href: '/dashboard/directory', icon: FolderGit2 },
       { name: 'Group Policies', href: '/dashboard/policies', icon: ShieldCheck, superUserOnly: true },
       { name: 'Backup & Restore', href: '/dashboard/backup', icon: DatabaseBackup, superUserOnly: true },
+      { name: 'Email Management', href: '/dashboard/email', icon: Mail, superUserOnly: true },
       { name: 'Settings', href: '/dashboard/settings', icon: Settings },
     ],
   },
