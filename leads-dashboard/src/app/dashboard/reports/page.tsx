@@ -19,7 +19,8 @@ import {
 import { getRatings, getMembers, getTasks, RatingItem, Member, TaskItem } from '@/lib/local-data';
 import { getRatingColor } from '@/lib/design-tokens';
 import { canViewRating } from '@/lib/permissions';
-import { BarChart3, Users, User, Download, Printer, Filter, Star, Info, Layers, CheckSquare } from 'lucide-react';
+import { generatePerformanceReportPdf } from '@/lib/report-generator';
+import { BarChart3, Users, User, Download, FileText, Filter, Star, Info, Layers, CheckSquare } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 
 export default function ReportsPage() {
@@ -139,8 +140,21 @@ export default function ReportsPage() {
     document.body.removeChild(link);
   };
 
-  const handlePrintReport = () => {
-    window.print();
+  const handleGenerateReport = () => {
+    if (filteredRatings.length === 0) {
+      alert('No data available to generate a report.');
+      return;
+    }
+    generatePerformanceReportPdf({
+      ratings: filteredRatings,
+      averages,
+      scope: {
+        division: selectedDivision === 'ALL' ? 'All Divisions' : selectedDivision,
+        member: selectedTarget === 'All' ? 'All Evaluated Members' : selectedTarget,
+        quarter: selectedQuarter === 'ALL' ? 'All Quarters (Cumulative)' : selectedQuarter,
+      },
+      generatedBy: user?.name || 'LEADS Dashboard User',
+    });
   };
 
   return (
@@ -155,17 +169,17 @@ export default function ReportsPage() {
 
         <div className="flex items-center gap-2 print:hidden">
           <button
-            onClick={handlePrintReport}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-border/40"
-            title="Generate Printable PDF View"
+            onClick={handleGenerateReport}
+            className="flex items-center gap-1.5 px-4 py-2 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer"
+            title="Generate a comprehensive PDF report"
           >
-            <Printer className="h-4 w-4" />
-            Generate PDF / Print
+            <FileText className="h-4 w-4" />
+            Download Report (PDF)
           </button>
 
           <button
             onClick={handleDownloadReport}
-            className="flex items-center gap-1.5 px-4 py-2 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-border/40"
           >
             <Download className="h-4 w-4" />
             Export CSV
