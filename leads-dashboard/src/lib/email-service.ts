@@ -85,23 +85,25 @@ async function buildTransporter(): Promise<{ transporter: Transporter; settings:
   let secure = settings.secure;
   let auth: { user: string; pass: string } | undefined = undefined;
 
+  const cleanedPass = (settings.authPass || '').replace(/\s+/g, '');
+
   if (settings.provider === 'gmail') {
     host = 'smtp.gmail.com';
     port = settings.smtpPort || 587;
     if (settings.authUser && settings.authPass) {
-      auth = { user: settings.authUser, pass: settings.authPass };
+      auth = { user: settings.authUser.trim(), pass: cleanedPass };
     }
   } else if (settings.provider === 'outlook') {
     host = 'smtp.office365.com';
     port = settings.smtpPort || 587;
     if (settings.authUser && settings.authPass) {
-      auth = { user: settings.authUser, pass: settings.authPass };
+      auth = { user: settings.authUser.trim(), pass: cleanedPass };
     }
   } else if (settings.provider === 'custom') {
     host = settings.smtpHost || 'smtp.gmail.com';
     port = settings.smtpPort || 587;
     if (settings.authUser && settings.authPass) {
-      auth = { user: settings.authUser, pass: settings.authPass };
+      auth = { user: settings.authUser.trim(), pass: cleanedPass };
     }
   } else if (settings.provider === 'local_postfix') {
     host = process.env.SMTP_HOST || 'localhost';
