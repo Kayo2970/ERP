@@ -17,6 +17,8 @@ import {
   Eye,
   ClipboardCheck,
   BookLock,
+  RotateCcw,
+  Save,
 } from 'lucide-react';
 import {
   getGroupPolicies,
@@ -24,9 +26,13 @@ import {
   updateGroupPolicy,
   deleteGroupPolicy,
   getMembers,
+  getAccessLevelSettings,
+  updateAccessLevelSettings,
+  DEFAULT_ACCESS_LEVEL_SETTINGS,
   GroupPolicy,
   Member,
   MemberDivision,
+  AccessLevelSettings,
 } from '@/lib/local-data';
 import { CAPABILITY_CATALOG } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
@@ -57,18 +63,18 @@ function memberMatchesCriteria(member: Member, criteria: TargetCriteria): boolea
   return false;
 }
 
-// Static description of the hardcoded tier/role rules in permissions.ts — these
-// exist independently of any policy tag and can't be edited from this page, but
-// the Super User should be able to see the whole access picture in one place.
-const BUILT_IN_RULES: { name: string; description: string }[] = [
-  { name: 'Super User (Tier 1)', description: 'Unrestricted access to every module in the dashboard, including Group Policy Management itself. Always the approver of last resort for any pending submission.' },
-  { name: 'Base Leadership (Tier 1–3)', description: 'Create/edit/delete events and tasks, edit the directory, view the full directory, publish announcements, and view every Design Portal submission.' },
-  { name: 'Core Committee (Tier 5)', description: 'Create/edit events and tasks, and publish announcements.' },
-  { name: 'Any "Head" role (job title contains the word "Head")', description: "Create/edit events and tasks, build public forms, publish announcements, view all designs, and see their own department's tasks and ratings regardless of tier." },
-  { name: 'Sector / Centre Head (title contains "Sector Head" or "Centre/Center Head", or tier ≤ 2)', description: 'First-stage reimbursement approval. This is also the built-in "Center Head" approver for any policy that requires approval without naming a specific person or tag.' },
-  { name: 'Finance Head (title or department contains "Finance")', description: 'Final-stage reimbursement approval, after the Sector Head stage.' },
-  { name: 'Everyone else (no matching rule above, and no policy tag)', description: 'Sees their own tasks/ratings, every event (unless a policy restricts them), and their own Design Portal / reimbursement submissions. Cannot create, edit, or delete events, tasks, forms, announcements, or directory records.' },
-];
+// The two rules that never change — Tier 1 is permanently hardcoded (the one
+// access rule that can never be reconfigured, so there's no way to lock the
+// real Super User out), and "everyone else" is just the fallback description,
+// not a rule with parameters to edit.
+const SUPER_USER_RULE = {
+  name: 'Super User (Tier 1)',
+  description: 'Unrestricted access to every module in the dashboard, including this page. Always the approver of last resort for any pending submission. This tier can never be reconfigured — a permanent safety floor so the Super User can never be locked out.',
+};
+const EVERYONE_ELSE_RULE = {
+  name: 'Everyone else (no matching rule below, and no policy tag)',
+  description: 'Sees their own tasks/ratings, every event (unless a policy restricts them), and their own Design Portal / reimbursement submissions. Cannot create, edit, or delete events, tasks, forms, announcements, or directory records.',
+};
 
 export default function GroupPoliciesPage() {
   const [user, setUser] = useState<any>(null);
@@ -77,6 +83,9 @@ export default function GroupPoliciesPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [expandedMembersId, setExpandedMembersId] = useState<string | null>(null);
   const [isBuiltInRulesOpen, setIsBuiltInRulesOpen] = useState(false);
+  const [accessSettings, setAccessSettings] = useState<AccessLevelSettings>(DEFAULT_ACCESS_LEVEL_SETTINGS);
+  const [isSavingAccessSettings, setIsSavingAccessSettings] = useState(false);
+  const [accessSettingsMsg, setAccessSettingsMsg] = useState('');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<GroupPolicy | null>(null);
@@ -118,6 +127,9 @@ export default function GroupPoliciesPage() {
       setMembers(getMembers());
     };
     refreshData();
+    // Loaded once on mount only — not on every background sync, so it never
+    // clobbers an in-progress unsaved edit in the form below.
+    setAccessSettings(getAccessLevelSettings());
 
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
@@ -306,6 +318,29 @@ export default function GroupPoliciesPage() {
     setPolicies(getGroupPolicies());
     setDeletingId(null);
     triggerSuccess(`Policy tag "${target?.name || ''}" deleted.`);
+  };
+
+  const handleSaveAccessSettings = () => {
+    setIsSavingAccessSettings(true);
+    const updated = updateAccessLevelSettings(
+      {
+        baseLeadershipMaxTier: accessSettings.baseLeadershipMaxTier,
+        coreCommitteeTier: accessSettings.coreCommitteeTier,
+        sectorHeadMaxTier: accessSettings.sectorHeadMaxTier,
+        headKeyword: accessSettings.headKeyword,
+        sectorHeadKeywords: accessSettings.sectorHeadKeywords,
+        financeKeyword: accessSettings.financeKeyword,
+      },
+      user?.name || 'Super User'
+    );
+    setAccessSettings(updated);
+    setIsSavingAccessSettings(false);
+    setAccessSettingsMsg('Saved — these thresholds now apply to every account across the platform immediately.');
+    setTimeout(() => setAccessSettingsMsg(''), 5000);
+  };
+
+  const handleResetAccessSettings = () => {
+    setAccessSettings({ ...DEFAULT_ACCESS_LEVEL_SETTINGS });
   };
 
   const getMatchingMembers = (policy: GroupPolicy) =>
@@ -503,9 +538,11 @@ export default function GroupPoliciesPage() {
         </div>
       )}
 
-      {/* Built-in Access Rules — the hardcoded tier/role rules that exist independently
-          of any policy tag, surfaced here read-only so the full access picture (built-in
-          + dynamic) lives in one place. */}
+      {/* Built-in Access Rules — the tier/role rules that exist even with zero policy
+          tags. Editable by the Super User: these thresholds/keywords are what
+          permissions.ts's isBaseLeadership/isCoreCommitteeTier/isHeadRole/isSectorHead/
+          isFinanceHead actually check, so a change here takes effect for every account
+          immediately. Tier 1 stays permanently hardcoded as a safety floor. */}
       <div className="glass-panel rounded-2xl border border-white/10 overflow-hidden">
         <button
           onClick={() => setIsBuiltInRulesOpen(!isBuiltInRulesOpen)}
@@ -515,19 +552,161 @@ export default function GroupPoliciesPage() {
             <BookLock className="h-4.5 w-4.5 text-theme-text-secondary" />
             <div>
               <h3 className="text-sm font-bold text-theme-text-primary">Built-in Access Rules</h3>
-              <p className="text-[11px] text-theme-text-secondary">The hardcoded rules that exist even with zero policy tags — read-only, not editable here.</p>
+              <p className="text-[11px] text-theme-text-secondary">The tier/role rules that exist even with zero policy tags — editable here.</p>
             </div>
           </div>
           <span className="text-[11px] font-semibold text-accent shrink-0">{isBuiltInRulesOpen ? 'Hide' : 'Show'}</span>
         </button>
         {isBuiltInRulesOpen && (
-          <div className="px-5 pb-5 space-y-2.5 border-t border-theme-border/20 pt-4">
-            {BUILT_IN_RULES.map((rule, i) => (
-              <div key={i} className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl">
-                <h4 className="text-xs font-bold text-theme-text-primary">{rule.name}</h4>
-                <p className="text-[11px] text-theme-text-secondary mt-0.5 leading-relaxed">{rule.description}</p>
+          <div className="px-5 pb-5 space-y-3 border-t border-theme-border/20 pt-4 text-xs">
+            <div className="flex items-start gap-2 p-3 bg-danger/5 border border-danger/25 rounded-xl text-[11px] text-theme-text-secondary">
+              <ShieldAlert className="h-3.5 w-3.5 text-danger shrink-0 mt-0.5" />
+              <span>
+                Changing these values changes who has elevated access across the entire platform, for every account,
+                the moment you save — not just for new logins. Tier 1 (the real Super User) is the one rule that can
+                never be reconfigured, so you can never lock yourself out.
+              </span>
+            </div>
+
+            {accessSettingsMsg && (
+              <div className="flex items-center gap-2 p-3 bg-success/10 border border-success/20 rounded-xl text-[11px] text-theme-text-primary">
+                <CheckCircle2 className="h-4 w-4 text-success shrink-0" />
+                <span>{accessSettingsMsg}</span>
               </div>
-            ))}
+            )}
+
+            {/* Super User — permanently hardcoded */}
+            <div className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl">
+              <h4 className="text-xs font-bold text-theme-text-primary">{SUPER_USER_RULE.name}</h4>
+              <p className="text-[11px] text-theme-text-secondary mt-0.5 leading-relaxed">{SUPER_USER_RULE.description}</p>
+            </div>
+
+            {/* Base Leadership */}
+            <div className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-1.5">
+              <h4 className="text-xs font-bold text-theme-text-primary">Base Leadership</h4>
+              <p className="text-[11px] text-theme-text-secondary leading-relaxed">
+                Create/edit/delete events and tasks, edit the directory, view the full directory, publish announcements, and view every Design Portal submission.
+              </p>
+              <div className="flex items-center gap-2 text-[11px] text-theme-text-secondary">
+                <span>Tier 1 through</span>
+                <select
+                  value={accessSettings.baseLeadershipMaxTier}
+                  onChange={(e) => setAccessSettings({ ...accessSettings, baseLeadershipMaxTier: parseInt(e.target.value, 10) })}
+                  className="px-2.5 py-1 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent"
+                >
+                  {ALL_TIERS.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Core Committee */}
+            <div className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-1.5">
+              <h4 className="text-xs font-bold text-theme-text-primary">Core Committee</h4>
+              <p className="text-[11px] text-theme-text-secondary leading-relaxed">Create/edit events and tasks, and publish announcements.</p>
+              <div className="flex items-center gap-2 text-[11px] text-theme-text-secondary">
+                <span>Tier equals</span>
+                <select
+                  value={accessSettings.coreCommitteeTier}
+                  onChange={(e) => setAccessSettings({ ...accessSettings, coreCommitteeTier: parseInt(e.target.value, 10) })}
+                  className="px-2.5 py-1 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent"
+                >
+                  {ALL_TIERS.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Head role */}
+            <div className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-1.5">
+              <h4 className="text-xs font-bold text-theme-text-primary">Any &quot;Head&quot; Role</h4>
+              <p className="text-[11px] text-theme-text-secondary leading-relaxed">
+                Create/edit events and tasks, build public forms, publish announcements, view all designs, and see their own department&apos;s tasks and ratings regardless of tier.
+              </p>
+              <div className="flex items-center gap-2 text-[11px] text-theme-text-secondary">
+                <span>Job title contains the word</span>
+                <input
+                  type="text"
+                  value={accessSettings.headKeyword}
+                  onChange={(e) => setAccessSettings({ ...accessSettings, headKeyword: e.target.value })}
+                  className="px-2.5 py-1 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent w-28"
+                />
+              </div>
+            </div>
+
+            {/* Sector / Centre Head */}
+            <div className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-1.5">
+              <h4 className="text-xs font-bold text-theme-text-primary">Sector / Centre Head</h4>
+              <p className="text-[11px] text-theme-text-secondary leading-relaxed">
+                First-stage reimbursement approval. Also the built-in &quot;Center Head&quot; approver for any policy that requires approval without naming a specific person or tag.
+              </p>
+              <div className="flex flex-col gap-1.5 text-[11px] text-theme-text-secondary">
+                <div className="flex items-center gap-2">
+                  <span>Title contains any of</span>
+                  <input
+                    type="text"
+                    value={accessSettings.sectorHeadKeywords}
+                    onChange={(e) => setAccessSettings({ ...accessSettings, sectorHeadKeywords: e.target.value })}
+                    placeholder="comma-separated phrases"
+                    className="px-2.5 py-1 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent flex-1"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span>...or tier is 1 through</span>
+                  <select
+                    value={accessSettings.sectorHeadMaxTier}
+                    onChange={(e) => setAccessSettings({ ...accessSettings, sectorHeadMaxTier: parseInt(e.target.value, 10) })}
+                    className="px-2.5 py-1 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent"
+                  >
+                    {ALL_TIERS.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Finance Head */}
+            <div className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-1.5">
+              <h4 className="text-xs font-bold text-theme-text-primary">Finance Head</h4>
+              <p className="text-[11px] text-theme-text-secondary leading-relaxed">Final-stage reimbursement approval, after the Sector Head stage.</p>
+              <div className="flex items-center gap-2 text-[11px] text-theme-text-secondary">
+                <span>Title or department contains</span>
+                <input
+                  type="text"
+                  value={accessSettings.financeKeyword}
+                  onChange={(e) => setAccessSettings({ ...accessSettings, financeKeyword: e.target.value })}
+                  className="px-2.5 py-1 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent w-28"
+                />
+              </div>
+            </div>
+
+            {/* Everyone else — static */}
+            <div className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl">
+              <h4 className="text-xs font-bold text-theme-text-primary">{EVERYONE_ELSE_RULE.name}</h4>
+              <p className="text-[11px] text-theme-text-secondary mt-0.5 leading-relaxed">{EVERYONE_ELSE_RULE.description}</p>
+            </div>
+
+            {accessSettings.updatedAt && (
+              <p className="text-[10px] text-theme-text-secondary">
+                Last changed {new Date(accessSettings.updatedAt).toLocaleString()} by {accessSettings.updatedBy || 'unknown'}
+              </p>
+            )}
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                onClick={handleSaveAccessSettings}
+                disabled={isSavingAccessSettings}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-accent hover:bg-primary-light text-white font-semibold text-xs rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer disabled:opacity-50"
+              >
+                <Save className="h-3.5 w-3.5" />
+                {isSavingAccessSettings ? 'Saving...' : 'Save Access Rules'}
+              </button>
+              <button
+                onClick={handleResetAccessSettings}
+                title="Reset the fields above to their defaults (not saved until you click Save)"
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary font-semibold text-xs rounded-xl transition-all cursor-pointer"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                Reset to Defaults
+              </button>
+            </div>
           </div>
         )}
       </div>

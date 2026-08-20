@@ -210,6 +210,39 @@ export interface AuditLogItem {
 }
 
 /**
+ * Access Level Settings: the thresholds/keywords behind the hardcoded tier
+ * and role rules in permissions.ts (Base Leadership, Core Committee, "Head"
+ * designation, Sector Head, Finance Head), editable by the Super User from
+ * the Group Policies page's "Built-in Access Rules" panel instead of living
+ * only as numbers/regexes in code. Always exactly one record (id: 'default').
+ *
+ * Tier 1 (Super User) itself is deliberately NOT represented here and never
+ * will be — it's the one access rule that stays permanently hardcoded, so
+ * there's no configuration that can ever lock the real Super User out.
+ */
+export interface AccessLevelSettings {
+  id: string; // always 'default'
+  baseLeadershipMaxTier: number; // tier <= this counts as "Base Leadership"
+  coreCommitteeTier: number; // tier === this counts as "Core Committee"
+  sectorHeadMaxTier: number; // tier <= this counts as Sector/Centre Head outright
+  headKeyword: string; // whole-word, case-insensitive match against Member.role
+  sectorHeadKeywords: string; // comma-separated phrases, e.g. "sector head, centre head, center head"
+  financeKeyword: string; // whole-word, case-insensitive match against role or department
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export const DEFAULT_ACCESS_LEVEL_SETTINGS: AccessLevelSettings = {
+  id: 'default',
+  baseLeadershipMaxTier: 3,
+  coreCommitteeTier: 5,
+  sectorHeadMaxTier: 2,
+  headKeyword: 'head',
+  sectorHeadKeywords: 'sector head, centre head, center head',
+  financeKeyword: 'finance',
+};
+
+/**
  * Group Policy: a dynamically Super-User-managed access "tag." Grants a set of
  * capability keys to any member matching ANY of its non-empty target criteria
  * (division / tier / designation keyword / explicit member) — no code change
@@ -311,6 +344,8 @@ export const initialDesigns: DesignSubmissionItem[] = [];
 
 export const initialGroupPolicies: GroupPolicy[] = [];
 
+export const initialAccessLevelSettings: AccessLevelSettings[] = [DEFAULT_ACCESS_LEVEL_SETTINGS];
+
 // -------------------------------------------------------------
 // Server Sync & Per-Collection API Helpers
 // -------------------------------------------------------------
@@ -352,6 +387,7 @@ export async function syncWithServer(): Promise<boolean> {
       hydrateCollection('leads_form_submissions', data.submissions);
       hydrateCollection('leads_designs', data.designs);
       hydrateCollection('leads_group_policies', data.groupPolicies);
+      hydrateCollection('leads_access_level_settings', data.accessLevelSettings);
       if (Array.isArray(data.auditLogs)) {
         localStorage.setItem('leads_audit_logs', JSON.stringify(data.auditLogs));
       }
@@ -1541,6 +1577,45 @@ export function deleteGroupPolicy(id: string, actorName: string): boolean {
   serverDelete('/api/group-policies', id);
   logAuditEvent('GROUP_POLICY_DELETED', actorName, `Deleted group policy tag "${target.name}" [${target.tag}]`);
   return true;
+}
+
+// -------------------------------------------------------------
+// Access Level Settings (Super User-only, editable built-in access rules)
+// -------------------------------------------------------------
+
+export function getAccessLevelSettings(): AccessLevelSettings {
+  if (typeof window === 'undefined') return DEFAULT_ACCESS_LEVEL_SETTINGS;
+  const saved = localStorage.getItem('leads_access_level_settings');
+  if (saved) {
+    try {
+      const arr = JSON.parse(saved);
+      if (Array.isArray(arr) && arr.length > 0) return { ...DEFAULT_ACCESS_LEVEL_SETTINGS, ...arr[0] };
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  return DEFAULT_ACCESS_LEVEL_SETTINGS;
+}
+
+export function updateAccessLevelSettings(updates: Partial<AccessLevelSettings>, actorName: string): AccessLevelSettings {
+  const current = getAccessLevelSettings();
+  const updated: AccessLevelSettings = {
+    ...current,
+    ...updates,
+    id: 'default',
+    updatedAt: new Date().toISOString(),
+    updatedBy: actorName,
+  };
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('leads_access_level_settings', JSON.stringify([updated]));
+  }
+  serverPost('/api/access-level-settings', updated);
+  logAuditEvent(
+    'ACCESS_LEVEL_SETTINGS_CHANGED',
+    actorName,
+    `Updated built-in access level rules: ${Object.keys(updates).join(', ')}`
+  );
+  return updated;
 }
 
 /**

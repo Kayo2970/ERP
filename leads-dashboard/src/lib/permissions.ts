@@ -12,7 +12,7 @@
  * There is no session-scoped "current user" object here; every function takes the
  * user explicitly so it works the same in pages, modals, and background sync code.
  */
-import { Member, TaskItem, RatingItem, ReimbursementItem, GroupPolicy, EventItem, getMembers, getGroupPolicies, canViewTask } from './local-data';
+import { Member, TaskItem, RatingItem, ReimbursementItem, GroupPolicy, EventItem, AccessLevelSettings, getMembers, getGroupPolicies, getAccessLevelSettings, canViewTask } from './local-data';
 
 export type SessionUser = {
   id?: string;
@@ -25,20 +25,48 @@ export type SessionUser = {
   role?: string;
 } | null | undefined;
 
-/** True for any member whose role string contains the word "Head" (case-insensitive) —
- *  covers "Head of Events", "Logistics Head", "Head Design and Social Media", "Centre Head", etc. */
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Build a whole-word, case-insensitive matcher for one configured keyword. */
+function keywordMatches(text: string, keyword: string): boolean {
+  const kw = keyword.trim();
+  if (!kw) return false;
+  return new RegExp(`\\b${escapeRegex(kw)}\\b`, 'i').test(text);
+}
+
+/** Build a whole-word, case-insensitive matcher for a comma-separated list of phrases. */
+function anyKeywordMatches(text: string, keywords: string): boolean {
+  return keywords
+    .split(',')
+    .map(k => k.trim())
+    .filter(Boolean)
+    .some(k => new RegExp(`\\b${escapeRegex(k)}\\b`, 'i').test(text));
+}
+
+/**
+ * True for any member whose role string contains the configured "Head"
+ * keyword (default "head", whole-word, case-insensitive) — covers "Head of
+ * Events", "Logistics Head", "Head Design and Social Media", "Centre Head",
+ * etc. The keyword itself is editable by the Super User (see
+ * getAccessLevelSettings / the Group Policies page's Built-in Access Rules
+ * panel) instead of being fixed in code.
+ */
 export function isHeadRole(user: SessionUser): boolean {
   const role = (user as any)?.role;
-  return !!user && typeof role === 'string' && /\bhead\b/i.test(role);
+  if (!user || typeof role !== 'string') return false;
+  return keywordMatches(role, getAccessLevelSettings().headKeyword);
 }
 
 /** Check if user holds the tag of Sector Head (Centre Head / Sector Head / Department Head / Base Leadership). */
 export function isSectorHead(user: SessionUser): boolean {
   if (!user) return false;
   const role = (user as any)?.role || '';
-  const isSectorOrCentreHead = /\b(sector|centre|center)\s+head\b/i.test(role);
-  const isGeneralHead = isHeadRole(user) && !/\bfinance\b/i.test(role);
-  return user.tier <= 2 || isSectorOrCentreHead || isGeneralHead || hasCapability(user, 'APPROVE_REIMBURSEMENTS_SECTOR');
+  const settings = getAccessLevelSettings();
+  const isSectorOrCentreHead = anyKeywordMatches(role, settings.sectorHeadKeywords);
+  const isGeneralHead = isHeadRole(user) && !keywordMatches(role, settings.financeKeyword);
+  return user.tier <= settings.sectorHeadMaxTier || isSectorOrCentreHead || isGeneralHead || hasCapability(user, 'APPROVE_REIMBURSEMENTS_SECTOR');
 }
 
 /** Check if user holds the tag of Finance Head (Finance Head / Finance Lead / Finance Department). */
@@ -46,19 +74,22 @@ export function isFinanceHead(user: SessionUser): boolean {
   if (!user) return false;
   const role = (user as any)?.role || '';
   const dept = user.department || resolveMember(user)?.department || '';
-  const isFinanceRole = /\bfinance\b/i.test(role);
-  const isFinanceDept = /\bfinance\b/i.test(dept);
+  const financeKeyword = getAccessLevelSettings().financeKeyword;
+  const isFinanceRole = keywordMatches(role, financeKeyword);
+  const isFinanceDept = keywordMatches(dept, financeKeyword);
+  // tier === 1 (the true Super User) is deliberately hardcoded, never configurable —
+  // see AccessLevelSettings' doc comment for why.
   return user.tier === 1 || isFinanceRole || isFinanceDept || hasCapability(user, 'APPROVE_REIMBURSEMENTS_FINANCE');
 }
 
-/** Tier 1-3: Super User, Centre Head, Head of Events — full organizational access. */
+/** Base leadership: tier <= the configured threshold (default 3) — Super User, Centre Head, Head of Events. */
 export function isBaseLeadership(user: SessionUser): boolean {
-  return !!user && user.tier <= 3;
+  return !!user && user.tier <= getAccessLevelSettings().baseLeadershipMaxTier;
 }
 
-/** Tier 5: Core Committee. */
+/** Core Committee: tier === the configured value (default 5). */
 export function isCoreCommitteeTier(user: SessionUser): boolean {
-  return !!user && user.tier === 5;
+  return !!user && user.tier === getAccessLevelSettings().coreCommitteeTier;
 }
 
 /** Tier 6: Training Associate (base tier). */
