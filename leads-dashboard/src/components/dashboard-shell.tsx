@@ -19,15 +19,18 @@ import {
   Moon, 
   Menu, 
   X, 
-  User, 
+  User,
   Bell,
   Check,
   Info,
   ShieldAlert,
   ShieldCheck,
-  Palette
+  Palette,
+  UserCog,
+  Search,
+  Undo2
 } from 'lucide-react';
-import { getAnnouncements, getTasks, getDesigns, TaskItem, AnnouncementItem, syncWithServer } from '@/lib/local-data';
+import { getAnnouncements, getTasks, getDesigns, getMembers, logAuditEvent, Member, TaskItem, AnnouncementItem, syncWithServer } from '@/lib/local-data';
 import { canViewTaskExtended, getAnnouncementScopeMatch } from '@/lib/permissions';
 
 interface SidebarItem {
@@ -78,6 +81,16 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const [notifications, setNotifications] = useState<{ id: string; title: string; time: string; read: boolean }[]>([]);
   const notifRef = useRef<HTMLDivElement>(null);
 
+  // Super User-only quick account switch — jumps straight into any real member's
+  // session without a password. originalUser is the Super User's own identity,
+  // stashed only while impersonating so there's always a way back.
+  const [isQuickSwitchOpen, setIsQuickSwitchOpen] = useState(false);
+  const [quickSwitchSearch, setQuickSwitchSearch] = useState('');
+  const [allMembers, setAllMembers] = useState<Member[]>([]);
+  const [isImpersonating, setIsImpersonating] = useState(false);
+  const [originalUser, setOriginalUser] = useState<any>(null);
+  const quickSwitchRef = useRef<HTMLDivElement>(null);
+
   const [user, setUser] = useState({
     name: 'Kayomarz Pavri',
     email: 'kayomarz.pavri@msruas.ac.in',
@@ -112,6 +125,17 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       const parsedUser = JSON.parse(savedUser);
       setUser(parsedUser);
       setIsAuthenticated(true);
+      setAllMembers(getMembers());
+
+      const stashedOriginal = localStorage.getItem('impersonatorOriginalUser');
+      if (stashedOriginal) {
+        try {
+          setOriginalUser(JSON.parse(stashedOriginal));
+          setIsImpersonating(true);
+        } catch (e) {
+          console.error('Failed to parse stashed impersonator identity:', e);
+        }
+      }
 
       // Initial sync: pull server state into localStorage immediately
       setIsSyncing(true);
@@ -166,10 +190,51 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
         setIsNotificationsOpen(false);
       }
+      if (quickSwitchRef.current && !quickSwitchRef.current.contains(event.target as Node)) {
+        setIsQuickSwitchOpen(false);
+      }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Super User only: jump straight into any real member's session, no password.
+  // The Super User's own identity is stashed so "Return to my account" always works,
+  // even across a chain of switches (only ever stashes the ORIGINAL identity once).
+  const canQuickSwitch = isImpersonating ? originalUser?.tier === 1 : user.tier === 1;
+
+  const handleQuickSwitch = (target: Member) => {
+    const realIdentity = isImpersonating ? originalUser : user;
+    localStorage.setItem('impersonatorOriginalUser', JSON.stringify(realIdentity));
+    localStorage.setItem('user', JSON.stringify(target));
+    logAuditEvent(
+      'ADMIN_QUICK_SWITCH',
+      realIdentity.name,
+      `Quick-switched into ${target.name} (${target.email}) without a password`,
+      realIdentity.email
+    );
+    setIsQuickSwitchOpen(false);
+    setQuickSwitchSearch('');
+    window.location.reload();
+  };
+
+  const handleReturnToSelf = () => {
+    if (!originalUser) return;
+    localStorage.setItem('user', JSON.stringify(originalUser));
+    localStorage.removeItem('impersonatorOriginalUser');
+    logAuditEvent(
+      'ADMIN_QUICK_SWITCH_RETURN',
+      originalUser.name,
+      'Returned to own account from a quick-switch session',
+      originalUser.email
+    );
+    window.location.reload();
+  };
+
+  const quickSwitchResults = allMembers.filter(m => {
+    const q = quickSwitchSearch.toLowerCase();
+    return !q || m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q) || m.role.toLowerCase().includes(q);
+  });
 
   const toggleTheme = () => {
     const newTheme = !isDarkTheme;
@@ -443,6 +508,75 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                 </div>
               )}
             </div>
+
+            {/* Super User quick-switch: view as any real member without a password */}
+            {isImpersonating && (
+              <button
+                onClick={handleReturnToSelf}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-warning/15 border border-warning/40 text-warning text-[11px] font-semibold rounded-xl hover:bg-warning/25 transition-all cursor-pointer"
+                title={`Return to ${originalUser?.name || 'your account'}`}
+              >
+                <Undo2 className="h-3.5 w-3.5" />
+                Viewing as {user.name} &mdash; Return
+              </button>
+            )}
+
+            {canQuickSwitch && (
+              <div className="relative" ref={quickSwitchRef}>
+                <button
+                  onClick={() => setIsQuickSwitchOpen(!isQuickSwitchOpen)}
+                  className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-xl hover:bg-theme-border/20 transition-all cursor-pointer"
+                  title="Quick Switch: view as any account (Super User only)"
+                >
+                  <UserCog className="h-4.5 w-4.5" />
+                </button>
+
+                {isQuickSwitchOpen && (
+                  <div className="absolute right-0 mt-2 w-80 glass-panel rounded-2xl p-3 shadow-2xl border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="flex items-center justify-between pb-2 border-b border-theme-border/30 mb-2">
+                      <h4 className="text-xs font-bold text-theme-text-primary">Quick Switch</h4>
+                      <span className="text-[10px] text-theme-text-secondary">Super User only</span>
+                    </div>
+                    <div className="flex items-center gap-2 px-2.5 py-1.5 bg-theme-background/40 border border-theme-border/40 rounded-lg mb-2">
+                      <Search className="h-3.5 w-3.5 text-theme-text-secondary shrink-0" />
+                      <input
+                        type="text"
+                        autoFocus
+                        value={quickSwitchSearch}
+                        onChange={(e) => setQuickSwitchSearch(e.target.value)}
+                        placeholder="Search by name, email, or role..."
+                        className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-xs text-theme-text-primary placeholder-theme-text-secondary"
+                      />
+                    </div>
+                    <div className="max-h-64 overflow-y-auto divide-y divide-theme-border/20">
+                      {quickSwitchResults.length === 0 ? (
+                        <div className="text-center py-6 text-theme-text-secondary text-xs">No matching members.</div>
+                      ) : (
+                        quickSwitchResults.map(m => (
+                          <button
+                            key={m.id}
+                            onClick={() => handleQuickSwitch(m)}
+                            className="w-full flex items-center gap-2.5 py-2 px-1 hover:bg-theme-border/20 rounded-lg transition-all cursor-pointer text-left"
+                          >
+                            <div className="h-7 w-7 bg-accent/15 rounded-lg flex items-center justify-center border border-accent/20 shrink-0">
+                              <span className="text-[10px] font-bold text-accent">
+                                {m.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                              </span>
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-theme-text-primary truncate">
+                                {m.name}{m.email === user.email && ' (current)'}
+                              </p>
+                              <p className="text-[10px] text-theme-text-secondary truncate">{m.role} · Tier {m.tier}</p>
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Active User info */}
             <div className="flex items-center gap-3">
