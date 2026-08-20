@@ -103,7 +103,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
   const [user, setUser] = useState({
     name: 'Kayomarz Pavri',
-    email: 'kayomarz.pavri@msruas.ac.in',
+    email: 'kayo2970@gmail.com',
     role: 'Super User',
     tier: 1,
     division: 'Core Committee',

@@ -97,7 +97,7 @@ export function TermsModal({ isOpen, onClose }: TermsModalProps) {
           {/* Contact Box */}
           <div className="p-3.5 bg-theme-border/10 border border-theme-border/20 rounded-2xl text-[11px] text-theme-text-secondary flex items-center justify-between">
             <span>For licensing queries or IP permissions, contact:</span>
-            <span className="font-semibold text-theme-text-primary font-mono">kayomarz.pavri@msruas.ac.in</span>
+            <span className="font-semibold text-theme-text-primary font-mono">kayo2970@gmail.com</span>
           </div>
         </div>
 

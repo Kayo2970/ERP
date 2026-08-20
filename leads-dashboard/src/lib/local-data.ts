@@ -290,7 +290,7 @@ const DEFAULT_PASSWORD_HASH = '039e521fbfd304a0a97bf0ad345fa30c:fabe61e51b967035
 
 // Real organization roster matching the leadership website and division structure
 const initialMembersRaw: Member[] = [
-  { id: 'm1', name: 'Kayomarz Pavri', email: 'kayomarz.pavri@msruas.ac.in', role: 'Super User', tier: 1, division: 'Core Committee', department: 'Design and Social Media' },
+  { id: 'm1', name: 'Kayomarz Pavri', email: 'kayo2970@gmail.com', role: 'Super User', tier: 1, division: 'Core Committee', department: 'Design and Social Media' },
   { id: 'm2', name: 'Dr. Subhadeep Mukherjee', email: 'subhadeep.mukherjee@msruas.ac.in', role: 'Centre Head', tier: 2, division: 'Advisory Board', department: 'Faculty Oversight' },
   { id: 'm3', name: 'Dr. Kiran Kumar B M', email: 'kiran.kumar@msruas.ac.in', role: 'Head of Events', tier: 3, division: 'Advisory Board', department: 'Faculty Oversight' },
   { id: 'm4', name: 'Dr. K. M. Sharath Kumar', email: 'sharath.kumar@msruas.ac.in', role: 'Advisory Board Member', tier: 4, division: 'Advisory Board', department: 'Faculty Advisory' },

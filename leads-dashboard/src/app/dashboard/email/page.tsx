@@ -552,7 +552,7 @@ export default function EmailManagementPage() {
                   type="email"
                   value={testRecipient}
                   onChange={e => setTestRecipient(e.target.value)}
-                  placeholder="kayomarz.pavri@msruas.ac.in"
+                  placeholder="kayo2970@gmail.com"
                   className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                 />
               </div>
