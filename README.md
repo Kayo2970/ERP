@@ -36,15 +36,15 @@ Open [http://localhost:3030](http://localhost:3030) in your browser to view the 
 
 ## 🖥️ Self-Hosted Deployment (Hostinger KVM VPS)
 
-This app runs as **one long-lived instance** — `next start` under PM2 — on a self-hosted Hostinger KVM VPS at **[leadsnextgencentre.online](https://leadsnextgencentre.online)**, with Nginx reverse-proxying HTTPS traffic to it and every team member's browser pointed at that one public domain. There is no separate database server: all data lives in one file, `leads-dashboard/data/database.json`, on the VPS.
+This app runs as **one long-lived instance** — `next start` under PM2 — on a self-hosted Hostinger KVM VPS at **[leadsnextgencentre.online](https://leadsnextgencentre.online)**, with Nginx reverse-proxying HTTPS traffic to it and every team member's browser pointed at that one public domain. There is no separate database server: all data lives under `leads-dashboard/data/` on the VPS — one JSON file per collection (`members.json`, `tasks.json`, `events.json`, ...) plus `data/uploads/`, which holds the actual bytes of every uploaded document (Design Portal assets, reimbursement receipts) referenced from those JSON records by a `storageKey`.
 
 **Workflow:**
 1. Develop and test locally, committing to a feature branch as usual.
 2. Push the branch and merge it into `main` once it's ready.
 3. On the VPS: `git pull`, `npm install`, `npm run build`, then `pm2 restart leads-dashboard`.
-4. Every device — anywhere, not just on a LAN — hits `https://leadsnextgencentre.online`, which Nginx routes to the one running instance sharing the one `data/database.json`, so everyone stays in sync automatically.
+4. Every device — anywhere, not just on a LAN — hits `https://leadsnextgencentre.online`, which Nginx routes to the one running instance sharing the one `data/` directory, so everyone stays in sync automatically.
 
-**Important:** `data/database.json` is git-ignored on purpose — it's live server state, not source code. Only code changes travel through git; the data file should never be committed or deleted on redeploy (`git pull` never touches it, but a careless `rm -rf` on the app directory would).
+**Important:** `leads-dashboard/data/` (JSON collections and `uploads/` alike) is git-ignored on purpose — it's live server state, not source code. Only code changes travel through git; nothing under `data/` should ever be committed or deleted on redeploy (`git pull` never touches it, but a careless `rm -rf` on the app directory would). **To back up or restore the app's data, copy the entire `leads-dashboard/data/` directory as one unit** — the JSON records and the uploaded files they reference (`storageKey`) only make sense together; restoring one without the other leaves broken links or orphaned files.
 
 **How live sync works once the server is running:** every open dashboard page polls the server every 7 seconds and re-renders automatically when new data arrives — no manual refresh needed to see a teammate's change. If you ever suspect sync is stuck, see [`docs/bugs-to-fix.md`](docs/bugs-to-fix.md) for the known-issues log and root-cause history of exactly this class of bug.
 

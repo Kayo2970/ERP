@@ -46,3 +46,9 @@ next-env.d.ts
 # only on the server; the data/ directory itself is created at runtime.
 data/*.json
 data/*.json.migrated
+
+# uploaded document storage (design assets, reimbursement receipts) — real
+# files on disk, referenced by storageKey from the JSON records above. Back
+# up the whole data/ directory together so records and the files they
+# reference are always restored as a matching pair.
+data/uploads/

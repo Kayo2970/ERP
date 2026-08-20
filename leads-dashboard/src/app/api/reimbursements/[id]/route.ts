@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection } from '@/lib/server-db';
+import { deleteStoredFilesForRecord } from '@/lib/file-storage';
 
 export async function PATCH(
   request: Request,
@@ -38,6 +39,7 @@ export async function DELETE(
       return filtered;
     });
     if (!found) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    await deleteStoredFilesForRecord('reimbursements', id);
     return NextResponse.json({ success: true });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

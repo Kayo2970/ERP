@@ -427,9 +427,9 @@ export default function DesignPortalPage() {
                 <div>
                   {/* Top Asset Preview Header */}
                   <div className="relative h-44 bg-muted/60 border-b border-border flex items-center justify-center overflow-hidden">
-                    {design.fileData && design.fileType.startsWith('image/') ? (
+                    {(design.fileUrl || design.fileData) && design.fileType.startsWith('image/') ? (
                       <img
-                        src={design.fileData}
+                        src={design.fileUrl || design.fileData}
                         alt={design.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
@@ -799,10 +799,10 @@ export default function DesignPortalPage() {
 
             {/* Asset Preview Frame */}
             <div className="bg-muted/40 border border-border rounded-xl p-4 text-center space-y-3">
-              {selectedDesign.fileData && selectedDesign.fileType.startsWith('image/') ? (
+              {(selectedDesign.fileUrl || selectedDesign.fileData) && selectedDesign.fileType.startsWith('image/') ? (
                 <div className="max-h-72 overflow-hidden rounded-lg border border-border mx-auto flex items-center justify-center">
                   <img
-                    src={selectedDesign.fileData}
+                    src={selectedDesign.fileUrl || selectedDesign.fileData}
                     alt={selectedDesign.title}
                     className="max-h-72 object-contain"
                   />
@@ -823,9 +823,9 @@ export default function DesignPortalPage() {
                 </div>
               )}
 
-              {selectedDesign.fileData && (
+              {(selectedDesign.fileUrl || selectedDesign.fileData) && (
                 <a
-                  href={selectedDesign.fileData}
+                  href={selectedDesign.fileUrl ? `${selectedDesign.fileUrl}?download=1` : selectedDesign.fileData}
                   download={selectedDesign.fileName}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-background border border-border text-xs font-medium text-foreground hover:bg-muted"
                 >

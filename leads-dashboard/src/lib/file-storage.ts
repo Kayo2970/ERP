@@ -1,0 +1,105 @@
+/**
+ * file-storage.ts — Real on-disk storage for uploaded documents (design assets,
+ * reimbursement receipts), replacing the previous approach of embedding a file's
+ * full base64 payload directly inside its JSON record.
+ *
+ * Every uploaded file lives under data/uploads/<category>/<recordId>/<index>__<name>
+ * — the same data/ directory the per-collection JSON files already live in, so a
+ * single backup of data/ (as already documented for the JSON collections) restores
+ * both the records AND the files they reference. JSON records only ever store a
+ * `storageKey` (the path under data/uploads) and a servable `url` — never the raw
+ * bytes — keeping the JSON files small and fast to read/write regardless of how
+ * much has been uploaded.
+ */
+import fs from 'fs/promises';
+import path from 'path';
+
+const UPLOADS_DIR = path.join(process.cwd(), 'data', 'uploads');
+
+/** Strip anything that isn't a safe filename character, keep it short. */
+function sanitizeFileName(name: string): string {
+  const base = (name || 'file').split(/[/\\]/).pop() || 'file';
+  const cleaned = base.replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '');
+  return (cleaned || 'file').slice(0, 120);
+}
+
+/** Parse a `data:<mime>;base64,<data>` URL into its MIME type and raw buffer. */
+function parseDataUrl(dataUrl: string): { mime: string; buffer: Buffer } {
+  const match = /^data:([^;]+);base64,([\s\S]*)$/.exec(dataUrl);
+  if (!match) throw new Error('Expected a base64 data URL.');
+  return { mime: match[1], buffer: Buffer.from(match[2], 'base64') };
+}
+
+export interface StoredFile {
+  storageKey: string; // path relative to data/uploads, e.g. "designs/des_123/0__poster.png"
+  url: string;         // servable URL, e.g. "/api/files/designs/des_123/0__poster.png"
+  size: number;
+}
+
+/**
+ * Decode a base64 data URL and write it to disk under
+ * data/uploads/<category>/<recordId>/<index>__<sanitizedName>.
+ */
+export async function saveBase64File(
+  category: string,
+  recordId: string,
+  index: number,
+  fileName: string,
+  dataUrl: string
+): Promise<StoredFile> {
+  const { buffer } = parseDataUrl(dataUrl);
+  const safeName = sanitizeFileName(fileName);
+  const storageKey = `${category}/${recordId}/${index}__${safeName}`;
+  const target = path.join(UPLOADS_DIR, category, recordId, `${index}__${safeName}`);
+
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await fs.writeFile(target, buffer);
+
+  return { storageKey, url: `/api/files/${storageKey}`, size: buffer.length };
+}
+
+/** Resolve a storageKey to an absolute path, refusing anything that escapes UPLOADS_DIR. */
+function resolveStoragePath(storageKey: string): string {
+  const resolved = path.resolve(UPLOADS_DIR, storageKey);
+  if (resolved !== UPLOADS_DIR && !resolved.startsWith(UPLOADS_DIR + path.sep)) {
+    throw new Error('Invalid storage key.');
+  }
+  return resolved;
+}
+
+export async function readStoredFile(storageKey: string): Promise<Buffer> {
+  return fs.readFile(resolveStoragePath(storageKey));
+}
+
+/** Best-effort delete — missing files are not an error. */
+export async function deleteStoredFile(storageKey: string): Promise<void> {
+  try {
+    await fs.unlink(resolveStoragePath(storageKey));
+  } catch (err: any) {
+    if (err?.code !== 'ENOENT') console.error('[file-storage] Failed to delete', storageKey, err);
+  }
+}
+
+/** Best-effort recursive delete of every file stored for one record (e.g. on record deletion). */
+export async function deleteStoredFilesForRecord(category: string, recordId: string): Promise<void> {
+  try {
+    await fs.rm(path.join(UPLOADS_DIR, category, recordId), { recursive: true, force: true });
+  } catch (err) {
+    console.error('[file-storage] Failed to delete record folder', category, recordId, err);
+  }
+}
+
+const MIME_BY_EXTENSION: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.pdf': 'application/pdf',
+};
+
+export function guessMimeType(fileName: string): string {
+  const ext = path.extname(fileName).toLowerCase();
+  return MIME_BY_EXTENSION[ext] || 'application/octet-stream';
+}
