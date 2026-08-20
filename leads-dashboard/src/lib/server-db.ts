@@ -1,7 +1,20 @@
 /**
  * server-db.ts — Shared server-side file-based database helper.
- * All API routes use this to read/write data/database.json safely.
- * Uses a simple async mutex to prevent concurrent write races.
+ *
+ * Each collection lives in its own file under data/ (data/members.json,
+ * data/events.json, ...) rather than one shared database.json — a write to
+ * one collection no longer requires reading and rewriting every other
+ * collection, and unrelated collections never block each other's writes
+ * (each has its own async mutex). The files stay "interconnected" the same
+ * way real relational tables do: by referencing each other's ids (tasks
+ * reference eventId/assigneeId, ratings reference targetId, reimbursements
+ * reference eventId, etc.) — the connections are in the data, not in a
+ * shared physical file.
+ *
+ * A one-time, idempotent migration splits any pre-existing single-file
+ * data/database.json into these per-collection files on first read after
+ * upgrading, and retires (never deletes) the old file to data/database.json.migrated
+ * as a safety net.
  */
 import fs from 'fs/promises';
 import path from 'path';
@@ -17,10 +30,10 @@ import {
   initialDesigns,
 } from './local-data';
 
-export const DB_PATH = path.join(process.cwd(), 'data', 'database.json');
-
-// Simple async mutex to prevent concurrent file writes
-let writeLock: Promise<void> = Promise.resolve();
+const DATA_DIR = path.join(process.cwd(), 'data');
+const LEGACY_DB_PATH = path.join(DATA_DIR, 'database.json');
+const RETIRED_LEGACY_DB_PATH = path.join(DATA_DIR, 'database.json.migrated');
+const META_PATH = path.join(DATA_DIR, '_meta.json');
 
 export interface DbSchema {
   members: any[];
@@ -68,6 +81,66 @@ const SEED_DB: DbSchema = {
   passwordResets: [],
 };
 
+const COLLECTION_KEYS = Object.keys(EMPTY_DB) as (keyof DbSchema)[];
+
+function collectionPath(key: keyof DbSchema): string {
+  return path.join(DATA_DIR, `${String(key)}.json`);
+}
+
+async function fileExists(p: string): Promise<boolean> {
+  try {
+    await fs.access(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * One-time, idempotent split of the legacy single-file database.json into
+ * per-collection files. Cached in module scope so concurrent calls (e.g.
+ * several requests landing at once on first boot after upgrading) all await
+ * the same migration instead of racing each other. Safe to call on every
+ * boot — a no-op once migration has happened (ENOENT on the legacy path).
+ */
+let migrationPromise: Promise<void> | null = null;
+function ensureMigrated(): Promise<void> {
+  if (!migrationPromise) {
+    migrationPromise = (async () => {
+      let legacy: Partial<DbSchema>;
+      try {
+        const raw = await fs.readFile(LEGACY_DB_PATH, 'utf-8');
+        legacy = JSON.parse(raw);
+      } catch (err: any) {
+        if (err?.code !== 'ENOENT') {
+          console.error('[server-db] Legacy database.json read failed during migration check:', err);
+        }
+        return; // no legacy file (or unreadable) — nothing to migrate
+      }
+
+      await fs.mkdir(DATA_DIR, { recursive: true });
+      for (const key of COLLECTION_KEYS) {
+        const target = collectionPath(key);
+        if (await fileExists(target)) continue; // already migrated (or created independently) — never overwrite
+        const value = Array.isArray(legacy[key]) ? legacy[key] : (EMPTY_DB[key] as any[]);
+        await fs.writeFile(target, JSON.stringify(value, null, 2), 'utf-8');
+      }
+
+      // Retire, never delete, the legacy file — undeletable safety net if migration
+      // logic ever has a bug. Idempotent: if a retired copy already exists (a prior
+      // partial run), leave both alone rather than overwriting the earlier snapshot.
+      if (!(await fileExists(RETIRED_LEGACY_DB_PATH))) {
+        try {
+          await fs.rename(LEGACY_DB_PATH, RETIRED_LEGACY_DB_PATH);
+        } catch (err) {
+          console.error('[server-db] Failed to retire legacy database.json after migration:', err);
+        }
+      }
+    })();
+  }
+  return migrationPromise;
+}
+
 /**
  * 30-Day Storage Retention Cleanup Helper:
  * Checks design items past 30 days, marks them as expired, and purges heavy file payloads.
@@ -90,82 +163,103 @@ function processDesignRetention(designs: any[]): any[] {
   });
 }
 
-export async function readDb(): Promise<DbSchema> {
+async function readCollectionFile<T = any>(key: keyof DbSchema): Promise<T[]> {
+  await ensureMigrated();
   try {
-    const raw = await fs.readFile(DB_PATH, 'utf-8');
+    const raw = await fs.readFile(collectionPath(key), 'utf-8');
     const parsed = JSON.parse(raw);
-    const db: DbSchema = { ...EMPTY_DB, ...parsed };
-    if (Array.isArray(db.designs)) {
-      db.designs = processDesignRetention(db.designs);
-    }
-    return db;
+    let arr: any[] = Array.isArray(parsed) ? parsed : ((EMPTY_DB[key] as any[]) ?? []);
+    if (key === 'designs') arr = processDesignRetention(arr);
+    return arr as T[];
   } catch (err: any) {
-    if (err?.code !== 'ENOENT') return { ...EMPTY_DB };
-    const seeded: DbSchema = { ...SEED_DB, lastUpdated: new Date().toISOString() };
+    if (err?.code !== 'ENOENT') return ((EMPTY_DB[key] as any[]) ?? []) as T[];
+    // First boot for this specific collection: seed it from local-data.ts's initial* export.
+    const seeded = ((SEED_DB[key] as any[]) ?? []) as T[];
     try {
-      await fs.mkdir(path.dirname(DB_PATH), { recursive: true });
-      await fs.writeFile(DB_PATH, JSON.stringify(seeded, null, 2), 'utf-8');
+      await fs.mkdir(DATA_DIR, { recursive: true });
+      await fs.writeFile(collectionPath(key), JSON.stringify(seeded, null, 2), 'utf-8');
     } catch (writeErr) {
-      console.error('[server-db] First-boot seed write failed:', writeErr);
+      console.error(`[server-db] First-boot seed write failed for "${String(key)}":`, writeErr);
     }
     return seeded;
   }
 }
 
+async function writeCollectionFile<T = any>(key: keyof DbSchema, data: T[]): Promise<void> {
+  await fs.mkdir(DATA_DIR, { recursive: true });
+  await fs.writeFile(collectionPath(key), JSON.stringify(data, null, 2), 'utf-8');
+}
+
+/** Best-effort shared freshness marker — nothing depends on this for correctness. */
+async function touchMeta(): Promise<void> {
+  try {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.writeFile(META_PATH, JSON.stringify({ lastUpdated: new Date().toISOString() }, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('[server-db] Failed to update _meta.json:', err);
+  }
+}
+
+/** Read every collection and assemble the full DbSchema shape (used by the /api/data aggregate poll). */
+export async function readDb(): Promise<DbSchema> {
+  const entries = await Promise.all(
+    COLLECTION_KEYS.map(async key => [key, await readCollectionFile(key)] as const)
+  );
+  const db = Object.fromEntries(entries) as unknown as DbSchema;
+  try {
+    const metaRaw = await fs.readFile(META_PATH, 'utf-8');
+    db.lastUpdated = JSON.parse(metaRaw)?.lastUpdated;
+  } catch {
+    // no meta file yet — fine, lastUpdated stays undefined
+  }
+  return db;
+}
+
+/** Write every collection out to its own file. Rarely used directly — mutateCollection is the normal write path. */
 export async function writeDb(data: DbSchema): Promise<void> {
-  let writeError: unknown = null;
-  writeLock = writeLock.then(async () => {
-    try {
-      const dir = path.dirname(DB_PATH);
-      await fs.mkdir(dir, { recursive: true });
-      await fs.writeFile(DB_PATH, JSON.stringify(data, null, 2), 'utf-8');
-    } catch (err) {
-      console.error('[server-db] Write failed:', err);
-      writeError = err;
-    }
-  });
-  await writeLock;
-  if (writeError) throw writeError;
+  await Promise.all(COLLECTION_KEYS.map(key => writeCollectionFile(key, (data[key] as any[]) ?? [])));
+  await touchMeta();
 }
 
 /**
- * Read a single collection from the database.
+ * Read a single collection from its own file.
  */
 export async function readCollection<T = any>(key: keyof DbSchema): Promise<T[]> {
-  const db = await readDb();
-  return (db[key] as T[]) ?? [];
+  return readCollectionFile<T>(key);
 }
 
+// Per-collection write locks — a write to "tasks" never waits on a concurrent
+// write to "members" or any other unrelated collection.
+const writeLocks = new Map<keyof DbSchema, Promise<void>>();
+
 /**
- * Apply a mutation to a single collection and write the file.
+ * Apply a mutation to a single collection and write only that collection's file.
  * The mutator receives the current array and returns the updated array.
- * Uses the write mutex so concurrent calls queue up safely.
- * Always resolves writeLock so errors don't poison subsequent calls.
+ * Locked per-collection so concurrent calls to the SAME collection queue up
+ * safely, while calls to different collections proceed independently.
  */
 export async function mutateCollection<T = any>(
   key: keyof DbSchema,
   mutator: (current: T[]) => T[]
 ): Promise<T[]> {
+  const previousLock = writeLocks.get(key) ?? Promise.resolve();
   let result: T[] = [];
   let mutationError: unknown = null;
 
-  writeLock = writeLock.then(async () => {
+  const thisLock = previousLock.then(async () => {
     try {
-      const db = await readDb();
-      const current = (db[key] as T[]) ?? [];
+      const current = await readCollectionFile<T>(key);
       const updated = mutator(current);
-      db[key] = updated as any;
-      db.lastUpdated = new Date().toISOString();
-      await fs.mkdir(path.dirname(DB_PATH), { recursive: true });
-      await fs.writeFile(DB_PATH, JSON.stringify(db, null, 2), 'utf-8');
+      await writeCollectionFile(key, updated);
       result = updated;
     } catch (err) {
       mutationError = err;
     }
   });
 
-  await writeLock;
+  writeLocks.set(key, thisLock);
+  await thisLock;
+  touchMeta(); // best-effort, not awaited — never blocks or fails a mutation
   if (mutationError) throw mutationError;
   return result;
 }
-

@@ -1,4 +1,4 @@
-export type MemberDivision = 'Advisory Board' | 'Core Committee' | 'Training Associate' | 'Alumni';
+export type MemberDivision = 'Advisory Board' | 'Core Committee' | 'Training Associate' | 'Alumni' | 'Faculty';
 
 export interface Member {
   id: string;
@@ -9,6 +9,7 @@ export interface Member {
   division: MemberDivision;
   committee?: string; // Legacy fallback
   department?: string;
+  program?: string; // e.g. "B.Tech Computer Science Engineering", "MBA"
   batch?: string; // e.g. "Class of 2025" for Alumni
   passwordHash?: string; // scrypt hash ("salt:hash"), set via password.ts — never plaintext
   bankName?: string;

@@ -24,7 +24,8 @@ import {
   Square,
   MinusSquare,
   Layers,
-  Sparkles
+  Sparkles,
+  BookOpen
 } from 'lucide-react';
 import {
   getMembers,
@@ -62,6 +63,8 @@ export default function DirectoryPage() {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('');
   const [division, setDivision] = useState<MemberDivision>('Training Associate');
+  const [department, setDepartment] = useState('');
+  const [program, setProgram] = useState('');
   const [batch, setBatch] = useState('');
   
   // Notification Alert State
@@ -87,6 +90,8 @@ export default function DirectoryPage() {
   const [editEmail, setEditEmail] = useState('');
   const [editRole, setEditRole] = useState('');
   const [editDivision, setEditDivision] = useState<MemberDivision>('Training Associate');
+  const [editDepartment, setEditDepartment] = useState('');
+  const [editProgram, setEditProgram] = useState('');
   const [editBatch, setEditBatch] = useState('');
 
   useEffect(() => {
@@ -126,6 +131,7 @@ export default function DirectoryPage() {
 
   const getTierForDivision = (div: MemberDivision, currentTier?: number): number => {
     if (div === 'Advisory Board') return currentTier && currentTier <= 4 ? currentTier : 4;
+    if (div === 'Faculty') return currentTier && currentTier <= 4 ? currentTier : 4;
     if (div === 'Core Committee') return 5;
     if (div === 'Training Associate') return 6;
     if (div === 'Alumni') return 7;
@@ -145,6 +151,8 @@ export default function DirectoryPage() {
         role: role.trim() || (division === 'Alumni' ? 'Alumni Member' : division),
         tier: calculatedTier,
         division,
+        department: department.trim() || undefined,
+        program: program.trim() || undefined,
         batch: division === 'Alumni' ? batch.trim() : undefined
       });
 
@@ -152,6 +160,8 @@ export default function DirectoryPage() {
       setEmail('');
       setRole('');
       setDivision('Training Associate');
+      setDepartment('');
+      setProgram('');
       setBatch('');
       setIsModalOpen(false);
 
@@ -168,6 +178,8 @@ export default function DirectoryPage() {
     setEditEmail(member.email);
     setEditRole(member.role);
     setEditDivision(member.division || 'Training Associate');
+    setEditDepartment(member.department || '');
+    setEditProgram(member.program || '');
     setEditBatch(member.batch || '');
   };
 
@@ -192,6 +204,8 @@ export default function DirectoryPage() {
       role: editRole.trim() || editDivision,
       tier: calculatedTier,
       division: editDivision,
+      department: editDepartment.trim() || undefined,
+      program: editProgram.trim() || undefined,
       batch: editDivision === 'Alumni' ? editBatch.trim() : undefined
     }, user?.name || 'Admin');
 
@@ -201,7 +215,12 @@ export default function DirectoryPage() {
   };
 
   const handleDownloadTemplate = () => {
-    const csvContent = 'Name,Email,Division,Role,Batch\nJohn Doe,john.doe@msruas.ac.in,Training Associate,Junior Coordinator,\nJane Smith,jane.smith@msruas.ac.in,Core Committee,Vice President,\nDr. Sharath Kumar,sharath.kumar@msruas.ac.in,Advisory Board,Advisory Member,\nKayomarz M Pavri,kayomarz.m@msruas.ac.in,Alumni,Alumni Mentor,Class of 2024';
+    const csvContent = 'Name,Email,Division,Role,Department,Program,Batch\n' +
+      'John Doe,john.doe@msruas.ac.in,Training Associate,Junior Coordinator,Operations and Logistics,B.Tech Computer Science Engineering,\n' +
+      'Jane Smith,jane.smith@msruas.ac.in,Core Committee,Vice President,Executive Council,B.Tech Electronics and Communication,\n' +
+      'Dr. Sharath Kumar,sharath.kumar@msruas.ac.in,Advisory Board,Advisory Member,Faculty Advisory,,\n' +
+      'Dr. Ajay Rao,ajay.rao@msruas.ac.in,Faculty,Assistant Professor,Faculty Advisory,,\n' +
+      'Kayomarz M Pavri,kayomarz.m@msruas.ac.in,Alumni,Alumni Mentor,Design and Social Media,,Class of 2024';
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -238,6 +257,7 @@ export default function DirectoryPage() {
         const divisionIndex = headers.indexOf('division');
         const roleIndex = headers.indexOf('role');
         const deptIndex = headers.indexOf('department');
+        const programIndex = headers.indexOf('program');
         const batchIndex = headers.indexOf('batch');
 
         if (nameIndex === -1 || emailIndex === -1) {
@@ -266,6 +286,7 @@ export default function DirectoryPage() {
           const mDivStr = divisionIndex !== -1 ? values[divisionIndex] : '';
           const mRole = roleIndex !== -1 ? values[roleIndex] : '';
           const mDept = deptIndex !== -1 ? values[deptIndex] : '';
+          const mProgram = programIndex !== -1 ? values[programIndex] : '';
           const mBatch = batchIndex !== -1 ? values[batchIndex] : '';
 
           if (!mName || !mEmail) continue;
@@ -279,13 +300,15 @@ export default function DirectoryPage() {
           const divLower = mDivStr.toLowerCase();
           const roleLower = mRole.toLowerCase();
 
-          if (divLower.includes('advisor') || divLower.includes('board')) {
+          if (divLower.includes('faculty') || roleLower.includes('professor') || roleLower.includes('faculty')) {
+            mDivision = 'Faculty';
+          } else if (divLower.includes('advisor') || divLower.includes('board')) {
             mDivision = 'Advisory Board';
           } else if (
-            divLower.includes('core') || 
-            roleLower.startsWith('head') || 
-            roleLower.includes('president') || 
-            roleLower.includes('secretary') || 
+            divLower.includes('core') ||
+            roleLower.startsWith('head') ||
+            roleLower.includes('president') ||
+            roleLower.includes('secretary') ||
             roleLower.includes('chief coordinator')
           ) {
             mDivision = 'Core Committee';
@@ -305,6 +328,7 @@ export default function DirectoryPage() {
               tier: mTier,
               division: mDivision,
               department: mDept || undefined,
+              program: mProgram || undefined,
               batch: mDivision === 'Alumni' ? mBatch : undefined
             });
             seenEmails.add(mEmail);
@@ -381,6 +405,7 @@ export default function DirectoryPage() {
   const coreCount = members.filter(m => m.division === 'Core Committee').length;
   const trainingCount = members.filter(m => m.division === 'Training Associate').length;
   const alumniCount = members.filter(m => m.division === 'Alumni').length;
+  const facultyCount = members.filter(m => m.division === 'Faculty').length;
 
   const totalPages = Math.ceil(filteredMembers.length / pageSize) || 1;
   const paginatedMembers = filteredMembers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -611,6 +636,18 @@ export default function DirectoryPage() {
         </button>
 
         <button
+          onClick={() => { setSelectedDivision('Faculty'); setCurrentPage(1); }}
+          className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+            selectedDivision === 'Faculty'
+              ? 'bg-accent text-white shadow-sm'
+              : 'bg-theme-border/20 text-theme-text-secondary hover:text-theme-text-primary'
+          }`}
+        >
+          <BookOpen className="h-3.5 w-3.5 text-cyan-400" />
+          Faculty ({facultyCount})
+        </button>
+
+        <button
           onClick={() => { setSelectedDivision('Core Committee'); setCurrentPage(1); }}
           className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
             selectedDivision === 'Core Committee'
@@ -741,6 +778,22 @@ export default function DirectoryPage() {
                       Designation / Role <ArrowUpDown className="h-3 w-3" />
                     </span>
                   </th>
+                  <th
+                    onClick={() => toggleSort('department')}
+                    className="pb-3.5 font-semibold cursor-pointer hover:text-theme-text-primary select-none"
+                  >
+                    <span className="flex items-center gap-1">
+                      Department <ArrowUpDown className="h-3 w-3" />
+                    </span>
+                  </th>
+                  <th
+                    onClick={() => toggleSort('program')}
+                    className="pb-3.5 font-semibold cursor-pointer hover:text-theme-text-primary select-none"
+                  >
+                    <span className="flex items-center gap-1">
+                      Program <ArrowUpDown className="h-3 w-3" />
+                    </span>
+                  </th>
                   <th className="pb-3.5 font-semibold text-right pr-2">Actions</th>
                 </tr>
               </thead>
@@ -753,7 +806,7 @@ export default function DirectoryPage() {
                       key={member.id} 
                       onClick={() => toggleSelectMember(member.id)}
                       className={`hover:bg-accent/5 transition-all text-xs cursor-pointer select-none ${
-                        isSelected ? 'bg-accent/10 border-l-2 border-l-accent' : ''
+                        isSelected ? 'backdrop-blur-md bg-white/10 dark:bg-white/5 border-l-2 border-l-accent shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]' : ''
                       }`}
                     >
                       <td className="py-3.5 pl-2 pr-2 text-center" onClick={(e) => toggleSelectMember(member.id, e)}>
@@ -785,6 +838,7 @@ export default function DirectoryPage() {
                       <td className="py-3.5 pr-2">
                         <span className={`inline-flex items-center text-[10px] font-semibold px-2.5 py-0.5 rounded-full border ${
                           member.division === 'Advisory Board' ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' :
+                          member.division === 'Faculty' ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30' :
                           member.division === 'Core Committee' ? 'bg-accent/15 text-accent border-accent/30' :
                           member.division === 'Alumni' ? 'bg-purple-500/15 text-purple-400 border-purple-500/30' :
                           'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
@@ -793,6 +847,8 @@ export default function DirectoryPage() {
                         </span>
                       </td>
                       <td className="py-3.5 pr-2 text-theme-text-secondary">{member.role}</td>
+                      <td className="py-3.5 pr-2 text-theme-text-secondary">{member.department || '—'}</td>
+                      <td className="py-3.5 pr-2 text-theme-text-secondary">{member.program || '—'}</td>
                       <td className="py-3.5 text-right pr-2" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end items-center gap-1">
                           <button
@@ -909,6 +965,7 @@ export default function DirectoryPage() {
                     className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   >
                     <option value="Advisory Board">Advisory Board</option>
+                    <option value="Faculty">Faculty</option>
                     <option value="Core Committee">Core Committee</option>
                     <option value="Training Associate">Training Associate</option>
                     <option value="Alumni">Alumni</option>
@@ -922,6 +979,30 @@ export default function DirectoryPage() {
                     value={role}
                     onChange={(e) => setRole(e.target.value)}
                     placeholder="e.g. Operations Lead"
+                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">Department</label>
+                  <input
+                    type="text"
+                    value={department}
+                    onChange={(e) => setDepartment(e.target.value)}
+                    placeholder="e.g. Design and Social Media"
+                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">Program</label>
+                  <input
+                    type="text"
+                    value={program}
+                    onChange={(e) => setProgram(e.target.value)}
+                    placeholder="e.g. B.Tech Computer Science"
                     className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   />
                 </div>
@@ -997,6 +1078,7 @@ export default function DirectoryPage() {
                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   >
                     <option value="Advisory Board">Advisory Board</option>
+                    <option value="Faculty">Faculty</option>
                     <option value="Core Committee">Core Committee</option>
                     <option value="Training Associate">Training Associate</option>
                     <option value="Alumni">Alumni</option>
@@ -1009,6 +1091,30 @@ export default function DirectoryPage() {
                     type="text"
                     value={editRole}
                     onChange={(e) => setEditRole(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">Department</label>
+                  <input
+                    type="text"
+                    value={editDepartment}
+                    onChange={(e) => setEditDepartment(e.target.value)}
+                    placeholder="e.g. Design and Social Media"
+                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">Program</label>
+                  <input
+                    type="text"
+                    value={editProgram}
+                    onChange={(e) => setEditProgram(e.target.value)}
+                    placeholder="e.g. B.Tech Computer Science"
                     className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   />
                 </div>
@@ -1068,7 +1174,7 @@ export default function DirectoryPage() {
 
       {/* Floating Bulk Actions Toolbar */}
       {selectedMemberIds.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-11/12 max-w-4xl glass-panel bg-theme-card/95 border border-accent/40 shadow-2xl rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 animate-in slide-in-from-bottom-5 duration-300">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-11/12 max-w-4xl glass-panel backdrop-blur-xl bg-theme-card/60 border border-accent/40 shadow-2xl rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 animate-in slide-in-from-bottom-5 duration-300">
           <div className="flex items-center gap-3">
             <div className="px-3 py-1.5 bg-accent/20 border border-accent/40 text-accent font-bold rounded-xl text-xs flex items-center gap-2">
               <CheckSquare className="h-4 w-4" />
@@ -1101,6 +1207,7 @@ export default function DirectoryPage() {
                   >
                     <option value="" disabled>Move Division...</option>
                     <option value="Advisory Board">Advisory Board</option>
+                    <option value="Faculty">Faculty</option>
                     <option value="Core Committee">Core Committee</option>
                     <option value="Training Associate">Training Associate</option>
                     <option value="Alumni">Alumni</option>
@@ -1194,6 +1301,7 @@ export default function DirectoryPage() {
                   >
                     <option value="" disabled>Select target division...</option>
                     <option value="Advisory Board">Advisory Board</option>
+                    <option value="Faculty">Faculty</option>
                     <option value="Core Committee">Core Committee</option>
                     <option value="Training Associate">Training Associate</option>
                     <option value="Alumni">Alumni</option>
