@@ -1,17 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { 
-  Calendar, 
-  CheckSquare, 
-  Clock, 
-  TrendingUp, 
-  ArrowUpRight, 
+import {
+  Calendar,
+  CheckSquare,
   AlertCircle,
   Megaphone,
-  CheckCircle2,
-  FileClock,
   ExternalLink,
   ChevronRight,
   Star,

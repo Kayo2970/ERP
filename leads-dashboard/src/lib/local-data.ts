@@ -542,7 +542,7 @@ export function bulkUpdateMembers(
     if (full) serverPatch('/api/members', id, full);
   });
   const changeSummary = Object.entries(updates)
-    .filter(([_, v]) => v !== undefined && v !== '')
+    .filter(([, v]) => v !== undefined && v !== '')
     .map(([k, v]) => `${k}='${v}'`)
     .join(', ');
   logAuditEvent('BULK_MEMBERS_UPDATED', actorName, `Bulk updated ${updatedCount} members with: ${changeSummary}`);
@@ -989,12 +989,6 @@ export function deleteRating(id: string, actorName: string): boolean {
   return true;
 }
 
-// Helper: Get ratable tasks (completed or in-progress)
-export function getRatableTasks(): TaskItem[] {
-  const tasks = getTasks();
-  return tasks.filter(t => t.status === 'Completed' || t.status === 'In Progress');
-}
-
 // -------------------------------------------------------------
 // Student Profiles & Individual Outcomes Aggregation
 // -------------------------------------------------------------
@@ -1190,17 +1184,6 @@ export function updateReimbursementStatus(
   return claim;
 }
 
-export function deleteReimbursement(id: string, actorName: string): boolean {
-  const current = getReimbursements();
-  const target = current.find(r => r.id === id);
-  if (!target) return false;
-
-  const updated = current.filter(r => r.id !== id);
-  saveReimbursements(updated);
-  serverDelete('/api/reimbursements', id);
-  logAuditEvent('REIMBURSEMENT_DELETED', actorName, `Deleted claim #${id} of ₹${target.amount}`);
-  return true;
-}
 
 // -------------------------------------------------------------
 // Announcements

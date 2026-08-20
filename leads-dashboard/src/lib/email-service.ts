@@ -1,5 +1,5 @@
 import nodemailer, { Transporter } from 'nodemailer';
-import { mutateCollection, readCollection } from './server-db';
+import { mutateCollection } from './server-db';
 
 export interface EmailLog {
   id: string;

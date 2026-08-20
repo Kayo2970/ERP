@@ -2,49 +2,39 @@
 
 import React, { useState, useEffect, use } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { 
-  ChevronLeft, 
-  Calendar, 
-  MapPin, 
-  Users, 
-  CheckSquare, 
-  Plus, 
-  Trash2, 
-  UserPlus, 
-  CheckCircle2, 
-  Clock, 
-  Sparkles, 
-  FileText,
+import {
+  ChevronLeft,
+  Calendar,
+  MapPin,
+  Users,
+  CheckSquare,
+  Plus,
+  Trash2,
+  UserPlus,
+  CheckCircle2,
   User,
-  ShieldCheck,
   Award
 } from 'lucide-react';
-import { 
-  getEventById, 
-  getEvents,
-  saveEvents,
-  getMembers, 
-  getTasks, 
+import {
+  getEventById,
+  getMembers,
+  getTasks,
   addTask,
-  updateTask,
   addEventCommittee,
   updateEventCommitteeMembers,
   deleteEventCommittee,
-  EventItem, 
+  EventItem,
   EventCommittee,
-  Member, 
-  TaskItem 
+  Member,
+  TaskItem
 } from '@/lib/local-data';
 import { canManageEvents } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
-import { EmptyState } from '@/components/ui/empty-state';
 import { StudentProfileModal } from '@/components/student-profile-modal';
 
 export default function EventDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const eventId = resolvedParams.id;
-  const router = useRouter();
 
   const [event, setEvent] = useState<EventItem | null>(null);
   const [members, setMembers] = useState<Member[]>([]);

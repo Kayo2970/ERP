@@ -1,20 +1,17 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { 
-  Megaphone, 
-  Plus, 
-  X, 
-  Mail, 
-  CheckCircle, 
-  ChevronRight, 
-  Play, 
-  Terminal, 
-  Edit2, 
-  Trash2, 
+import {
+  Megaphone,
+  Plus,
+  X,
+  CheckCircle,
+  Play,
+  Terminal,
+  Edit2,
+  Trash2,
   Info,
-  Clock,
-  Send
+  Clock
 } from 'lucide-react';
 import { 
   getAnnouncements, 

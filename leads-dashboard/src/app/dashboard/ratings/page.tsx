@@ -1,39 +1,31 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { 
-  Star, 
-  CheckCircle, 
-  Users, 
-  User, 
-  Clock, 
-  ShieldAlert, 
-  Award, 
-  FileText, 
-  X, 
-  Search, 
-  Edit2, 
+import {
+  Star,
+  CheckCircle,
+  ShieldAlert,
+  Award,
+  X,
+  Search,
+  Edit2,
   Trash2,
-  Filter,
-  CheckSquare,
-  AlertCircle
+  CheckSquare
 } from 'lucide-react';
-import { 
-  getRatings, 
-  addRating, 
+import {
+  getRatings,
+  addRating,
   updateRating,
   deleteRating,
-  getMembers, 
-  getTasks, 
-  getRatableTasks,
-  Member, 
-  TaskItem, 
-  RatingItem 
+  getMembers,
+  getTasks,
+  Member,
+  TaskItem,
+  RatingItem
 } from '@/lib/local-data';
 import { getRatingColor } from '@/lib/design-tokens';
 import { canViewRating } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
-import { EmptyState } from '@/components/ui/empty-state';
 
 export default function RatingsPage() {
   const [ratings, setRatings] = useState<RatingItem[]>([]);

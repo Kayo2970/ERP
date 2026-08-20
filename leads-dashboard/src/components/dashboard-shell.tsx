@@ -3,27 +3,26 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { 
-  LayoutDashboard, 
-  Calendar, 
-  CheckSquare, 
-  Star, 
-  Receipt, 
-  FileText, 
-  BarChart3, 
-  Megaphone, 
-  FolderGit2, 
-  Settings, 
-  LogOut, 
-  Sun, 
-  Moon, 
-  Menu, 
-  X, 
+import {
+  LayoutDashboard,
+  Calendar,
+  CheckSquare,
+  Star,
+  Receipt,
+  FileText,
+  BarChart3,
+  Megaphone,
+  FolderGit2,
+  Settings,
+  LogOut,
+  Sun,
+  Moon,
+  Menu,
+  X,
   User,
   Bell,
   Check,
   Info,
-  ShieldAlert,
   ShieldCheck,
   Palette,
   UserCog,
@@ -31,7 +30,7 @@ import {
   Undo2,
   DatabaseBackup
 } from 'lucide-react';
-import { getAnnouncements, getTasks, getDesigns, getMembers, logAuditEvent, Member, TaskItem, AnnouncementItem, syncWithServer } from '@/lib/local-data';
+import { getAnnouncements, getTasks, getDesigns, getMembers, logAuditEvent, Member, syncWithServer } from '@/lib/local-data';
 import { canViewTaskExtended, getAnnouncementScopeMatch } from '@/lib/permissions';
 
 interface SidebarItem {
@@ -81,7 +80,6 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDarkTheme, setIsDarkTheme] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [notifications, setNotifications] = useState<{ id: string; title: string; time: string; read: boolean }[]>([]);
   const notifRef = useRef<HTMLDivElement>(null);
 
@@ -142,8 +140,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       }
 
       // Initial sync: pull server state into localStorage immediately
-      setIsSyncing(true);
-      syncWithServer().finally(() => setIsSyncing(false));
+      syncWithServer();
 
       // Poll every 7 seconds so changes from other devices appear automatically
       const pollInterval = setInterval(() => {

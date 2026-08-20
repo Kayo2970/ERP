@@ -12,7 +12,7 @@
  * There is no session-scoped "current user" object here; every function takes the
  * user explicitly so it works the same in pages, modals, and background sync code.
  */
-import { Member, TaskItem, RatingItem, ReimbursementItem, GroupPolicy, EventItem, AccessLevelSettings, getMembers, getGroupPolicies, getAccessLevelSettings, canViewTask } from './local-data';
+import { Member, TaskItem, RatingItem, ReimbursementItem, GroupPolicy, EventItem, getMembers, getGroupPolicies, getAccessLevelSettings, canViewTask } from './local-data';
 
 export type SessionUser = {
   id?: string;
@@ -90,11 +90,6 @@ export function isBaseLeadership(user: SessionUser): boolean {
 /** Core Committee: tier === the configured value (default 5). */
 export function isCoreCommitteeTier(user: SessionUser): boolean {
   return !!user && user.tier === getAccessLevelSettings().coreCommitteeTier;
-}
-
-/** Tier 6: Training Associate (base tier). */
-export function isTrainingAssociateTier(user: SessionUser): boolean {
-  return !!user && user.tier === 6;
 }
 
 /** Resolve the full Member record for a session user (persona objects are a subset of Member). */
@@ -220,16 +215,6 @@ export function canApproveAsSectorHead(user: SessionUser): boolean {
 
 /** Finance Head second-stage approval permission. */
 export function canApproveAsFinanceHead(user: SessionUser): boolean {
-  return isFinanceHead(user);
-}
-
-/** Backwards-compatibility wrapper for first-pass (Sector Head) review. */
-export function canReviewReimbursementFirstPass(user: SessionUser): boolean {
-  return isSectorHead(user);
-}
-
-/** Backwards-compatibility wrapper for final (Finance Head) approval. */
-export function canApproveReimbursementFinal(user: SessionUser): boolean {
   return isFinanceHead(user);
 }
 
