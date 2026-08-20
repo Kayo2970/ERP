@@ -37,6 +37,7 @@ interface SidebarItem {
   name: string;
   href: string;
   icon: React.ComponentType<any>;
+  superUserOnly?: boolean;
 }
 
 interface NavSection {
@@ -64,6 +65,7 @@ const navSections: NavSection[] = [
       { name: 'Reports', href: '/dashboard/reports', icon: BarChart3 },
       { name: 'Announcements', href: '/dashboard/announcements', icon: Megaphone },
       { name: 'Directory', href: '/dashboard/directory', icon: FolderGit2 },
+      { name: 'Group Policies', href: '/dashboard/policies', icon: ShieldCheck, superUserOnly: true },
       { name: 'Settings', href: '/dashboard/settings', icon: Settings },
     ],
   },
@@ -303,7 +305,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                 {section.title}
               </h3>
               <div className="space-y-1 pt-1">
-                {section.items.map((item) => {
+                {section.items.filter(item => !item.superUserOnly || user.tier === 1).map((item) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
                   return (
@@ -392,7 +394,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                   <h4 className="px-2 text-[10px] font-bold text-theme-text-secondary uppercase tracking-wider">
                     {section.title}
                   </h4>
-                  {section.items.map((item) => {
+                  {section.items.filter(item => !item.superUserOnly || user.tier === 1).map((item) => {
                     const Icon = item.icon;
                     const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
                     return (

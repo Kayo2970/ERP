@@ -190,6 +190,29 @@ export interface AuditLogItem {
   timestamp: string;
 }
 
+/**
+ * Group Policy: a dynamically Super-User-managed access "tag." Grants a set of
+ * capability keys to any member matching ANY of its non-empty target criteria
+ * (division / tier / designation keyword / explicit member) — no code change
+ * required to grant or revoke access. See permissions.ts's hasCapability() for
+ * the resolution logic and CAPABILITY_CATALOG for the grantable capabilities.
+ */
+export interface GroupPolicy {
+  id: string;
+  tag: string; // short unique code, e.g. "JUNIOR_EVENT_LEAD" — used for display/reference
+  name: string; // human-readable name, e.g. "Junior Event Lead Access"
+  description?: string;
+  capabilities: string[]; // capability keys from CAPABILITY_CATALOG this tag grants
+  targetDivisions: MemberDivision[];
+  targetTiers: number[];
+  targetDesignationKeyword?: string; // substring match against Member.role, case-insensitive
+  targetMemberIds: string[]; // explicit individual overrides
+  enabled: boolean;
+  createdBy: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 // Shared default password ("Kayo29") every seeded account starts with, scrypt-hashed —
 // members should change this from Settings once they can log in. Precomputed once via
 // password.ts's hashPassword('Kayo29') rather than computed at import time.
@@ -255,6 +278,8 @@ export const initialSubmissions: FormSubmissionItem[] = [];
 
 export const initialDesigns: DesignSubmissionItem[] = [];
 
+export const initialGroupPolicies: GroupPolicy[] = [];
+
 // -------------------------------------------------------------
 // Server Sync & Per-Collection API Helpers
 // -------------------------------------------------------------
@@ -295,6 +320,7 @@ export async function syncWithServer(): Promise<boolean> {
       hydrateCollection('leads_custom_forms', data.forms);
       hydrateCollection('leads_form_submissions', data.submissions);
       hydrateCollection('leads_designs', data.designs);
+      hydrateCollection('leads_group_policies', data.groupPolicies);
       if (Array.isArray(data.auditLogs)) {
         localStorage.setItem('leads_audit_logs', JSON.stringify(data.auditLogs));
       }
@@ -1353,6 +1379,66 @@ export function deleteDesign(id: string, actorName: string): boolean {
   saveDesigns(updated);
   serverDelete('/api/designs', id);
   logAuditEvent('DESIGN_DELETED', actorName, `Deleted design submission "${target.title}"`);
+  return true;
+}
+
+// -------------------------------------------------------------
+// Group Policy Management (Super User-only dynamic access control)
+// -------------------------------------------------------------
+
+export function getGroupPolicies(): GroupPolicy[] {
+  if (typeof window === 'undefined') return initialGroupPolicies;
+  const saved = localStorage.getItem('leads_group_policies');
+  if (saved) {
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  return initialGroupPolicies;
+}
+
+export function saveGroupPolicies(policies: GroupPolicy[]): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem('leads_group_policies', JSON.stringify(policies));
+}
+
+export function addGroupPolicy(policy: Omit<GroupPolicy, 'id' | 'createdAt'>): GroupPolicy {
+  const current = getGroupPolicies();
+  const newPolicy: GroupPolicy = {
+    ...policy,
+    id: 'policy_' + Date.now(),
+    createdAt: new Date().toISOString(),
+  };
+  current.unshift(newPolicy);
+  saveGroupPolicies(current);
+  serverPost('/api/group-policies', newPolicy);
+  logAuditEvent('GROUP_POLICY_CREATED', policy.createdBy, `Created group policy tag "${newPolicy.name}" [${newPolicy.tag}] granting: ${newPolicy.capabilities.join(', ') || 'none'}`);
+  return newPolicy;
+}
+
+export function updateGroupPolicy(id: string, updates: Partial<GroupPolicy>, actorName: string): GroupPolicy | null {
+  const current = getGroupPolicies();
+  const idx = current.findIndex(p => p.id === id);
+  if (idx === -1) return null;
+
+  current[idx] = { ...current[idx], ...updates, updatedAt: new Date().toISOString() };
+  saveGroupPolicies(current);
+  serverPatch('/api/group-policies', id, current[idx]);
+  logAuditEvent('GROUP_POLICY_UPDATED', actorName, `Updated group policy tag "${current[idx].name}" [${current[idx].tag}]`);
+  return current[idx];
+}
+
+export function deleteGroupPolicy(id: string, actorName: string): boolean {
+  const current = getGroupPolicies();
+  const target = current.find(p => p.id === id);
+  if (!target) return false;
+
+  const updated = current.filter(p => p.id !== id);
+  saveGroupPolicies(updated);
+  serverDelete('/api/group-policies', id);
+  logAuditEvent('GROUP_POLICY_DELETED', actorName, `Deleted group policy tag "${target.name}" [${target.tag}]`);
   return true;
 }
 

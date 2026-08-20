@@ -12,7 +12,7 @@
  * There is no session-scoped "current user" object here; every function takes the
  * user explicitly so it works the same in pages, modals, and background sync code.
  */
-import { Member, TaskItem, RatingItem, ReimbursementItem, getMembers, canViewTask } from './local-data';
+import { Member, TaskItem, RatingItem, ReimbursementItem, GroupPolicy, getMembers, getGroupPolicies, canViewTask } from './local-data';
 
 export type SessionUser = {
   id?: string;
@@ -38,7 +38,7 @@ export function isSectorHead(user: SessionUser): boolean {
   const role = (user as any)?.role || '';
   const isSectorOrCentreHead = /\b(sector|centre|center)\s+head\b/i.test(role);
   const isGeneralHead = isHeadRole(user) && !/\bfinance\b/i.test(role);
-  return user.tier <= 2 || isSectorOrCentreHead || isGeneralHead;
+  return user.tier <= 2 || isSectorOrCentreHead || isGeneralHead || hasCapability(user, 'APPROVE_REIMBURSEMENTS_SECTOR');
 }
 
 /** Check if user holds the tag of Finance Head (Finance Head / Finance Lead / Finance Department). */
@@ -48,7 +48,7 @@ export function isFinanceHead(user: SessionUser): boolean {
   const dept = user.department || resolveMember(user)?.department || '';
   const isFinanceRole = /\bfinance\b/i.test(role);
   const isFinanceDept = /\bfinance\b/i.test(dept);
-  return user.tier === 1 || isFinanceRole || isFinanceDept;
+  return user.tier === 1 || isFinanceRole || isFinanceDept || hasCapability(user, 'APPROVE_REIMBURSEMENTS_FINANCE');
 }
 
 /** Tier 1-3: Super User, Centre Head, Head of Events — full organizational access. */
@@ -74,6 +74,52 @@ function resolveMember(user: SessionUser): Member | undefined {
     (user.id && members.find(m => m.id === user.id)) ||
     members.find(m => m.email.toLowerCase() === user.email.toLowerCase())
   );
+}
+
+/**
+ * Group Policy Management — dynamic, Super User-managed access control.
+ *
+ * A fixed catalog of grantable capabilities. Every capability key here maps
+ * 1:1 to an existing `can*` check below via `hasCapability()`, so a Group
+ * Policy tag granting e.g. "MANAGE_TASKS_EVENTS" has the exact same effect
+ * as the hardcoded tier/role rules already covering that action — it's an
+ * additional grant path, never a replacement for the existing rules.
+ */
+export const CAPABILITY_CATALOG: { key: string; label: string; description: string }[] = [
+  { key: 'MANAGE_TASKS_EVENTS', label: 'Manage Tasks & Events', description: 'Create, edit, and delete tasks and events.' },
+  { key: 'EDIT_DIRECTORY', label: 'Edit Member Directory', description: 'Add, edit, remove, and bulk-manage member records.' },
+  { key: 'VIEW_FULL_DIRECTORY', label: 'View Full Directory', description: 'See the entire member roster, not just their own profile.' },
+  { key: 'BUILD_FORMS', label: 'Build Public Forms', description: 'Create and edit public-facing forms.' },
+  { key: 'CREATE_ANNOUNCEMENT', label: 'Publish Announcements', description: 'Author and publish announcements to a chosen scope.' },
+  { key: 'VIEW_ALL_DESIGNS', label: 'View All Design Submissions', description: 'See every submission in the Design Portal, not just their own.' },
+  { key: 'APPROVE_REIMBURSEMENTS_SECTOR', label: 'Approve Reimbursements (Sector Head stage)', description: 'First-pass reimbursement review and approval.' },
+  { key: 'APPROVE_REIMBURSEMENTS_FINANCE', label: 'Approve Reimbursements (Finance Head stage)', description: 'Final-stage reimbursement approval.' },
+];
+
+/** True if a member satisfies ANY of a policy's non-empty target criteria. */
+function memberMatchesPolicy(member: Member, policy: GroupPolicy): boolean {
+  if (policy.targetMemberIds?.includes(member.id)) return true;
+  if (policy.targetDivisions?.length && policy.targetDivisions.includes(member.division)) return true;
+  if (policy.targetTiers?.length && policy.targetTiers.includes(member.tier)) return true;
+  if (policy.targetDesignationKeyword?.trim()) {
+    const kw = policy.targetDesignationKeyword.trim().toLowerCase();
+    if ((member.role || '').toLowerCase().includes(kw)) return true;
+  }
+  return false;
+}
+
+/**
+ * Resolve whether `user` currently holds `capability` through any enabled
+ * Group Policy tag whose targeting matches them. Super User (tier 1) always
+ * has every capability implicitly and never needs an explicit policy.
+ */
+export function hasCapability(user: SessionUser, capability: string): boolean {
+  if (!user) return false;
+  if (user.tier === 1) return true;
+  const member = resolveMember(user);
+  if (!member) return false;
+  const policies = getGroupPolicies().filter(p => p.enabled !== false);
+  return policies.some(p => p.capabilities?.includes(capability) && memberMatchesPolicy(member, p));
 }
 
 /** Sector Head first-stage approval permission. */
@@ -128,7 +174,7 @@ export function canViewReimbursement(claim: ReimbursementItem, user: SessionUser
 
 /** Tasks/events creation & management — leadership, Core Committee, and any Head (incl. tier-3 Heads). */
 export function canManageTasksAndEvents(user: SessionUser): boolean {
-  return isBaseLeadership(user) || isCoreCommitteeTier(user) || isHeadRole(user);
+  return isBaseLeadership(user) || isCoreCommitteeTier(user) || isHeadRole(user) || hasCapability(user, 'MANAGE_TASKS_EVENTS');
 }
 
 /**
@@ -190,22 +236,22 @@ export function canViewRating(rating: RatingItem, user: SessionUser): boolean {
  * see their own profile.
  */
 export function canViewFullDirectory(user: SessionUser): boolean {
-  return !!user && (user.tier <= 5 || isHeadRole(user));
+  return !!user && (user.tier <= 5 || isHeadRole(user) || hasCapability(user, 'VIEW_FULL_DIRECTORY'));
 }
 
-/** Roster CRUD (add/edit/remove/bulk-edit members) — unchanged, base leadership only. */
+/** Roster CRUD (add/edit/remove/bulk-edit members) — base leadership, or an explicit Group Policy grant. */
 export function canEditDirectory(user: SessionUser): boolean {
-  return isBaseLeadership(user);
+  return isBaseLeadership(user) || hasCapability(user, 'EDIT_DIRECTORY');
 }
 
 /** Form builder access — existing convention (tier 1 or tier 5), plus any Head regardless of tier. */
 export function canBuildForms(user: SessionUser): boolean {
-  return (!!user && (user.tier === 1 || user.tier === 5)) || isHeadRole(user);
+  return (!!user && (user.tier === 1 || user.tier === 5)) || isHeadRole(user) || hasCapability(user, 'BUILD_FORMS');
 }
 
 /** Announcement authoring — leadership, Core Committee, and Heads. */
 export function canCreateAnnouncement(user: SessionUser): boolean {
-  return isBaseLeadership(user) || isCoreCommitteeTier(user) || isHeadRole(user);
+  return isBaseLeadership(user) || isCoreCommitteeTier(user) || isHeadRole(user) || hasCapability(user, 'CREATE_ANNOUNCEMENT');
 }
 
 /**
@@ -214,7 +260,7 @@ export function canCreateAnnouncement(user: SessionUser): boolean {
  * the page's own "proofread" tab). Leadership and any Head see every submission.
  */
 export function canViewAllDesigns(user: SessionUser): boolean {
-  return isBaseLeadership(user) || isHeadRole(user);
+  return isBaseLeadership(user) || isHeadRole(user) || hasCapability(user, 'VIEW_ALL_DESIGNS');
 }
 
 /**
