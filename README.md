@@ -50,11 +50,11 @@ This app is designed to run as **one long-lived instance** on a self-hosted serv
 
 ---
 
-## 🔐 Authentication & Access Level Tiers (Testing)
+## 🔐 Authentication & Access Level Tiers
 
-The system dynamically validates sign-ins against the registered members database. You can test different role perspectives using the default password `password123`:
+Sign-ins are validated server-side (`/api/auth/login`) against the registered members database, with real scrypt-hashed passwords — there is no shared bypass password anymore. Every account starts on a shared temporary password (`Kayo29`) and should be changed from Settings → Account (or via "Forgot Password?" on the login screen) as soon as its owner first logs in.
 
-| Role / Rank | Representative Test Email | Access Level Tier |
+| Role / Rank | Representative Email | Access Level Tier |
 | :--- | :--- | :--- |
 | **Super User** | `kayomarz.pavri@msruas.ac.in` | **Tier 1** — Full Operations & Settings Control |
 | **Centre Head** | `subhadeep.mukherjee@msruas.ac.in` | **Tier 2** — Member uploads & reimbursement audits |
@@ -63,7 +63,7 @@ The system dynamically validates sign-ins against the registered members databas
 | **Core Committee** | `gurutejas.c@msruas.ac.in` | **Tier 5** — Operations control, task setup, form builder |
 | **Training Associate** | `kunal.bhadauria@msruas.ac.in` | **Tier 6** — Member dashboard, task completion, claim submission |
 
-For a complete index of all 35+ testing accounts, see [docs/login_creds.md](docs/login_creds.md).
+For the complete roster of all 35 accounts, see [docs/login_creds.md](docs/login_creds.md).
 
 ---
 

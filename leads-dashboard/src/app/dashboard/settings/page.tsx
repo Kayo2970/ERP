@@ -97,7 +97,7 @@ export default function SettingsPage() {
     setTimeout(() => setErrorMsg(''), 4000);
   };
 
-  const handleUpdateAccount = (e: React.FormEvent) => {
+  const handleUpdateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!displayName.trim()) {
       triggerError('Name cannot be blank.');
@@ -105,6 +105,10 @@ export default function SettingsPage() {
     }
 
     if (newPassword) {
+      if (!currentPassword) {
+        triggerError('Enter your current password to set a new one.');
+        return;
+      }
       if (newPassword.length < 4) {
         triggerError('New password must be at least 4 characters.');
         return;
@@ -113,11 +117,21 @@ export default function SettingsPage() {
         triggerError('New password and confirmation do not match.');
         return;
       }
+
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email, currentPassword, newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        triggerError(data.error || 'Failed to change password.');
+        return;
+      }
     }
 
-    const changes = { 
-      name: displayName.trim(), 
-      ...(newPassword ? { customPassword: newPassword } : {}),
+    const changes = {
+      name: displayName.trim(),
       bankName: savedBankName.trim(),
       accountNumber: savedAccountNumber.trim(),
       ifscCode: savedIfscCode.trim().toUpperCase()

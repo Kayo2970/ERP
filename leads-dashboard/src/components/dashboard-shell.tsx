@@ -23,13 +23,11 @@ import {
   Bell,
   Check,
   Info,
-  ChevronDown,
   ShieldAlert,
   ShieldCheck,
-  Sparkles,
   Palette
 } from 'lucide-react';
-import { getAnnouncements, getTasks, getDesigns, TaskItem, AnnouncementItem, syncWithServer, logAuditEvent } from '@/lib/local-data';
+import { getAnnouncements, getTasks, getDesigns, TaskItem, AnnouncementItem, syncWithServer } from '@/lib/local-data';
 import { canViewTaskExtended, getAnnouncementScopeMatch } from '@/lib/permissions';
 
 interface SidebarItem {
@@ -70,119 +68,15 @@ const navSections: NavSection[] = [
 
 const allSidebarItems = navSections.flatMap(s => s.items);
 
-export const TEST_PERSONAS = [
-  {
-    name: 'Kayomarz Pavri',
-    email: 'kayomarz.pavri@msruas.ac.in',
-    role: 'Super User',
-    tier: 1,
-    division: 'Core Committee',
-    committee: 'All Committees',
-    department: 'Design and Social Media',
-    badge: 'Super Admin',
-    color: 'bg-danger/10 text-danger border-danger/30'
-  },
-  {
-    name: 'Dr. Ananya Sharma',
-    email: 'ananya.sharma@msruas.ac.in',
-    role: 'Centre Head',
-    tier: 2,
-    division: 'Advisory Board',
-    committee: 'Faculty Oversight',
-    department: 'Faculty Oversight',
-    badge: 'Faculty Lead',
-    color: 'bg-purple-500/10 text-purple-400 border-purple-500/30'
-  },
-  {
-    name: 'Rahul Verma',
-    email: 'rahul.verma@msruas.ac.in',
-    role: 'Head of Events',
-    tier: 3,
-    division: 'Core Committee',
-    committee: 'Core Committee',
-    department: 'Faculty Oversight',
-    badge: 'Executive',
-    color: 'bg-accent/10 text-accent border-accent/30'
-  },
-  {
-    name: 'Prof. S. Ramesh',
-    email: 'ramesh.s@msruas.ac.in',
-    role: 'Faculty Advisor',
-    tier: 4,
-    division: 'Advisory Board',
-    committee: 'Faculty Advisory',
-    department: 'Faculty Advisory',
-    badge: 'Advisor',
-    color: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30'
-  },
-  {
-    name: 'Aarav Patel',
-    email: 'aarav.patel@msruas.ac.in',
-    role: 'President / Student Lead',
-    tier: 5,
-    division: 'Core Committee',
-    committee: 'Core Committee',
-    department: 'Executive Council',
-    badge: 'Student Lead',
-    color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-  },
-  {
-    name: 'Sneha Kulkarni',
-    email: 'sneha.k@msruas.ac.in',
-    role: 'Vice President',
-    tier: 5,
-    division: 'Core Committee',
-    committee: 'Core Committee',
-    department: 'Executive Council',
-    badge: 'Leadership',
-    color: 'bg-blue-500/10 text-blue-400 border-blue-500/30'
-  },
-  {
-    name: 'Arjun Mehta',
-    email: 'arjun.mehta@msruas.ac.in',
-    role: 'Head Design and Social Media',
-    tier: 5,
-    division: 'Core Committee',
-    committee: 'Design and Social Media',
-    department: 'Design and Social Media',
-    badge: 'Department Head',
-    color: 'bg-pink-500/10 text-pink-400 border-pink-500/30'
-  },
-  {
-    name: 'Rohan Deshmukh',
-    email: 'rohan.d@msruas.ac.in',
-    role: 'Full-Stack Developer',
-    tier: 6,
-    division: 'Training Associate',
-    committee: 'Technical & Platform',
-    department: 'Design and Social Media',
-    badge: 'Associate',
-    color: 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-  },
-  {
-    name: 'Priya Nair',
-    email: 'priya.nair.alumni@msruas.ac.in',
-    role: 'Alumni Advisor',
-    tier: 4,
-    division: 'Alumni',
-    committee: 'Mentorship Circle',
-    department: 'Alumni Relations',
-    badge: 'Alumni',
-    color: 'bg-teal-500/10 text-teal-400 border-teal-500/30'
-  }
-];
-
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDarkTheme, setIsDarkTheme] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [isPersonaSwitcherOpen, setIsPersonaSwitcherOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [notifications, setNotifications] = useState<{ id: string; title: string; time: string; read: boolean }[]>([]);
   const notifRef = useRef<HTMLDivElement>(null);
-  const personaRef = useRef<HTMLDivElement>(null);
 
   const [user, setUser] = useState({
     name: 'Kayomarz Pavri',
@@ -272,32 +166,10 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
         setIsNotificationsOpen(false);
       }
-      if (personaRef.current && !personaRef.current.contains(event.target as Node)) {
-        setIsPersonaSwitcherOpen(false);
-      }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  const handleSwitchPersona = (persona: any) => {
-    const newUserData = {
-      name: persona.name,
-      email: persona.email,
-      role: persona.role,
-      tier: persona.tier,
-      division: persona.division || 'Core Committee',
-      committee: persona.committee || 'All Committees',
-      department: persona.department
-    };
-    localStorage.setItem('user', JSON.stringify(newUserData));
-    setUser(newUserData);
-    setIsPersonaSwitcherOpen(false);
-    logAuditEvent('SWITCHED_TEST_PERSONA', persona.name, `Active session switched to ${persona.name} (${persona.role} - Tier ${persona.tier})`, persona.email);
-    // Trigger global refresh for views listening to storage/user changes
-    window.dispatchEvent(new Event('storage'));
-    window.location.reload();
-  };
 
   const toggleTheme = () => {
     const newTheme = !isDarkTheme;
@@ -571,57 +443,6 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                 </div>
               )}
             </div>
-
-            {/* Persona Quick Switcher */}
-            <div className="relative" ref={personaRef}>
-              <button
-                onClick={() => setIsPersonaSwitcherOpen(!isPersonaSwitcherOpen)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-accent/30 bg-accent/10 hover:bg-accent/20 text-accent transition-all text-xs font-semibold cursor-pointer shadow-sm"
-                title="Switch test RBAC persona"
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                <span className="hidden lg:inline">Switch Role</span>
-                <ChevronDown className={`h-3 w-3 transition-transform ${isPersonaSwitcherOpen ? 'rotate-180' : ''}`} />
-              </button>
-
-              {isPersonaSwitcherOpen && (
-                <div className="absolute right-0 mt-2 w-72 glass-panel rounded-2xl p-3 shadow-2xl border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150">
-                  <div className="flex items-center justify-between pb-2 border-b border-theme-border/30 px-1">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-theme-text-secondary">Switch Test Persona</span>
-                    <span className="text-[10px] font-semibold bg-accent/15 text-accent px-2 py-0.5 rounded-full">RBAC Demo</span>
-                  </div>
-
-                  <div className="divide-y divide-theme-border/20 max-h-80 overflow-y-auto pt-1">
-                    {TEST_PERSONAS.map(p => {
-                      const isCurrent = user.email === p.email;
-                      return (
-                        <button
-                          key={p.email}
-                          onClick={() => handleSwitchPersona(p)}
-                          className={`w-full text-left p-2 rounded-xl transition-all flex items-center justify-between my-0.5 cursor-pointer ${
-                            isCurrent ? 'bg-accent/15 border border-accent/30' : 'hover:bg-theme-border/20'
-                          }`}
-                        >
-                          <div className="min-w-0 pr-2">
-                            <div className="flex items-center gap-1.5">
-                              <p className="font-bold text-xs text-theme-text-primary truncate">{p.name}</p>
-                              {isCurrent && <Check className="h-3 w-3 text-accent shrink-0" />}
-                            </div>
-                            <p className="text-[10px] text-theme-text-secondary truncate">{p.role} • Tier {p.tier}</p>
-                          </div>
-                          <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full shrink-0 border ${p.color}`}>
-                            {p.badge}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Divider */}
-            <div className="h-6 w-px bg-theme-border/30"></div>
 
             {/* Active User info */}
             <div className="flex items-center gap-3">

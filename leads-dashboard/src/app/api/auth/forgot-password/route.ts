@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { randomInt } from 'crypto';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { dispatchEmail, generateOtpEmailTemplate } from '@/lib/email-service';
 
@@ -20,8 +21,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Generate 6-digit OTP code
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    // Generate 6-digit OTP code (cryptographically strong, not Math.random())
+    const otp = randomInt(100000, 1000000).toString();
     
     // 5 minutes expiry enforcement
     const expiresAt = Date.now() + 5 * 60 * 1000;
