@@ -52,3 +52,11 @@ data/*.json.migrated
 # up the whole data/ directory together so records and the files they
 # reference are always restored as a matching pair.
 data/uploads/
+
+# retired live data, automatically renamed (never deleted) before a database
+# restore overwrites data/ — a safety net for undoing a bad restore by hand.
+data.pre-restore-*/
+
+# downloaded/uploaded encrypted database backups — never source, and never
+# something that should end up committed to the repo by accident.
+*.leadsbackup
