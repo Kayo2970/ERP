@@ -19,14 +19,15 @@ import {
   Award,
   Users
 } from 'lucide-react';
-import { 
-  getTasks, 
-  getEvents, 
-  getMembers, 
-  getRatings, 
-  getAnnouncements, 
+import {
+  getTasks,
+  getEvents,
+  getMembers,
+  getRatings,
+  getAnnouncements,
   updateTaskStatus,
   getStudentLeaderboard,
+  getEffectiveEventStatus,
   TaskItem,
   EventItem,
   AnnouncementItem
@@ -56,7 +57,10 @@ export default function DashboardHome() {
     const refreshData = () => {
       const allEvents = getEvents();
       setEvents(allEvents.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()));
-      setActiveEventsCount(allEvents.filter(e => e.status === 'active').length);
+      setActiveEventsCount(allEvents.filter(e => {
+        const effective = getEffectiveEventStatus(e);
+        return effective !== 'completed' && effective !== 'archived';
+      }).length);
       
       const allTasks = getTasks();
       setTasks(allTasks);
@@ -443,20 +447,25 @@ export default function DashboardHome() {
 
           <div className="flex-1 space-y-3 overflow-y-auto max-h-[300px] pr-1 text-xs">
             {activeTab === 'events' ? (
-              events.length === 0 ? (
-                <div className="text-center py-8 text-theme-text-secondary text-xs">No upcoming events.</div>
-              ) : (
-                events.map(ev => (
+              (() => {
+                const upcoming = events.filter(ev => {
+                  const effective = getEffectiveEventStatus(ev);
+                  return effective !== 'completed' && effective !== 'archived';
+                });
+                if (upcoming.length === 0) {
+                  return <div className="text-center py-8 text-theme-text-secondary text-xs">No upcoming events.</div>;
+                }
+                return upcoming.map(ev => (
                   <div key={ev.id} className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-1 hover:bg-theme-border/15 transition-all">
                     <div className="flex items-center justify-between">
                       <h4 className="font-semibold text-theme-text-primary text-xs">{ev.title}</h4>
-                      <span className="text-[10px] px-2 py-0.5 bg-accent/15 text-accent font-semibold rounded-md capitalize">{ev.status}</span>
+                      <span className="text-[10px] px-2 py-0.5 bg-accent/15 text-accent font-semibold rounded-md capitalize">{getEffectiveEventStatus(ev)}</span>
                     </div>
                     <p className="text-[10px] text-theme-text-secondary line-clamp-2">{ev.description}</p>
                     <p className="text-[10px] text-theme-text-secondary font-medium pt-1">{ev.startDate} to {ev.endDate}</p>
                   </div>
-                ))
-              )
+                ));
+              })()
             ) : (
               announcements.length === 0 ? (
                 <div className="text-center py-8 text-theme-text-secondary text-xs">No announcements published.</div>

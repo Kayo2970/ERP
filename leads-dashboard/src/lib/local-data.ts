@@ -557,6 +557,20 @@ export function deleteEvent(id: string, actorName: string): boolean {
   return true;
 }
 
+/**
+ * An event's stored `status` is set manually (planned/active/completed/archived),
+ * but nothing ever moved it to "completed" once its end date passed — it just sat
+ * as "planned"/"active" forever. This derives the status that should actually be
+ * shown/filtered on: past its end date, treat it as completed, unless someone has
+ * deliberately archived it (archiving always wins, it's a manual terminal state).
+ */
+export function getEffectiveEventStatus(event: EventItem): EventItem['status'] {
+  if (event.status === 'archived') return 'archived';
+  const today = new Date().toISOString().split('T')[0];
+  if (event.endDate && event.endDate < today) return 'completed';
+  return event.status;
+}
+
 export function addEventCommittee(eventId: string, committeeName: string, actorName: string): EventItem | null {
   const events = getEvents();
   const event = events.find(e => e.id === eventId);

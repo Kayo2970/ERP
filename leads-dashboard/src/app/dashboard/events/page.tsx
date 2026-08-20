@@ -17,7 +17,7 @@ import {
   Download,
   Upload
 } from 'lucide-react';
-import { getEvents, addEvent, updateEvent, deleteEvent, getTasks, EventItem, TaskItem } from '@/lib/local-data';
+import { getEvents, addEvent, updateEvent, deleteEvent, getTasks, getEffectiveEventStatus, EventItem, TaskItem } from '@/lib/local-data';
 import { canManageTasksAndEvents } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -278,6 +278,23 @@ export default function EventsPage() {
     }
   };
 
+  // Upcoming/active events first (soonest start date first), then events whose end
+  // date has already passed — those sort most-recently-ended first, and their
+  // status badge shows "completed" even if it's still stored as "planned"/"active"
+  // (nothing ever auto-transitioned it before), so the grid reads as a real
+  // upcoming-vs-past view instead of an arbitrary jumble.
+  const statusRank = (s: EventItem['status']) => (s === 'archived' ? 2 : s === 'completed' ? 1 : 0);
+  const sortedEvents = [...events].sort((a, b) => {
+    const aStatus = getEffectiveEventStatus(a);
+    const bStatus = getEffectiveEventStatus(b);
+    const rankDiff = statusRank(aStatus) - statusRank(bStatus);
+    if (rankDiff !== 0) return rankDiff;
+    const aTime = new Date(a.startDate).getTime();
+    const bTime = new Date(b.startDate).getTime();
+    const isPast = aStatus === 'completed' || aStatus === 'archived';
+    return isPast ? bTime - aTime : aTime - bTime;
+  });
+
   return (
     <div className="p-6 md:p-8 space-y-6">
       
@@ -350,19 +367,21 @@ export default function EventsPage() {
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {events.map((event) => {
+          {sortedEvents.map((event) => {
             const eventTasks = tasks.filter(t => t.eventId === event.id || t.event === event.title);
             const totalStudentsAssigned = Array.from(new Set((event.committees || []).flatMap(c => c.memberIds))).length;
+            const effectiveStatus = getEffectiveEventStatus(event);
+            const isPast = effectiveStatus === 'completed' || effectiveStatus === 'archived';
 
             return (
-              <div 
-                key={event.id} 
-                className="glass-panel rounded-3xl p-6 flex flex-col justify-between hover:bg-theme-border/10 transition-all border border-theme-card-border/50 group space-y-5"
+              <div
+                key={event.id}
+                className={`glass-panel rounded-3xl p-6 flex flex-col justify-between hover:bg-theme-border/10 transition-all border border-theme-card-border/50 group space-y-5 ${isPast ? 'opacity-70' : ''}`}
               >
                 <div className="space-y-3.5">
                   <div className="flex items-center justify-between">
-                    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full capitalize ${getStatusBadge(event.status)}`}>
-                      {event.status}
+                    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full capitalize ${getStatusBadge(effectiveStatus)}`}>
+                      {effectiveStatus}
                     </span>
                     <span className="text-[11px] text-accent font-semibold flex items-center gap-1">
                       <Users className="h-3.5 w-3.5" />
