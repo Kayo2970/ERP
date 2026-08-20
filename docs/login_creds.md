@@ -1,8 +1,8 @@
 # LEADS Dashboard — Complete Roster Login Credentials (35 Accounts)
 
-Every single leader and student from the official directory is registered in the portal database. Below is the complete directory of testing credentials, sorted by Access Level Tier.
+Every single leader and student from the official directory is registered in the portal database. Below is the complete directory, sorted by Access Level Tier.
 
-**Default Password for all accounts:** `password123`
+**Shared starting password for every account:** `Kayo29` — real authentication now requires this exact password (or whatever a member has changed it to from Settings). This is meant to be temporary: everyone should change it to something only they know as soon as they log in, via Settings → Account, or via "Forgot Password?" on the login screen (emails a one-time code to reset it).
 
 ---
 
@@ -65,4 +65,4 @@ Every single leader and student from the official directory is registered in the
 
 ---
 
-*Note: Since the login screen dynamically searches the directory state, you can use any of these 35 emails with any password to sign in and test the respective access level views!*
+*Note: passwords are now real — the login screen only accepts the shared starting password `Kayo29` (or a member's own changed password), not just any input.*

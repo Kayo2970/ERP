@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
+import { hashPassword } from '@/lib/password';
 
 export async function POST(request: Request) {
   try {
@@ -41,7 +42,7 @@ export async function POST(request: Request) {
           memberName = m.name;
           return {
             ...m,
-            customPassword: newPassword,
+            passwordHash: hashPassword(newPassword),
           };
         }
         return m;

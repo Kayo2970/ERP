@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ShieldAlert, LogIn, Mail, Lock, Eye, EyeOff, KeyRound, CheckCircle2, Clock, ArrowLeft, Send } from 'lucide-react';
-import { getMembers, logAuditEvent, requestPasswordReset, submitPasswordReset } from '@/lib/local-data';
+import { logAuditEvent, requestPasswordReset, submitPasswordReset } from '@/lib/local-data';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -66,49 +66,40 @@ export default function LoginPage() {
     return () => clearInterval(interval);
   }, [expiresAt, forgotStep]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    const trimmedEmail = email.trim().toLowerCase();
-
     if (!password || password.length < 4) {
-      setTimeout(() => {
-        setError('Please enter a valid password (minimum 4 characters).');
-        setIsLoading(false);
-      }, 400);
+      setError('Please enter a valid password (minimum 4 characters).');
+      setIsLoading(false);
       return;
     }
 
-    const membersList = getMembers();
-    const matchedUser = membersList.find(u => u.email.toLowerCase() === trimmedEmail);
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
 
-    if (!matchedUser) {
-      setTimeout(() => {
-        setError("We couldn't find an account with that email. Contact your committee head if you believe this is a mistake.");
+      if (!res.ok) {
+        setError(data.error || 'Login failed. Please try again.');
         setIsLoading(false);
-      }, 600);
-      return;
-    }
+        return;
+      }
 
-    // Check custom password if set
-    if (matchedUser.customPassword && matchedUser.customPassword !== password) {
-      setTimeout(() => {
-        setError("Incorrect password. If you forgot your password, click 'Forgot Password?' below.");
-        setIsLoading(false);
-      }, 500);
-      return;
-    }
+      // Save logged-in user to localStorage
+      localStorage.setItem('user', JSON.stringify(data.user));
+      logAuditEvent('USER_LOGIN', data.user.name, `Logged in successfully with role ${data.user.role} (Tier ${data.user.tier})`);
 
-    // Save logged-in user to localStorage
-    localStorage.setItem('user', JSON.stringify(matchedUser));
-    logAuditEvent('USER_LOGIN', matchedUser.name, `Logged in successfully with role ${matchedUser.role} (Tier ${matchedUser.tier})`);
-
-    // Redirect to home dashboard
-    setTimeout(() => {
       router.push('/dashboard/home');
-    }, 600);
+    } catch (err) {
+      setError('Network error — could not reach the server. Please try again.');
+      setIsLoading(false);
+    }
   };
 
   const handleRequestOtp = async (e: React.FormEvent) => {

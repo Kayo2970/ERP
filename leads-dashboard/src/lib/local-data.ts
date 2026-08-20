@@ -10,7 +10,7 @@ export interface Member {
   committee?: string; // Legacy fallback
   department?: string;
   batch?: string; // e.g. "Class of 2025" for Alumni
-  customPassword?: string; // Set via Settings → Account; demo-only, not hashed
+  passwordHash?: string; // scrypt hash ("salt:hash"), set via password.ts — never plaintext
   bankName?: string;
   accountNumber?: string;
   ifscCode?: string;
@@ -189,8 +189,13 @@ export interface AuditLogItem {
   timestamp: string;
 }
 
-// Initial mock data matching leadership website and division structure
-export const initialMembers: Member[] = [
+// Shared default password ("Kayo29") every seeded account starts with, scrypt-hashed —
+// members should change this from Settings once they can log in. Precomputed once via
+// password.ts's hashPassword('Kayo29') rather than computed at import time.
+const DEFAULT_PASSWORD_HASH = '039e521fbfd304a0a97bf0ad345fa30c:fabe61e51b9670355e96fa18763974f718215fdff2533c42e3da9fb81bd21f62780271331c4c3fa2f1a10cf452a180b13b45d2aa41604ed02620cb7bf8af2135';
+
+// Real organization roster matching the leadership website and division structure
+const initialMembersRaw: Member[] = [
   { id: 'm1', name: 'Kayomarz Pavri', email: 'kayomarz.pavri@msruas.ac.in', role: 'Super User', tier: 1, division: 'Core Committee', department: 'Design and Social Media' },
   { id: 'm2', name: 'Dr. Subhadeep Mukherjee', email: 'subhadeep.mukherjee@msruas.ac.in', role: 'Centre Head', tier: 2, division: 'Advisory Board', department: 'Faculty Oversight' },
   { id: 'm3', name: 'Dr. Kiran Kumar B M', email: 'kiran.kumar@msruas.ac.in', role: 'Head of Events', tier: 3, division: 'Advisory Board', department: 'Faculty Oversight' },
@@ -227,6 +232,11 @@ export const initialMembers: Member[] = [
   { id: 'm34', name: 'Yash Chandak', email: 'yash.chandak@msruas.ac.in', role: 'Head Operations and Logistics', tier: 5, division: 'Core Committee', department: 'Operations and Logistics' },
   { id: 'm35', name: 'Niyati Chawra', email: 'niyati.chawra@msruas.ac.in', role: 'Head Leadership and Development', tier: 5, division: 'Core Committee', department: 'Leadership and Development' },
 ];
+
+export const initialMembers: Member[] = initialMembersRaw.map(m => ({
+  ...m,
+  passwordHash: m.passwordHash || DEFAULT_PASSWORD_HASH,
+}));
 
 export const initialEvents: EventItem[] = [];
 
@@ -1366,15 +1376,9 @@ export async function submitPasswordReset(email: string, otp: string, newPasswor
       return { success: false, error: data.error || 'Failed to reset password.' };
     }
     
-    // Refresh local members cache if matching member is cached
-    const currentMembers = getMembers();
-    const updatedMembers = currentMembers.map(m => {
-      if (m.email.toLowerCase() === email.trim().toLowerCase()) {
-        return { ...m, customPassword: newPassword };
-      }
-      return m;
-    });
-    saveMembers(updatedMembers);
+    // Pull the freshly-hashed passwordHash back from the server rather than mirroring
+    // the plaintext newPassword into the local cache ourselves.
+    await syncWithServer();
 
     return { success: true, message: data.message };
   } catch (err: any) {

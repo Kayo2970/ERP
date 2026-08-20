@@ -48,7 +48,8 @@ export default function DashboardHome() {
 
   // Leaderboard State
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
-  const [overallAvgScore, setOverallAvgScore] = useState<number>(4.8);
+  const [overallAvgScore, setOverallAvgScore] = useState<number>(0);
+  const [hasRatings, setHasRatings] = useState(false);
   const [selectedStudentForProfile, setSelectedStudentForProfile] = useState<string | null>(null);
 
   useEffect(() => {
@@ -68,6 +69,7 @@ export default function DashboardHome() {
       setLeaderboard(studentRanks.slice(0, 5));
 
       const ratingsList = getRatings();
+      setHasRatings(ratingsList.length > 0);
       if (ratingsList.length > 0) {
         const totalScore = ratingsList.reduce((acc, r) => acc + r.overallScore, 0);
         setOverallAvgScore(parseFloat((totalScore / ratingsList.length).toFixed(1)));
@@ -213,14 +215,18 @@ export default function DashboardHome() {
         <div className="glass-panel rounded-2xl p-5 flex items-center justify-between">
           <div className="space-y-1.5 flex-1 pr-2">
             <span className="text-xs font-semibold text-theme-text-secondary uppercase tracking-wider">Performance Rollup</span>
-            <h3 className="text-2xl font-bold text-theme-text-primary">
-              {overallAvgScore.toFixed(1)} <span className="text-xs font-normal text-theme-text-secondary">/ 5.0</span>
-            </h3>
+            {hasRatings ? (
+              <h3 className="text-2xl font-bold text-theme-text-primary">
+                {overallAvgScore.toFixed(1)} <span className="text-xs font-normal text-theme-text-secondary">/ 5.0</span>
+              </h3>
+            ) : (
+              <h3 className="text-sm font-semibold text-theme-text-secondary">No ratings yet</h3>
+            )}
             {/* Continuous progress track */}
             <div className="w-full bg-theme-border/40 h-2 rounded-full overflow-hidden">
-              <div 
-                className="bg-emerald-500 h-full rounded-full transition-all duration-500" 
-                style={{ width: `${scorePercentage}%` }}
+              <div
+                className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                style={{ width: `${hasRatings ? scorePercentage : 0}%` }}
               ></div>
             </div>
           </div>
