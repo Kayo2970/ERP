@@ -1,19 +1,21 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { 
-  Plus, 
-  X, 
-  Calendar, 
-  MapPin, 
-  Users, 
-  Edit2, 
-  Trash2, 
-  CheckCircle2, 
-  ShieldAlert, 
+import {
+  Plus,
+  X,
+  Calendar,
+  MapPin,
+  Users,
+  Edit2,
+  Trash2,
+  CheckCircle2,
+  ShieldAlert,
   ArrowRight,
-  Sparkles
+  Sparkles,
+  Download,
+  Upload
 } from 'lucide-react';
 import { getEvents, addEvent, updateEvent, deleteEvent, getTasks, EventItem, TaskItem } from '@/lib/local-data';
 import { canManageTasksAndEvents } from '@/lib/permissions';
@@ -39,6 +41,8 @@ export default function EventsPage() {
   const [status, setStatus] = useState<EventItem['status']>('planned');
   const [formError, setFormError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const refreshData = () => {
@@ -66,7 +70,120 @@ export default function EventsPage() {
 
   const triggerSuccess = (msg: string) => {
     setSuccessMsg(msg);
+    setErrorMsg('');
     setTimeout(() => setSuccessMsg(''), 4000);
+  };
+
+  const triggerError = (msg: string) => {
+    setErrorMsg(msg);
+    setSuccessMsg('');
+    setTimeout(() => setErrorMsg(''), 5000);
+  };
+
+  const VALID_STATUSES: EventItem['status'][] = ['planned', 'active', 'completed', 'archived'];
+
+  const handleDownloadTemplate = () => {
+    const csvContent = 'Title,Description,StartDate,EndDate,Location,Status\n' +
+      'National Robotics Symposium 2026,Annual robotics and AI showcase,2026-09-10,2026-09-12,Auditorium 2,planned\n' +
+      'Design Sprint Weekend,Two-day UI/UX design bootcamp,2026-10-01,2026-10-02,Design Lab,planned';
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'leads_events_template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (!text) return;
+
+      try {
+        const lines = text.split('\n');
+        if (lines.length < 2) {
+          triggerError('CSV file is empty or missing headers.');
+          return;
+        }
+
+        const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+        const titleIndex = headers.indexOf('title');
+        const descIndex = headers.indexOf('description');
+        const startIndex = headers.indexOf('startdate');
+        const endIndex = headers.indexOf('enddate');
+        const locationIndex = headers.indexOf('location');
+        const statusIndex = headers.indexOf('status');
+
+        if (titleIndex === -1 || startIndex === -1 || endIndex === -1) {
+          triggerError('Invalid CSV headers. Required at minimum: Title, StartDate, EndDate');
+          return;
+        }
+
+        let importCount = 0;
+        let skippedCount = 0;
+
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+
+          const values = line.split(',').map(v => v.replace(/^"|"$/g, '').trim());
+          if (values.length < 2) continue;
+
+          const evTitle = values[titleIndex];
+          const evStart = values[startIndex];
+          const evEnd = values[endIndex];
+
+          if (!evTitle || !evStart || !evEnd || isNaN(new Date(evStart).getTime()) || isNaN(new Date(evEnd).getTime())) {
+            skippedCount++;
+            continue;
+          }
+          if (new Date(evEnd) < new Date(evStart)) {
+            skippedCount++;
+            continue;
+          }
+
+          const rawStatus = statusIndex !== -1 ? values[statusIndex].toLowerCase() : 'planned';
+          const evStatus = (VALID_STATUSES as string[]).includes(rawStatus) ? rawStatus as EventItem['status'] : 'planned';
+
+          addEvent({
+            title: evTitle,
+            description: descIndex !== -1 ? values[descIndex] : '',
+            startDate: evStart,
+            endDate: evEnd,
+            location: locationIndex !== -1 ? values[locationIndex] : '',
+            status: evStatus,
+            createdBy: user?.name || 'User',
+            committees: [
+              { id: 'c_' + Date.now() + '_' + i + '_1', name: 'Logistics & Venue Committee', memberIds: [] },
+              { id: 'c_' + Date.now() + '_' + i + '_2', name: 'Technical & AV Committee', memberIds: [] },
+              { id: 'c_' + Date.now() + '_' + i + '_3', name: 'Design & Media Committee', memberIds: [] }
+            ]
+          });
+          importCount++;
+        }
+
+        if (importCount > 0) {
+          setEvents(getEvents());
+          triggerSuccess(`Successfully imported ${importCount} new event(s). ${skippedCount > 0 ? `(${skippedCount} invalid row(s) skipped)` : ''}`);
+        } else {
+          triggerError('No valid event rows found in the CSV — check that Title, StartDate, and EndDate are filled in and dates are valid.');
+        }
+      } catch (err) {
+        triggerError('Error parsing CSV file. Please verify formatting.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   const handleOpenCreate = () => {
@@ -171,6 +288,12 @@ export default function EventsPage() {
           <span>{successMsg}</span>
         </div>
       )}
+      {errorMsg && (
+        <div className="flex items-center gap-3 p-4 bg-danger/15 border border-danger/20 rounded-2xl text-theme-text-primary text-xs animate-in fade-in duration-300">
+          <ShieldAlert className="h-5 w-5 text-danger shrink-0" />
+          <span>{errorMsg}</span>
+        </div>
+      )}
 
       {/* Header section with Create Button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -179,13 +302,40 @@ export default function EventsPage() {
           <p className="text-xs text-theme-text-secondary">Manage symposiums, create event-specific sub-committees, and assign student teams</p>
         </div>
         {canManage && (
-          <button
-            onClick={handleOpenCreate}
-            className="flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer"
-          >
-            <Plus className="h-4 w-4" />
-            Create New Event
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleDownloadTemplate}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-border/40"
+              title="Download CSV Template"
+            >
+              <Download className="h-4 w-4" />
+              Download Template
+            </button>
+
+            <button
+              onClick={handleUploadClick}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-border/40"
+              title="Upload Filled CSV File"
+            >
+              <Upload className="h-4 w-4" />
+              Upload Events (CSV)
+            </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              accept=".csv"
+              className="hidden"
+            />
+
+            <button
+              onClick={handleOpenCreate}
+              className="flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer"
+            >
+              <Plus className="h-4 w-4" />
+              Create New Event
+            </button>
+          </div>
         )}
       </div>
 
