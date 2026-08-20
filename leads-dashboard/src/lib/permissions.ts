@@ -97,14 +97,31 @@ export function isTrainingAssociateTier(user: SessionUser): boolean {
   return !!user && user.tier === 6;
 }
 
+/** Check if user is Centre Head (Super User tier 1, or tier <= 2 / Centre Head designation). */
+export function isCentreHead(user: SessionUser): boolean {
+  if (!user) return false;
+  if (user.tier === 1) return true;
+  const role = ((user as any)?.role || '').toLowerCase();
+  const settings = getAccessLevelSettings();
+  return user.tier <= settings.sectorHeadMaxTier || anyKeywordMatches(role, settings.sectorHeadKeywords);
+}
+
+/** Check if user holds the designation of Head of Events (or Events Head). */
+export function isHeadOfEvents(user: SessionUser): boolean {
+  if (!user) return false;
+  const role = ((user as any)?.role || '').toLowerCase();
+  return role.includes('head of event') || role.includes('head of events') || role.includes('events head');
+}
+
 /** Check if user is Events Head for GG Campus. */
 export function isEventsHeadGgCampus(user: SessionUser): boolean {
   if (!user) return false;
   const role = ((user as any)?.role || '').toLowerCase();
   const committee = ((user as any)?.committee || '').toLowerCase();
   return (role.includes('events head') && role.includes('gg')) || 
+         (role.includes('head of events') && role.includes('gg')) ||
          (role.includes('events') && role.includes('gg campus')) ||
-         (committee.includes('gg campus') && isHeadRole(user));
+         (committee.includes('gg campus') && isHeadOfEvents(user));
 }
 
 /** Check if user is Events Head for RTC Campus. */
@@ -113,41 +130,47 @@ export function isEventsHeadRtcCampus(user: SessionUser): boolean {
   const role = ((user as any)?.role || '').toLowerCase();
   const committee = ((user as any)?.committee || '').toLowerCase();
   return (role.includes('events head') && role.includes('rtc')) || 
+         (role.includes('head of events') && role.includes('rtc')) ||
          (role.includes('events') && role.includes('rtc campus')) ||
-         (committee.includes('rtc campus') && isHeadRole(user));
+         (committee.includes('rtc campus') && isHeadOfEvents(user));
 }
 
 /**
- * Campus evaluation rule enforcement:
- * When an event is created, a campus is selected ('GG Campus' or 'RTC Campus').
- * ONLY the Events Head of that specific campus (or Super User / Centre Head) can evaluate students.
- * An RTC Events Head CANNOT give an evaluation for GG Campus events, and vice versa.
+ * Strict evaluation rule enforcement:
+ * ONLY TWO designations are authorized to evaluate student performance or committee deliverables:
+ * 1) Centre Head (evaluates any event across all campuses)
+ * 2) Head of Events (must match event campus: GG Events Head evaluates GG events, RTC Events Head evaluates RTC events)
+ * All other roles and designations are strictly prohibited from submitting ratings!
  */
 export function canEvaluateEventStudent(user: SessionUser, eventCampus?: string): boolean {
   if (!user) return false;
-  // Super User (tier 1) and Centre Head (tier <= 2) can evaluate any event across campuses
-  if (user.tier <= 2) return true;
 
-  if (!eventCampus || eventCampus === 'Both Campuses') {
-    return isHeadRole(user) || isBaseLeadership(user);
+  const centreHead = isCentreHead(user);
+  const eventsHead = isHeadOfEvents(user);
+
+  // Strictly block anyone who is neither Centre Head nor Head of Events
+  if (!centreHead && !eventsHead) {
+    return false;
   }
 
+  // Centre Head can evaluate across all campuses
+  if (centreHead) return true;
+
+  // Head of Events must obey campus rules
   const isGgHead = isEventsHeadGgCampus(user);
   const isRtcHead = isEventsHeadRtcCampus(user);
 
   if (eventCampus === 'GG Campus') {
-    // Explicit RTC Events Head cannot evaluate GG Campus events
     if (isRtcHead) return false;
-    return isGgHead || isBaseLeadership(user);
+    return isGgHead || eventsHead;
   }
 
   if (eventCampus === 'RTC Campus') {
-    // Explicit GG Events Head cannot evaluate RTC Campus events
     if (isGgHead) return false;
-    return isRtcHead || isBaseLeadership(user);
+    return isRtcHead || eventsHead;
   }
 
-  return isHeadRole(user) || isBaseLeadership(user);
+  return eventsHead;
 }
 
 /** Check if user is a Design Head (Head role + Design department/role). */

@@ -148,7 +148,7 @@ export default function RatingsPage() {
       const linkedEvent = events.find(ev => ev.id === selectedTask.eventId || ev.title === selectedTask.event);
       const eventCampus = linkedEvent?.campus || selectedTask.eventCampus || 'GG Campus';
       if (!canEvaluateEventStudent(user, eventCampus)) {
-        setFormError(`Campus Evaluation Constraint: Evaluators from ${user.role} are not authorized to evaluate student performance for a ${eventCampus} event.`);
+        setFormError(`Evaluation Access Denied: Only the Centre Head or Head of Events (${eventCampus}) are authorized to evaluate student performance.`);
         return;
       }
     }
@@ -167,6 +167,7 @@ export default function RatingsPage() {
       triggerSuccess(`Updated evaluation scorecard for ${editingRating.targetName}`);
     } else if (selectedTask) {
       const assigneeMember = members.find(m => m.name.toLowerCase() === selectedTask.assignee.toLowerCase());
+      const isCommittee = selectedTask.assigneeType === 'committee' || selectedTask.eventCommitteeId;
 
       addRating({
         taskId: selectedTask.id,
@@ -184,7 +185,9 @@ export default function RatingsPage() {
         notes,
         quarter: '2026-Q3'
       });
-      triggerSuccess(`Submitted performance score of ${overall}/5.0 for ${selectedTask.assignee} on "${selectedTask.title}"`);
+
+      const committeeNotice = isCommittee ? ' (Evaluation propagated to all student members of this committee)' : '';
+      triggerSuccess(`Submitted performance score of ${overall}/5.0 for ${selectedTask.assignee} on "${selectedTask.title}"${committeeNotice}`);
     }
 
     setIsModalOpen(false);
@@ -295,13 +298,18 @@ export default function RatingsPage() {
                         <p className="text-[10px] text-theme-text-secondary mt-0.5">
                           Assignee: <strong className="text-theme-text-primary">{task.assignee}</strong>
                         </p>
-                        <div className="flex items-center gap-1.5 mt-1">
+                        <div className="flex items-center flex-wrap gap-1.5 mt-1">
                           {task.event && (
                             <span className="text-[10px] text-accent font-semibold">{task.event}</span>
                           )}
                           <span className="text-[9px] font-bold px-1.5 py-0.5 bg-accent/10 text-accent rounded border border-accent/20">
                             {eventCampus}
                           </span>
+                          {(task.assigneeType === 'committee' || task.eventCommitteeId) && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-warning/15 text-warning rounded border border-warning/20 flex items-center gap-1">
+                              <Users className="h-2.5 w-2.5" /> Committee Task
+                            </span>
+                          )}
                         </div>
                       </div>
                       <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
@@ -320,13 +328,15 @@ export default function RatingsPage() {
                         </span>
                       </div>
                     ) : (
-                      <div className="pt-1 border-t border-theme-border/20 flex items-center justify-between">
+                      <div className="pt-1 border-t border-theme-border/20 flex items-center justify-between gap-2">
                         {!canEval ? (
                           <span className="text-[10px] text-warning font-medium italic">
-                            Blocked: {eventCampus} evaluation restricted
+                            Evaluations restricted to Centre Head or Head of Events ({eventCampus})
                           </span>
                         ) : (
-                          <span className="text-[10px] text-theme-text-secondary">Pending Evaluation</span>
+                          <span className="text-[10px] text-theme-text-secondary">
+                            {task.assigneeType === 'committee' ? 'Rates entire committee' : 'Pending Evaluation'}
+                          </span>
                         )}
                         <button
                           disabled={!canEval}
