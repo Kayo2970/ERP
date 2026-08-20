@@ -218,13 +218,9 @@ export function canViewAllDesigns(user: SessionUser): boolean {
 }
 
 /**
- * Whether an announcement's target `scope` matches a given viewer, for scoping
- * notifications/lists to "things relevant to me" (base tier only receives their own
- * division's + all-members announcements; this mirrors the existing scope values).
+ * Whether an announcement's target `scope` matches a given viewer — the canonical
+ * implementation (and the recipient-set builder it shares logic with) lives in
+ * announcement-scope.ts so both real email dispatch (server) and this per-viewer
+ * relevance check can use the exact same scope-matching rules.
  */
-export function getAnnouncementScopeMatch(scope: string, user: SessionUser): boolean {
-  if (!user) return false;
-  if (!scope || scope === 'All Members') return true;
-  if (isBaseLeadership(user)) return true;
-  return scope === user.division || scope === user.committee;
-}
+export { getAnnouncementScopeMatch } from './announcement-scope';
