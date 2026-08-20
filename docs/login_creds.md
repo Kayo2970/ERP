@@ -45,7 +45,7 @@ Every single leader and student from the official directory is registered in the
 | :--- | :--- | :--- | :--- |
 | Nuthan H | President | `nuthan.h@msruas.ac.in` | **Tier 5 — Core Committee Control** |
 | Kunal Bhadauria | Vice President | `kunal.bhadauria@msruas.ac.in` | **Tier 5 — Core Committee Control** |
-| Kayomarz M Pavri | Head — Design & Media | `kayomarz.pavri@msruas.ac.in` | **Tier 5 — Core Committee Control** |
+| Kayomarz M Pavri | Head — Design & Media | `kayomarz.m@msruas.ac.in` | **Tier 5 — Core Committee Control** |
 | S Bhavya Shree | General Secretary | `bhavya.shree@msruas.ac.in` | **Tier 6 — Collaborator Account** |
 | Shriram SG | General Secretary | `shriram.sg@msruas.ac.in` | **Tier 6 — Collaborator Account** |
 | Manoj Petakamsetty | General Secretary | `manoj.petakamsetty@msruas.ac.in` | **Tier 6 — Collaborator Account** |
