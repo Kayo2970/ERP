@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
-import { getEvents, EventItem } from '@/lib/local-data';
+import { getEvents, getEffectiveEventStatus, EventItem } from '@/lib/local-data';
 
 export default function CalendarPage() {
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -63,8 +63,11 @@ export default function CalendarPage() {
   };
 
   const upcomingEvents = [...events]
+    .filter(e => {
+      const effective = getEffectiveEventStatus(e);
+      return effective !== 'completed' && effective !== 'archived';
+    })
     .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
-    .filter(e => e.status !== 'archived')
     .slice(0, 6);
 
   return (
@@ -177,7 +180,7 @@ export default function CalendarPage() {
                       <p className="text-[10px] text-theme-text-secondary mt-0.5">{(ev.committees || []).length} Sub-Committees</p>
                     </div>
                     <span className="text-[10px] px-2.5 py-0.5 bg-accent/15 text-accent font-semibold rounded-md capitalize">
-                      {ev.status}
+                      {getEffectiveEventStatus(ev)}
                     </span>
                   </Link>
                 ));
