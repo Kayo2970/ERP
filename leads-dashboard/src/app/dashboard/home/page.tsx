@@ -32,14 +32,13 @@ import {
   EventItem,
   AnnouncementItem
 } from '@/lib/local-data';
-import { canViewTaskExtended } from '@/lib/permissions';
+import { canViewTaskExtended, canViewEvent, canApprovePendingEvent } from '@/lib/permissions';
 import { getRatingColor } from '@/lib/design-tokens';
 import { StudentProfileModal } from '@/components/student-profile-modal';
 
 export default function DashboardHome() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
-  const [activeEventsCount, setActiveEventsCount] = useState(0);
   const [membersCount, setMembersCount] = useState(0);
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [user, setUser] = useState<any>(null);
@@ -57,11 +56,7 @@ export default function DashboardHome() {
     const refreshData = () => {
       const allEvents = getEvents();
       setEvents(allEvents.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()));
-      setActiveEventsCount(allEvents.filter(e => {
-        const effective = getEffectiveEventStatus(e);
-        return effective !== 'completed' && effective !== 'archived';
-      }).length);
-      
+
       const allTasks = getTasks();
       setTasks(allTasks);
       
@@ -113,9 +108,24 @@ export default function DashboardHome() {
     setTasks(getTasks());
   };
 
+  // Same visibility rule as the Events page: approved/legacy events follow the
+  // own-vs-all Group Policy scope; pending/rejected submissions are only shown to
+  // their submitter, their resolved approver, or the Super User.
+  const visibleEvents = events.filter(event => {
+    if (event.approvalStatus === 'pending_create' || event.approvalStatus === 'rejected') {
+      return user?.tier === 1 || event.submittedByEmail === user?.email || canApprovePendingEvent(event, user);
+    }
+    return canViewEvent(event, user);
+  });
+
+  const activeEventsCount = visibleEvents.filter(e => {
+    const effective = getEffectiveEventStatus(e);
+    return effective !== 'completed' && effective !== 'archived';
+  }).length;
+
   const getEventsOnDate = (date: Date) => {
     const checkStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-    return events.filter(e => checkStr >= e.startDate && checkStr <= e.endDate);
+    return visibleEvents.filter(e => checkStr >= e.startDate && checkStr <= e.endDate);
   };
 
   // Filter tasks based on shared permission helper
@@ -181,7 +191,7 @@ export default function DashboardHome() {
             <span className="text-xs font-semibold text-theme-text-secondary uppercase tracking-wider">Active Events</span>
             <h3 className="text-2xl font-bold text-theme-text-primary">{activeEventsCount}</h3>
             <span className="text-[11px] text-theme-text-secondary font-medium">
-              {events.length} total planned / active
+              {visibleEvents.length} total planned / active
             </span>
           </div>
           <div className="h-11 w-11 bg-accent/15 rounded-xl flex items-center justify-center border border-accent/15">
@@ -448,7 +458,7 @@ export default function DashboardHome() {
           <div className="flex-1 space-y-3 overflow-y-auto max-h-[300px] pr-1 text-xs">
             {activeTab === 'events' ? (
               (() => {
-                const upcoming = events.filter(ev => {
+                const upcoming = visibleEvents.filter(ev => {
                   const effective = getEffectiveEventStatus(ev);
                   return effective !== 'completed' && effective !== 'archived';
                 });

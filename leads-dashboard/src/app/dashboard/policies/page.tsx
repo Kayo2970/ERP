@@ -14,6 +14,9 @@ import {
   CheckCircle2,
   ToggleLeft,
   ToggleRight,
+  Eye,
+  ClipboardCheck,
+  BookLock,
 } from 'lucide-react';
 import {
   getGroupPolicies,
@@ -54,12 +57,26 @@ function memberMatchesCriteria(member: Member, criteria: TargetCriteria): boolea
   return false;
 }
 
+// Static description of the hardcoded tier/role rules in permissions.ts — these
+// exist independently of any policy tag and can't be edited from this page, but
+// the Super User should be able to see the whole access picture in one place.
+const BUILT_IN_RULES: { name: string; description: string }[] = [
+  { name: 'Super User (Tier 1)', description: 'Unrestricted access to every module in the dashboard, including Group Policy Management itself. Always the approver of last resort for any pending submission.' },
+  { name: 'Base Leadership (Tier 1–3)', description: 'Create/edit/delete events and tasks, edit the directory, view the full directory, publish announcements, and view every Design Portal submission.' },
+  { name: 'Core Committee (Tier 5)', description: 'Create/edit events and tasks, and publish announcements.' },
+  { name: 'Any "Head" role (job title contains the word "Head")', description: "Create/edit events and tasks, build public forms, publish announcements, view all designs, and see their own department's tasks and ratings regardless of tier." },
+  { name: 'Sector / Centre Head (title contains "Sector Head" or "Centre/Center Head", or tier ≤ 2)', description: 'First-stage reimbursement approval. This is also the built-in "Center Head" approver for any policy that requires approval without naming a specific person or tag.' },
+  { name: 'Finance Head (title or department contains "Finance")', description: 'Final-stage reimbursement approval, after the Sector Head stage.' },
+  { name: 'Everyone else (no matching rule above, and no policy tag)', description: 'Sees their own tasks/ratings, every event (unless a policy restricts them), and their own Design Portal / reimbursement submissions. Cannot create, edit, or delete events, tasks, forms, announcements, or directory records.' },
+];
+
 export default function GroupPoliciesPage() {
   const [user, setUser] = useState<any>(null);
   const [userHydrated, setUserHydrated] = useState(false);
   const [policies, setPolicies] = useState<GroupPolicy[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [expandedMembersId, setExpandedMembersId] = useState<string | null>(null);
+  const [isBuiltInRulesOpen, setIsBuiltInRulesOpen] = useState(false);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<GroupPolicy | null>(null);
@@ -80,6 +97,20 @@ export default function GroupPoliciesPage() {
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
   const [isMemberDropdownOpen, setIsMemberDropdownOpen] = useState(false);
   const memberDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Restrict event visibility to own/listed only for the targeted people (opt-in —
+  // omitted means unrestricted, exactly as before this control existed).
+  const [restrictEventVisibility, setRestrictEventVisibility] = useState(false);
+
+  // Approval requirement: any capability this tag grants only takes effect once
+  // the resolved approver signs off.
+  const [requiresApproval, setRequiresApproval] = useState(false);
+  const [approverType, setApproverType] = useState<'CENTER_HEAD' | 'SPECIFIC_MEMBER' | 'POLICY_TAG'>('CENTER_HEAD');
+  const [approverMemberId, setApproverMemberId] = useState('');
+  const [approverPolicyTagId, setApproverPolicyTagId] = useState('');
+  const [approverSearchQuery, setApproverSearchQuery] = useState('');
+  const [isApproverDropdownOpen, setIsApproverDropdownOpen] = useState(false);
+  const approverDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const refreshData = () => {
@@ -111,6 +142,9 @@ export default function GroupPoliciesPage() {
       if (memberDropdownRef.current && !memberDropdownRef.current.contains(event.target as Node)) {
         setIsMemberDropdownOpen(false);
       }
+      if (approverDropdownRef.current && !approverDropdownRef.current.contains(event.target as Node)) {
+        setIsApproverDropdownOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -136,6 +170,13 @@ export default function GroupPoliciesPage() {
     setEnabled(true);
     setMemberSearchQuery('');
     setIsMemberDropdownOpen(false);
+    setRestrictEventVisibility(false);
+    setRequiresApproval(false);
+    setApproverType('CENTER_HEAD');
+    setApproverMemberId('');
+    setApproverPolicyTagId('');
+    setApproverSearchQuery('');
+    setIsApproverDropdownOpen(false);
   };
 
   const handleOpenCreate = () => {
@@ -158,6 +199,13 @@ export default function GroupPoliciesPage() {
     setEnabled(policy.enabled !== false);
     setMemberSearchQuery('');
     setIsMemberDropdownOpen(false);
+    setRestrictEventVisibility(policy.eventVisibilityScope === 'OWN_ONLY');
+    setRequiresApproval(!!policy.requiresApproval);
+    setApproverType(policy.approverType || 'CENTER_HEAD');
+    setApproverMemberId(policy.approverMemberId || '');
+    setApproverPolicyTagId(policy.approverPolicyTagId || '');
+    setApproverSearchQuery('');
+    setIsApproverDropdownOpen(false);
     setIsModalOpen(true);
   };
 
@@ -196,6 +244,13 @@ export default function GroupPoliciesPage() {
     return !q || m.name.toLowerCase().includes(q) || m.role.toLowerCase().includes(q) || m.email.toLowerCase().includes(q);
   });
 
+  const approverSearchResults = members.filter(m => {
+    const q = approverSearchQuery.toLowerCase();
+    return !q || m.name.toLowerCase().includes(q) || m.role.toLowerCase().includes(q) || m.email.toLowerCase().includes(q);
+  });
+  const selectedApproverMember = members.find(m => m.id === approverMemberId);
+  const otherPolicies = policies.filter(p => p.id !== editingPolicy?.id);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !tag.trim() || capabilities.length === 0) return;
@@ -203,6 +258,9 @@ export default function GroupPoliciesPage() {
     const hasAnyTarget =
       targetDivisions.length > 0 || targetTiers.length > 0 || !!targetDesignationKeyword.trim() || targetMemberIds.length > 0;
     if (!hasAnyTarget) return;
+
+    if (requiresApproval && approverType === 'SPECIFIC_MEMBER' && !approverMemberId) return;
+    if (requiresApproval && approverType === 'POLICY_TAG' && !approverPolicyTagId) return;
 
     const payload = {
       tag: tag.trim(),
@@ -214,6 +272,11 @@ export default function GroupPoliciesPage() {
       targetDesignationKeyword: targetDesignationKeyword.trim() || undefined,
       targetMemberIds,
       enabled,
+      eventVisibilityScope: restrictEventVisibility ? ('OWN_ONLY' as const) : undefined,
+      requiresApproval,
+      approverType: requiresApproval ? approverType : undefined,
+      approverMemberId: requiresApproval && approverType === 'SPECIFIC_MEMBER' ? approverMemberId : undefined,
+      approverPolicyTagId: requiresApproval && approverType === 'POLICY_TAG' ? approverPolicyTagId : undefined,
     };
 
     if (editingPolicy) {
@@ -254,6 +317,18 @@ export default function GroupPoliciesPage() {
         targetMemberIds: policy.targetMemberIds || [],
       })
     );
+
+  const describeApprover = (policy: GroupPolicy): string => {
+    if (policy.approverType === 'SPECIFIC_MEMBER') {
+      return members.find(m => m.id === policy.approverMemberId)?.name || 'unassigned member';
+    }
+    if (policy.approverType === 'POLICY_TAG') {
+      return policies.find(p => p.id === policy.approverPolicyTagId)?.name
+        ? `anyone holding "${policies.find(p => p.id === policy.approverPolicyTagId)?.name}"`
+        : 'unassigned tag';
+    }
+    return 'Center Head';
+  };
 
   const summarizeTargets = (policy: GroupPolicy): string[] => {
     const parts: string[] = [];
@@ -382,6 +457,16 @@ export default function GroupPoliciesPage() {
                       </span>
                     );
                   })}
+                  {policy.eventVisibilityScope === 'OWN_ONLY' && (
+                    <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 bg-warning/10 text-warning rounded-md border border-warning/20">
+                      <Eye className="h-3 w-3" /> Own/Listed Events Only
+                    </span>
+                  )}
+                  {policy.requiresApproval && (
+                    <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 bg-accent/10 text-accent rounded-md border border-accent/20">
+                      <ClipboardCheck className="h-3 w-3" /> Approval Required &rarr; {describeApprover(policy)}
+                    </span>
+                  )}
                 </div>
 
                 <div className="text-[11px] text-theme-text-secondary space-y-0.5">
@@ -417,6 +502,35 @@ export default function GroupPoliciesPage() {
           })}
         </div>
       )}
+
+      {/* Built-in Access Rules — the hardcoded tier/role rules that exist independently
+          of any policy tag, surfaced here read-only so the full access picture (built-in
+          + dynamic) lives in one place. */}
+      <div className="glass-panel rounded-2xl border border-white/10 overflow-hidden">
+        <button
+          onClick={() => setIsBuiltInRulesOpen(!isBuiltInRulesOpen)}
+          className="w-full flex items-center justify-between gap-3 p-5 text-left cursor-pointer"
+        >
+          <div className="flex items-center gap-2.5">
+            <BookLock className="h-4.5 w-4.5 text-theme-text-secondary" />
+            <div>
+              <h3 className="text-sm font-bold text-theme-text-primary">Built-in Access Rules</h3>
+              <p className="text-[11px] text-theme-text-secondary">The hardcoded rules that exist even with zero policy tags — read-only, not editable here.</p>
+            </div>
+          </div>
+          <span className="text-[11px] font-semibold text-accent shrink-0">{isBuiltInRulesOpen ? 'Hide' : 'Show'}</span>
+        </button>
+        {isBuiltInRulesOpen && (
+          <div className="px-5 pb-5 space-y-2.5 border-t border-theme-border/20 pt-4">
+            {BUILT_IN_RULES.map((rule, i) => (
+              <div key={i} className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl">
+                <h4 className="text-xs font-bold text-theme-text-primary">{rule.name}</h4>
+                <p className="text-[11px] text-theme-text-secondary mt-0.5 leading-relaxed">{rule.description}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Create / Edit Policy Tag Modal */}
       {isModalOpen && (
@@ -502,6 +616,24 @@ export default function GroupPoliciesPage() {
                   ))}
                 </div>
               </div>
+
+              <label
+                title="Members matched by this tag will only see events they created or are listed on a committee for, instead of every event. Purely restrictive — it never grants visibility beyond what someone already has."
+                className={`flex items-start gap-2 p-3 rounded-xl border cursor-pointer transition-all ${
+                  restrictEventVisibility ? 'bg-warning/10 border-warning/30' : 'bg-theme-background/20 border-theme-card-border hover:bg-theme-border/10'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={restrictEventVisibility}
+                  onChange={(e) => setRestrictEventVisibility(e.target.checked)}
+                  className="accent-warning mt-0.5"
+                />
+                <span className="flex items-center gap-1.5 font-medium text-theme-text-primary leading-tight">
+                  <Eye className="h-3.5 w-3.5 text-warning shrink-0" />
+                  Restrict event visibility to their own / listed events only
+                </span>
+              </label>
 
               <div className="space-y-3 pt-1 border-t border-theme-border/20">
                 <label className="block font-medium text-theme-text-secondary">
@@ -631,6 +763,100 @@ export default function GroupPoliciesPage() {
                     This tag currently matches {draftMatches.length} member{draftMatches.length === 1 ? '' : 's'}.
                   </span>
                 </div>
+              </div>
+
+              <div className="space-y-3 pt-1 border-t border-theme-border/20">
+                <label
+                  className={`flex items-start gap-2 p-3 rounded-xl border cursor-pointer transition-all ${
+                    requiresApproval ? 'bg-accent/10 border-accent/30' : 'bg-theme-background/20 border-theme-card-border hover:bg-theme-border/10'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={requiresApproval}
+                    onChange={(e) => setRequiresApproval(e.target.checked)}
+                    className="accent-accent mt-0.5"
+                  />
+                  <span className="flex items-center gap-1.5 font-medium text-theme-text-primary leading-tight">
+                    <ClipboardCheck className="h-3.5 w-3.5 text-accent shrink-0" />
+                    Require approval before these capabilities take effect
+                  </span>
+                </label>
+
+                {requiresApproval && (
+                  <div className="space-y-3 pl-1">
+                    <div className="flex flex-wrap gap-1.5">
+                      {([
+                        { value: 'CENTER_HEAD', label: 'Center Head' },
+                        { value: 'SPECIFIC_MEMBER', label: 'Specific Person' },
+                        { value: 'POLICY_TAG', label: 'Anyone Holding Another Tag' },
+                      ] as const).map(opt => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setApproverType(opt.value)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${
+                            approverType === opt.value
+                              ? 'bg-accent text-white border-accent'
+                              : 'bg-theme-background/30 border-theme-card-border text-theme-text-secondary hover:text-theme-text-primary'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {approverType === 'SPECIFIC_MEMBER' && (
+                      <div ref={approverDropdownRef} className="relative">
+                        <div className="flex items-center gap-2 px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl focus-within:border-accent">
+                          <Search className="h-3.5 w-3.5 text-theme-text-secondary shrink-0" />
+                          <input
+                            type="text"
+                            value={isApproverDropdownOpen ? approverSearchQuery : (selectedApproverMember?.name || '')}
+                            onFocus={() => { setApproverSearchQuery(''); setIsApproverDropdownOpen(true); }}
+                            onChange={(e) => { setApproverSearchQuery(e.target.value); setIsApproverDropdownOpen(true); }}
+                            placeholder="Search for the approver by name, role, or email..."
+                            className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-theme-text-primary placeholder-theme-text-secondary"
+                          />
+                        </div>
+                        {isApproverDropdownOpen && (
+                          <div className="absolute left-0 right-0 mt-1.5 max-h-48 overflow-y-auto glass-panel rounded-xl border border-white/15 shadow-2xl z-10 divide-y divide-theme-border/20 animate-in fade-in zoom-in-95 duration-150">
+                            {approverSearchResults.length === 0 ? (
+                              <div className="text-center py-4 text-theme-text-secondary">No matching members.</div>
+                            ) : (
+                              approverSearchResults.map(m => (
+                                <button
+                                  key={m.id}
+                                  type="button"
+                                  onClick={() => { setApproverMemberId(m.id); setApproverSearchQuery(''); setIsApproverDropdownOpen(false); }}
+                                  className={`w-full flex items-center justify-between gap-2 text-left px-3 py-2 hover:bg-theme-border/20 transition-all cursor-pointer ${
+                                    m.id === approverMemberId ? 'bg-accent/10' : ''
+                                  }`}
+                                >
+                                  <span className="font-medium text-theme-text-primary">{m.name}</span>
+                                  <span className="text-theme-text-secondary shrink-0">{m.role}</span>
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {approverType === 'POLICY_TAG' && (
+                      <select
+                        value={approverPolicyTagId}
+                        onChange={(e) => setApproverPolicyTagId(e.target.value)}
+                        className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                      >
+                        <option value="">-- Select a tag --</option>
+                        {otherPolicies.map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
               </div>
 
               <label className="flex items-center gap-2 cursor-pointer font-medium text-theme-text-primary">

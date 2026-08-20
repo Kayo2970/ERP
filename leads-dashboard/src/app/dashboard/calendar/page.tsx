@@ -4,9 +4,11 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
 import { getEvents, getEffectiveEventStatus, EventItem } from '@/lib/local-data';
+import { canViewEvent, canApprovePendingEvent } from '@/lib/permissions';
 
 export default function CalendarPage() {
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [user, setUser] = useState<any>(null);
   const [calendarDate, setCalendarDate] = useState(new Date(2026, 7, 1)); // Default August 2026
   const [selectedDay, setSelectedDay] = useState<number | null>(10); // Default to 10th
 
@@ -16,6 +18,15 @@ export default function CalendarPage() {
     };
     refreshData();
 
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
     window.addEventListener('leads-data-sync', refreshData);
     window.addEventListener('storage', refreshData);
     return () => {
@@ -23,6 +34,16 @@ export default function CalendarPage() {
       window.removeEventListener('storage', refreshData);
     };
   }, []);
+
+  // Same visibility rule as the Events page: approved/legacy events follow the
+  // own-vs-all Group Policy scope; pending/rejected submissions are only shown to
+  // their submitter, their resolved approver, or the Super User.
+  const visibleEvents = events.filter(event => {
+    if (event.approvalStatus === 'pending_create' || event.approvalStatus === 'rejected') {
+      return user?.tier === 1 || event.submittedByEmail === user?.email || canApprovePendingEvent(event, user);
+    }
+    return canViewEvent(event, user);
+  });
 
   const handlePrevMonth = () => {
     const newDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1);
@@ -59,10 +80,10 @@ export default function CalendarPage() {
 
   const getDayEvents = (day: number) => {
     const checkStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    return events.filter(e => checkStr >= e.startDate && checkStr <= e.endDate);
+    return visibleEvents.filter(e => checkStr >= e.startDate && checkStr <= e.endDate);
   };
 
-  const upcomingEvents = [...events]
+  const upcomingEvents = [...visibleEvents]
     .filter(e => {
       const effective = getEffectiveEventStatus(e);
       return effective !== 'completed' && effective !== 'archived';
