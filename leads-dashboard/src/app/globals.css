@@ -71,29 +71,23 @@ body {
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25);
 }
 
-/* Background Space Layouts */
-.bg-space-theme {
-  background-image: url('/images/body-bg-light.jpg');
-  background-size: cover;
-  background-position: center;
-  background-attachment: fixed;
-  background-repeat: no-repeat;
+/* Background Theme Layouts - Side-to-Side Dark Navy Blue to Black Gradient */
+.bg-space-theme, body {
+  background: linear-gradient(90deg, #020617 0%, #081528 25%, #0F284B 50%, #081528 75%, #020617 100%) !important;
+  background-attachment: fixed !important;
+  background-size: cover !important;
 }
 
 .dark.bg-space-theme, .dark .bg-space-theme, .dark body {
-  background-image: url('/images/sung-jinwoo-dark.jpg');
-  background-size: cover;
-  background-position: center;
-  background-attachment: fixed;
-  background-repeat: no-repeat;
+  background: linear-gradient(90deg, #020617 0%, #081528 25%, #0F284B 50%, #081528 75%, #020617 100%) !important;
+  background-attachment: fixed !important;
+  background-size: cover !important;
 }
 
 @media (max-width: 768px) {
-  .dark.bg-space-theme, .dark .bg-space-theme, .dark body {
-    background-image: url('/images/sung-jinwoo-mobile.jpg');
-    background-size: cover;
-    background-position: center top;
-    background-attachment: fixed;
-    background-repeat: no-repeat;
+  .bg-space-theme, body, .dark.bg-space-theme, .dark .bg-space-theme, .dark body {
+    background: linear-gradient(90deg, #020617 0%, #081528 25%, #0F284B 50%, #081528 75%, #020617 100%) !important;
+    background-attachment: fixed !important;
   }
 }
+
