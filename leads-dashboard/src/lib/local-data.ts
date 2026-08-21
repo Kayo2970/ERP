@@ -249,6 +249,28 @@ export const DEFAULT_ACCESS_LEVEL_SETTINGS: AccessLevelSettings = {
 };
 
 /**
+ * Site-wide lockdown switch. When enabled, every dashboard page renders a
+ * generic "Page Not Found" screen instead of its real content for everyone
+ * except the Super User (tier 1, hardcoded — same as access-level settings,
+ * there is no configuration that can lock the real Super User out).
+ */
+export interface SystemSettings {
+  id: string; // always 'default'
+  lockdownEnabled: boolean;
+  lockdownEnabledAt?: string;
+  lockdownEnabledBy?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
+  id: 'default',
+  lockdownEnabled: false,
+};
+
+export const initialSystemSettings: SystemSettings[] = [DEFAULT_SYSTEM_SETTINGS];
+
+/**
  * Group Policy: a dynamically Super-User-managed access "tag." Grants a set of
  * capability keys to any member matching ANY of its non-empty target criteria
  * (division / tier / designation keyword / explicit member) — no code change
@@ -394,6 +416,7 @@ export async function syncWithServer(): Promise<boolean> {
       hydrateCollection('leads_designs', data.designs);
       hydrateCollection('leads_group_policies', data.groupPolicies);
       hydrateCollection('leads_access_level_settings', data.accessLevelSettings);
+      hydrateCollection('leads_system_settings', data.systemSettings);
       if (Array.isArray(data.auditLogs)) {
         localStorage.setItem('leads_audit_logs', JSON.stringify(data.auditLogs));
       }
@@ -1689,6 +1712,45 @@ export function updateAccessLevelSettings(updates: Partial<AccessLevelSettings>,
     'ACCESS_LEVEL_SETTINGS_CHANGED',
     actorName,
     `Updated built-in access level rules: ${Object.keys(updates).join(', ')}`
+  );
+  return updated;
+}
+
+// -------------------------------------------------------------
+// System Settings (Super User-only site-wide lockdown switch)
+// -------------------------------------------------------------
+
+export function getSystemSettings(): SystemSettings {
+  if (typeof window === 'undefined') return DEFAULT_SYSTEM_SETTINGS;
+  const saved = localStorage.getItem('leads_system_settings');
+  if (saved) {
+    try {
+      const arr = JSON.parse(saved);
+      if (Array.isArray(arr) && arr.length > 0) return { ...DEFAULT_SYSTEM_SETTINGS, ...arr[0] };
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  return DEFAULT_SYSTEM_SETTINGS;
+}
+
+export function updateSystemSettings(updates: Partial<SystemSettings>, actorName: string): SystemSettings {
+  const current = getSystemSettings();
+  const updated: SystemSettings = {
+    ...current,
+    ...updates,
+    id: 'default',
+    updatedAt: new Date().toISOString(),
+    updatedBy: actorName,
+  };
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('leads_system_settings', JSON.stringify([updated]));
+  }
+  serverPost('/api/system-settings', updated);
+  logAuditEvent(
+    'SYSTEM_LOCKDOWN_CHANGED',
+    actorName,
+    updated.lockdownEnabled ? 'Enabled site-wide lockdown — every user except the Super User now sees a Not Found screen' : 'Disabled site-wide lockdown — normal access restored for everyone'
   );
   return updated;
 }

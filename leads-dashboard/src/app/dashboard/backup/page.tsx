@@ -12,8 +12,9 @@ import {
   CheckCircle2,
   AlertTriangle,
   FileArchive,
+  FileQuestion,
 } from 'lucide-react';
-import { logAuditEvent } from '@/lib/local-data';
+import { logAuditEvent, getSystemSettings, updateSystemSettings } from '@/lib/local-data';
 import { EmptyState } from '@/components/ui/empty-state';
 
 export default function BackupRestorePage() {
@@ -35,6 +36,9 @@ export default function BackupRestorePage() {
   const [restoreSuccess, setRestoreSuccess] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [lockdownEnabled, setLockdownEnabled] = useState(false);
+  const [isTogglingLockdown, setIsTogglingLockdown] = useState(false);
+
   useEffect(() => {
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
@@ -44,8 +48,17 @@ export default function BackupRestorePage() {
         console.error(e);
       }
     }
+    setLockdownEnabled(getSystemSettings().lockdownEnabled);
     setUserHydrated(true);
   }, []);
+
+  const handleToggleLockdown = async () => {
+    setIsTogglingLockdown(true);
+    const next = !lockdownEnabled;
+    updateSystemSettings({ lockdownEnabled: next }, user?.name || 'Super User');
+    setLockdownEnabled(next);
+    setIsTogglingLockdown(false);
+  };
 
   const isSuperUser = user?.tier === 1;
 
@@ -183,6 +196,48 @@ export default function BackupRestorePage() {
           announcements, forms, submissions, designs, group policies, audit logs) and every uploaded file (design assets,
           reimbursement receipts) — or restore the system from a previous backup.
         </p>
+      </div>
+
+      {/* Site-wide Lockdown */}
+      <div className={`glass-panel rounded-2xl p-6 space-y-3 border ${lockdownEnabled ? 'border-danger/30' : 'border-theme-card-border'}`}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5">
+            <div className={`p-2 rounded-xl ${lockdownEnabled ? 'bg-danger/10' : 'bg-theme-border/10'}`}>
+              <FileQuestion className={`h-4.5 w-4.5 ${lockdownEnabled ? 'text-danger' : 'text-theme-text-secondary'}`} />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-theme-text-primary">Site-Wide Lockdown</h3>
+              <p className="text-[11px] text-theme-text-secondary max-w-md">
+                When enabled, every dashboard page shows a plain "Page Not Found" screen to everyone except the Super User. Takes effect for signed-in users within seconds — no reload needed on their end.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={handleToggleLockdown}
+            disabled={isTogglingLockdown}
+            role="switch"
+            aria-checked={lockdownEnabled}
+            className={`shrink-0 relative w-14 h-8 rounded-full transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+              lockdownEnabled ? 'bg-danger' : 'bg-theme-border/40'
+            }`}
+          >
+            <span
+              className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow-md transition-transform ${
+                lockdownEnabled ? 'translate-x-7' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
+
+        {lockdownEnabled && (
+          <div className="flex items-start gap-2 p-3 bg-danger/5 border border-danger/25 rounded-xl text-[11px] text-theme-text-secondary">
+            <AlertTriangle className="h-3.5 w-3.5 text-danger shrink-0 mt-0.5" />
+            <span>
+              Lockdown is currently <strong className="text-danger">ON</strong>. Only the Super User account can use the dashboard right now — flip this off to restore access for everyone else.
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -31,6 +31,7 @@ import {
   initialDesigns,
   initialGroupPolicies,
   initialAccessLevelSettings,
+  initialSystemSettings,
 } from './local-data';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -50,6 +51,7 @@ export interface DbSchema {
   designs: any[];
   groupPolicies: any[];
   accessLevelSettings: any[];
+  systemSettings: any[];
   auditLogs: any[];
   emails: any[];
   passwordResets: any[];
@@ -70,6 +72,7 @@ const EMPTY_DB: DbSchema = {
   designs: [],
   groupPolicies: [],
   accessLevelSettings: [],
+  systemSettings: [],
   auditLogs: [],
   emails: [],
   passwordResets: [],
@@ -89,6 +92,7 @@ const SEED_DB: DbSchema = {
   designs: initialDesigns,
   groupPolicies: initialGroupPolicies,
   accessLevelSettings: initialAccessLevelSettings,
+  systemSettings: initialSystemSettings,
   auditLogs: [],
   emails: [],
   passwordResets: [],
