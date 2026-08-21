@@ -19,6 +19,8 @@ import {
   ImagePlus,
   ImageOff,
   ExternalLink,
+  Download,
+  Upload,
 } from 'lucide-react';
 import { getGuests, addGuest, updateGuest, deleteGuest, Guest } from '@/lib/local-data';
 import { canAccessGuestDirectory } from '@/lib/permissions';
@@ -39,6 +41,38 @@ const emptyForm = {
   notes: '',
 };
 
+/** Splits one CSV line into fields, respecting double-quoted fields that may
+ * contain commas (e.g. an "Address" value like "123 MG Road, Bangalore"). */
+function parseCsvLine(line: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (inQuotes) {
+      if (char === '"') {
+        if (line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        current += char;
+      }
+    } else if (char === '"') {
+      inQuotes = true;
+    } else if (char === ',') {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
 export default function GuestDirectoryPage() {
   const [user, setUser] = useState<any>(null);
   const [userHydrated, setUserHydrated] = useState(false);
@@ -56,6 +90,7 @@ export default function GuestDirectoryPage() {
 
   const [deletingGuest, setDeletingGuest] = useState<Guest | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const csvFileInputRef = useRef<HTMLInputElement>(null);
 
   const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -194,6 +229,110 @@ export default function GuestDirectoryPage() {
     }
   };
 
+  const handleDownloadTemplate = () => {
+    const csvContent = 'Name,Organization,Designation,Phone,Email,Website,Address,LinkedIn,Notes,Met By\n' +
+      'Anjali Rao,Acme Corp,Marketing Director,+91 98765 43210,anjali.rao@acmecorp.com,acmecorp.com,"123 MG Road, Bangalore, KA 560001",linkedin.com/in/anjalirao,Interested in sponsoring the annual summit,Kayomarz Pavri\n' +
+      'Rahul Mehta,,,+91 99999 11111,rahul.mehta@example.com,,,,,';
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'leads_guest_directory_template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleCsvUploadClick = () => {
+    csvFileInputRef.current?.click();
+  };
+
+  const handleCsvFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (!text) return;
+
+      try {
+        const lines = text.split('\n').filter(l => l.trim() !== '');
+        if (lines.length < 2) {
+          triggerToast('error', 'CSV file is empty or missing headers.');
+          return;
+        }
+
+        const headers = parseCsvLine(lines[0]).map(h => h.toLowerCase());
+        const nameIndex = headers.indexOf('name');
+        const orgIndex = headers.indexOf('organization');
+        const designationIndex = headers.indexOf('designation');
+        const phoneIndex = headers.indexOf('phone');
+        const emailIndex = headers.indexOf('email');
+        const websiteIndex = headers.indexOf('website');
+        const addressIndex = headers.indexOf('address');
+        const linkedinIndex = headers.indexOf('linkedin');
+        const notesIndex = headers.indexOf('notes');
+        const metByIndex = headers.indexOf('met by');
+
+        if (nameIndex === -1) {
+          triggerToast('error', 'Invalid CSV headers. Required at minimum: Name');
+          return;
+        }
+
+        // Guests don't require a unique email, but skip within-file/roster
+        // duplicates when an email IS present, same spirit as the member import.
+        const seenEmails = new Set(
+          getGuests().map(g => g.email?.toLowerCase()).filter((email): email is string => Boolean(email))
+        );
+        let importCount = 0;
+        let skippedCount = 0;
+
+        for (let i = 1; i < lines.length; i++) {
+          const values = parseCsvLine(lines[i]);
+          const gName = values[nameIndex];
+          if (!gName) {
+            skippedCount++;
+            continue;
+          }
+
+          const gEmail = emailIndex !== -1 ? values[emailIndex]?.toLowerCase() : '';
+          if (gEmail && seenEmails.has(gEmail)) {
+            skippedCount++;
+            continue;
+          }
+
+          addGuest({
+            name: gName,
+            organization: (orgIndex !== -1 ? values[orgIndex] : '') || undefined,
+            designation: (designationIndex !== -1 ? values[designationIndex] : '') || undefined,
+            phone: (phoneIndex !== -1 ? values[phoneIndex] : '') || undefined,
+            email: gEmail || undefined,
+            website: (websiteIndex !== -1 ? values[websiteIndex] : '') || undefined,
+            address: (addressIndex !== -1 ? values[addressIndex] : '') || undefined,
+            linkedin: (linkedinIndex !== -1 ? values[linkedinIndex] : '') || undefined,
+            notes: (notesIndex !== -1 ? values[notesIndex] : '') || undefined,
+            metBy: (metByIndex !== -1 ? values[metByIndex] : '') || user?.name || 'Unknown',
+          }, user?.name || 'Admin');
+
+          if (gEmail) seenEmails.add(gEmail);
+          importCount++;
+        }
+
+        if (importCount > 0) {
+          setGuests(getGuests());
+          triggerToast('success', `Successfully imported ${importCount} guest${importCount === 1 ? '' : 's'}.${skippedCount > 0 ? ` (${skippedCount} row${skippedCount === 1 ? '' : 's'} skipped)` : ''}`);
+        } else {
+          triggerToast('error', skippedCount > 0 ? `No new guests imported. ${skippedCount} row(s) skipped (missing name or duplicate email).` : 'No valid guest rows found in the CSV.');
+        }
+      } catch {
+        triggerToast('error', 'Error parsing CSV file. Please verify formatting.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   const filteredGuests = guests.filter(g => {
     const q = searchQuery.toLowerCase();
     if (!q) return true;
@@ -228,13 +367,40 @@ export default function GuestDirectoryPage() {
           <h1 className="text-xl font-bold text-theme-text-primary">Guest Directory</h1>
           <p className="text-xs text-theme-text-secondary">Guests, sponsors, and visitors met at events — sourced from visiting cards. Separate from the Member roster and Guest Invites tool.</p>
         </div>
-        <button
-          onClick={openAddModal}
-          className="flex items-center gap-1.5 px-4 py-2 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer shrink-0"
-        >
-          <Plus className="h-4 w-4" />
-          Add Guest
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={handleDownloadTemplate}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-border/40"
+            title="Download CSV Template"
+          >
+            <Download className="h-4 w-4" />
+            Download Template
+          </button>
+
+          <button
+            onClick={handleCsvUploadClick}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-border/40"
+            title="Upload Filled CSV File"
+          >
+            <Upload className="h-4 w-4" />
+            Upload Guests (CSV)
+          </button>
+          <input
+            type="file"
+            ref={csvFileInputRef}
+            onChange={handleCsvFileUpload}
+            accept=".csv"
+            className="hidden"
+          />
+
+          <button
+            onClick={openAddModal}
+            className="flex items-center gap-1.5 px-4 py-2 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer shrink-0"
+          >
+            <Plus className="h-4 w-4" />
+            Add Guest
+          </button>
+        </div>
       </div>
 
       {toastMsg && (

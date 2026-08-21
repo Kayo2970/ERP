@@ -32,7 +32,9 @@ import {
   Mail,
   Send,
   Contact,
-  Wallet
+  Wallet,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { getAnnouncements, getTasks, getDesigns, getMembers, logAuditEvent, Member, syncWithServer, getSystemSettings } from '@/lib/local-data';
 import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isFinanceHead, canAccessGuestDirectory } from '@/lib/permissions';
@@ -100,6 +102,13 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const [isTermsOpen, setIsTermsOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const notifRefMobile = useRef<HTMLDivElement>(null);
+
+  // Desktop sidebar: collapses to an icon-only rail (persisted across
+  // reloads) and temporarily flies out to full width on hover so labels
+  // stay reachable without permanently giving up the reclaimed space.
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarHovering, setIsSidebarHovering] = useState(false);
+  const showSidebarLabels = !isSidebarCollapsed || isSidebarHovering;
 
   // Brief branded splash shown whenever navigation crosses into a different
   // top-level module (e.g. Tasks -> Events), not for sub-routes within the
@@ -181,6 +190,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       setIsDarkTheme(false);
       document.documentElement.classList.remove('dark');
     }
+
+    setIsSidebarCollapsed(localStorage.getItem('sidebarCollapsed') === 'true');
 
     const savedUser = localStorage.getItem('user');
     if (!savedUser) {
@@ -354,6 +365,12 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     return !q || m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q) || m.role.toLowerCase().includes(q);
   });
 
+  const toggleSidebarCollapsed = () => {
+    const next = !isSidebarCollapsed;
+    setIsSidebarCollapsed(next);
+    localStorage.setItem('sidebarCollapsed', String(next));
+  };
+
   const toggleTheme = () => {
     const newTheme = !isDarkTheme;
     setIsDarkTheme(newTheme);
@@ -484,77 +501,102 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       )}
 
       {/* Sidebar - Desktop */}
-      <aside className="hidden md:flex flex-col w-64 glass-panel bg-theme-sidebar/80 border-r border-theme-sidebar-border h-screen sticky top-0 z-40">
-        {/* Brand Logo Link to Dashboard Home */}
-        <Link 
-          href="/dashboard/home" 
-          className="h-16 flex items-center px-6 border-b border-theme-border/30 gap-3 hover:opacity-90 transition-all cursor-pointer select-none"
-          title="Return to Dashboard Home"
+      <aside className={`hidden md:block relative shrink-0 h-screen sticky top-0 z-40 transition-[width] duration-200 ${isSidebarCollapsed ? 'w-20' : 'w-64'}`}>
+        <div
+          onMouseEnter={() => { if (isSidebarCollapsed) setIsSidebarHovering(true); }}
+          onMouseLeave={() => setIsSidebarHovering(false)}
+          className={`absolute inset-y-0 left-0 flex flex-col glass-panel bg-theme-sidebar/95 border-r border-theme-sidebar-border overflow-hidden transition-[width] duration-200 ${
+            showSidebarLabels ? 'w-64' : 'w-20'
+          } ${isSidebarCollapsed && isSidebarHovering ? 'shadow-2xl' : ''}`}
         >
-          <div className="h-8 w-8 flex items-center justify-center">
-            <img 
-              src="/images/leads-short-logo.png" 
-              alt="LEADS Logo" 
-              className="h-full w-full object-contain"
-            />
-          </div>
-          <div>
-            <h1 className="font-bold text-theme-text-primary text-xs tracking-wider uppercase">LEADS NEXT GEN CENTRE</h1>
-            <p className="text-[10px] text-theme-text-secondary font-medium tracking-wider uppercase">MSRUAS Portal</p>
-          </div>
-        </Link>
-
-        {/* Sidebar Nav links grouped by section */}
-        <nav className="flex-1 px-4 py-5 space-y-5 overflow-y-auto">
-          {navSections.map((section) => (
-            <div key={section.title} className="space-y-1">
-              <h3 className="px-3 text-[11px] font-bold text-theme-text-secondary uppercase tracking-wider">
-                {section.title}
-              </h3>
-              <div className="space-y-1 pt-1">
-                {section.items.filter(item => (!item.superUserOnly || user.tier === 1) && (!item.centreHeadOnly || isCentreHead(user)) && (!item.guestDirectoryOnly || canAccessGuestDirectory(user)) && (!item.budgetAccessOnly || isCentreHead(user) || isFinanceHead(user))).map((item) => {
-                  const Icon = item.icon;
-                  const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
-                  return (
-                    <Link
-                      key={item.name}
-                      href={item.href}
-                      className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 ${
-                        isActive
-                          ? 'bg-accent text-white shadow-md shadow-accent/20'
-                          : 'text-theme-text-secondary hover:text-theme-text-primary hover:bg-theme-border/20'
-                      }`}
-                    >
-                      <Icon className={`h-4.5 w-4.5 ${isActive ? 'text-white' : 'text-theme-text-secondary'}`} />
-                      {item.name}
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </nav>
-
-        {/* User Info & Logout */}
-        <div className="p-4 border-t border-theme-border/30 flex flex-col gap-3">
-          <div className="flex items-center gap-3 px-2 py-1">
-            <div className="h-9 w-9 bg-accent/15 rounded-xl flex items-center justify-center border border-accent/20">
-              <User className="h-4.5 w-4.5 text-accent" />
-            </div>
-            <div className="overflow-hidden">
-              <h4 className="font-semibold text-xs text-theme-text-primary truncate">{user.name}</h4>
-              <p className="text-[11px] text-theme-text-secondary truncate">{user.role || 'Member'}</p>
-            </div>
-          </div>
-          
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2.5 w-full px-3.5 py-2 text-xs font-semibold text-danger hover:bg-danger/10 rounded-xl transition-all duration-200 cursor-pointer"
+          {/* Brand Logo Link to Dashboard Home */}
+          <Link
+            href="/dashboard/home"
+            className={`h-16 flex items-center border-b border-theme-border/30 gap-3 hover:opacity-90 transition-all cursor-pointer select-none shrink-0 ${showSidebarLabels ? 'px-6' : 'justify-center px-0'}`}
+            title="Return to Dashboard Home"
           >
-            <LogOut className="h-4 w-4" />
-            Sign Out
-          </button>
+            <div className="h-8 w-8 flex items-center justify-center shrink-0">
+              <img
+                src="/images/leads-short-logo.png"
+                alt="LEADS Logo"
+                className="h-full w-full object-contain"
+              />
+            </div>
+            {showSidebarLabels && (
+              <div className="whitespace-nowrap">
+                <h1 className="font-bold text-theme-text-primary text-xs tracking-wider uppercase">LEADS NEXT GEN CENTRE</h1>
+                <p className="text-[10px] text-theme-text-secondary font-medium tracking-wider uppercase">MSRUAS Portal</p>
+              </div>
+            )}
+          </Link>
+
+          {/* Sidebar Nav links grouped by section */}
+          <nav className="flex-1 px-4 py-5 space-y-5 overflow-y-auto overflow-x-hidden">
+            {navSections.map((section) => (
+              <div key={section.title} className="space-y-1">
+                {showSidebarLabels && (
+                  <h3 className="px-3 text-[11px] font-bold text-theme-text-secondary uppercase tracking-wider whitespace-nowrap">
+                    {section.title}
+                  </h3>
+                )}
+                <div className="space-y-1 pt-1">
+                  {section.items.filter(item => (!item.superUserOnly || user.tier === 1) && (!item.centreHeadOnly || isCentreHead(user)) && (!item.guestDirectoryOnly || canAccessGuestDirectory(user)) && (!item.budgetAccessOnly || isCentreHead(user) || isFinanceHead(user))).map((item) => {
+                    const Icon = item.icon;
+                    const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+                    return (
+                      <Link
+                        key={item.name}
+                        href={item.href}
+                        title={showSidebarLabels ? undefined : item.name}
+                        className={`flex items-center gap-3 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 whitespace-nowrap ${showSidebarLabels ? 'px-3.5' : 'justify-center px-0'} ${
+                          isActive
+                            ? 'bg-accent text-white shadow-md shadow-accent/20'
+                            : 'text-theme-text-secondary hover:text-theme-text-primary hover:bg-theme-border/20'
+                        }`}
+                      >
+                        <Icon className={`h-4.5 w-4.5 shrink-0 ${isActive ? 'text-white' : 'text-theme-text-secondary'}`} />
+                        {showSidebarLabels && item.name}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </nav>
+
+          {/* User Info & Logout */}
+          <div className="p-4 border-t border-theme-border/30 flex flex-col gap-3 shrink-0">
+            <div className={`flex items-center gap-3 py-1 ${showSidebarLabels ? 'px-2' : 'justify-center px-0'}`}>
+              <div className="h-9 w-9 bg-accent/15 rounded-xl flex items-center justify-center border border-accent/20 shrink-0">
+                <User className="h-4.5 w-4.5 text-accent" />
+              </div>
+              {showSidebarLabels && (
+                <div className="overflow-hidden">
+                  <h4 className="font-semibold text-xs text-theme-text-primary truncate">{user.name}</h4>
+                  <p className="text-[11px] text-theme-text-secondary truncate">{user.role || 'Member'}</p>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={handleLogout}
+              title={showSidebarLabels ? undefined : 'Sign Out'}
+              className={`flex items-center gap-2.5 w-full py-2 text-xs font-semibold text-danger hover:bg-danger/10 rounded-xl transition-all duration-200 cursor-pointer whitespace-nowrap ${showSidebarLabels ? 'px-3.5' : 'justify-center px-0'}`}
+            >
+              <LogOut className="h-4 w-4 shrink-0" />
+              {showSidebarLabels && 'Sign Out'}
+            </button>
+          </div>
         </div>
+
+        {/* Collapse / expand toggle — straddles the sidebar's docked edge */}
+        <button
+          onClick={toggleSidebarCollapsed}
+          title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          className="absolute top-20 -right-3 h-6 w-6 flex items-center justify-center rounded-full bg-theme-sidebar border border-theme-sidebar-border shadow-md text-theme-text-secondary hover:text-theme-text-primary hover:bg-theme-border/30 transition-all z-50 cursor-pointer"
+        >
+          {isSidebarCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
+        </button>
       </aside>
 
       {/* Mobile Header / Nav */}
