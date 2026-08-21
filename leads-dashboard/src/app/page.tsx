@@ -327,13 +327,14 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-space-theme flex flex-col items-center justify-center p-4 md:p-8">
       {/* Grid Layout Container */}
-      <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch">
-        
-        {/* Dynamic Quotes Hero Panel */}
-        <div className="md:col-span-6 lg:col-span-7 glass-panel rounded-3xl p-8 flex flex-col justify-between min-h-[340px] md:min-h-[460px] relative overflow-hidden transition-all duration-300 border border-white/15 shadow-2xl bg-gradient-to-br from-accent/20 via-primary/10 to-transparent">
-          <div className="absolute -top-16 -left-16 w-48 h-48 bg-accent/25 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-16 -right-16 w-48 h-48 bg-primary/20 rounded-full blur-3xl pointer-events-none" />
-          
+      <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 items-stretch">
+
+        {/* Dynamic Quotes Hero Panel — shown after the login form on mobile so
+            signing in never requires scrolling past a tall decorative panel. */}
+        <div className="order-2 md:order-1 md:col-span-6 lg:col-span-7 glass-panel rounded-3xl p-5 md:p-8 flex flex-col justify-between min-h-[180px] md:min-h-[460px] relative overflow-hidden transition-all duration-300 border border-white/15 shadow-2xl bg-gradient-to-br from-accent/20 via-primary/10 to-transparent">
+          <div className="absolute -top-16 -left-16 w-32 h-32 md:w-48 md:h-48 bg-accent/25 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-16 -right-16 w-32 h-32 md:w-48 md:h-48 bg-primary/20 rounded-full blur-3xl pointer-events-none" />
+
           {/* Quotes Header */}
           <div className="flex items-center justify-between z-10">
             <div className="flex items-center gap-2.5">
@@ -345,12 +346,12 @@ export default function LoginPage() {
           </div>
 
           {/* Quote Body */}
-          <div className="my-auto py-8 z-10">
+          <div className="my-auto py-3 md:py-8 z-10">
             <div className={`transition-all duration-300 ${isQuoteFading ? 'opacity-0 transform translate-y-2' : 'opacity-100 transform translate-y-0'}`}>
-              <blockquote className="text-lg md:text-xl font-medium text-theme-text-primary leading-relaxed italic">
+              <blockquote className="text-sm md:text-lg lg:text-xl font-medium text-theme-text-primary leading-relaxed italic">
                 &ldquo;{INSPIRATIONAL_QUOTES[quoteIndex].quote}&rdquo;
               </blockquote>
-              <div className="mt-6 flex items-center gap-3">
+              <div className="mt-4 md:mt-6 flex items-center gap-3">
                 <div className="h-0.5 w-8 bg-accent/60 rounded-full" />
                 <div>
                   <h4 className="text-sm font-bold text-theme-text-primary">
@@ -365,7 +366,7 @@ export default function LoginPage() {
           </div>
 
           {/* Quotes Controls Footer */}
-          <div className="flex items-center justify-between z-10 pt-4 border-t border-white/10">
+          <div className="flex items-center justify-between z-10 pt-3 md:pt-4 border-t border-white/10">
             <div className="flex items-center gap-1.5">
               {INSPIRATIONAL_QUOTES.map((_, idx) => (
                 <button
@@ -391,19 +392,19 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Login Form Panel */}
-        <div className="md:col-span-6 lg:col-span-5 glass-panel rounded-3xl p-8 flex flex-col justify-between space-y-7 relative overflow-hidden transition-all duration-300 border border-white/15 shadow-2xl">
-          
+        {/* Login Form Panel — comes first on mobile so signing in is immediate. */}
+        <div className="order-1 md:order-2 md:col-span-6 lg:col-span-5 glass-panel rounded-3xl p-6 md:p-8 flex flex-col justify-between space-y-5 md:space-y-7 relative overflow-hidden transition-all duration-300 border border-white/15 shadow-2xl">
+
           {/* Brand Header */}
-          <Link 
-            href="/" 
-            className="flex flex-col items-center text-center space-y-3 hover:opacity-90 transition-all cursor-pointer select-none"
+          <Link
+            href="/"
+            className="flex flex-col items-center text-center space-y-2 md:space-y-3 hover:opacity-90 transition-all cursor-pointer select-none"
             title="LEADS Home"
           >
-            <div className="h-16 w-16 flex items-center justify-center">
-              <img 
-                src="/images/leads-short-logo.png" 
-                alt="LEADS Logo" 
+            <div className="h-12 w-12 md:h-16 md:w-16 flex items-center justify-center">
+              <img
+                src="/images/leads-short-logo.png"
+                alt="LEADS Logo"
                 className="h-full w-full object-contain filter drop-shadow-[0_4px_10px_rgba(46,117,182,0.35)]"
               />
             </div>
