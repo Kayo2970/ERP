@@ -21,6 +21,10 @@ export interface Member {
   status?: 'Active' | 'Terminated';
   terminatedAt?: string;
   terminatedBy?: string;
+  avatarData?: string;       // transient: base64 data URL sent on upload, converted server-side
+  avatarFileName?: string;   // transient: original filename, paired with avatarData
+  avatarUrl?: string;        // servable path under /api/files, backed by a real file on disk
+  avatarStorageKey?: string; // path relative to data/uploads
 }
 
 // A person encountered outside the org (event guest, sponsor contact, vendor,

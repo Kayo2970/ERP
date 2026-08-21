@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ShieldAlert, LogIn, Mail, Lock, Eye, EyeOff, KeyRound, CheckCircle2, Clock, ArrowLeft, Send, Quote, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ShieldAlert, LogIn, Mail, Lock, Eye, EyeOff, KeyRound, CheckCircle2, Clock, ArrowLeft, Send, Quote } from 'lucide-react';
 import { logAuditEvent, requestPasswordReset, submitPasswordReset } from '@/lib/local-data';
 import { TermsModal } from '@/components/terms-modal';
 import { LoadingScreen } from '@/components/loading-screen';
@@ -55,6 +55,66 @@ const INSPIRATIONAL_QUOTES: QuoteItem[] = [
     author: "Steve Jobs",
     title: "Co-founder of Apple Inc.",
   },
+  {
+    quote: "If your actions inspire others to dream more, learn more, do more and become more, you are a leader.",
+    author: "John Quincy Adams",
+    title: "6th President of the United States",
+  },
+  {
+    quote: "Let us remember: one book, one pen, one child, and one teacher can change the world.",
+    author: "Malala Yousafzai",
+    title: "Nobel Peace Prize Laureate & Education Activist",
+  },
+  {
+    quote: "Education is the most powerful weapon which you can use to change the world.",
+    author: "Nelson Mandela",
+    title: "Former President of South Africa & Nobel Laureate",
+  },
+  {
+    quote: "You have to dream before your dreams can come true.",
+    author: "Dr. A.P.J. Abdul Kalam",
+    title: "Former President of India & The People's President",
+  },
+  {
+    quote: "Excellence is to do a common thing in an uncommon way.",
+    author: "Booker T. Washington",
+    title: "Educator & Founder of Tuskegee Institute",
+  },
+  {
+    quote: "Leadership is hard to define and good leadership even harder. But if you can get people to follow you to the ends of the earth, you are a great leader.",
+    author: "Indra Nooyi",
+    title: "Former Chairman & CEO of PepsiCo",
+  },
+  {
+    quote: "None can destroy iron, but its own rust can. Likewise, no one can destroy a person, but their own mindset can.",
+    author: "Ratan Tata",
+    title: "Former Chairman, Tata Sons",
+  },
+  {
+    quote: "Change will not come if we wait for some other person or some other time. We are the ones we've been waiting for.",
+    author: "Barack Obama",
+    title: "44th President of the United States",
+  },
+  {
+    quote: "The most difficult thing is the decision to act, the rest is merely tenacity.",
+    author: "Amelia Earhart",
+    title: "Aviation Pioneer",
+  },
+  {
+    quote: "The future belongs to those who believe in the beauty of their dreams.",
+    author: "Eleanor Roosevelt",
+    title: "Former First Lady of the United States & Human Rights Advocate",
+  },
+  {
+    quote: "The end-product of education should be a free creative man, who can battle against historical circumstances and adversities of nature.",
+    author: "Dr. Sarvepalli Radhakrishnan",
+    title: "Former President of India & Philosopher-Teacher",
+  },
+  {
+    quote: "Leaders don't create followers, they create more leaders.",
+    author: "Kiran Bedi",
+    title: "India's First Woman IPS Officer",
+  },
 ];
 
 export default function LoginPage() {
@@ -85,7 +145,7 @@ export default function LoginPage() {
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
   const [timeLeftStr, setTimeLeftStr] = useState('05:00');
 
-  // Auto-rotate quotes every 7 seconds
+  // Auto-rotate quotes every ~3.5 seconds
   useEffect(() => {
     const timer = setInterval(() => {
       setIsQuoteFading(true);
@@ -93,26 +153,10 @@ export default function LoginPage() {
         setQuoteIndex(prev => (prev + 1) % INSPIRATIONAL_QUOTES.length);
         setIsQuoteFading(false);
       }, 350);
-    }, 7000);
+    }, 3500);
 
     return () => clearInterval(timer);
   }, []);
-
-  const handleNextQuote = () => {
-    setIsQuoteFading(true);
-    setTimeout(() => {
-      setQuoteIndex(prev => (prev + 1) % INSPIRATIONAL_QUOTES.length);
-      setIsQuoteFading(false);
-    }, 250);
-  };
-
-  const handlePrevQuote = () => {
-    setIsQuoteFading(true);
-    setTimeout(() => {
-      setQuoteIndex(prev => (prev - 1 + INSPIRATIONAL_QUOTES.length) % INSPIRATIONAL_QUOTES.length);
-      setIsQuoteFading(false);
-    }, 250);
-  };
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
@@ -297,24 +341,6 @@ export default function LoginPage() {
                 <Quote className="h-5 w-5" />
               </div>
               <span className="text-xs font-bold uppercase tracking-wider text-accent">Words of Wisdom</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={handlePrevQuote}
-                aria-label="Previous quote"
-                className="p-1.5 rounded-xl bg-white/5 hover:bg-white/15 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer border border-white/10"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={handleNextQuote}
-                aria-label="Next quote"
-                className="p-1.5 rounded-xl bg-white/5 hover:bg-white/15 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer border border-white/10"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
             </div>
           </div>
 
