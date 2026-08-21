@@ -12,7 +12,9 @@ import {
   Building2,
   Phone,
   Mail,
-  Calendar,
+  Globe,
+  MapPin,
+  Link2,
   StickyNote,
   ImagePlus,
   ImageOff,
@@ -31,8 +33,10 @@ const emptyForm = {
   designation: '',
   phone: '',
   email: '',
+  website: '',
+  address: '',
+  linkedin: '',
   notes: '',
-  metDate: '',
 };
 
 export default function GuestDirectoryPage() {
@@ -103,8 +107,10 @@ export default function GuestDirectoryPage() {
       designation: guest.designation || '',
       phone: guest.phone || '',
       email: guest.email || '',
+      website: guest.website || '',
+      address: guest.address || '',
+      linkedin: guest.linkedin || '',
       notes: guest.notes || '',
-      metDate: guest.metDate || '',
     });
     setCardFile(null);
     setCardData('');
@@ -145,8 +151,10 @@ export default function GuestDirectoryPage() {
       designation: form.designation.trim() || undefined,
       phone: form.phone.trim() || undefined,
       email: form.email.trim() || undefined,
+      website: form.website.trim() || undefined,
+      address: form.address.trim() || undefined,
+      linkedin: form.linkedin.trim() || undefined,
       notes: form.notes.trim() || undefined,
-      metDate: form.metDate || undefined,
       metBy: editingGuest?.metBy || user?.name || 'Unknown',
     };
 
@@ -194,6 +202,7 @@ export default function GuestDirectoryPage() {
       (g.organization || '').toLowerCase().includes(q) ||
       (g.designation || '').toLowerCase().includes(q) ||
       (g.email || '').toLowerCase().includes(q) ||
+      (g.website || '').toLowerCase().includes(q) ||
       (g.metBy || '').toLowerCase().includes(q)
     );
   });
@@ -300,10 +309,44 @@ export default function GuestDirectoryPage() {
                     <span className="truncate">{guest.email}</span>
                   </div>
                 )}
-                {guest.metDate && (
+                {guest.website && (
                   <div className="flex items-center gap-1.5">
-                    <Calendar className="h-3 w-3 shrink-0" />
-                    <span>Met on {guest.metDate}{guest.metBy ? ` by ${guest.metBy}` : ''}</span>
+                    <Globe className="h-3 w-3 shrink-0" />
+                    <a
+                      href={/^https?:\/\//i.test(guest.website) ? guest.website : `https://${guest.website}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={e => e.stopPropagation()}
+                      className="truncate hover:text-accent hover:underline"
+                    >
+                      {guest.website}
+                    </a>
+                  </div>
+                )}
+                {guest.linkedin && (
+                  <div className="flex items-center gap-1.5">
+                    <Link2 className="h-3 w-3 shrink-0" />
+                    <a
+                      href={/^https?:\/\//i.test(guest.linkedin) ? guest.linkedin : `https://${guest.linkedin}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={e => e.stopPropagation()}
+                      className="truncate hover:text-accent hover:underline"
+                    >
+                      {guest.linkedin}
+                    </a>
+                  </div>
+                )}
+                {guest.address && (
+                  <div className="flex items-start gap-1.5">
+                    <MapPin className="h-3 w-3 shrink-0 mt-0.5" />
+                    <span className="line-clamp-2">{guest.address}</span>
+                  </div>
+                )}
+                {guest.metBy && (
+                  <div className="flex items-center gap-1.5">
+                    <Users className="h-3 w-3 shrink-0" />
+                    <span>Met by {guest.metBy}</span>
                   </div>
                 )}
                 {guest.notes && (
@@ -410,12 +453,36 @@ export default function GuestDirectoryPage() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">Company Website</label>
+                  <input
+                    type="text"
+                    value={form.website}
+                    onChange={e => setForm(f => ({ ...f, website: e.target.value }))}
+                    placeholder="e.g. acmecorp.com"
+                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">LinkedIn</label>
+                  <input
+                    type="text"
+                    value={form.linkedin}
+                    onChange={e => setForm(f => ({ ...f, linkedin: e.target.value }))}
+                    placeholder="linkedin.com/in/..."
+                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  />
+                </div>
+              </div>
+
               <div className="space-y-1.5">
-                <label className="block font-medium text-theme-text-secondary">Date Met</label>
-                <input
-                  type="date"
-                  value={form.metDate}
-                  onChange={e => setForm(f => ({ ...f, metDate: e.target.value }))}
+                <label className="block font-medium text-theme-text-secondary">Address</label>
+                <textarea
+                  value={form.address}
+                  onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
+                  placeholder="Office / mailing address"
+                  rows={2}
                   className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                 />
               </div>

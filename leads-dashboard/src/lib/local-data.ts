@@ -33,9 +33,11 @@ export interface Guest {
   designation?: string;
   phone?: string;
   email?: string;
+  website?: string; // company website
+  address?: string;
+  linkedin?: string; // LinkedIn profile URL
   notes?: string;
   metBy?: string; // name of the member who met them
-  metDate?: string; // YYYY-MM-DD
   visitingCardData?: string; // transient: base64 data URL sent on upload, converted server-side
   visitingCardUrl?: string;  // servable path under /api/files, backed by a real file on disk
   visitingCardStorageKey?: string;
