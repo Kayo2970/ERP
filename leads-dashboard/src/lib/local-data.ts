@@ -765,12 +765,21 @@ export function rejectEvent(id: string, actorName: string, reason?: string): Eve
  * but nothing ever moved it to "completed" once its end date passed — it just sat
  * as "planned"/"active" forever. This derives the status that should actually be
  * shown/filtered on: past its end date, treat it as completed, unless someone has
- * deliberately archived it (archiving always wins, it's a manual terminal state).
+ * deliberately archived it (archiving always wins, it's a manual terminal state) —
+ * or unless a task tied to this event is still open, in which case the event stays
+ * whatever its stored status is instead of silently completing with loose ends.
+ * `tasks` defaults to a fresh getTasks() read when the caller doesn't already have
+ * a copy on hand.
  */
-export function getEffectiveEventStatus(event: EventItem): EventItem['status'] {
+export function getEffectiveEventStatus(event: EventItem, tasks?: TaskItem[]): EventItem['status'] {
   if (event.status === 'archived') return 'archived';
   const today = new Date().toISOString().split('T')[0];
-  if (event.endDate && event.endDate < today) return 'completed';
+  if (event.endDate && event.endDate < today) {
+    const relevantTasks = tasks ?? getTasks();
+    const hasPendingTask = relevantTasks.some(t => t.eventId === event.id && t.status !== 'Completed');
+    if (hasPendingTask) return event.status;
+    return 'completed';
+  }
   return event.status;
 }
 
