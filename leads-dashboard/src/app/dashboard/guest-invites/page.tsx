@@ -30,9 +30,13 @@ interface Guest {
   email: string;
 }
 
-/** Replaces {{name}} (any casing/spacing inside the braces) with the guest's name. */
-function applyMailMerge(template: string, guestName: string): string {
-  return template.replace(/\{\{\s*name\s*\}\}/gi, guestName);
+/** Replaces @name or {{name}} (and @email or {{email}}) with the guest's actual details. */
+function applyMailMerge(template: string, guestName: string, guestEmail: string = ''): string {
+  return template
+    .replace(/\{\{\s*name\s*\}\}/gi, guestName)
+    .replace(/@name\b/gi, guestName)
+    .replace(/\{\{\s*email\s*\}\}/gi, guestEmail)
+    .replace(/@email\b/gi, guestEmail);
 }
 
 export default function GuestInvitesPage() {
@@ -201,8 +205,8 @@ export default function GuestInvitesPage() {
           body: JSON.stringify({
             scope: 'SINGLE',
             recipientEmail: guest.email,
-            subject: applyMailMerge(subject, guest.name),
-            bodyText: applyMailMerge(bodyText, guest.name),
+            subject: applyMailMerge(subject, guest.name, guest.email),
+            bodyText: applyMailMerge(bodyText, guest.name, guest.email),
             category: 'GUEST_INVITE',
             badgeText: resolvedBadgeText,
           }),
@@ -417,16 +421,37 @@ export default function GuestInvitesPage() {
                   type="text"
                   value={subject}
                   onChange={e => setSubject(e.target.value)}
-                  placeholder="You're invited, {{name}}!"
+                  placeholder="You're invited, @name!"
                   className="w-full px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl text-xs text-theme-text-primary focus:outline-none focus:border-accent"
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="block text-[11px] font-medium text-theme-text-secondary">Message</label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-medium text-theme-text-secondary">Message</label>
+                  <div className="flex items-center gap-1.5 text-[10px]">
+                    <span className="text-theme-text-secondary font-medium">Quick Insert:</span>
+                    <button
+                      type="button"
+                      onClick={() => setBodyText(prev => prev + ' @name ')}
+                      className="px-2 py-0.5 bg-accent/15 text-accent border border-accent/30 rounded-md font-semibold hover:bg-accent/25 transition-all cursor-pointer"
+                      title="Insert guest name tag"
+                    >
+                      + @name
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBodyText(prev => prev + ' @email ')}
+                      className="px-2 py-0.5 bg-accent/15 text-accent border border-accent/30 rounded-md font-semibold hover:bg-accent/25 transition-all cursor-pointer"
+                      title="Insert guest email tag"
+                    >
+                      + @email
+                    </button>
+                  </div>
+                </div>
                 <textarea
                   value={bodyText}
                   onChange={e => setBodyText(e.target.value)}
-                  placeholder={'Dear {{name}},\n\nYou are cordially invited to...'}
+                  placeholder={'Dear @name,\n\nYou are cordially invited to...'}
                   rows={10}
                   className="w-full px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl text-xs text-theme-text-primary focus:outline-none focus:border-accent"
                 />
@@ -436,8 +461,8 @@ export default function GuestInvitesPage() {
             <div className="space-y-2">
               <p className="text-[11px] text-theme-text-secondary">Previewing as sent to <strong>{previewGuest?.name}</strong> ({previewGuest?.email})</p>
               <div className="p-3.5 bg-theme-background/30 border border-theme-border/20 rounded-xl space-y-2">
-                <p className="text-xs font-bold text-theme-text-primary">{applyMailMerge(subject, previewGuest?.name || '') || '(no subject)'}</p>
-                <p className="text-xs text-theme-text-secondary whitespace-pre-wrap">{applyMailMerge(bodyText, previewGuest?.name || '') || '(no message)'}</p>
+                <p className="text-xs font-bold text-theme-text-primary">{applyMailMerge(subject, previewGuest?.name || '', previewGuest?.email || '') || '(no subject)'}</p>
+                <p className="text-xs text-theme-text-secondary whitespace-pre-wrap">{applyMailMerge(bodyText, previewGuest?.name || '', previewGuest?.email || '') || '(no message)'}</p>
               </div>
             </div>
           )}
