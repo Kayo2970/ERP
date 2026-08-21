@@ -9,7 +9,7 @@ An enterprise-grade, institutional management and operations platform designed f
 ### 📊 Workspace & Operational Modules
 
 #### 1. Dashboard Home (`/dashboard/home`)
-- **Executive Overview**: Centralized operations desk displaying real-time system metrics, active task counters, upcoming event schedules, and recent announcements.
+- **Executive Overview**: Centralized operations desk featuring friendly user greetings, official designation and committee breakdowns, active task counters, upcoming event schedules, and recent announcements.
 - **Quick Action Hub**: Direct shortcuts for event creation, task assignment, design uploads, and announcement broadcasting.
 - **Personal Deliverables**: Tailored dashboard widget highlighting deliverables assigned specifically to the logged-in user.
 
@@ -92,6 +92,7 @@ An enterprise-grade, institutional management and operations platform designed f
 
 #### 15. Dynamic Group Policies (`/dashboard/policies`)
 - **Granular RBAC Engine**: Super User authority to grant any of 15 capability keys (`EVENTS_CREATE`, `TASKS_EDIT`, `EDIT_DIRECTORY`, `BUILD_FORMS`, etc.).
+- **Quick Selection Controls**: Integrated **Select All** and **Select None** controls for capabilities/privileges, divisions, and tiers.
 - **Targeting Matrix**: Target by Member ID, Division, Tier, or Designation Keyword.
 - **Approval Gateways**: Configure optional approval sign-offs (Centre Head, specific member, policy tag holder).
 - **Scope Restrictions**: Apply `OWN_ONLY` visibility restrictions to specific users or tiers.
@@ -131,6 +132,7 @@ The system enforces a multi-tiered permission model backed by dynamic policy gra
 
 ## 🎨 UI Aesthetics & Light Mode Styling
 
+- **Dynamic Inspirational Quotes Carousel**: Auto-rotating hero banner on the login screen (`src/app/page.tsx`) featuring timeless wisdom from Mahatma Gandhi, Nelson Mandela, Dr. A.P.J. Abdul Kalam, Martin Luther King Jr., Swami Vivekananda, Mother Teresa, Peter Drucker, and Steve Jobs with smooth cross-fade transitions and manual controls.
 - **Isometric Light Mode Background**: Custom geometric isometric cube background image (`/images/light-bg.jpg`) rendered fixed across Light Mode layout ([`src/app/globals.css`](file:///Users/kayo/ERP/leads-dashboard/src/app/globals.css)).
 - **Fast Module Transitions**: Optimized 1-second (1000ms) transition animations between workspace modules.
 - **Master Light Mode Email Template**: Institutional HTML email wrapper with clean white cards (`#ffffff`), soft slate borders (`#e2e8f0`), LEADS institutional blue accents (`#0284c7`), and dark slate body text (`#0f172a`, `#334155`) ([`src/lib/email-service.ts`](file:///Users/kayo/ERP/leads-dashboard/src/lib/email-service.ts)).
