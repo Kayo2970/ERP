@@ -294,6 +294,11 @@ export interface GroupPolicy {
   targetDesignationKeyword?: string; // substring match against Member.role, case-insensitive
   targetMemberIds: string[]; // explicit individual overrides
   enabled: boolean;
+  // If set, the policy stops granting anything once this ISO timestamp passes —
+  // for a temporary grant instead of a permanent one. Enforced everywhere
+  // enabled policies are matched (permissions.ts's isPolicyActive()); the
+  // record itself is never deleted, so it's easy to see what expired and when.
+  expiresAt?: string;
   // If set, restricts members matching this policy's targeting to seeing only
   // events they created or are listed on a committee for, instead of the default
   // (unrestricted) visibility every member has today. Purely restrictive — never
