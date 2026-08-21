@@ -535,7 +535,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             </div>
             <div className="overflow-hidden">
               <h4 className="font-semibold text-xs text-theme-text-primary truncate">{user.name}</h4>
-              <p className="text-[11px] text-theme-text-secondary truncate">{user.role} (Tier {user.tier})</p>
+              <p className="text-[11px] text-theme-text-secondary truncate">{user.role || 'Member'}</p>
             </div>
           </div>
           
@@ -625,7 +625,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                 </div>
                 <div>
                   <h4 className="font-semibold text-xs text-theme-text-primary">{user.name}</h4>
-                  <p className="text-[11px] text-theme-text-secondary font-medium">{user.role} (Tier {user.tier})</p>
+                  <p className="text-[11px] text-theme-text-secondary font-medium">{user.role || 'Member'}</p>
                 </div>
               </div>
               <button
@@ -722,7 +722,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                               <p className="text-xs font-semibold text-theme-text-primary truncate">
                                 {m.name}{m.email === user.email && ' (current)'}
                               </p>
-                              <p className="text-[10px] text-theme-text-secondary truncate">{m.role} · Tier {m.tier}</p>
+                              <p className="text-[10px] text-theme-text-secondary truncate">{m.role}{m.division ? ` · ${m.division}` : ''}</p>
                             </div>
                           </button>
                         ))

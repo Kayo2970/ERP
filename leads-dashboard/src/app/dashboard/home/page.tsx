@@ -138,13 +138,16 @@ export default function DashboardHome() {
       {user && (
         <div className="glass-panel rounded-3xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gradient-to-r from-accent/10 to-primary/5 border border-accent/20">
           <div>
-            <h1 className="text-xl font-bold text-theme-text-primary">Welcome Back, {user.name}!</h1>
+            <h1 className="text-xl font-bold text-theme-text-primary">Hello! Welcome back, {user.name}</h1>
             <p className="text-xs text-theme-text-secondary mt-1">
-              Role: <span className="font-semibold text-theme-text-primary">{user.role}</span> &middot; Tier {user.tier} &middot; Committee: {user.committee}
+              Designation: <span className="font-semibold text-theme-text-primary">{user.role || 'Member'}</span>
+              {(user.committee || user.division) && (
+                <> &middot; {user.committee ? `Committee: ${user.committee}` : `Division: ${user.division}`}</>
+              )}
             </p>
           </div>
-          <span className="text-xs font-semibold text-accent px-3 py-1 bg-accent/15 rounded-xl border border-accent/15">
-            {user.tier <= 3 ? 'Leadership Access' : user.tier === 4 ? 'Advisory Oversight' : 'Core Workspace'}
+          <span className="text-xs font-semibold text-accent px-3.5 py-1.5 bg-accent/15 rounded-xl border border-accent/20">
+            {user.role || user.division || 'LEADS Member'}
           </span>
         </div>
       )}
