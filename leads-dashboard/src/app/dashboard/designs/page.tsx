@@ -1177,10 +1177,12 @@ export default function DesignPortalPage() {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="font-medium text-foreground">Proofreader Comments & Feedback</label>
+                    <label className="font-medium text-foreground">
+                      Proofreader Comments & Feedback{reviewStatus === 'Changes Requested' ? ' *' : ' (optional)'}
+                    </label>
                     <textarea
                       rows={3}
-                      required
+                      required={reviewStatus === 'Changes Requested'}
                       placeholder="Add specific corrections, text typos, color scheme notes..."
                       value={reviewComments}
                       onChange={e => setReviewComments(e.target.value)}
@@ -1267,10 +1269,12 @@ export default function DesignPortalPage() {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="font-medium text-foreground">Style Feedback & Guidelines Compliance</label>
+                    <label className="font-medium text-foreground">
+                      Style Feedback & Guidelines Compliance{styleStatus === 'Style Rejected' ? ' *' : ' (optional)'}
+                    </label>
                     <textarea
                       rows={2}
-                      required
+                      required={styleStatus === 'Style Rejected'}
                       placeholder="Feedback on typography, color scheme, design alignment..."
                       value={styleFeedback}
                       onChange={e => setStyleFeedback(e.target.value)}

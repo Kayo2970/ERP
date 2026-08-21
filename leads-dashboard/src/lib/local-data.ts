@@ -458,21 +458,53 @@ export const initialAccessLevelSettings: AccessLevelSettings[] = [DEFAULT_ACCESS
 // Server Sync & Per-Collection API Helpers
 // -------------------------------------------------------------
 
+// Timestamp of the most recent local write to each collection (by localStorage
+// key). Lets a sync poll tell whether its response is stale relative to a
+// mutation that happened while the request was in flight — see hydrateIfStale.
+const lastLocalWriteAt: Record<string, number> = {};
+
+/** Record that `key` was just written locally (called at the end of every
+ * saveX()/direct localStorage.setItem write in this file). */
+function markLocalWrite(key: string): void {
+  lastLocalWriteAt[key] = Date.now();
+}
+
+// How long to distrust a sync poll's response for a collection after we
+// wrote to it locally. The mutation's own POST/PATCH/DELETE is fire-and-forget
+// (never awaited by its caller), so comparing the poll's *start* time against
+// our write time isn't quite enough: a poll's GET can reach the server and
+// read the file before our own write's request does, even if our write
+// started first from the client. A flat suppression window sidesteps that —
+// it's vastly more time than a same-server POST needs to land (well under a
+// second in practice), while staying far short of the 7s poll cadence, so
+// the very next poll after this one is guaranteed to see our change.
+const STALE_HYDRATE_SUPPRESSION_MS = 4000;
+
 /**
  * Write a collection fetched from the server into localStorage, verbatim —
- * including a legitimately empty array. The bundled sample data is never
- * written here; it only ever appears as each getX()'s own in-memory fallback
- * before the first sync resolves (see below) — that's the true first-run/offline experience. Once a sync
+ * including a legitimately empty array — UNLESS we wrote to this collection
+ * locally within the last `STALE_HYDRATE_SUPPRESSION_MS`. Without that guard,
+ * a poll that was in flight (or raced our own write at the server) when the
+ * user made a change (e.g. created an event, approved a design) can resolve
+ * carrying the server's PRE-change state, silently reverting the just-made
+ * change in the UI even though it saved successfully — the next poll, well
+ * after our write, doesn't have this problem and will correctly reflect it.
+ * The bundled sample data is never written here; it only ever appears as
+ * each getX()'s own in-memory fallback before the first sync resolves (see
+ * below) — that's the true first-run/offline experience. Once a sync
  * resolves, even to an empty collection, that's what's shown from then on.
  */
-function hydrateCollection(key: string, serverArray: unknown): void {
+function hydrateIfStale(key: string, serverArray: unknown, requestStartedAt: number): void {
   if (!Array.isArray(serverArray)) return;
+  const writtenAt = lastLocalWriteAt[key];
+  if (writtenAt !== undefined && requestStartedAt - writtenAt < STALE_HYDRATE_SUPPRESSION_MS) return;
   localStorage.setItem(key, JSON.stringify(serverArray));
 }
 
 /**
  * Fetch all collections from the server and hydrate localStorage.
- * Server data ALWAYS wins — this is safe to call repeatedly (polling).
+ * Server data wins over anything not written locally since this request
+ * started (see hydrateIfStale) — this is safe to call repeatedly (polling).
  * Before the first sync ever resolves, each getX() shows bundled sample data
  * from memory without persisting it (see the "Do NOT seed localStorage here"
  * getters below) — that's the true first-run/offline experience. Once a sync
@@ -480,29 +512,28 @@ function hydrateCollection(key: string, serverArray: unknown): void {
  */
 export async function syncWithServer(): Promise<boolean> {
   if (typeof window === 'undefined') return false;
+  const requestStartedAt = Date.now();
   try {
     const res = await fetch('/api/data', { cache: 'no-store' });
     if (!res.ok) return false;
     const data = await res.json();
     if (data && typeof data === 'object') {
-      hydrateCollection('leads_members', data.members);
-      hydrateCollection('leads_events', data.events);
-      hydrateCollection('leads_tasks', data.tasks);
-      hydrateCollection('leads_ratings', data.ratings);
-      hydrateCollection('leads_reimbursements', data.reimbursements);
-      hydrateCollection('leads_announcements', data.announcements);
-      hydrateCollection('leads_custom_forms', data.forms);
-      hydrateCollection('leads_form_templates', data.formTemplates);
-      hydrateCollection('leads_form_submissions', data.submissions);
-      hydrateCollection('leads_designs', data.designs);
-      hydrateCollection('leads_group_policies', data.groupPolicies);
-      hydrateCollection('leads_access_level_settings', data.accessLevelSettings);
-      hydrateCollection('leads_system_settings', data.systemSettings);
-      hydrateCollection('leads_guests', data.guests);
-      hydrateCollection('leads_budgets', data.budgets);
-      if (Array.isArray(data.auditLogs)) {
-        localStorage.setItem('leads_audit_logs', JSON.stringify(data.auditLogs));
-      }
+      hydrateIfStale('leads_members', data.members, requestStartedAt);
+      hydrateIfStale('leads_events', data.events, requestStartedAt);
+      hydrateIfStale('leads_tasks', data.tasks, requestStartedAt);
+      hydrateIfStale('leads_ratings', data.ratings, requestStartedAt);
+      hydrateIfStale('leads_reimbursements', data.reimbursements, requestStartedAt);
+      hydrateIfStale('leads_announcements', data.announcements, requestStartedAt);
+      hydrateIfStale('leads_custom_forms', data.forms, requestStartedAt);
+      hydrateIfStale('leads_form_templates', data.formTemplates, requestStartedAt);
+      hydrateIfStale('leads_form_submissions', data.submissions, requestStartedAt);
+      hydrateIfStale('leads_designs', data.designs, requestStartedAt);
+      hydrateIfStale('leads_group_policies', data.groupPolicies, requestStartedAt);
+      hydrateIfStale('leads_access_level_settings', data.accessLevelSettings, requestStartedAt);
+      hydrateIfStale('leads_system_settings', data.systemSettings, requestStartedAt);
+      hydrateIfStale('leads_guests', data.guests, requestStartedAt);
+      hydrateIfStale('leads_budgets', data.budgets, requestStartedAt);
+      hydrateIfStale('leads_audit_logs', data.auditLogs, requestStartedAt);
       // Notify every open page in this tab to re-read localStorage and re-render.
       // The native 'storage' event only fires in OTHER tabs/windows — it never
       // fires in the tab that made the write, so this custom event is the only
@@ -596,6 +627,7 @@ export function getMembers(): Member[] {
 export function saveMembers(members: Member[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_members', JSON.stringify(members));
+  markLocalWrite('leads_members');
   // Note: Mutations call targeted per-member endpoints (/api/members, /api/members/[id])
 }
 
@@ -760,6 +792,7 @@ export function getGuests(): Guest[] {
 export function saveGuests(guests: Guest[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_guests', JSON.stringify(guests));
+  markLocalWrite('leads_guests');
 }
 
 export function addGuest(guest: Omit<Guest, 'id' | 'createdAt'>, actorName: string): Guest {
@@ -833,6 +866,7 @@ export function getEventById(id: string): EventItem | null {
 export function saveEvents(events: EventItem[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_events', JSON.stringify(events));
+  markLocalWrite('leads_events');
   // Individual mutations use targeted serverPost/serverPatch/serverDelete
 }
 
@@ -1057,6 +1091,7 @@ export function getTasks(): TaskItem[] {
 export function saveTasks(tasks: TaskItem[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_tasks', JSON.stringify(tasks));
+  markLocalWrite('leads_tasks');
 }
 
 export function addTask(task: Omit<TaskItem, 'id' | 'status'> & { status?: TaskItem['status'] }): TaskItem {
@@ -1167,6 +1202,7 @@ export function getRatings(): RatingItem[] {
 export function saveRatings(ratings: RatingItem[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_ratings', JSON.stringify(ratings));
+  markLocalWrite('leads_ratings');
 }
 
 function propagateCommitteeRating(task: TaskItem, parentRating: RatingItem): void {
@@ -1205,7 +1241,6 @@ function propagateCommitteeRating(task: TaskItem, parentRating: RatingItem): voi
       collaboration: parentRating.collaboration,
       overallScore: parentRating.overallScore,
       notes: `[Committee Evaluation: ${committee.name}] ${parentRating.notes || ''}`.trim(),
-      quarter: parentRating.quarter || '2026-Q3',
       createdAt: parentRating.createdAt
     };
     ratings.unshift(studentRating);
@@ -1428,6 +1463,7 @@ export function getReimbursements(): ReimbursementItem[] {
 export function saveReimbursements(reimbursements: ReimbursementItem[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_reimbursements', JSON.stringify(reimbursements));
+  markLocalWrite('leads_reimbursements');
 }
 
 export function addReimbursement(item: Omit<ReimbursementItem, 'id' | 'status' | 'submittedAt'>): ReimbursementItem {
@@ -1496,6 +1532,7 @@ export function getBudgets(): BudgetItem[] {
 export function saveBudgets(budgets: BudgetItem[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_budgets', JSON.stringify(budgets));
+  markLocalWrite('leads_budgets');
 }
 
 export function addBudget(item: Omit<BudgetItem, 'id' | 'status' | 'submittedAt'>): BudgetItem {
@@ -1578,6 +1615,7 @@ export function getAnnouncements(): AnnouncementItem[] {
 export function saveAnnouncements(announcements: AnnouncementItem[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_announcements', JSON.stringify(announcements));
+  markLocalWrite('leads_announcements');
 }
 
 export function addAnnouncement(item: Omit<AnnouncementItem, 'id' | 'publishedAt'>): AnnouncementItem {
@@ -1682,6 +1720,7 @@ export function getForms(): PublicFormItem[] {
 export function saveForms(forms: PublicFormItem[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_custom_forms', JSON.stringify(forms));
+  markLocalWrite('leads_custom_forms');
 }
 
 export function addForm(form: Omit<PublicFormItem, 'id' | 'createdAt'>): PublicFormItem {
@@ -1749,6 +1788,7 @@ export function getFormTemplates(): FormTemplateItem[] {
 export function saveFormTemplates(templates: FormTemplateItem[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_form_templates', JSON.stringify(templates));
+  markLocalWrite('leads_form_templates');
 }
 
 export function addFormTemplate(template: Omit<FormTemplateItem, 'id' | 'createdAt'>): FormTemplateItem {
@@ -1804,6 +1844,7 @@ export function addSubmission(sub: Omit<FormSubmissionItem, 'id' | 'submittedAt'
   current.unshift(newSub);
   if (typeof window !== 'undefined') {
     localStorage.setItem('leads_form_submissions', JSON.stringify(current));
+    markLocalWrite('leads_form_submissions');
     serverPost('/api/submissions', newSub);
   }
   logAuditEvent('FORM_SUBMITTED', 'Public Respondent', `New response submitted for form slug "${sub.slug}"`);
@@ -1844,6 +1885,7 @@ export function logAuditEvent(action: string, actorName: string, details: string
   current.unshift(newLog);
   // Keep last 200 logs in localStorage (aligns with server)
   localStorage.setItem('leads_audit_logs', JSON.stringify(current.slice(0, 200)));
+  markLocalWrite('leads_audit_logs');
   // Push to server asynchronously (fire-and-forget)
   serverPost('/api/auditlogs', newLog);
 }
@@ -1876,6 +1918,7 @@ export function getDesigns(): DesignSubmissionItem[] {
 export function saveDesigns(designs: DesignSubmissionItem[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_designs', JSON.stringify(designs));
+  markLocalWrite('leads_designs');
 }
 
 /**
@@ -2130,6 +2173,7 @@ export function getGroupPolicies(): GroupPolicy[] {
 export function saveGroupPolicies(policies: GroupPolicy[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_group_policies', JSON.stringify(policies));
+  markLocalWrite('leads_group_policies');
 }
 
 export function addGroupPolicy(policy: Omit<GroupPolicy, 'id' | 'createdAt'>): GroupPolicy {
@@ -2199,6 +2243,7 @@ export function updateAccessLevelSettings(updates: Partial<AccessLevelSettings>,
   };
   if (typeof window !== 'undefined') {
     localStorage.setItem('leads_access_level_settings', JSON.stringify([updated]));
+    markLocalWrite('leads_access_level_settings');
   }
   serverPost('/api/access-level-settings', updated);
   logAuditEvent(
@@ -2238,6 +2283,7 @@ export function updateSystemSettings(updates: Partial<SystemSettings>, actorName
   };
   if (typeof window !== 'undefined') {
     localStorage.setItem('leads_system_settings', JSON.stringify([updated]));
+    markLocalWrite('leads_system_settings');
   }
   serverPost('/api/system-settings', updated);
   logAuditEvent(
