@@ -3,7 +3,7 @@
 import React, { useState, useEffect, use } from 'react';
 import { CheckCircle2, ChevronLeft, Send, Sparkles, AlertTriangle, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
-import { getForms, addSubmission, PublicFormItem } from '@/lib/local-data';
+import { getForms, addSubmission, syncWithServer, PublicFormItem } from '@/lib/local-data';
 import { TermsModal } from '@/components/terms-modal';
 
 export default function PublicFormPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -19,23 +19,43 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
   const [isTermsOpen, setIsTermsOpen] = useState(false);
 
   useEffect(() => {
-    const allForms = getForms();
-    const matchedForm = allForms.find(f => f.slug.toLowerCase() === slug.toLowerCase());
+    let cancelled = false;
 
-    if (!matchedForm) {
-      setNotFound(true);
+    const applyForm = (matchedForm: PublicFormItem | undefined) => {
+      if (cancelled) return;
+      if (!matchedForm) {
+        setNotFound(true);
+        setLoading(false);
+        return;
+      }
+      setForm(matchedForm);
+      const initialData: Record<string, any> = {};
+      matchedForm.fields.forEach(f => {
+        initialData[f.id] = '';
+      });
+      setFormData(initialData);
       setLoading(false);
+    };
+
+    const localMatch = getForms().find(f => f.slug.toLowerCase() === slug.toLowerCase());
+    if (localMatch) {
+      // Already cached in this browser (e.g. staff previewing right after
+      // building it) — show it immediately, no need to wait on the network.
+      applyForm(localMatch);
       return;
     }
 
-    setForm(matchedForm);
-
-    const initialData: Record<string, any> = {};
-    matchedForm.fields.forEach(f => {
-      initialData[f.id] = '';
+    // A real respondent filling this out from a shared link has never logged
+    // into the dashboard in this browser, so localStorage starts completely
+    // empty — reading it alone would always report "Form Not Found" for a
+    // real, live form. Sync with the server first so the actual form list is
+    // available before deciding the slug doesn't exist.
+    syncWithServer().then(() => {
+      if (cancelled) return;
+      applyForm(getForms().find(f => f.slug.toLowerCase() === slug.toLowerCase()));
     });
-    setFormData(initialData);
-    setLoading(false);
+
+    return () => { cancelled = true; };
   }, [slug]);
 
   const handleInputChange = (fieldId: string, value: any) => {
@@ -159,7 +179,37 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
                   {field.label} {field.required && <span className="text-red-400">*</span>}
                 </label>
 
-                {field.type === 'textarea' ? (
+                {field.type === 'scale' ? (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2" role="radiogroup" aria-label={field.label}>
+                      {[1, 2, 3, 4, 5].map(n => (
+                        <label
+                          key={n}
+                          className={`flex-1 flex items-center justify-center py-2.5 rounded-xl border cursor-pointer text-sm font-bold transition-all ${
+                            Number(formData[field.id]) === n
+                              ? 'bg-blue-600 border-blue-500 text-white'
+                              : 'bg-slate-900/60 border-slate-700 text-slate-300 hover:border-blue-500/60'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name={field.id}
+                            value={n}
+                            required={field.required}
+                            checked={Number(formData[field.id]) === n}
+                            onChange={() => handleInputChange(field.id, n)}
+                            className="sr-only"
+                          />
+                          {n}
+                        </label>
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] text-slate-500 px-0.5">
+                      <span>1 = Low</span>
+                      <span>5 = High</span>
+                    </div>
+                  </div>
+                ) : field.type === 'textarea' ? (
                   <textarea
                     required={field.required}
                     value={formData[field.id] || ''}
