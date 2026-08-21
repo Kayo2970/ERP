@@ -27,6 +27,7 @@ import {
   getReimbursements,
   addReimbursement,
   updateReimbursementStatus,
+  verifyReimbursementByCentreHead,
   getEvents,
   getMembers,
   Member,
@@ -35,6 +36,7 @@ import {
   ReceiptFile
 } from '@/lib/local-data';
 import {
+  isCentreHead,
   canApproveAsSectorHead,
   canApproveAsFinanceHead,
   canViewReimbursement
@@ -193,22 +195,28 @@ export default function ReimbursementsPage() {
     triggerSuccess(`Reimbursement claim ${selectedEv ? `attached to "${selectedEv.title}"` : ''} submitted successfully with ${attachedFiles.length} file(s).`);
   };
 
-  // Two-Stage Approval Handlers (Sector Head Stage 1 -> Finance Head Stage 2)
+  // Two-Stage Approval Handlers (Centre Head Verification Stage 1 -> Finance Head Approval Stage 2)
   const handleSectorHeadApproval = (id: string, approve: boolean) => {
     if (approve) {
-      updateReimbursementStatus(id, 'Under Review', { name: user?.name || 'Sector Head', stage: 'firstPass', tier: user?.tier });
-      triggerSuccess('Sector Head approval granted. Claim forwarded to Finance Head dashboard.');
+      verifyReimbursementByCentreHead(id, user?.name || 'Centre Head');
+      triggerSuccess('Centre Head verification completed. Claim is ready for Finance Head final approval.');
     } else {
-      updateReimbursementStatus(id, 'Denied', { name: user?.name || 'Sector Head', stage: 'firstPass', tier: user?.tier });
-      triggerSuccess('Claim rejected by Sector Head.');
+      updateReimbursementStatus(id, 'Denied', { name: user?.name || 'Centre Head', stage: 'firstPass', tier: user?.tier });
+      triggerSuccess('Claim rejected by Centre Head.');
     }
     setReimbursements(getReimbursements());
   };
 
   const handleFinanceHeadApproval = (id: string, approve: boolean) => {
+    const claim = reimbursements.find(r => r.id === id);
+    if (approve && claim && claim.status === 'Pending' && !isCentreHead(user) && user?.tier !== 1) {
+      setFormError('Centre Head Verification Required: This claim must be verified by the Centre Head before Finance Head final approval.');
+      return;
+    }
+
     if (approve) {
       updateReimbursementStatus(id, 'Approved', { name: user?.name || 'Finance Head', stage: 'final', tier: user?.tier });
-      triggerSuccess('Finance Head approval granted. Reimbursement claim processed & approved.');
+      triggerSuccess('Finance Head approval granted. Reimbursement claim processed & disbursed.');
     } else {
       updateReimbursementStatus(id, 'Denied', { name: user?.name || 'Finance Head', stage: 'final', tier: user?.tier });
       triggerSuccess('Claim rejected by Finance Head.');
@@ -320,13 +328,14 @@ export default function ReimbursementsPage() {
     return r.eventId === selectedEventFilter;
   });
 
-  const pendingClaims = displayedClaims.filter(r => r.status === 'Pending' || r.status === 'Under Review');
+  const pendingClaims = displayedClaims.filter(r => r.status === 'Pending' || r.status === 'Verified by Centre Head' || r.status === 'Under Review');
   const processedClaims = displayedClaims.filter(r => r.status === 'Approved' || r.status === 'Denied');
 
   const getStatusBadge = (status: ReimbursementItem['status']) => {
     switch (status) {
       case 'Pending':
         return 'bg-amber-500/15 text-amber-500 border border-amber-500/30';
+      case 'Verified by Centre Head':
       case 'Under Review':
         return 'bg-blue-500/15 text-blue-400 border border-blue-500/30';
       case 'Approved':
@@ -339,9 +348,10 @@ export default function ReimbursementsPage() {
   const getStatusLabel = (status: ReimbursementItem['status']) => {
     switch (status) {
       case 'Pending':
-        return 'Pending Sector Head Approval';
+        return 'Pending Centre Head Verification';
+      case 'Verified by Centre Head':
       case 'Under Review':
-        return 'Approved by Sector Head → Awaiting Finance Approval';
+        return 'Verified by Centre Head → Awaiting Finance Approval';
       case 'Approved':
         return 'Approved & Payment Processed';
       case 'Denied':
@@ -737,15 +747,15 @@ export default function ReimbursementsPage() {
 
                       {/* Action buttons based on role & stage */}
                       <div className="flex justify-end gap-2 pt-2 border-t border-theme-border/20">
-                        {/* Stage 1: Sector Head approval (Pending claims) */}
-                        {(canSectorApprove || user?.tier === 1) && claim.status === 'Pending' && (
+                        {/* Stage 1: Centre Head verification (Pending claims) */}
+                        {(canSectorApprove || isCentreHead(user) || user?.tier === 1) && claim.status === 'Pending' && (
                           <>
                             <button
                               onClick={() => handleSectorHeadApproval(claim.id, true)}
                               className="px-3 py-1.5 bg-accent hover:bg-primary-light text-white font-semibold rounded-lg transition-all text-xs cursor-pointer flex items-center gap-1 shadow-sm"
                             >
                               <Check className="h-3.5 w-3.5" />
-                              Approve (Pass to Finance Head)
+                              Verify Claim (Step 1 - Pass to Finance)
                             </button>
                             <button
                               onClick={() => handleSectorHeadApproval(claim.id, false)}
@@ -757,15 +767,15 @@ export default function ReimbursementsPage() {
                           </>
                         )}
 
-                        {/* Stage 2: Finance Head approval (Under Review claims post Sector Head approval) */}
-                        {(canFinanceApprove || user?.tier === 1) && claim.status === 'Under Review' && (
+                        {/* Stage 2: Finance Head approval (Verified by Centre Head or Under Review claims) */}
+                        {(canFinanceApprove || isCentreHead(user) || user?.tier === 1) && (claim.status === 'Verified by Centre Head' || claim.status === 'Under Review' || (claim.status === 'Pending' && (isCentreHead(user) || user?.tier === 1))) && (
                           <>
                             <button
                               onClick={() => handleFinanceHeadApproval(claim.id, true)}
                               className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg transition-all text-xs cursor-pointer flex items-center gap-1 shadow-sm"
                             >
                               <Check className="h-3.5 w-3.5" />
-                              Final Approve & Process Payment
+                              Final Approve & Process Payment (Step 2)
                             </button>
                             <button
                               onClick={() => handleFinanceHeadApproval(claim.id, false)}

@@ -34,7 +34,7 @@ import {
   Member,
   EventItem
 } from '@/lib/local-data';
-import { canViewAllDesigns, isDesignHead } from '@/lib/permissions';
+import { canViewAllDesigns, isDesignHead, isCentreHead } from '@/lib/permissions';
 
 export default function DesignPortalPage() {
   const [designs, setDesigns] = useState<DesignSubmissionItem[]>([]);
@@ -973,7 +973,7 @@ export default function DesignPortalPage() {
                 </div>
               )}
 
-              {isDesignHead(user) ? (
+              {(isDesignHead(user) || isCentreHead(user)) ? (
                 <form onSubmit={handleSaveStyleReview} className="space-y-3 text-xs bg-accent/5 p-4 rounded-xl border border-accent/20">
                   <p className="font-medium text-foreground">Submit Design Style Decision:</p>
 

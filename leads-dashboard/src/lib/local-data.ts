@@ -113,12 +113,15 @@ export interface ReimbursementItem {
   receiptUrl?: string;
   receiptData?: string; // Legacy fallback
   receiptFiles?: ReceiptFile[]; // Up to 3 attached bills & supporting documents
-  status: 'Pending' | 'Under Review' | 'Approved' | 'Denied';
+  status: 'Pending' | 'Verified by Centre Head' | 'Under Review' | 'Approved' | 'Denied';
   bankDetails: string; // Summary string formatted for legacy/display
   bankName?: string;
   accountNumber?: string;
   ifscCode?: string;
   submittedAt: string;
+  centreHeadVerified?: boolean;
+  centreHeadVerifiedBy?: string;
+  centreHeadVerifiedAt?: string;
   firstPassReviewer?: string;
   finalApprover?: string;
   decidedAt?: string;
@@ -134,6 +137,9 @@ export interface AnnouncementItem {
   authorName: string;
   publishedAt: string;
   editedAt?: string;
+  status?: 'Pending Approval' | 'Approved' | 'Rejected';
+  approvedBy?: string;
+  approvedAt?: string;
 }
 
 export interface FormField {
@@ -1266,10 +1272,26 @@ export function updateReimbursementStatus(
   }
 
   saveReimbursements(current);
-  // Send the full merged claim, not just the changed fields, so a server-side upsert
-  // (a client-only sample reimbursement that was never POSTed, e.g. the seeded demo
-  // claims) creates a complete record instead of a corrupt partial one.
   serverPatch('/api/reimbursements', id, claim);
+  return claim;
+}
+
+export function verifyReimbursementByCentreHead(id: string, reviewerName: string): ReimbursementItem | null {
+  const current = getReimbursements();
+  const idx = current.findIndex(r => r.id === id);
+  if (idx === -1) return null;
+
+  const claim = current[idx];
+  const now = new Date().toISOString().split('T')[0];
+  claim.status = 'Verified by Centre Head';
+  claim.centreHeadVerified = true;
+  claim.centreHeadVerifiedBy = reviewerName;
+  claim.centreHeadVerifiedAt = now;
+  claim.firstPassReviewer = reviewerName;
+
+  saveReimbursements(current);
+  serverPatch('/api/reimbursements', id, claim);
+  logAuditEvent('REIMBURSEMENT_VERIFIED', reviewerName, `Centre Head verified reimbursement claim of ₹${claim.amount} for ${claim.memberName}`);
   return claim;
 }
 
@@ -1314,6 +1336,41 @@ export function addAnnouncement(item: Omit<AnnouncementItem, 'id' | 'publishedAt
   return newAnn;
 }
 
+export function approveAnnouncement(id: string, approverName: string): AnnouncementItem | null {
+  const current = getAnnouncements();
+  const idx = current.findIndex(a => a.id === id);
+  if (idx === -1) return null;
+
+  const now = new Date();
+  const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+  current[idx] = {
+    ...current[idx],
+    status: 'Approved',
+    approvedBy: approverName,
+    approvedAt: formattedDate,
+  };
+  saveAnnouncements(current);
+  serverPatch('/api/announcements', id, current[idx]);
+  logAuditEvent('ANNOUNCEMENT_APPROVED', approverName, `Approved and published announcement: "${current[idx].title}"`);
+  return current[idx];
+}
+
+export function rejectAnnouncement(id: string, actorName: string): AnnouncementItem | null {
+  const current = getAnnouncements();
+  const idx = current.findIndex(a => a.id === id);
+  if (idx === -1) return null;
+
+  current[idx] = {
+    ...current[idx],
+    status: 'Rejected',
+  };
+  saveAnnouncements(current);
+  serverPatch('/api/announcements', id, current[idx]);
+  logAuditEvent('ANNOUNCEMENT_REJECTED', actorName, `Rejected announcement submission: "${current[idx].title}"`);
+  return current[idx];
+}
+
 export function updateAnnouncement(id: string, updates: Partial<AnnouncementItem>, actorName: string): AnnouncementItem | null {
   const current = getAnnouncements();
   const idx = current.findIndex(a => a.id === id);
@@ -1326,9 +1383,6 @@ export function updateAnnouncement(id: string, updates: Partial<AnnouncementItem
     editedAt: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
   };
   saveAnnouncements(current);
-  // Send the full merged announcement, not just the diff, so a server-side upsert
-  // (a client-only sample announcement that was never POSTed) creates a complete
-  // record.
   serverPatch('/api/announcements', id, current[idx]);
   logAuditEvent('ANNOUNCEMENT_UPDATED', actorName, `Updated announcement: "${current[idx].title}"`);
   return current[idx];

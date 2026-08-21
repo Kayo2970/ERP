@@ -17,13 +17,15 @@ import {
   getAnnouncements, 
   addAnnouncement, 
   updateAnnouncement, 
-  deleteAnnouncement, 
+  deleteAnnouncement,
+  approveAnnouncement,
+  rejectAnnouncement,
   getMembers, 
   getCommittees, 
   AnnouncementItem, 
   Member 
 } from '@/lib/local-data';
-import { canCreateAnnouncement } from '@/lib/permissions';
+import { isCentreHead, canCreateAnnouncement, canApproveAnnouncement } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -92,6 +94,22 @@ export default function AnnouncementsPage() {
     setScope(ann.scope);
   };
 
+  const handleApproveAnnouncement = (id: string) => {
+    const updated = approveAnnouncement(id, user?.name || 'Centre Head');
+    if (updated) {
+      triggerSuccess(`Announcement "${updated.title}" approved and published to all members!`);
+      setAnnouncements(getAnnouncements());
+    }
+  };
+
+  const handleRejectAnnouncement = (id: string) => {
+    const updated = rejectAnnouncement(id, user?.name || 'Centre Head');
+    if (updated) {
+      triggerSuccess(`Announcement submission rejected.`);
+      setAnnouncements(getAnnouncements());
+    }
+  };
+
   const handleSaveAnnouncement = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title || !content || !user) return;
@@ -105,14 +123,24 @@ export default function AnnouncementsPage() {
       triggerSuccess('Announcement updated.');
       setEditingAnnouncement(null);
     } else {
+      const isApproved = isCentreHead(user) || user.tier === 1;
+
       addAnnouncement({
         title,
         content,
         scope,
-        authorName: user.name
+        authorName: user.name,
+        status: isApproved ? 'Approved' : 'Pending Approval',
       });
 
-      // Calculate email recipients based on scope
+      if (!isApproved) {
+        triggerSuccess('Announcement submitted! Awaiting Centre Head approval before publication.');
+        setIsModalOpen(false);
+        setAnnouncements(getAnnouncements());
+        return;
+      }
+
+      // Calculate email recipients based on scope for approved announcement
       const allMembers = getMembers();
       let recipients: Member[] = [];
 
@@ -129,7 +157,6 @@ export default function AnnouncementsPage() {
       } else if (scope === 'Executive Council') {
         recipients = allMembers.filter(m => m.committee === 'Executive Council');
       } else {
-        // Specific committee
         recipients = allMembers.filter(m => m.committee === scope || m.committee === 'All Committees');
       }
 
@@ -185,6 +212,13 @@ export default function AnnouncementsPage() {
   };
 
   const canPublish = canCreateAnnouncement(user);
+  const canApprove = canApproveAnnouncement(user);
+
+  const displayedAnnouncements = announcements.filter(ann => {
+    if (canApprove) return true;
+    if (user && ann.authorName.toLowerCase() === user.name.toLowerCase()) return true;
+    return !ann.status || ann.status === 'Approved';
+  });
 
   return (
     <div className="p-6 md:p-8 space-y-6">
@@ -216,7 +250,7 @@ export default function AnnouncementsPage() {
 
       {/* Announcements Feed */}
       <div className="space-y-4">
-        {announcements.length === 0 ? (
+        {displayedAnnouncements.length === 0 ? (
           <EmptyState
             icon={Megaphone}
             title="No announcements published"
@@ -225,14 +259,24 @@ export default function AnnouncementsPage() {
             onAction={canPublish ? handleOpenCreate : undefined}
           />
         ) : (
-          announcements.map((ann) => (
+          displayedAnnouncements.map((ann) => (
             <div key={ann.id} className="glass-panel rounded-2xl p-6 flex flex-col space-y-3 hover:bg-theme-border/10 transition-all border border-theme-card-border/50 text-xs">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center flex-wrap gap-2.5">
                   <h3 className="font-bold text-sm text-theme-text-primary">{ann.title}</h3>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/20">
                     {ann.scope}
                   </span>
+                  {ann.status === 'Pending Approval' && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 border border-amber-500/20">
+                      Pending Centre Head Approval
+                    </span>
+                  )}
+                  {ann.status === 'Approved' && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 border border-emerald-500/20">
+                      Approved & Published
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-3 text-theme-text-secondary text-[11px]">
                   <span className="flex items-center gap-1">
@@ -251,6 +295,23 @@ export default function AnnouncementsPage() {
                 <span className="text-[10px] text-theme-text-secondary italic">
                   Last edited: {ann.editedAt}
                 </span>
+              )}
+
+              {canApprove && ann.status === 'Pending Approval' && (
+                <div className="flex items-center gap-2 pt-2 border-t border-theme-border/20">
+                  <button
+                    onClick={() => handleApproveAnnouncement(ann.id)}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                  >
+                    <CheckCircle className="h-3.5 w-3.5" /> Approve & Publish
+                  </button>
+                  <button
+                    onClick={() => handleRejectAnnouncement(ann.id)}
+                    className="px-3 py-1.5 bg-danger hover:bg-danger/90 text-white font-semibold rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                  >
+                    <X className="h-3.5 w-3.5" /> Reject
+                  </button>
+                </div>
               )}
 
               {canPublish && (

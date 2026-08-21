@@ -299,9 +299,22 @@ export function canApproveAsSectorHead(user: SessionUser): boolean {
   return isSectorHead(user);
 }
 
-/** Finance Head second-stage approval permission. */
-export function canApproveAsFinanceHead(user: SessionUser): boolean {
-  return isFinanceHead(user);
+/** Centre Head first-stage verification permission for reimbursement claims. */
+export function canVerifyReimbursementCentreHead(user: SessionUser): boolean {
+  return isCentreHead(user) || user?.tier === 1;
+}
+
+/** Finance Head second-stage approval permission for reimbursement claims. */
+export function canApproveAsFinanceHead(user: SessionUser, claim?: ReimbursementItem): boolean {
+  if (!user || !isFinanceHead(user)) return false;
+  if (user.tier === 1 || isCentreHead(user)) return true;
+  if (!claim) return true;
+  return claim.centreHeadVerified === true || claim.status === 'Verified by Centre Head' || claim.status === 'Under Review';
+}
+
+/** Announcement approval permission — Centre Head or Super User. */
+export function canApproveAnnouncement(user: SessionUser): boolean {
+  return isCentreHead(user) || user?.tier === 1;
 }
 
 /**
