@@ -64,6 +64,12 @@ export default function DesignPortalPage() {
   const [requestProofread, setRequestProofread] = useState<boolean>(false);
   const [assignedProofreaderId, setAssignedProofreaderId] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  // Reading the file into base64 happens asynchronously (FileReader), separately
+  // from the "Uploading..." server round-trip — both get their own progress state
+  // so a large file doesn't look "attached and ready" before it actually is.
+  const [isReadingFile, setIsReadingFile] = useState<boolean>(false);
+  const [readProgress, setReadProgress] = useState<number>(0);
+  const [submitError, setSubmitError] = useState<string>('');
 
   // Proofread Review form state inside Inspector Modal
   const [reviewStatus, setReviewStatus] = useState<'Proofread Approved' | 'Changes Requested'>('Proofread Approved');
@@ -78,6 +84,8 @@ export default function DesignPortalPage() {
   const [replaceFileData, setReplaceFileData] = useState<string>('');
   const [replaceFileError, setReplaceFileError] = useState<string>('');
   const [isReplacingFile, setIsReplacingFile] = useState<boolean>(false);
+  const [isReadingReplaceFile, setIsReadingReplaceFile] = useState<boolean>(false);
+  const [replaceReadProgress, setReplaceReadProgress] = useState<number>(0);
 
   // Deep link from a notification (?highlight=<designId>) — auto-open its Inspector once
   const [highlightDesignId, setHighlightDesignId] = useState<string | null>(null);
@@ -126,24 +134,43 @@ export default function DesignPortalPage() {
     }
 
     setReplaceFile(selected);
+    setReplaceFileData('');
+    setIsReadingReplaceFile(true);
+    setReplaceReadProgress(0);
     const reader = new FileReader();
+    reader.onprogress = (ev) => {
+      if (ev.lengthComputable) setReplaceReadProgress(Math.round((ev.loaded / ev.total) * 100));
+    };
     reader.onload = () => {
       if (typeof reader.result === 'string') setReplaceFileData(reader.result);
+      setIsReadingReplaceFile(false);
+      setReplaceReadProgress(100);
+    };
+    reader.onerror = () => {
+      setReplaceFileError('Could not read that file. Please try selecting it again.');
+      setReplaceFile(null);
+      setReplaceFileData('');
+      setIsReadingReplaceFile(false);
     };
     reader.readAsDataURL(selected);
   };
 
-  const handleReplaceFileSubmit = (e: React.FormEvent) => {
+  const handleReplaceFileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDesign || !user) return;
-    if (!replaceFile || !replaceFileData) {
+    if (isReadingReplaceFile) {
+      setReplaceFileError('Still preparing the file — please wait a moment and try again.');
+      return;
+    }
+    if (!replaceFile || !replaceFileData.startsWith('data:')) {
       setReplaceFileError('Select a replacement file first.');
       return;
     }
 
     setIsReplacingFile(true);
+    setReplaceFileError('');
     try {
-      const updated = updateDesignFile(
+      const updated = await updateDesignFile(
         selectedDesign.id,
         replaceFileData,
         replaceFile.name,
@@ -219,31 +246,57 @@ export default function DesignPortalPage() {
     }
 
     setFile(selected);
+    setFileData('');
+    setIsReadingFile(true);
+    setReadProgress(0);
 
-    // Convert file to base64 DataURL for storage & preview
+    // Convert file to base64 DataURL for storage & preview. This can take a
+    // moment for a large PNG/PDF, so it's tracked as its own progress step —
+    // submitting before it finishes used to silently create a design with no
+    // file attached, since fileData was still the empty string at that point.
     const reader = new FileReader();
+    reader.onprogress = (ev) => {
+      if (ev.lengthComputable) setReadProgress(Math.round((ev.loaded / ev.total) * 100));
+    };
     reader.onload = () => {
       if (typeof reader.result === 'string') {
         setFileData(reader.result);
       }
+      setIsReadingFile(false);
+      setReadProgress(100);
+    };
+    reader.onerror = () => {
+      setFileError('Could not read that file. Please try selecting it again.');
+      setFile(null);
+      setFileData('');
+      setIsReadingFile(false);
     };
     reader.readAsDataURL(selected);
   };
 
-  const handleUploadSubmit = (e: React.FormEvent) => {
+  const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
     if (!file) {
       setFileError('Please select a design asset to upload.');
       return;
     }
+    if (isReadingFile) {
+      setFileError('Still preparing the file — please wait a moment and try again.');
+      return;
+    }
+    if (!fileData.startsWith('data:')) {
+      setFileError('The file did not load correctly. Please re-select it and try again.');
+      return;
+    }
 
     setIsSubmitting(true);
+    setSubmitError('');
     try {
       const selectedProofreader = members.find(m => m.id === assignedProofreaderId);
       const selectedEvent = events.find(ev => ev.id === eventId);
 
-      addDesign({
+      await addDesign({
         title: title.trim(),
         description: description.trim(),
         category,
@@ -276,7 +329,9 @@ export default function DesignPortalPage() {
       setRequestProofread(false);
       setAssignedProofreaderId('');
     } catch (err: any) {
-      setFileError(err.message || 'Failed to submit design.');
+      // Deliberately doesn't close the modal or reset the form on failure —
+      // the file is still selected, so the designer can just hit Submit again.
+      setSubmitError(err.message || 'Failed to submit design.');
     } finally {
       setIsSubmitting(false);
     }
@@ -372,7 +427,7 @@ export default function DesignPortalPage() {
           </p>
         </div>
         <button
-          onClick={() => setShowUploadModal(true)}
+          onClick={() => { setSubmitError(''); setShowUploadModal(true); }}
           className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-accent text-accent-foreground font-medium text-sm hover:opacity-90 transition-opacity shadow-sm whitespace-nowrap"
         >
           <UploadCloud className="h-4 w-4" />
@@ -515,7 +570,7 @@ export default function DesignPortalPage() {
               : 'Be the first to submit a design asset for proofreading and approval!'}
           </p>
           <button
-            onClick={() => setShowUploadModal(true)}
+            onClick={() => { setSubmitError(''); setShowUploadModal(true); }}
             className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-accent text-accent-foreground text-xs font-medium hover:opacity-90"
           >
             <UploadCloud className="h-3.5 w-3.5" />
@@ -792,6 +847,21 @@ export default function DesignPortalPage() {
                   </label>
                 </div>
 
+                {isReadingFile && (
+                  <div className="space-y-1 pt-1">
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span>Preparing file...</span>
+                      <span className="font-mono">{readProgress}%</span>
+                    </div>
+                    <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-accent transition-all duration-150 ease-out"
+                        style={{ width: `${readProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
                 {fileError && (
                   <p className="text-rose-500 font-medium text-[11px] flex items-center gap-1 pt-1">
                     <AlertCircle className="h-3.5 w-3.5" />
@@ -840,6 +910,22 @@ export default function DesignPortalPage() {
                 )}
               </div>
 
+              {isSubmitting && (
+                <div className="space-y-1">
+                  <p className="text-[11px] text-muted-foreground">Uploading to server...</p>
+                  <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                    <div className="h-full w-full bg-accent rounded-full animate-pulse" />
+                  </div>
+                </div>
+              )}
+
+              {submitError && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-500 text-[11px] flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>{submitError} The file is still selected — you can try submitting again.</span>
+                </div>
+              )}
+
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
                 <button
                   type="button"
@@ -850,10 +936,10 @@ export default function DesignPortalPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || isReadingFile}
                   className="px-4 py-2 rounded-lg bg-accent text-accent-foreground font-medium hover:opacity-90 disabled:opacity-50"
                 >
-                  {isSubmitting ? 'Uploading...' : 'Submit Design'}
+                  {isSubmitting ? 'Uploading...' : isReadingFile ? 'Preparing file...' : submitError ? 'Retry Submit' : 'Submit Design'}
                 </button>
               </div>
             </form>
@@ -946,7 +1032,7 @@ export default function DesignPortalPage() {
                   Uploading a new file resets any proofread or style decision back to pending, since the reviewed asset no longer exists.
                 </p>
                 {replaceFileError && (
-                  <p className="text-xs text-rose-500">{replaceFileError}</p>
+                  <p className="text-xs text-rose-500">{replaceFileError} The file selection is kept — you can try again.</p>
                 )}
                 <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
                   <input
@@ -956,13 +1042,32 @@ export default function DesignPortalPage() {
                   />
                   <button
                     type="submit"
-                    disabled={isReplacingFile || !replaceFile}
+                    disabled={isReplacingFile || isReadingReplaceFile || !replaceFile}
                     className="px-4 py-2 rounded-lg bg-accent text-accent-foreground font-medium hover:opacity-90 text-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                   >
                     <UploadCloud className="h-3.5 w-3.5" />
-                    {isReplacingFile ? 'Uploading...' : 'Replace File'}
+                    {isReplacingFile ? 'Uploading...' : isReadingReplaceFile ? 'Preparing file...' : 'Replace File'}
                   </button>
                 </div>
+                {isReadingReplaceFile && (
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                      <span>Preparing file...</span>
+                      <span className="font-mono">{replaceReadProgress}%</span>
+                    </div>
+                    <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-accent transition-all duration-150 ease-out"
+                        style={{ width: `${replaceReadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+                {isReplacingFile && (
+                  <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                    <div className="h-full w-full bg-accent rounded-full animate-pulse" />
+                  </div>
+                )}
               </form>
             )}
 
