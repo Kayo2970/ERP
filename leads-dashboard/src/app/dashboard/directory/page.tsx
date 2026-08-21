@@ -54,6 +54,8 @@ export default function DirectoryPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deletingMember, setDeletingMember] = useState<Member | null>(null);
   const [terminatingMember, setTerminatingMember] = useState<Member | null>(null);
+  const [terminationReason, setTerminationReason] = useState('');
+  const [terminationError, setTerminationError] = useState('');
   const [reactivatingMember, setReactivatingMember] = useState<Member | null>(null);
   const [selectedStudentForProfile, setSelectedStudentForProfile] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -401,7 +403,12 @@ export default function DirectoryPage() {
 
   const handleConfirmTerminate = async () => {
     if (!terminatingMember) return;
+    if (!terminationReason.trim()) {
+      setTerminationError('Please provide a reason for the termination — it will be included in the official notification email.');
+      return;
+    }
     const target = terminatingMember;
+    const reason = terminationReason.trim();
     try {
       terminateMember(target.id, user?.name || 'Centre Head');
       setMembers(getMembers());
@@ -413,8 +420,8 @@ export default function DirectoryPage() {
           body: JSON.stringify({
             scope: 'SINGLE',
             recipientEmail: target.email,
-            subject: 'Notice: Dashboard Access Status Update',
-            bodyText: `Dear ${target.name},\n\nThis is an automated notification to inform you that your access to the LEADS Dashboard has been terminated by ${user?.name || 'Centre Head'}.\n\nAll historical records and activity retain unchanged in the system.\n\nRegards,\nLEADS Administration`,
+            subject: 'Notice: Termination from LEADS Next Gen Centre',
+            bodyText: `Dear ${target.name},\n\nThis is to inform you that you have been terminated from LEADS Next Gen Centre by ${user?.name || 'the Centre Head'}.\n\nReason for termination: ${reason}\n\nConsider this an official notification of your termination.\n\nRegards,\nLEADS Administration`,
             category: 'SYSTEM_NOTIFICATION',
           }),
         });
@@ -427,6 +434,8 @@ export default function DirectoryPage() {
       triggerError(err.message || 'Failed to terminate member.');
     } finally {
       setTerminatingMember(null);
+      setTerminationReason('');
+      setTerminationError('');
     }
   };
 
@@ -1301,16 +1310,68 @@ export default function DirectoryPage() {
         onCancel={() => setDeletingMember(null)}
       />
 
-      {/* Terminate Member Confirmation Modal */}
-      <ConfirmModal
-        isOpen={Boolean(terminatingMember)}
-        title="Terminate Member Access"
-        message={`${terminatingMember?.name} (${terminatingMember?.email}) will immediately lose access to the dashboard and will not be able to log in. Their existing tasks, ratings, and other records will remain in the system unchanged. You can restore their access at any time.`}
-        confirmLabel="Terminate Access"
-        variant="danger"
-        onConfirm={handleConfirmTerminate}
-        onCancel={() => setTerminatingMember(null)}
-      />
+      {/* Terminate Member Modal — reason required, sent in the official notification email */}
+      {terminatingMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="glass-panel w-full max-w-md rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-danger/15 text-danger">
+                  <ShieldOff className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-theme-text-primary">Terminate Member</h3>
+                  <p className="text-xs text-theme-text-secondary mt-0.5">{terminatingMember.name} ({terminatingMember.email})</p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setTerminatingMember(null); setTerminationReason(''); setTerminationError(''); }}
+                className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-theme-text-secondary leading-relaxed bg-theme-background/30 p-3.5 rounded-xl border border-theme-border/30">
+              This member will immediately lose access to the dashboard and will not be able to log in. Their existing tasks, ratings, and other records will remain unchanged, and you can restore their access at any time. Terminating a member&apos;s access is restricted to the Centre Head only.
+            </p>
+
+            {terminationError && (
+              <div className="flex gap-2.5 p-3 bg-danger/15 border border-danger/30 rounded-xl text-danger text-xs leading-relaxed">
+                <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>{terminationError}</span>
+              </div>
+            )}
+
+            <div className="space-y-1.5 text-xs">
+              <label className="block font-medium text-theme-text-secondary">Reason for Termination *</label>
+              <textarea
+                value={terminationReason}
+                onChange={(e) => { setTerminationReason(e.target.value); setTerminationError(''); }}
+                placeholder="Explain why this member's access is being terminated..."
+                rows={3}
+                className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+              />
+              <p className="text-[11px] text-theme-text-secondary">This reason will be included in the official termination notification email sent to the member.</p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                onClick={() => { setTerminatingMember(null); setTerminationReason(''); setTerminationError(''); }}
+                className="px-4 py-2.5 text-xs font-semibold text-theme-text-primary bg-theme-border/30 hover:bg-theme-border/50 rounded-xl transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmTerminate}
+                className="px-4 py-2.5 text-xs font-semibold rounded-xl transition-all shadow-md cursor-pointer bg-red-600 hover:bg-red-700 text-white shadow-red-600/20"
+              >
+                Terminate Access
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Reactivate Member Confirmation Modal */}
       <ConfirmModal
