@@ -290,7 +290,7 @@ const DEFAULT_PASSWORD_HASH = '039e521fbfd304a0a97bf0ad345fa30c:fabe61e51b967035
 
 // Real organization roster matching the leadership website and division structure
 const initialMembersRaw: Member[] = [
-  { id: 'm1', name: 'Kayomarz Pavri', email: 'kayomarz.pavri@msruas.ac.in', role: 'Super User', tier: 1, division: 'Core Committee', department: 'Design and Social Media' },
+  { id: 'm1', name: 'Kayomarz Pavri', email: 'kayo2970@gmail.com', role: 'Super User', tier: 1, division: 'Core Committee', department: 'Design and Social Media' },
   { id: 'm2', name: 'Dr. Subhadeep Mukherjee', email: 'subhadeep.mukherjee@msruas.ac.in', role: 'Centre Head', tier: 2, division: 'Advisory Board', department: 'Faculty Oversight' },
   { id: 'm3', name: 'Dr. Kiran Kumar B M', email: 'kiran.kumar@msruas.ac.in', role: 'Head of Events', tier: 3, division: 'Advisory Board', department: 'Faculty Oversight' },
   { id: 'm4', name: 'Dr. K. M. Sharath Kumar', email: 'sharath.kumar@msruas.ac.in', role: 'Advisory Board Member', tier: 4, division: 'Advisory Board', department: 'Faculty Advisory' },
@@ -318,7 +318,7 @@ const initialMembersRaw: Member[] = [
   { id: 'm26', name: 'P Koushik Reddy', email: 'koushik.reddy@msruas.ac.in', role: 'Chief Coordinator', tier: 5, division: 'Core Committee', department: 'Coordination' },
   { id: 'm27', name: 'Sadiya Sawood', email: 'sadiya.sawood@msruas.ac.in', role: 'Head Leadership and Development', tier: 5, division: 'Core Committee', department: 'Leadership and Development' },
   { id: 'm28', name: 'Syed Furqaan Ahmed', email: 'furqaan.ahmed@msruas.ac.in', role: 'Head Research & Development', tier: 5, division: 'Core Committee', department: 'Research & Development' },
-  { id: 'm29', name: 'Kayomarz M Pavri', email: 'kayomarz.m@msruas.ac.in', role: 'Head Design and Social Media', tier: 5, division: 'Core Committee', department: 'Design and Social Media' },
+  { id: 'm29', name: 'Kayomarz M Pavri', email: 'kayo2970@gmail.com', role: 'Head Design and Social Media', tier: 5, division: 'Core Committee', department: 'Design and Social Media' },
   { id: 'm30', name: 'Nimisha K M', email: 'nimisha.km@msruas.ac.in', role: 'Head Sustainability and Innovation', tier: 5, division: 'Core Committee', department: 'Sustainability and Innovation' },
   { id: 'm31', name: 'Aravind Manashetti', email: 'aravind.manashetti@msruas.ac.in', role: 'Head Finance and Sponsorship', tier: 5, division: 'Core Committee', department: 'Finance and Sponsorship' },
   { id: 'm32', name: 'Shwetha S', email: 'shwetha.s@msruas.ac.in', role: 'Head Design and Social Media', tier: 5, division: 'Core Committee', department: 'Design and Social Media' },

@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { getAnnouncements, getTasks, getDesigns, getMembers, logAuditEvent, Member, syncWithServer } from '@/lib/local-data';
 import { canViewTaskExtended, getAnnouncementScopeMatch } from '@/lib/permissions';
+import { TermsModal } from '@/components/terms-modal';
 
 interface SidebarItem {
   name: string;
@@ -83,6 +84,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const [isDarkTheme, setIsDarkTheme] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<{ id: string; title: string; time: string; read: boolean }[]>([]);
+  const [isTermsOpen, setIsTermsOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
   // Super User-only quick account switch — jumps straight into any real member's
@@ -97,7 +99,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
   const [user, setUser] = useState({
     name: 'Kayomarz Pavri',
-    email: 'kayomarz.pavri@msruas.ac.in',
+    email: 'kayo2970@gmail.com',
     role: 'Super User',
     tier: 1,
     division: 'Core Committee',
@@ -600,6 +602,28 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         <main className="flex-1 overflow-x-hidden">
           {children}
         </main>
+
+        {/* Global Footer */}
+        <footer className="mt-auto border-t border-theme-border/20 py-4 px-6 md:px-8 bg-theme-background/40 backdrop-blur-md flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-theme-text-secondary">
+          <div className="flex flex-col sm:flex-row items-center gap-2 text-center md:text-left">
+            <span>By visiting or using this portal, you agree to our</span>
+            <button
+              type="button"
+              onClick={() => setIsTermsOpen(true)}
+              className="font-semibold text-accent underline hover:text-primary-light transition-colors cursor-pointer"
+            >
+              Terms & Conditions
+            </button>
+            <span className="hidden sm:inline">&middot;</span>
+            <span className="text-[11px]">All Intellectual Property, Copyrights & Development Licensing belong exclusively to <strong>Kayomarz Pavri</strong>.</span>
+          </div>
+          <div className="text-[11px] font-medium text-theme-text-secondary">
+            &copy; 2026 LEADS Next Gen Centre. All rights reserved.
+          </div>
+        </footer>
+
+        {/* Terms & Conditions Modal */}
+        <TermsModal isOpen={isTermsOpen} onClose={() => setIsTermsOpen(false)} />
       </div>
     </div>
   );

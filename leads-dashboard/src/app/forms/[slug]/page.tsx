@@ -4,6 +4,7 @@ import React, { useState, useEffect, use } from 'react';
 import { CheckCircle2, ChevronLeft, Send, Sparkles, AlertTriangle, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { getForms, addSubmission, PublicFormItem } from '@/lib/local-data';
+import { TermsModal } from '@/components/terms-modal';
 
 export default function PublicFormPage({ params }: { params: Promise<{ slug: string }> }) {
   const resolvedParams = use(params);
@@ -15,6 +16,7 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [isTermsOpen, setIsTermsOpen] = useState(false);
 
   useEffect(() => {
     const allForms = getForms();
@@ -209,6 +211,26 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
         </div>
       )}
 
+      {/* Footer Info */}
+      <footer className="mt-8 text-center text-[11px] text-slate-400 space-y-1 max-w-lg px-4 pb-6">
+        <p>
+          By visiting or using this portal, you agree to our{' '}
+          <button
+            type="button"
+            onClick={() => setIsTermsOpen(true)}
+            className="font-semibold text-sky-400 underline hover:text-sky-300 transition-colors cursor-pointer"
+          >
+            Terms & Conditions
+          </button>.
+        </p>
+        <p className="text-[10px]">
+          All Intellectual Property, Copyrights & Development Licensing belong exclusively to <strong>Kayomarz Pavri</strong>.
+        </p>
+        <p className="text-[10px] opacity-75">&copy; 2026 LEADS Next Gen Centre &middot; MSRUAS Internal Operations Portal</p>
+      </footer>
+
+      {/* Terms & Conditions Modal */}
+      <TermsModal isOpen={isTermsOpen} onClose={() => setIsTermsOpen(false)} />
     </div>
   );
 }

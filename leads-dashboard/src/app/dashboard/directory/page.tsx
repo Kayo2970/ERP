@@ -246,7 +246,7 @@ export default function DirectoryPage() {
       'Jane Smith,jane.smith@msruas.ac.in,Core Committee,Vice President,Executive Council,B.Tech Electronics and Communication,\n' +
       'Dr. Sharath Kumar,sharath.kumar@msruas.ac.in,Advisory Board,Advisory Member,Faculty Advisory,,\n' +
       'Dr. Ajay Rao,ajay.rao@msruas.ac.in,Faculty,Assistant Professor,Faculty Advisory,,\n' +
-      'Kayomarz M Pavri,kayomarz.m@msruas.ac.in,Alumni,Alumni Mentor,Design and Social Media,,Class of 2024';
+      'Kayomarz M Pavri,kayo2970@gmail.com,Alumni,Alumni Mentor,Design and Social Media,,Class of 2024';
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
