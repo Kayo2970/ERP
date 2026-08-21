@@ -139,13 +139,14 @@ export function wrapInMasterEmailTemplate(options: {
   bodyContentHtml: string;
 }): string {
   const logoUrl = 'https://leadsnextgencentre.online/images/leads-short-logo.png';
+  const bgImageUrl = 'https://leadsnextgencentre.online/images/light-bg.jpg';
 
   const badgeHtml = options.badgeText
     ? `<span style="font-size: 11px; font-weight: 700; color: ${options.badgeColor || '#0369a1'}; background: #e0f2fe; border: 1px solid #bae6fd; padding: 4px 10px; border-radius: 8px; display: inline-block; margin-bottom: 14px;">${options.badgeText}</span>`
     : '';
 
   return `
-    <div style="background-color: #f1f5f9; padding: 32px 16px; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif; color: #1e293b; width: 100%; box-sizing: border-box;">
+    <div style="background: #f1f5f9 url('${bgImageUrl}') center / cover no-repeat; padding: 32px 16px; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif; color: #1e293b; width: 100%; box-sizing: border-box;">
       <div style="max-width: 580px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);">
         
         <!-- Header Banner with Logo -->
