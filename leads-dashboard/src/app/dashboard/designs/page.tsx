@@ -27,6 +27,7 @@ import {
   addDesign,
   updateDesignReview,
   updateDesignStyleReview,
+  updateDesignFile,
   deleteDesign,
   getMembers,
   getEvents,
@@ -72,6 +73,12 @@ export default function DesignPortalPage() {
   const [styleStatus, setStyleStatus] = useState<'Style Approved' | 'Style Rejected'>('Style Approved');
   const [styleFeedback, setStyleFeedback] = useState('');
 
+  // Replace File form state inside Inspector Modal (design owner only)
+  const [replaceFile, setReplaceFile] = useState<File | null>(null);
+  const [replaceFileData, setReplaceFileData] = useState<string>('');
+  const [replaceFileError, setReplaceFileError] = useState<string>('');
+  const [isReplacingFile, setIsReplacingFile] = useState<boolean>(false);
+
   const handleSaveStyleReview = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDesign || !user) return;
@@ -79,6 +86,62 @@ export default function DesignPortalPage() {
     if (updated) {
       setSelectedDesign(updated);
       setDesigns(getDesigns());
+    }
+  };
+
+  const handleReplaceFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files?.[0];
+    setReplaceFileError('');
+    if (!selected) {
+      setReplaceFile(null);
+      setReplaceFileData('');
+      return;
+    }
+
+    const MAX_SIZE = 25 * 1024 * 1024; // 25 MB
+    if (selected.size > MAX_SIZE) {
+      setReplaceFileError(`File size (${(selected.size / (1024 * 1024)).toFixed(2)} MB) exceeds the 25 MB maximum limit.`);
+      setReplaceFile(null);
+      setReplaceFileData('');
+      return;
+    }
+
+    setReplaceFile(selected);
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') setReplaceFileData(reader.result);
+    };
+    reader.readAsDataURL(selected);
+  };
+
+  const handleReplaceFileSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedDesign || !user) return;
+    if (!replaceFile || !replaceFileData) {
+      setReplaceFileError('Select a replacement file first.');
+      return;
+    }
+
+    setIsReplacingFile(true);
+    try {
+      const updated = updateDesignFile(
+        selectedDesign.id,
+        replaceFileData,
+        replaceFile.name,
+        replaceFile.size,
+        replaceFile.type || 'application/octet-stream',
+        user.name
+      );
+      if (updated) {
+        setSelectedDesign(updated);
+        setDesigns(getDesigns());
+        setReplaceFile(null);
+        setReplaceFileData('');
+      }
+    } catch (err: any) {
+      setReplaceFileError(err.message || 'Failed to replace file.');
+    } finally {
+      setIsReplacingFile(false);
     }
   };
 
@@ -846,6 +909,37 @@ export default function DesignPortalPage() {
                 </a>
               )}
             </div>
+
+            {/* Replace File (design owner or admins only) */}
+            {(selectedDesign.designerEmail === user?.email || canViewAllDesigns(user)) && (
+              <form onSubmit={handleReplaceFileSubmit} className="border-t border-border pt-4 space-y-3">
+                <h3 className="text-sm font-bold flex items-center gap-2">
+                  <UploadCloud className="h-4 w-4 text-accent" />
+                  Replace Uploaded File
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Uploading a new file resets any proofread or style decision back to pending, since the reviewed asset no longer exists.
+                </p>
+                {replaceFileError && (
+                  <p className="text-xs text-rose-500">{replaceFileError}</p>
+                )}
+                <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+                  <input
+                    type="file"
+                    onChange={handleReplaceFileChange}
+                    className="flex-1 text-xs file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-accent file:text-white file:text-xs file:font-medium file:cursor-pointer cursor-pointer"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isReplacingFile || !replaceFile}
+                    className="px-4 py-2 rounded-lg bg-accent text-accent-foreground font-medium hover:opacity-90 text-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                  >
+                    <UploadCloud className="h-3.5 w-3.5" />
+                    {isReplacingFile ? 'Uploading...' : 'Replace File'}
+                  </button>
+                </div>
+              </form>
+            )}
 
             {/* Description & Event */}
             {selectedDesign.description && (
