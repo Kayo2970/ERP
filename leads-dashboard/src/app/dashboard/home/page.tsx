@@ -114,7 +114,7 @@ export default function DashboardHome() {
   });
 
   const activeEventsCount = visibleEvents.filter(e => {
-    const effective = getEffectiveEventStatus(e);
+    const effective = getEffectiveEventStatus(e, tasks);
     return effective !== 'completed' && effective !== 'archived';
   }).length;
 
@@ -454,7 +454,7 @@ export default function DashboardHome() {
             {activeTab === 'events' ? (
               (() => {
                 const upcoming = visibleEvents.filter(ev => {
-                  const effective = getEffectiveEventStatus(ev);
+                  const effective = getEffectiveEventStatus(ev, tasks);
                   return effective !== 'completed' && effective !== 'archived';
                 });
                 if (upcoming.length === 0) {
@@ -464,7 +464,7 @@ export default function DashboardHome() {
                   <div key={ev.id} className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-1 hover:bg-theme-border/15 transition-all">
                     <div className="flex items-center justify-between">
                       <h4 className="font-semibold text-theme-text-primary text-xs">{ev.title}</h4>
-                      <span className="text-[10px] px-2 py-0.5 bg-accent/15 text-accent font-semibold rounded-md capitalize">{getEffectiveEventStatus(ev)}</span>
+                      <span className="text-[10px] px-2 py-0.5 bg-accent/15 text-accent font-semibold rounded-md capitalize">{getEffectiveEventStatus(ev, tasks)}</span>
                     </div>
                     <p className="text-[10px] text-theme-text-secondary line-clamp-2">{ev.description}</p>
                     <p className="text-[10px] text-theme-text-secondary font-medium pt-1">{ev.startDate} to {ev.endDate}</p>
