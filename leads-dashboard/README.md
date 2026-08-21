@@ -4,23 +4,112 @@ An enterprise-grade, institutional management and operations platform designed f
 
 ---
 
-## 🚀 Key Modules & System Features
+## 🚀 Comprehensive Module Breakdown
 
-### 📊 Workspace & Operations
-- **Dashboard Home**: High-level operational metrics, active task counts, upcoming event schedules, and recent announcements.
-- **Calendar & Events**: Comprehensive event management with campus scoping (**GG Campus** & **RTC Campus**), sub-committee assignments, and student performance evaluation tools.
-- **Tasks Desk**: Individual and committee task delegation, due-date tracking, progress milestones, and extension request approvals.
-- **Ratings & Evaluation**: Dual-gate student performance evaluation (Centre Head & Events Head authority) for event deliverables and leadership contributions.
-- **Design Portal**: Asset submission, proofreading workflow, status reviews, and version management for design & social media collateral.
+### 📊 Workspace & Operational Modules
 
-### 🛡️ Administration & Governance
-- **Reimbursement Claims**: Two-stage approval pipeline (Stage 1: Sector Head review; Stage 2: Finance Head final sign-off).
-- **Budget & Funding**: Financial management, allocation tracking, and expenditure monitoring for approved operations.
-- **Public Forms & Announcements**: Form builder for student engagement, plus multi-scope targeted announcement broadcasting.
-- **Directory & Roster**: Centralized member directory with tier hierarchy management, status controls (Active, Terminated, Reactivated), and automated email notifications.
-- **Guest Directory**: Visiting contact cards, faculty advisory records, and guest event invites.
-- **Dynamic Group Policies**: 15 grantable capability keys (`EVENTS_CREATE`, `TASKS_EDIT`, `EDIT_DIRECTORY`, etc.) with customizable approval gateways and visibility scopes.
-- **Email Management & SMTP Client**: Integrated Nodemailer engine with diagnostic health checks, log tracking, and master institutional light-mode HTML wrappers.
+#### 1. Dashboard Home (`/dashboard/home`)
+- **Executive Overview**: Centralized operations desk displaying real-time system metrics, active task counters, upcoming event schedules, and recent announcements.
+- **Quick Action Hub**: Direct shortcuts for event creation, task assignment, design uploads, and announcement broadcasting.
+- **Personal Deliverables**: Tailored dashboard widget highlighting deliverables assigned specifically to the logged-in user.
+
+#### 2. Calendar Module (`/dashboard/calendar`)
+- **Inter-Campus Operational Timeline**: Interactive calendar displaying event schedules, sub-committee milestones, and university deadlines.
+- **Campus Filtering**: Filter view by **GG Campus**, **RTC Campus**, or **All Campuses**.
+- **Event Highlights**: Clickable event cards showing start/end dates, venue details, committee leads, and status badges.
+
+#### 3. Events Desk (`/dashboard/events`)
+- **Lifecycle Management**: End-to-end event workflow: *Draft* → *Pending Approval* → *Published* → *Completed*.
+- **Sub-Committee Formation**: Create specialized committees (Logistics, Technical, Media, Operations) and assign member rosters.
+- **Approval Engine**: Event creation by Executive Council members (President, VP, Chief Coordinator) automatically triggers a Centre Head sign-off requirement.
+- **Student Performance Evaluation**: Integrated dual-gate rating system for Centre Head and campus-specific Events Heads.
+
+#### 4. Tasks Desk (`/dashboard/tasks`)
+- **Task Delegation**: Assign tasks to individual members or entire sub-committees with priority tagging (*Urgent*, *High*, *Normal*, *Low*).
+- **Status Tracking**: Visual progress pipeline: *To Do* → *In Progress* → *Under Review* → *Completed*.
+- **Extension Requests**: Assignees can submit task deadline extension requests, which Faculty Advisors or the Centre Head can approve or reject.
+- **Executive Task Allotment**: Executive Council task assignments require Event Head approval before activation.
+
+#### 5. Ratings & Student Performance (`/dashboard/ratings`)
+- **Rubric Evaluation**: 5-point performance scoring system for student deliverables and leadership contributions.
+- **Scoped Visibility**:
+  - *Super User / Centre Head*: Universal visibility across all members and campuses.
+  - *Department Heads*: Visibility over team members in their department.
+  - *Executive Council*: Visibility over own performance and committees they belong to.
+  - *Alumni*: Restricted strictly to viewing their own historical performance ratings.
+
+#### 6. Design Portal (`/dashboard/designs`)
+- **Asset Review Desk**: Dedicated portal for Design and Social Media department asset requests, proofreading, and approval workflows.
+- **Proofreading Pipeline**: Upload design files, assign proofreaders, and manage review decisions (*Approved*, *Revisions Requested*, *Pending Proofread*).
+- **Asset Replacements**: Support for uploading updated asset revisions while retaining review logs.
+- **Scoped Access**: Restricted to Design Head, Super User, and assigned proofreaders.
+
+---
+
+### 🛡️ Administration & Governance Modules
+
+#### 7. Reimbursements System (`/dashboard/reimbursements`)
+- **Expense Claims**: Member expense submission desk with receipt proof attachments and amount validation.
+- **Two-Stage Approval Pipeline**:
+  - **Stage 1 (Sector Head)**: Initial operational verification.
+  - **Stage 2 (Finance Head)**: Final financial audit and reimbursement sign-off.
+- **Visibility Isolation**: Claimants view own claims; Sector Heads view all pending Stage 1 claims; Finance Heads view claims only after Stage 1 verification.
+
+#### 8. Budget & Funds (`/dashboard/budget`)
+- **Financial Governance**: Ledger for university fund allocations, department budgets, and operational expenditures.
+- **Access Scoping**: Restricted strictly to Super User, Centre Head, and Finance Leadership.
+
+#### 9. Public Forms Builder (`/dashboard/forms` & `/forms/[slug]`)
+- **Interactive Form Builder**: Custom form creation engine for student signups, feedback collection, and event registrations.
+- **Field Customization**: Text inputs, textareas, dropdowns, checkboxes, and file upload fields.
+- **Public Form Slugs**: Custom public landing pages rendered at `/forms/[slug]`.
+- **Form Protection**: Deletion of public forms is strictly restricted to Centre Head and Super User.
+
+#### 10. Analytics & Reports (`/dashboard/reports`)
+- **Executive Report Generator**: Styled PDF report generation and CSV data exports.
+- **Report Types**: Performance scorecards, event post-mortems, financial audit summaries, and member activity reports.
+
+#### 11. Announcements Engine (`/dashboard/announcements`)
+- **Targeted Broadcasting**: Multi-scope message delivery (`ALL_MEMBERS`, `CORE_COMMITTEE`, `DEPARTMENTS`, `INDIVIDUAL`).
+- **Dual Notification**: In-dashboard bell alerts combined with automated Light Mode HTML email dispatch.
+- **Authoring Rules**: Allowed for Leadership, Core Committee, and Heads; blocked for Alumni & Executive Council without approval.
+
+#### 12. Member Directory & Roster (`/dashboard/directory`)
+- **Central Roster**: Complete roster management covering Advisory Board, Core Committee, Training Associates, and Alumni.
+- **Tier & Persona Control**: Manage Tiers 1 through 7, roles, divisions, and departments.
+- **Status Controls**: Active vs. Terminated account status toggles.
+- **Automated Termination Email**: Terminating a member automatically dispatches an official notification email to their registered address while retaining historical records in the database.
+- **Member Protection**: Member removal and termination controls are strictly blocked for Executive Council roles.
+
+#### 13. Guest Directory (`/dashboard/guest-directory`)
+- **External Contact Cards**: Directory for visiting guests, external VIPs, faculty advisors, and industry partners.
+- **Access Scoping**: View and add contacts allowed for Executive Council, Centre Head, and Faculty; contact deletion restricted to Centre Head and Super User.
+
+#### 14. Guest Invites Dispatcher (`/dashboard/guest-invites`)
+- **Mass Email Dispatcher**: Batch invitation engine for official events and guest communications.
+- **Mail-Merge Engine**: Dynamic placeholder substitution (`{{name}}`, `{{email}}`, `{{role}}`).
+- **Delivery Monitoring**: Progress tracking bar with real-time success and failure reporting.
+
+#### 15. Dynamic Group Policies (`/dashboard/policies`)
+- **Granular RBAC Engine**: Super User authority to grant any of 15 capability keys (`EVENTS_CREATE`, `TASKS_EDIT`, `EDIT_DIRECTORY`, `BUILD_FORMS`, etc.).
+- **Targeting Matrix**: Target by Member ID, Division, Tier, or Designation Keyword.
+- **Approval Gateways**: Configure optional approval sign-offs (Centre Head, specific member, policy tag holder).
+- **Scope Restrictions**: Apply `OWN_ONLY` visibility restrictions to specific users or tiers.
+
+#### 16. Backup & Restore (`/dashboard/backup`)
+- **Database Snapshot Manager**: Export complete system state to formatted JSON backup files.
+- **System Restoration**: Restore database state with validation checks, rollback protection, and backup history logs.
+
+#### 17. Email Management & Client (`/dashboard/email`)
+- **SMTP Client Configuration**: Configure Nodemailer for Google Workspace SMTP, Local Postfix, or Custom SMTP.
+- **Diagnostics & Testing**: Live connection verification tool with instant test mail delivery.
+- **Dispatch Logs**: Detailed audit log of all sent and failed email notifications.
+- **Master Light Mode Template Engine**: Centralized HTML email wrapper styling.
+
+#### 18. System & Account Settings (`/dashboard/settings`)
+- **Personal Profile**: Profile customization, password updates, and avatar settings.
+- **Secure Email Update**: Updating login email sends a 5-minute OTP code to the CURRENT email inbox for security verification.
+- **Emergency System Lockdown**: Super User toggle to lock the dashboard site-wide (renders plain 404 for non-admin session attempts).
 
 ---
 
@@ -40,16 +129,11 @@ The system enforces a multi-tiered permission model backed by dynamic policy gra
 
 ---
 
-## 📧 Email Notification Engine & Light Mode Styling
+## 🎨 UI Aesthetics & Light Mode Styling
 
-All system notifications use the **Master Institutional Light Mode HTML Wrapper** ([`src/lib/email-service.ts`](file:///Users/kayo/ERP/leads-dashboard/src/lib/email-service.ts)):
-- **Light Theme Palette**: Clean white container (`#ffffff`), soft slate borders (`#e2e8f0`), LEADS institutional blue branding (`#0284c7`), and dark slate body text (`#0f172a`, `#334155`).
-- **Automated Templates**:
-  - Password Reset & Email Change 5-minute OTP verifications.
-  - Announcement broadcasting.
-  - Task assignment notifications.
-  - Event committee roster additions.
-  - Automated member termination notices.
+- **Isometric Light Mode Background**: Custom geometric isometric cube background image (`/images/light-bg.jpg`) rendered fixed across Light Mode layout ([`src/app/globals.css`](file:///Users/kayo/ERP/leads-dashboard/src/app/globals.css)).
+- **Fast Module Transitions**: Optimized 1-second (1000ms) transition animations between workspace modules.
+- **Master Light Mode Email Template**: Institutional HTML email wrapper with clean white cards (`#ffffff`), soft slate borders (`#e2e8f0`), LEADS institutional blue accents (`#0284c7`), and dark slate body text (`#0f172a`, `#334155`) ([`src/lib/email-service.ts`](file:///Users/kayo/ERP/leads-dashboard/src/lib/email-service.ts)).
 
 ---
 
