@@ -90,9 +90,10 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDarkTheme, setIsDarkTheme] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [notifications, setNotifications] = useState<{ id: string; title: string; time: string; read: boolean }[]>([]);
+  const [notifications, setNotifications] = useState<{ id: string; title: string; time: string; read: boolean; link: string }[]>([]);
   const [isTermsOpen, setIsTermsOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+  const notifRefMobile = useRef<HTMLDivElement>(null);
 
   // Super User-only quick account switch — jumps straight into any real member's
   // session without a password. originalUser is the Super User's own identity,
@@ -114,6 +115,47 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   });
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [lockdownEnabled, setLockdownEnabled] = useState(false);
+  // Tracks the current user for the 'leads-data-sync' handler below, which is
+  // registered once on mount and would otherwise only ever see this initial
+  // (pre-login) placeholder user via a stale closure.
+  const userRef = useRef(user);
+  useEffect(() => { userRef.current = user; }, [user]);
+
+  const buildNotifications = (currentUser: any) => {
+    const proofreadNotifs = getDesigns()
+      .filter(d => d.proofreadRequested && d.assignedProofreaderEmail === currentUser.email && d.review?.status === 'Pending Proofread')
+      .map(d => ({
+        id: 'pf_' + d.id,
+        title: `Proofreading Request: ${d.title}`,
+        time: `From ${d.designerName}`,
+        read: false,
+        link: `/dashboard/designs?highlight=${d.id}`,
+      }));
+
+    const recentAnnounce = getAnnouncements()
+      .filter(a => getAnnouncementScopeMatch(a.scope, currentUser))
+      .slice(0, 3)
+      .map(a => ({
+        id: a.id,
+        title: `Announcement: ${a.title}`,
+        time: a.publishedAt,
+        read: false,
+        link: `/dashboard/announcements?highlight=${a.id}`,
+      }));
+
+    const recentTasks = getTasks()
+      .filter(t => canViewTaskExtended(t, currentUser))
+      .slice(0, 2)
+      .map(t => ({
+        id: t.id,
+        title: `Task assigned: ${t.title}`,
+        time: `Due ${t.dueDate}`,
+        read: false,
+        link: `/dashboard/tasks?highlight=${t.id}`,
+      }));
+
+    return [...proofreadNotifs, ...recentAnnounce, ...recentTasks];
+  };
 
   // Initialize theme, user session, notifications, and server sync
   useEffect(() => {
@@ -161,34 +203,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       }, 7000);
 
       // Load dynamic notifications from recent announcements, tasks, and proofread requests
-      const proofreadNotifs = getDesigns()
-        .filter(d => d.proofreadRequested && d.assignedProofreaderEmail === parsedUser.email && d.review?.status === 'Pending Proofread')
-        .map(d => ({
-          id: 'pf_' + d.id,
-          title: `Proofreading Request: ${d.title}`,
-          time: `From ${d.designerName}`,
-          read: false
-        }));
-
-      const recentAnnounce = getAnnouncements()
-        .filter(a => getAnnouncementScopeMatch(a.scope, parsedUser))
-        .slice(0, 3)
-        .map(a => ({
-          id: a.id,
-          title: `Announcement: ${a.title}`,
-          time: a.publishedAt,
-          read: false
-        }));
-      const recentTasks = getTasks()
-        .filter(t => canViewTaskExtended(t, parsedUser))
-        .slice(0, 2)
-        .map(t => ({
-          id: t.id,
-          title: `Task assigned: ${t.title}`,
-          time: `Due ${t.dueDate}`,
-          read: false
-        }));
-      setNotifications([...proofreadNotifs, ...recentAnnounce, ...recentTasks]);
+      setNotifications(buildNotifications(parsedUser));
 
       return () => clearInterval(pollInterval);
     } catch (e) {
@@ -198,22 +213,38 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
   }, [router]);
 
-  // Re-check the lockdown flag every time a server sync lands (initial load,
-  // the 7-second poll, or another tab's write) so flipping it takes effect
-  // for everyone already inside the dashboard without needing a reload.
+  // Re-check the lockdown flag and rebuild notifications every time a server
+  // sync lands (initial load, the 7-second poll, or another tab's write) — the
+  // notification list used to be computed once at mount, before that first
+  // sync had a chance to resolve, so anything assigned/published right before
+  // (or shortly after) login never appeared until a full remount. Existing
+  // read flags are preserved by id across the rebuild.
   useEffect(() => {
-    const handleSync = () => setLockdownEnabled(getSystemSettings().lockdownEnabled);
+    const handleSync = () => {
+      setLockdownEnabled(getSystemSettings().lockdownEnabled);
+      const currentUser = userRef.current;
+      if (!currentUser?.email) return;
+      setNotifications(prev => {
+        const readIds = new Set(prev.filter(n => n.read).map(n => n.id));
+        return buildNotifications(currentUser).map(n => readIds.has(n.id) ? { ...n, read: true } : n);
+      });
+    };
     window.addEventListener('leads-data-sync', handleSync);
     return () => window.removeEventListener('leads-data-sync', handleSync);
   }, []);
 
-  // Click outside to close dropdowns
+  // Click outside to close dropdowns. The notification bell renders twice (desktop
+  // header + mobile header, only one visible at a time via CSS), so both refs must
+  // miss the click before the dropdown closes.
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const insideDesktopBell = notifRef.current?.contains(target);
+      const insideMobileBell = notifRefMobile.current?.contains(target);
+      if (!insideDesktopBell && !insideMobileBell) {
         setIsNotificationsOpen(false);
       }
-      if (quickSwitchRef.current && !quickSwitchRef.current.contains(event.target as Node)) {
+      if (quickSwitchRef.current && !quickSwitchRef.current.contains(target)) {
         setIsQuickSwitchOpen(false);
       }
     }
@@ -285,7 +316,74 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
   };
 
+  const handleNotifClick = (notif: { id: string; link: string }) => {
+    setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
+    setIsNotificationsOpen(false);
+    setIsMobileMenuOpen(false);
+    router.push(notif.link);
+  };
+
   const unreadCount = notifications.filter(n => !n.read).length;
+
+  // Rendered twice — once in the desktop navbar, once in the mobile header — since
+  // only one is ever visible at a time (the other's ancestor is `hidden` via CSS),
+  // this keeps the bell available on phones without duplicating ~50 lines of JSX.
+  const renderNotificationBell = (wrapperRef: React.RefObject<HTMLDivElement | null>) => (
+    <div className="relative" ref={wrapperRef}>
+      <button
+        onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+        className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-xl hover:bg-theme-border/20 transition-all cursor-pointer relative"
+        title="Notifications"
+      >
+        <Bell className="h-4.5 w-4.5" />
+        {unreadCount > 0 && (
+          <span className="absolute top-2 right-2 h-2 w-2 bg-danger rounded-full ring-2 ring-theme-sidebar"></span>
+        )}
+      </button>
+
+      {isNotificationsOpen && (
+        <div className="absolute right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] glass-panel rounded-2xl p-4 shadow-2xl border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150">
+          <div className="flex items-center justify-between pb-2.5 border-b border-theme-border/30">
+            <h4 className="text-xs font-bold text-theme-text-primary">Notifications</h4>
+            {unreadCount > 0 && (
+              <button
+                onClick={markAllNotificationsAsRead}
+                className="text-[10px] text-accent hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+              >
+                <Check className="h-3 w-3" />
+                Mark all read
+              </button>
+            )}
+          </div>
+
+          <div className="divide-y divide-theme-border/20 max-h-64 overflow-y-auto pt-1 space-y-1">
+            {notifications.length === 0 ? (
+              <div className="text-center py-6 text-theme-text-secondary text-xs">
+                No notifications at this time.
+              </div>
+            ) : (
+              notifications.map(notif => (
+                <button
+                  key={notif.id}
+                  type="button"
+                  onClick={() => handleNotifClick(notif)}
+                  className={`w-full text-left py-2.5 px-2 rounded-lg text-xs transition-all cursor-pointer hover:bg-accent/10 ${notif.read ? 'opacity-60' : 'bg-accent/5'}`}
+                >
+                  <div className="flex items-start gap-2">
+                    <Info className="h-3.5 w-3.5 text-accent shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-theme-text-primary text-xs leading-snug">{notif.title}</p>
+                      <p className="text-[10px] text-theme-text-secondary mt-0.5">{notif.time}</p>
+                    </div>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   if (!isAuthenticated) {
     return (
@@ -403,7 +501,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           >
             {isDarkTheme ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </button>
-          
+
+          {renderNotificationBell(notifRefMobile)}
+
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-lg hover:bg-theme-border/20 transition-all"
@@ -490,55 +590,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             </button>
 
             {/* Notification bell & dropdown */}
-            <div className="relative" ref={notifRef}>
-              <button 
-                onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
-                className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-xl hover:bg-theme-border/20 transition-all cursor-pointer relative"
-                title="Notifications"
-              >
-                <Bell className="h-4.5 w-4.5" />
-                {unreadCount > 0 && (
-                  <span className="absolute top-2 right-2 h-2 w-2 bg-danger rounded-full ring-2 ring-theme-sidebar"></span>
-                )}
-              </button>
-
-              {isNotificationsOpen && (
-                <div className="absolute right-0 mt-2 w-80 glass-panel rounded-2xl p-4 shadow-2xl border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150">
-                  <div className="flex items-center justify-between pb-2.5 border-b border-theme-border/30">
-                    <h4 className="text-xs font-bold text-theme-text-primary">Notifications</h4>
-                    {unreadCount > 0 && (
-                      <button
-                        onClick={markAllNotificationsAsRead}
-                        className="text-[10px] text-accent hover:underline font-semibold flex items-center gap-1 cursor-pointer"
-                      >
-                        <Check className="h-3 w-3" />
-                        Mark all read
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="divide-y divide-theme-border/20 max-h-64 overflow-y-auto pt-1 space-y-1">
-                    {notifications.length === 0 ? (
-                      <div className="text-center py-6 text-theme-text-secondary text-xs">
-                        No notifications at this time.
-                      </div>
-                    ) : (
-                      notifications.map(notif => (
-                        <div key={notif.id} className={`py-2.5 px-2 rounded-lg text-xs transition-all ${notif.read ? 'opacity-60' : 'bg-accent/5'}`}>
-                          <div className="flex items-start gap-2">
-                            <Info className="h-3.5 w-3.5 text-accent shrink-0 mt-0.5" />
-                            <div>
-                              <p className="font-medium text-theme-text-primary text-xs leading-snug">{notif.title}</p>
-                              <p className="text-[10px] text-theme-text-secondary mt-0.5">{notif.time}</p>
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
+            {renderNotificationBell(notifRef)}
 
             {/* Super User quick-switch: view as any real member without a password */}
             {isImpersonating && (

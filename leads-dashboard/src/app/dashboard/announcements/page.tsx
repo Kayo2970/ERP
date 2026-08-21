@@ -51,6 +51,10 @@ export default function AnnouncementsPage() {
   const [isDispatching, setIsDispatching] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
 
+  // Deep link from a notification (?highlight=<announcementId>) — scroll to it once
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [hasScrolledToHighlight, setHasScrolledToHighlight] = useState(false);
+
   useEffect(() => {
     const refreshData = () => {
       setAnnouncements(getAnnouncements());
@@ -67,6 +71,9 @@ export default function AnnouncementsPage() {
       }
     }
 
+    const params = new URLSearchParams(window.location.search);
+    setHighlightId(params.get('highlight'));
+
     window.addEventListener('leads-data-sync', refreshData);
     window.addEventListener('storage', refreshData);
     return () => {
@@ -74,6 +81,17 @@ export default function AnnouncementsPage() {
       window.removeEventListener('storage', refreshData);
     };
   }, []);
+
+  // Once the highlighted announcement has actually rendered, scroll to it — retries
+  // on every refresh until found, since it may not exist locally yet on first paint.
+  useEffect(() => {
+    if (!highlightId || hasScrolledToHighlight) return;
+    const el = document.getElementById(`announcement-${highlightId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHasScrolledToHighlight(true);
+    }
+  }, [announcements, highlightId, hasScrolledToHighlight]);
 
   const triggerSuccess = (msg: string) => {
     setSuccessMsg(msg);
@@ -260,7 +278,13 @@ export default function AnnouncementsPage() {
           />
         ) : (
           displayedAnnouncements.map((ann) => (
-            <div key={ann.id} className="glass-panel rounded-2xl p-6 flex flex-col space-y-3 hover:bg-theme-border/10 transition-all border border-theme-card-border/50 text-xs">
+            <div
+              key={ann.id}
+              id={`announcement-${ann.id}`}
+              className={`glass-panel rounded-2xl p-6 flex flex-col space-y-3 hover:bg-theme-border/10 transition-all border text-xs ${
+                ann.id === highlightId ? 'border-accent ring-2 ring-accent/50' : 'border-theme-card-border/50'
+              }`}
+            >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex items-center flex-wrap gap-2.5">
                   <h3 className="font-bold text-sm text-theme-text-primary">{ann.title}</h3>

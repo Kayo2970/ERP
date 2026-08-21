@@ -28,7 +28,7 @@ import {
   EventItem,
   Member
 } from '@/lib/local-data';
-import { canViewTaskExtended, canManageTasks, canRequestTaskExtension, isHeadRole } from '@/lib/permissions';
+import { canViewTaskExtended, canManageTasks, canRequestTaskExtension, canDecideTaskExtension, isHeadRole } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -60,6 +60,10 @@ export default function TasksPage() {
   const [assigneeQuery, setAssigneeQuery] = useState('');
   const [isAssigneeDropdownOpen, setIsAssigneeDropdownOpen] = useState(false);
   const assigneeDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Deep link from a notification (?highlight=<taskId>) — scroll to and ring the task once
+  const [highlightTaskId, setHighlightTaskId] = useState<string | null>(null);
+  const [hasScrolledToHighlight, setHasScrolledToHighlight] = useState(false);
 
   useEffect(() => {
     const refreshData = () => {
@@ -102,6 +106,23 @@ export default function TasksPage() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Read the ?highlight=<taskId> query param (set by a notification click) once on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setHighlightTaskId(params.get('highlight'));
+  }, []);
+
+  // Once the highlighted task has actually rendered, scroll to it — retries on every
+  // tasks refresh until found, since it may not exist locally yet on first paint.
+  useEffect(() => {
+    if (!highlightTaskId || hasScrolledToHighlight) return;
+    const el = document.getElementById(`task-${highlightTaskId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHasScrolledToHighlight(true);
+    }
+  }, [tasks, highlightTaskId, hasScrolledToHighlight]);
 
   const triggerSuccess = (msg: string) => {
     setSuccessMsg(msg);
@@ -331,8 +352,8 @@ export default function TasksPage() {
         </div>
       )}
 
-      {/* Pending Extension Review Queue (Leadership Only) */}
-      {user && user.tier <= 3 && tasks.filter(t => t.status === 'Pending Extension').length > 0 && (
+      {/* Pending Extension Review Queue (Leadership or Faculty) */}
+      {canDecideTaskExtension(user) && tasks.filter(t => t.status === 'Pending Extension').length > 0 && (
         <div className="glass-panel rounded-2xl p-5 border border-danger/30 bg-danger/5 space-y-3">
           <div className="flex items-center gap-2">
             <Clock className="h-4.5 w-4.5 text-danger" />
@@ -383,7 +404,13 @@ export default function TasksPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {displayedTasks.map((task) => (
-            <div key={task.id} className="glass-panel rounded-2xl p-6 flex flex-col justify-between hover:bg-theme-border/10 transition-all border border-theme-card-border/50 space-y-4">
+            <div
+              key={task.id}
+              id={`task-${task.id}`}
+              className={`glass-panel rounded-2xl p-6 flex flex-col justify-between hover:bg-theme-border/10 transition-all border space-y-4 ${
+                task.id === highlightTaskId ? 'border-accent ring-2 ring-accent/50' : 'border-theme-card-border/50'
+              }`}
+            >
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full capitalize ${getStatusBadge(task.status)}`}>
