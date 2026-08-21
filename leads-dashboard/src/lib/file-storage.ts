@@ -23,9 +23,15 @@ function sanitizeFileName(name: string): string {
   return (cleaned || 'file').slice(0, 120);
 }
 
-/** Parse a `data:<mime>;base64,<data>` URL into its MIME type and raw buffer. */
+/**
+ * Parse a `data:<mime>;base64,<data>` URL into its MIME type and raw buffer.
+ * The mime segment is matched as zero-or-more chars (not one-or-more) — a
+ * browser that can't sniff a file's type can produce `data:;base64,...`
+ * with nothing before the semicolon, which used to fail this parse outright
+ * and silently drop the whole upload.
+ */
 function parseDataUrl(dataUrl: string): { mime: string; buffer: Buffer } {
-  const match = /^data:([^;]+);base64,([\s\S]*)$/.exec(dataUrl);
+  const match = /^data:([^;]*);base64,([\s\S]*)$/.exec(dataUrl);
   if (!match) throw new Error('Expected a base64 data URL.');
   return { mime: match[1], buffer: Buffer.from(match[2], 'base64') };
 }

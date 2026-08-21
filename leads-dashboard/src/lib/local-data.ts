@@ -1732,7 +1732,19 @@ export function saveDesigns(designs: DesignSubmissionItem[]): void {
   localStorage.setItem('leads_designs', JSON.stringify(designs));
 }
 
-export function addDesign(design: Omit<DesignSubmissionItem, 'id' | 'submittedAt' | 'expiresAt' | 'isExpired'>): DesignSubmissionItem {
+/**
+ * Unlike most mutations in this file, a design submission's server round-trip
+ * is awaited rather than fired-and-forgotten: the uploaded file only actually
+ * exists once the server has converted and saved it, so a silent server-side
+ * failure here (a bad request, the file never arriving, a transient network
+ * blip) previously left the designer looking at what appeared to be a
+ * successful upload in their own browser — the local write always
+ * succeeded — while no file (and no record at all) ever reached the server
+ * or any other user's view. On failure, the optimistic local write is rolled
+ * back and an error is thrown so the caller can show it and let the designer
+ * retry, instead of a submission that silently goes nowhere.
+ */
+export async function addDesign(design: Omit<DesignSubmissionItem, 'id' | 'submittedAt' | 'expiresAt' | 'isExpired'>): Promise<DesignSubmissionItem> {
   if (design.fileSize > 25 * 1024 * 1024) {
     throw new Error('File size exceeds the 25 MB limit.');
   }
@@ -1757,11 +1769,16 @@ export function addDesign(design: Omit<DesignSubmissionItem, 'id' | 'submittedAt
 
   current.unshift(newDesign);
   saveDesigns(current);
-  serverPost('/api/designs', newDesign);
-  
+
+  const serverResult = await serverPost('/api/designs', newDesign);
+  if (!serverResult) {
+    saveDesigns(getDesigns().filter(d => d.id !== newDesign.id));
+    throw new Error('The design failed to upload to the server. Please check your connection and try again.');
+  }
+
   const proofreadMsg = design.proofreadRequested ? ` (Requested proofread from ${design.assignedProofreaderName})` : '';
   logAuditEvent('DESIGN_SUBMITTED', design.designerName, `Submitted design "${design.title}" (${(design.fileSize / (1024 * 1024)).toFixed(2)} MB)${proofreadMsg}`, design.designerEmail);
-  
+
   return newDesign;
 }
 
@@ -1866,16 +1883,19 @@ export function updateDesignStyleReview(
  * Replace the uploaded asset on an existing design submission — e.g. after
  * "Changes Requested" — without creating a new record. Resets any prior
  * proofread/style decision back to pending, since the reviewed file no
- * longer exists.
+ * longer exists. The server round-trip is awaited (see addDesign for why) —
+ * a failed upload rolls the local record back to the file it had before,
+ * rather than leaving the UI showing a "replaced" file that never actually
+ * reached the server.
  */
-export function updateDesignFile(
+export async function updateDesignFile(
   id: string,
   fileData: string,
   fileName: string,
   fileSize: number,
   fileType: string,
   actorName: string
-): DesignSubmissionItem | null {
+): Promise<DesignSubmissionItem | null> {
   if (fileSize > 25 * 1024 * 1024) {
     throw new Error('File size exceeds the 25 MB limit.');
   }
@@ -1898,7 +1918,18 @@ export function updateDesignFile(
 
   current[idx] = updated;
   saveDesigns(current);
-  serverPatch('/api/designs', id, updated);
+
+  const serverResult = await serverPatch('/api/designs', id, updated);
+  if (!serverResult) {
+    const rolledBack = getDesigns();
+    const rbIdx = rolledBack.findIndex(d => d.id === id);
+    if (rbIdx !== -1) {
+      rolledBack[rbIdx] = item;
+      saveDesigns(rolledBack);
+    }
+    throw new Error('The replacement file failed to upload to the server. Please check your connection and try again.');
+  }
+
   logAuditEvent('DESIGN_FILE_REPLACED', actorName, `Replaced the uploaded file for design "${item.title}"`);
 
   return updated;
