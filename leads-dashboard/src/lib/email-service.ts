@@ -301,6 +301,43 @@ export function generateOtpEmailTemplate(name: string, otp: string): { subject: 
 }
 
 /**
+ * Template Generator: Email Change Confirmation OTP.
+ * Sent to the OLD address as a security check, never the new one — the
+ * recipient must already control the account's current inbox to approve
+ * a change away from it.
+ */
+export function generateEmailChangeOtpTemplate(name: string, otp: string, newEmail: string): { subject: string; bodyText: string; bodyHtml: string } {
+  const subject = `Your LEADS Dashboard Email Change Code: ${otp}`;
+  const bodyText = `Hello ${name},\n\n` +
+    `Someone requested to change the login email on your LEADS Next Gen Dashboard account from this address to: ${newEmail}\n\n` +
+    `Your One-Time Password (OTP) code is: ${otp}\n\n` +
+    `This code is strictly valid for 5 minutes. If you did not request this change, do NOT share this code — ignore this email or notify your system administrator immediately, and your login email will remain unchanged.\n\n` +
+    `Regards,\nLEADS Next Gen Centre, MSRUAS`;
+
+  const bodyHtml = wrapInMasterEmailTemplate({
+    headerTitle: `Email Change Authorization`,
+    headerSubtitle: `Security Verification Code`,
+    badgeText: `🔒 5-Minute OTP Code`,
+    badgeColor: `#f43f5e`,
+    bodyContentHtml: `
+      <p style="margin-top: 0; color: #f8fafc; font-size: 14px;">Hello <strong>${name}</strong>,</p>
+      <p style="color: #cbd5e1; font-size: 14px; line-height: 1.6;">A request was made to change the login email on your LEADS account to <strong style="color: #f8fafc;">${newEmail}</strong>. Use the 6-digit verification code below to authorize this change:</p>
+
+      <div style="text-align: center; margin: 28px 0;">
+        <span style="font-family: monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #38bdf8; background: rgba(56, 189, 248, 0.1); border: 1px dashed rgba(56, 189, 248, 0.4); padding: 14px 28px; border-radius: 12px; display: inline-block;">
+          ${otp}
+        </span>
+        <p style="color: #f43f5e; font-size: 12px; margin-top: 12px; font-weight: 700;">⏱️ Valid for 5 minutes only</p>
+      </div>
+
+      <p style="color: #94a3b8; font-size: 12px; line-height: 1.5; margin-bottom: 0;">If you did not request this, do not share this code with anyone — ignore this message and your login email will remain unchanged.</p>
+    `
+  });
+
+  return { subject, bodyText, bodyHtml };
+}
+
+/**
  * Template Generator: Announcement Alert
  */
 export function generateAnnouncementEmailTemplate(memberName: string, title: string, content: string, author: string): { subject: string; bodyText: string; bodyHtml: string } {

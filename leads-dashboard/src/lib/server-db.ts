@@ -53,6 +53,7 @@ export interface DbSchema {
   auditLogs: any[];
   emails: any[];
   passwordResets: any[];
+  emailChanges: any[];
   emailSettings: any[];
   lastUpdated?: string;
 }
@@ -72,6 +73,7 @@ const EMPTY_DB: DbSchema = {
   auditLogs: [],
   emails: [],
   passwordResets: [],
+  emailChanges: [],
   emailSettings: [],
 };
 
@@ -90,6 +92,7 @@ const SEED_DB: DbSchema = {
   auditLogs: [],
   emails: [],
   passwordResets: [],
+  emailChanges: [],
   emailSettings: [
     {
       id: 'default',
@@ -218,6 +221,45 @@ function ensureFilesMigrated(): Promise<void> {
   return fileMigrationPromise;
 }
 
+/**
+ * One-off correction: an instance already running before local-data.ts's
+ * seed was corrected may still have Dr. Subhadeep Mukherjee's old email
+ * baked into its members.json — the seed only applies on first boot, and
+ * an already-existing collection file is never overwritten. Runs once per
+ * boot, only touches the record if the stale address is still present, and
+ * is a permanent no-op afterward.
+ */
+let subhadeepEmailFixPromise: Promise<void> | null = null;
+function ensureSubhadeepEmailFixed(): Promise<void> {
+  if (!subhadeepEmailFixPromise) {
+    subhadeepEmailFixPromise = (async () => {
+      const STALE_EMAIL = 'subhadeep.mukherjee@msruas.ac.in';
+      const CORRECT_EMAIL = 'subhadeepmukherjee.ms.mc@msruas.ac.in';
+      try {
+        const raw = await fs.readFile(collectionPath('members'), 'utf-8');
+        const members = JSON.parse(raw);
+        if (!Array.isArray(members)) return;
+        let changed = false;
+        const updated = members.map((m: any) => {
+          if (m?.email?.toLowerCase() === STALE_EMAIL) {
+            changed = true;
+            return { ...m, email: CORRECT_EMAIL };
+          }
+          return m;
+        });
+        if (changed) {
+          await fs.writeFile(collectionPath('members'), JSON.stringify(updated, null, 2), 'utf-8');
+        }
+      } catch (err: any) {
+        if (err?.code !== 'ENOENT') {
+          console.error('[server-db] Subhadeep email correction check failed:', err);
+        }
+      }
+    })();
+  }
+  return subhadeepEmailFixPromise;
+}
+
 async function migrateDesignFilesToDisk(): Promise<void> {
   let designs: any[];
   try {
@@ -288,6 +330,7 @@ async function migrateReimbursementFilesToDisk(): Promise<void> {
 async function readCollectionFile<T = any>(key: keyof DbSchema): Promise<T[]> {
   await ensureMigrated();
   await ensureFilesMigrated();
+  await ensureSubhadeepEmailFixed();
   try {
     const raw = await fs.readFile(collectionPath(key), 'utf-8');
     const parsed = JSON.parse(raw);

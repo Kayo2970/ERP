@@ -291,7 +291,7 @@ const DEFAULT_PASSWORD_HASH = '039e521fbfd304a0a97bf0ad345fa30c:fabe61e51b967035
 // Real organization roster matching the leadership website and division structure
 const initialMembersRaw: Member[] = [
   { id: 'm1', name: 'Kayomarz Pavri', email: 'kayo2970@gmail.com', role: 'Super User', tier: 1, division: 'Core Committee', department: 'Design and Social Media' },
-  { id: 'm2', name: 'Dr. Subhadeep Mukherjee', email: 'subhadeep.mukherjee@msruas.ac.in', role: 'Centre Head', tier: 2, division: 'Advisory Board', department: 'Faculty Oversight' },
+  { id: 'm2', name: 'Dr. Subhadeep Mukherjee', email: 'subhadeepmukherjee.ms.mc@msruas.ac.in', role: 'Centre Head', tier: 2, division: 'Advisory Board', department: 'Faculty Oversight' },
   { id: 'm3', name: 'Dr. Kiran Kumar B M', email: 'kiran.kumar@msruas.ac.in', role: 'Head of Events', tier: 3, division: 'Advisory Board', department: 'Faculty Oversight' },
   { id: 'm4', name: 'Dr. K. M. Sharath Kumar', email: 'sharath.kumar@msruas.ac.in', role: 'Advisory Board Member', tier: 4, division: 'Advisory Board', department: 'Faculty Advisory' },
   { id: 'm5', name: 'Gurutejas C', email: 'gurutejas.c@msruas.ac.in', role: 'Past President & Executive Lead', tier: 5, division: 'Core Committee', department: 'Executive Council' },
@@ -1735,6 +1735,52 @@ export async function submitPasswordReset(email: string, otp: string, newPasswor
     return { success: true, message: data.message };
   } catch (err: any) {
     return { success: false, error: err.message || 'Network error submitting password reset.' };
+  }
+}
+
+/**
+ * Client Helper: Request a 5-minute OTP to authorize changing the account's
+ * login email. The code is sent to the CURRENT (old) email, not the new one.
+ */
+export async function requestEmailChange(memberId: string, currentEmail: string, newEmail: string): Promise<{ success: boolean; message?: string; error?: string; expiresAt?: number }> {
+  try {
+    const res = await fetch('/api/auth/request-email-change', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ memberId, currentEmail, newEmail }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Failed to send verification code.' };
+    }
+    return { success: true, message: data.message, expiresAt: data.expiresAt };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Network error requesting email change.' };
+  }
+}
+
+/**
+ * Client Helper: Submit the OTP sent to the old email and apply the new one.
+ */
+export async function confirmEmailChange(memberId: string, otp: string): Promise<{ success: boolean; message?: string; error?: string; newEmail?: string }> {
+  try {
+    const res = await fetch('/api/auth/confirm-email-change', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ memberId, otp }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Failed to confirm email change.' };
+    }
+
+    // Pull the freshly-updated record back from the server rather than mirroring
+    // the change into the local cache ourselves.
+    await syncWithServer();
+
+    return { success: true, message: data.message, newEmail: data.newEmail };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Network error confirming email change.' };
   }
 }
 

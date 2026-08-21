@@ -18,7 +18,7 @@ import {
   RefreshCw,
   FileText
 } from 'lucide-react';
-import { getAuditLogs, getMembers, updateMember, AuditLogItem, getEmailLogs } from '@/lib/local-data';
+import { getAuditLogs, getMembers, updateMember, AuditLogItem, getEmailLogs, requestEmailChange, confirmEmailChange } from '@/lib/local-data';
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<'account' | 'reimbursement' | 'roles' | 'audit' | 'emails'>('account');
@@ -39,6 +39,18 @@ export default function SettingsPage() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  // Change Email state (self-service, OTP sent to the OLD email)
+  const [isChangingEmail, setIsChangingEmail] = useState(false);
+  const [emailStep, setEmailStep] = useState<'REQUEST' | 'VERIFY'>('REQUEST');
+  const [newEmailInput, setNewEmailInput] = useState('');
+  const [emailOtp, setEmailOtp] = useState('');
+  const [emailExpiresAt, setEmailExpiresAt] = useState<number | null>(null);
+  const [emailTimeLeftStr, setEmailTimeLeftStr] = useState('05:00');
+  const [isSendingEmailOtp, setIsSendingEmailOtp] = useState(false);
+  const [isConfirmingEmailOtp, setIsConfirmingEmailOtp] = useState(false);
+  const [emailChangeMsg, setEmailChangeMsg] = useState('');
+  const [emailChangeErr, setEmailChangeErr] = useState('');
 
   // Reimbursement Settlement Coordinates
   const [savedBankName, setSavedBankName] = useState('');
@@ -74,6 +86,85 @@ export default function SettingsPage() {
   const fetchEmails = async () => {
     const logs = await getEmailLogs();
     setEmailLogs(logs);
+  };
+
+  // 5-minute countdown timer for the email-change OTP
+  useEffect(() => {
+    if (!emailExpiresAt || emailStep !== 'VERIFY') return;
+
+    const interval = setInterval(() => {
+      const remainingMs = emailExpiresAt - Date.now();
+      if (remainingMs <= 0) {
+        setEmailTimeLeftStr('00:00');
+        setEmailChangeErr('The 5-minute verification code has expired. Please request a new one.');
+        clearInterval(interval);
+      } else {
+        const totalSec = Math.floor(remainingMs / 1000);
+        const mins = Math.floor(totalSec / 60);
+        const secs = totalSec % 60;
+        setEmailTimeLeftStr(`${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [emailExpiresAt, emailStep]);
+
+  const resetEmailChangeFlow = () => {
+    setIsChangingEmail(false);
+    setEmailStep('REQUEST');
+    setNewEmailInput('');
+    setEmailOtp('');
+    setEmailExpiresAt(null);
+    setEmailTimeLeftStr('05:00');
+    setEmailChangeMsg('');
+    setEmailChangeErr('');
+  };
+
+  const handleRequestEmailChange = async () => {
+    setEmailChangeErr('');
+    setEmailChangeMsg('');
+    if (!newEmailInput.trim()) {
+      setEmailChangeErr('Enter the new email address.');
+      return;
+    }
+
+    setIsSendingEmailOtp(true);
+    const res = await requestEmailChange(user.id, user.email, newEmailInput.trim());
+    setIsSendingEmailOtp(false);
+
+    if (!res.success) {
+      setEmailChangeErr(res.error || 'Failed to send verification code.');
+      return;
+    }
+
+    setEmailChangeMsg(res.message || `Verification code sent to ${user.email}.`);
+    if (res.expiresAt) setEmailExpiresAt(res.expiresAt);
+    setEmailStep('VERIFY');
+  };
+
+  const handleConfirmEmailChange = async () => {
+    setEmailChangeErr('');
+    if (!emailOtp.trim()) {
+      setEmailChangeErr('Enter the 6-digit verification code.');
+      return;
+    }
+
+    setIsConfirmingEmailOtp(true);
+    const res = await confirmEmailChange(user.id, emailOtp.trim());
+    setIsConfirmingEmailOtp(false);
+
+    if (!res.success) {
+      setEmailChangeErr(res.error || 'Failed to confirm email change.');
+      return;
+    }
+
+    const updatedUser = { ...user, email: res.newEmail };
+    setUser(updatedUser);
+    localStorage.setItem('user', JSON.stringify(updatedUser));
+    setAuditLogs(getAuditLogs());
+
+    resetEmailChangeFlow();
+    triggerSuccess(res.message || 'Email address updated successfully.');
   };
 
   const triggerSuccess = (msg: string) => {
@@ -311,7 +402,18 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Email Address (Read-only)</label>
+                  <div className="flex items-center justify-between">
+                    <label className="block font-medium text-theme-text-secondary">Email Address</label>
+                    {!isChangingEmail && (
+                      <button
+                        type="button"
+                        onClick={() => { setIsChangingEmail(true); setNewEmailInput(''); setEmailStep('REQUEST'); setEmailChangeMsg(''); setEmailChangeErr(''); }}
+                        className="text-[11px] font-semibold text-accent hover:underline cursor-pointer"
+                      >
+                        Change Email
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="email"
                     disabled
@@ -320,6 +422,97 @@ export default function SettingsPage() {
                   />
                 </div>
               </div>
+
+              {isChangingEmail && (
+                <div className="p-4 bg-theme-background/30 border border-theme-border/30 rounded-xl space-y-3">
+                  <h4 className="font-bold text-xs text-theme-text-primary uppercase tracking-wider flex items-center gap-1.5">
+                    <Mail className="h-4 w-4 text-accent" />
+                    Change Login Email
+                  </h4>
+                  <p className="text-[11px] text-theme-text-secondary leading-relaxed">
+                    A verification code will be sent to your <strong>current</strong> email ({user?.email}) to confirm this change — not the new address. This proves you still control the account you're changing.
+                  </p>
+
+                  {emailChangeErr && (
+                    <p className="text-[11px] text-danger bg-danger/10 border border-danger/20 rounded-lg px-3 py-2">{emailChangeErr}</p>
+                  )}
+                  {emailChangeMsg && (
+                    <p className="text-[11px] text-success bg-success/10 border border-success/20 rounded-lg px-3 py-2">{emailChangeMsg}</p>
+                  )}
+
+                  {emailStep === 'REQUEST' ? (
+                    <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end">
+                      <div className="flex-1 space-y-1.5">
+                        <label className="block font-medium text-theme-text-secondary">New Email Address</label>
+                        <input
+                          type="email"
+                          value={newEmailInput}
+                          onChange={(e) => setNewEmailInput(e.target.value)}
+                          placeholder="you@msruas.ac.in"
+                          className="w-full px-4 py-2.5 bg-theme-background/50 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={isSendingEmailOtp}
+                          onClick={handleRequestEmailChange}
+                          className="px-4 py-2.5 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1.5 whitespace-nowrap"
+                        >
+                          <Send className="h-3.5 w-3.5" />
+                          {isSendingEmailOtp ? 'Sending...' : 'Send Code'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={resetEmailChangeFlow}
+                          className="px-3 py-2.5 bg-theme-background/40 hover:bg-theme-border/30 text-theme-text-secondary font-semibold rounded-xl transition-all cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between text-[11px] text-theme-text-secondary">
+                        <span>Enter the code sent to <strong className="text-theme-text-primary">{user?.email}</strong></span>
+                        <span className="font-mono font-bold text-accent">{emailTimeLeftStr}</span>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end">
+                        <div className="flex-1 space-y-1.5">
+                          <label className="block font-medium text-theme-text-secondary">Verification Code</label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={6}
+                            value={emailOtp}
+                            onChange={(e) => setEmailOtp(e.target.value.replace(/\D/g, ''))}
+                            placeholder="6-digit code"
+                            className="w-full px-4 py-2.5 bg-theme-background/50 border border-theme-card-border rounded-xl text-theme-text-primary text-center font-mono text-base tracking-[0.3em] focus:outline-none focus:border-accent"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            disabled={isConfirmingEmailOtp}
+                            onClick={handleConfirmEmailChange}
+                            className="px-4 py-2.5 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1.5 whitespace-nowrap"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            {isConfirmingEmailOtp ? 'Confirming...' : 'Confirm'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={resetEmailChangeFlow}
+                            className="px-3 py-2.5 bg-theme-background/40 hover:bg-theme-border/30 text-theme-text-secondary font-semibold rounded-xl transition-all cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-theme-border/20">
                 <div className="space-y-1.5">
