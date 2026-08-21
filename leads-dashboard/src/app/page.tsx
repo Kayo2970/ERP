@@ -197,11 +197,11 @@ export default function LoginPage() {
             />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-theme-text-primary">
-              LEADS All-in-One Dashboard
+            <h1 className="text-xl font-extrabold tracking-wider uppercase text-theme-text-primary">
+              LEADS NEXT GEN CENTRE
             </h1>
-            <p className="text-xs text-theme-text-secondary mt-1">
-              Sign in with your MSRUAS email to continue
+            <p className="text-xs text-theme-text-secondary mt-1 font-medium">
+              Sign in with your MSRUAS email to access the operational portal
             </p>
           </div>
         </Link>

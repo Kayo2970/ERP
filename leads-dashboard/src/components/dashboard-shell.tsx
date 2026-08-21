@@ -315,7 +315,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             />
           </div>
           <div>
-            <h1 className="font-semibold text-theme-text-primary text-sm tracking-wide">LEADS Next Gen</h1>
+            <h1 className="font-bold text-theme-text-primary text-xs tracking-wider uppercase">LEADS NEXT GEN CENTRE</h1>
             <p className="text-[10px] text-theme-text-secondary font-medium tracking-wider uppercase">MSRUAS Portal</p>
           </div>
         </Link>
@@ -387,7 +387,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
               className="h-full w-full object-contain"
             />
           </div>
-          <span className="font-semibold text-sm text-theme-text-primary">LEADS Next Gen</span>
+          <span className="font-bold text-xs tracking-wider uppercase text-theme-text-primary">LEADS NEXT GEN CENTRE</span>
         </Link>
 
         <div className="flex items-center gap-2">
