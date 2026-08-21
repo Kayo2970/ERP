@@ -26,6 +26,13 @@ export async function POST(request: Request) {
       );
     }
 
+    if (matchedUser.status === 'Terminated') {
+      return NextResponse.json(
+        { error: 'This account has been deactivated. Contact your Centre Head if you believe this is a mistake.' },
+        { status: 403 }
+      );
+    }
+
     if (!verifyPassword(password, matchedUser.passwordHash)) {
       return NextResponse.json(
         { error: "Incorrect password. If you forgot your password, click 'Forgot Password?' below." },

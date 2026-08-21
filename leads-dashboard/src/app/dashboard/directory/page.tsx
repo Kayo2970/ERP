@@ -24,7 +24,9 @@ import {
   Square,
   MinusSquare,
   Layers,
-  BookOpen
+  BookOpen,
+  UserX,
+  ShieldOff
 } from 'lucide-react';
 import {
   getMembers,
@@ -34,12 +36,14 @@ import {
   bulkUpdateMembers,
   bulkDeleteMembers,
   logAuditEvent,
+  terminateMember,
+  reactivateMember,
   Member,
   MemberDivision
 } from '@/lib/local-data';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { StudentProfileModal } from '@/components/student-profile-modal';
-import { canViewFullDirectory, canEditDirectory } from '@/lib/permissions';
+import { canViewFullDirectory, canEditDirectory, isCentreHead } from '@/lib/permissions';
 
 export default function DirectoryPage() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -49,6 +53,8 @@ export default function DirectoryPage() {
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deletingMember, setDeletingMember] = useState<Member | null>(null);
+  const [terminatingMember, setTerminatingMember] = useState<Member | null>(null);
+  const [reactivatingMember, setReactivatingMember] = useState<Member | null>(null);
   const [selectedStudentForProfile, setSelectedStudentForProfile] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -393,6 +399,32 @@ export default function DirectoryPage() {
     }
   };
 
+  const handleConfirmTerminate = () => {
+    if (!terminatingMember) return;
+    try {
+      terminateMember(terminatingMember.id, user?.name || 'Centre Head');
+      setMembers(getMembers());
+      triggerSuccess(`${terminatingMember.name} has been terminated and can no longer access the dashboard.`);
+    } catch (err: any) {
+      triggerError(err.message || 'Failed to terminate member.');
+    } finally {
+      setTerminatingMember(null);
+    }
+  };
+
+  const handleConfirmReactivate = () => {
+    if (!reactivatingMember) return;
+    try {
+      reactivateMember(reactivatingMember.id, user?.name || 'Centre Head');
+      setMembers(getMembers());
+      triggerSuccess(`${reactivatingMember.name}'s dashboard access has been restored.`);
+    } catch (err: any) {
+      triggerError(err.message || 'Failed to reactivate member.');
+    } finally {
+      setReactivatingMember(null);
+    }
+  };
+
   const toggleSort = (field: keyof Member) => {
     if (sortField === field) {
       setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
@@ -408,7 +440,11 @@ export default function DirectoryPage() {
   // Filter members list based on division tab and search query
   const filteredMembers = members
     .filter(m => {
-      if (selectedDivision !== 'ALL' && m.division !== selectedDivision) return false;
+      if (selectedDivision === 'TERMINATED') {
+        if (m.status !== 'Terminated') return false;
+      } else if (selectedDivision !== 'ALL' && m.division !== selectedDivision) {
+        return false;
+      }
       const q = searchQuery.toLowerCase();
       const nameMatch = (m.name || '').toLowerCase().includes(q);
       const emailMatch = (m.email || '').toLowerCase().includes(q);
@@ -432,6 +468,7 @@ export default function DirectoryPage() {
   const trainingCount = members.filter(m => m.division === 'Training Associate').length;
   const alumniCount = members.filter(m => m.division === 'Alumni').length;
   const facultyCount = members.filter(m => m.division === 'Faculty').length;
+  const terminatedCount = members.filter(m => m.status === 'Terminated').length;
 
   const totalPages = Math.ceil(filteredMembers.length / pageSize) || 1;
   const paginatedMembers = filteredMembers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -708,6 +745,20 @@ export default function DirectoryPage() {
           <GraduationCap className="h-3.5 w-3.5 text-purple-400" />
           Alumni Mentors ({alumniCount})
         </button>
+
+        {terminatedCount > 0 && (
+          <button
+            onClick={() => { setSelectedDivision('TERMINATED'); setCurrentPage(1); }}
+            className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+              selectedDivision === 'TERMINATED'
+                ? 'bg-accent text-white shadow-sm'
+                : 'bg-theme-border/20 text-theme-text-secondary hover:text-theme-text-primary'
+            }`}
+          >
+            <ShieldOff className="h-3.5 w-3.5 text-danger" />
+            Terminated ({terminatedCount})
+          </button>
+        )}
       </div>
 
       {/* Filter Bar & Search */}
@@ -854,7 +905,17 @@ export default function DirectoryPage() {
                           </span>
                         </div>
                         <div>
-                          <span>{member.name}</span>
+                          <span className="flex items-center gap-1.5">
+                            {member.name}
+                            {member.status === 'Terminated' && (
+                              <span
+                                className="inline-flex items-center text-[9px] font-semibold px-1.5 py-0.5 rounded-full border bg-danger/15 text-danger border-danger/30"
+                                title={member.terminatedAt ? `Terminated ${new Date(member.terminatedAt).toLocaleDateString()}${member.terminatedBy ? ` by ${member.terminatedBy}` : ''}` : 'Terminated'}
+                              >
+                                Terminated
+                              </span>
+                            )}
+                          </span>
                           {member.batch && (
                             <span className="block text-[10px] text-theme-text-secondary font-normal">{member.batch}</span>
                           )}
@@ -906,6 +967,26 @@ export default function DirectoryPage() {
                                 </button>
                               )}
                             </>
+                          )}
+
+                          {isCentreHead(user) && member.id !== 'm1' && (
+                            member.status === 'Terminated' ? (
+                              <button
+                                onClick={() => setReactivatingMember(member)}
+                                className="p-1.5 text-success hover:bg-success/10 rounded-lg transition-all cursor-pointer"
+                                title="Reactivate Member"
+                              >
+                                <UserCheck className="h-3.5 w-3.5" />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => setTerminatingMember(member)}
+                                className="p-1.5 text-danger hover:bg-danger/10 rounded-lg transition-all cursor-pointer"
+                                title="Terminate Member (revoke dashboard access)"
+                              >
+                                <UserX className="h-3.5 w-3.5" />
+                              </button>
+                            )
                           )}
                         </div>
                       </td>
@@ -1200,6 +1281,28 @@ export default function DirectoryPage() {
         variant="danger"
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeletingMember(null)}
+      />
+
+      {/* Terminate Member Confirmation Modal */}
+      <ConfirmModal
+        isOpen={Boolean(terminatingMember)}
+        title="Terminate Member Access"
+        message={`${terminatingMember?.name} (${terminatingMember?.email}) will immediately lose access to the dashboard and will not be able to log in. Their existing tasks, ratings, and other records will remain in the system unchanged. You can restore their access at any time.`}
+        confirmLabel="Terminate Access"
+        variant="danger"
+        onConfirm={handleConfirmTerminate}
+        onCancel={() => setTerminatingMember(null)}
+      />
+
+      {/* Reactivate Member Confirmation Modal */}
+      <ConfirmModal
+        isOpen={Boolean(reactivatingMember)}
+        title="Reactivate Member Access"
+        message={`${reactivatingMember?.name} (${reactivatingMember?.email}) will be able to log in to the dashboard again immediately.`}
+        confirmLabel="Reactivate Access"
+        variant="primary"
+        onConfirm={handleConfirmReactivate}
+        onCancel={() => setReactivatingMember(null)}
       />
 
       {/* Bulk Delete Confirmation Modal */}
