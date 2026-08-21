@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   User,
   ShieldCheck,
@@ -16,9 +16,12 @@ import {
   Send,
   Eye,
   RefreshCw,
-  FileText
+  FileText,
+  Camera
 } from 'lucide-react';
-import { getAuditLogs, getMembers, updateMember, AuditLogItem, getEmailLogs, requestEmailChange, confirmEmailChange } from '@/lib/local-data';
+import { getAuditLogs, getMembers, saveMembers, updateMember, logAuditEvent, AuditLogItem, getEmailLogs, requestEmailChange, confirmEmailChange } from '@/lib/local-data';
+
+const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<'account' | 'reimbursement' | 'roles' | 'audit' | 'emails'>('account');
@@ -39,6 +42,11 @@ export default function SettingsPage() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  // Profile photo upload
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [avatarError, setAvatarError] = useState('');
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   // Change Email state (self-service, OTP sent to the OLD email)
   const [isChangingEmail, setIsChangingEmail] = useState(false);
@@ -177,6 +185,58 @@ export default function SettingsPage() {
     setErrorMsg(msg);
     setSuccessMsg('');
     setTimeout(() => setErrorMsg(''), 4000);
+  };
+
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !user) return;
+
+    setAvatarError('');
+    if (file.size > MAX_AVATAR_SIZE_BYTES) {
+      setAvatarError(`Image size (${(file.size / (1024 * 1024)).toFixed(2)} MB) exceeds the 2 MB maximum limit.`);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result;
+      if (typeof dataUrl !== 'string') return;
+
+      setIsUploadingAvatar(true);
+      try {
+        const res = await fetch(`/api/members/${user.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ avatarData: dataUrl, avatarFileName: file.name }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setAvatarError(data.error || 'Failed to upload profile photo.');
+          return;
+        }
+
+        // The session's `user` object (read by the dashboard header/sidebar)
+        // is separate from the members collection, so both need updating —
+        // the collection mirror won't itself propagate into the active session.
+        const members = getMembers();
+        const idx = members.findIndex(m => m.id === user.id);
+        if (idx !== -1) {
+          members[idx] = { ...members[idx], avatarUrl: data.avatarUrl, avatarStorageKey: data.avatarStorageKey };
+          saveMembers(members);
+        }
+        const updatedUser = { ...user, avatarUrl: data.avatarUrl };
+        setUser(updatedUser);
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        logAuditEvent('MEMBER_UPDATED', user.name, 'Updated profile photo', user.email);
+        triggerSuccess('Profile photo updated successfully.');
+      } catch {
+        setAvatarError('Network error while uploading. Please try again.');
+      } finally {
+        setIsUploadingAvatar(false);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleUpdateAccount = async (e: React.FormEvent) => {
@@ -389,6 +449,38 @@ export default function SettingsPage() {
             </div>
 
             <form onSubmit={handleUpdateAccount} className="space-y-4 text-xs">
+              <div className="flex items-center gap-4 pb-2">
+                <div className="h-16 w-16 shrink-0 rounded-2xl bg-accent flex items-center justify-center shadow-md shadow-accent/20 overflow-hidden">
+                  {user?.avatarUrl ? (
+                    <img src={user.avatarUrl} alt={user.name} className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="text-white font-bold text-base">
+                      {(user?.name || '').split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => avatarInputRef.current?.click()}
+                    disabled={isUploadingAvatar}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary font-semibold rounded-xl transition-all cursor-pointer border border-theme-border/40 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Camera className="h-3.5 w-3.5" />
+                    {isUploadingAvatar ? 'Uploading...' : 'Upload Profile Photo'}
+                  </button>
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAvatarUpload}
+                    className="hidden"
+                  />
+                  <p className="text-[11px] text-theme-text-secondary">JPG, PNG, or GIF. Max size 2 MB.</p>
+                  {avatarError && <p className="text-[11px] text-danger">{avatarError}</p>}
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="block font-medium text-theme-text-secondary">Full Name</label>

@@ -126,13 +126,19 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const [originalUser, setOriginalUser] = useState<any>(null);
   const quickSwitchRef = useRef<HTMLDivElement>(null);
 
+  // Header user-menu dropdown (Settings / Sign Out), opened by clicking the
+  // name/avatar in the desktop navbar.
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
   const [user, setUser] = useState({
     name: 'Kayomarz Pavri',
     email: 'kayo2970@gmail.com',
     role: 'Super User',
     tier: 1,
     division: 'Core Committee',
-    committee: 'All Committees'
+    committee: 'All Committees',
+    avatarUrl: undefined as string | undefined,
   });
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [lockdownEnabled, setLockdownEnabled] = useState(false);
@@ -269,6 +275,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       }
       if (quickSwitchRef.current && !quickSwitchRef.current.contains(target)) {
         setIsQuickSwitchOpen(false);
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(target)) {
+        setIsUserMenuOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -567,8 +576,12 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           {/* User Info & Logout */}
           <div className="p-4 border-t border-theme-border/30 flex flex-col gap-3 shrink-0">
             <div className={`flex items-center gap-3 py-1 ${showSidebarLabels ? 'px-2' : 'justify-center px-0'}`}>
-              <div className="h-9 w-9 bg-accent/15 rounded-xl flex items-center justify-center border border-accent/20 shrink-0">
-                <User className="h-4.5 w-4.5 text-accent" />
+              <div className="h-9 w-9 bg-accent/15 rounded-xl flex items-center justify-center border border-accent/20 shrink-0 overflow-hidden">
+                {user.avatarUrl ? (
+                  <img src={user.avatarUrl} alt={user.name} className="h-full w-full object-cover" />
+                ) : (
+                  <User className="h-4.5 w-4.5 text-accent" />
+                )}
               </div>
               {showSidebarLabels && (
                 <div className="overflow-hidden">
@@ -670,8 +683,12 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             
             <div className="border-t border-theme-border/30 pt-3 flex flex-col gap-2">
               <div className="flex items-center gap-3 px-2">
-                <div className="h-9 w-9 bg-accent/15 rounded-xl flex items-center justify-center border border-accent/20">
-                  <User className="h-4.5 w-4.5 text-accent" />
+                <div className="h-9 w-9 bg-accent/15 rounded-xl flex items-center justify-center border border-accent/20 overflow-hidden">
+                  {user.avatarUrl ? (
+                    <img src={user.avatarUrl} alt={user.name} className="h-full w-full object-cover" />
+                  ) : (
+                    <User className="h-4.5 w-4.5 text-accent" />
+                  )}
                 </div>
                 <div>
                   <h4 className="font-semibold text-xs text-theme-text-primary">{user.name}</h4>
@@ -784,17 +801,46 @@ export default function DashboardShell({ children }: { children: React.ReactNode
               </div>
             )}
 
-            {/* Active User info */}
-            <div className="flex items-center gap-3 shrink-0 min-w-0">
-              <div className="text-right min-w-0 max-w-[110px] lg:max-w-[180px]">
-                <h4 className="font-bold text-xs text-theme-text-primary truncate" title={user.name}>{user.name}</h4>
-                <p className="text-[10px] text-theme-text-secondary font-medium tracking-wide truncate" title={user.role}>{user.role}</p>
-              </div>
-              <div className="h-8.5 w-8.5 shrink-0 bg-accent rounded-xl flex items-center justify-center shadow-md shadow-accent/20">
-                <span className="text-white font-bold text-xs">
-                  {user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                </span>
-              </div>
+            {/* Active User info — click to open the Settings / Sign Out menu */}
+            <div className="relative shrink-0" ref={userMenuRef}>
+              <button
+                onClick={() => setIsUserMenuOpen(v => !v)}
+                className="flex items-center gap-3 min-w-0 rounded-xl px-1.5 py-1 hover:bg-theme-border/20 transition-all cursor-pointer"
+              >
+                <div className="text-right min-w-0 max-w-[110px] lg:max-w-[180px]">
+                  <h4 className="font-bold text-xs text-theme-text-primary truncate" title={user.name}>{user.name}</h4>
+                  <p className="text-[10px] text-theme-text-secondary font-medium tracking-wide truncate" title={user.role}>{user.role}</p>
+                </div>
+                <div className="h-8.5 w-8.5 shrink-0 bg-accent rounded-xl flex items-center justify-center shadow-md shadow-accent/20 overflow-hidden">
+                  {user.avatarUrl ? (
+                    <img src={user.avatarUrl} alt={user.name} className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="text-white font-bold text-xs">
+                      {user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+              </button>
+
+              {isUserMenuOpen && (
+                <div className="absolute right-0 mt-2 w-48 glass-panel rounded-2xl p-1.5 shadow-2xl border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <Link
+                    href="/dashboard/settings"
+                    onClick={() => setIsUserMenuOpen(false)}
+                    className="flex items-center gap-2.5 w-full px-3 py-2.5 text-xs font-semibold text-theme-text-primary hover:bg-theme-border/20 rounded-xl transition-all cursor-pointer"
+                  >
+                    <Settings className="h-4 w-4 text-theme-text-secondary" />
+                    Settings
+                  </Link>
+                  <button
+                    onClick={() => { setIsUserMenuOpen(false); handleLogout(); }}
+                    className="flex items-center gap-2.5 w-full px-3 py-2.5 text-xs font-semibold text-danger hover:bg-danger/10 rounded-xl transition-all cursor-pointer"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Sign Out
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </header>

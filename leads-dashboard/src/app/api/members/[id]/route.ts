@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection } from '@/lib/server-db';
+import { deleteStoredFile, saveBase64File } from '@/lib/file-storage';
+
+const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
 
 export async function PATCH(
   request: Request,
@@ -8,6 +11,23 @@ export async function PATCH(
   try {
     const { id } = await params;
     const updates = await request.json();
+
+    // Persist a newly uploaded profile photo as a real file on disk under
+    // data/uploads/, same as guests' visiting cards and design submissions —
+    // never keep the raw base64 payload inline in members.json.
+    if (typeof updates.avatarData === 'string' && updates.avatarData.startsWith('data:')) {
+      const approxSize = Math.ceil((updates.avatarData.length * 3) / 4);
+      if (approxSize > MAX_AVATAR_SIZE_BYTES) {
+        return NextResponse.json({ error: 'Profile photo exceeds the 2 MB maximum limit.' }, { status: 400 });
+      }
+      const stored = await saveBase64File('members', id, 0, updates.avatarFileName || 'avatar.jpg', updates.avatarData);
+      updates.avatarUrl = stored.url;
+      updates.avatarStorageKey = stored.storageKey;
+    }
+    delete updates.avatarData;
+    delete updates.avatarFileName;
+
+    let previousStorageKey: string | undefined;
     // Upsert: if this id isn't in the server's collection yet (e.g. client-bundled
     // sample/seed data never POSTed), create it instead of 404ing and silently
     // dropping the edit.
@@ -15,9 +35,17 @@ export async function PATCH(
       const idx = current.findIndex((m: any) => m.id === id);
       if (idx === -1) return [...current, { id, ...updates }];
       const next = [...current];
+      if (updates.avatarStorageKey && next[idx].avatarStorageKey && next[idx].avatarStorageKey !== updates.avatarStorageKey) {
+        previousStorageKey = next[idx].avatarStorageKey;
+      }
       next[idx] = { ...next[idx], ...updates };
       return next;
     });
+
+    if (previousStorageKey) {
+      await deleteStoredFile(previousStorageKey);
+    }
+
     return NextResponse.json(updated.find((m: any) => m.id === id));
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 });
