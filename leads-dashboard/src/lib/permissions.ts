@@ -567,6 +567,11 @@ export function canRequestTaskExtension(task: TaskItem, user: SessionUser): bool
   return false;
 }
 
+/** Task extension approval/rejection: base leadership, or Faculty. */
+export function canDecideTaskExtension(user: SessionUser): boolean {
+  return isBaseLeadership(user) || isFaculty(user);
+}
+
 /**
  * Whether an announcement's target `scope` matches a given viewer — the canonical
  * implementation (and the recipient-set builder it shares logic with) lives in

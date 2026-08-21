@@ -79,6 +79,16 @@ export default function DesignPortalPage() {
   const [replaceFileError, setReplaceFileError] = useState<string>('');
   const [isReplacingFile, setIsReplacingFile] = useState<boolean>(false);
 
+  // Deep link from a notification (?highlight=<designId>) — auto-open its Inspector once
+  const [highlightDesignId, setHighlightDesignId] = useState<string | null>(null);
+  const [hasOpenedHighlight, setHasOpenedHighlight] = useState(false);
+
+  const openInspector = (design: DesignSubmissionItem) => {
+    setSelectedDesign(design);
+    setReviewComments(design.review?.comments || '');
+    setShowInspectorModal(true);
+  };
+
   const handleSaveStyleReview = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDesign || !user) return;
@@ -162,10 +172,24 @@ export default function DesignPortalPage() {
     }
     refreshData();
 
+    const params = new URLSearchParams(window.location.search);
+    setHighlightDesignId(params.get('highlight'));
+
     const handleSync = () => refreshData();
     window.addEventListener('leads-data-sync', handleSync);
     return () => window.removeEventListener('leads-data-sync', handleSync);
   }, []);
+
+  // Once the highlighted design has actually loaded, open its Inspector — retries on
+  // every refresh until found, since it may not exist locally yet on first paint.
+  useEffect(() => {
+    if (!highlightDesignId || hasOpenedHighlight) return;
+    const match = designs.find(d => d.id === highlightDesignId);
+    if (match) {
+      openInspector(match);
+      setHasOpenedHighlight(true);
+    }
+  }, [designs, highlightDesignId, hasOpenedHighlight]);
 
   // Handle file selection with 25 MB limit check
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -623,15 +647,7 @@ export default function DesignPortalPage() {
                     )}
 
                     <button
-                      onClick={() => {
-                        setSelectedDesign(design);
-                        if (design.review?.comments) {
-                          setReviewComments(design.review.comments);
-                        } else {
-                          setReviewComments('');
-                        }
-                        setShowInspectorModal(true);
-                      }}
+                      onClick={() => openInspector(design)}
                       className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-muted hover:bg-muted/80 text-foreground text-xs font-medium transition-colors border border-border"
                     >
                       <Eye className="h-3.5 w-3.5" />
