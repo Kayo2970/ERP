@@ -15,6 +15,12 @@ export interface Member {
   bankName?: string;
   accountNumber?: string;
   ifscCode?: string;
+  // Undefined/'Active' = normal login access. 'Terminated' = login is blocked
+  // (see /api/auth/login) but the member row itself, and every historical
+  // record that references it by id/name/email, is left untouched.
+  status?: 'Active' | 'Terminated';
+  terminatedAt?: string;
+  terminatedBy?: string;
 }
 
 export interface EventCommittee {
@@ -613,6 +619,58 @@ export function updateMember(id: string, updates: Partial<Member>, actorName: st
   // client-only sample member that was never POSTed) creates a complete record.
   serverPatch('/api/members', id, current[idx]);
   logAuditEvent('MEMBER_UPDATED', actorName, `Updated member details for ${current[idx].name}`);
+  return current[idx];
+}
+
+/**
+ * Revoke a member's dashboard access without deleting them — every historical
+ * record (tasks, ratings, reimbursements, event committees, audit log) keeps
+ * referencing this member by id/name/email exactly as before, since none of
+ * those are live foreign keys. Login is blocked server-side in /api/auth/login.
+ */
+export function terminateMember(id: string, actorName: string): Member | null {
+  const current = getMembers();
+  const idx = current.findIndex(m => m.id === id);
+  if (idx === -1) return null;
+  if (id === 'm1') throw new Error('The Super User account cannot be terminated.');
+
+  current[idx] = {
+    ...current[idx],
+    status: 'Terminated',
+    terminatedAt: new Date().toISOString(),
+    terminatedBy: actorName,
+  };
+  saveMembers(current);
+  serverPatch('/api/members', id, current[idx]);
+  logAuditEvent(
+    'MEMBER_TERMINATED',
+    actorName,
+    `Terminated ${current[idx].name} (${current[idx].email}) — dashboard access revoked, historical records retained`,
+    current[idx].email
+  );
+  return current[idx];
+}
+
+/** Restore a terminated member's dashboard access. */
+export function reactivateMember(id: string, actorName: string): Member | null {
+  const current = getMembers();
+  const idx = current.findIndex(m => m.id === id);
+  if (idx === -1) return null;
+
+  current[idx] = {
+    ...current[idx],
+    status: 'Active',
+    terminatedAt: undefined,
+    terminatedBy: undefined,
+  };
+  saveMembers(current);
+  serverPatch('/api/members', id, current[idx]);
+  logAuditEvent(
+    'MEMBER_REACTIVATED',
+    actorName,
+    `Reactivated ${current[idx].name} (${current[idx].email}) — dashboard access restored`,
+    current[idx].email
+  );
   return current[idx];
 }
 
