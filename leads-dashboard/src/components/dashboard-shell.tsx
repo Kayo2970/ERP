@@ -469,7 +469,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     <div className="min-h-screen bg-space-theme flex flex-col md:flex-row transition-all duration-300">
       {isModuleTransitioning && (
         <LoadingScreen
-          duration={2000}
+          duration={1000}
           subtitle="Loading module..."
           onComplete={() => setIsModuleTransitioning(false)}
         />

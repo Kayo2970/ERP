@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 
 interface LoadingScreenProps {
   /** How long the splash stays on screen before onComplete fires, in ms. */
@@ -16,13 +16,6 @@ interface LoadingScreenProps {
  * when onComplete fires.
  */
 export function LoadingScreen({ duration, subtitle, onComplete }: LoadingScreenProps) {
-  const [barFilled, setBarFilled] = useState(false);
-
-  useEffect(() => {
-    const raf = requestAnimationFrame(() => setBarFilled(true));
-    return () => cancelAnimationFrame(raf);
-  }, []);
-
   useEffect(() => {
     if (!onComplete) return;
     const timer = setTimeout(onComplete, duration);
@@ -47,12 +40,6 @@ export function LoadingScreen({ duration, subtitle, onComplete }: LoadingScreenP
           {subtitle && (
             <p className="text-[11px] text-theme-text-secondary mt-1">{subtitle}</p>
           )}
-        </div>
-        <div className="w-40 h-1 bg-theme-border/30 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-accent rounded-full"
-            style={{ width: barFilled ? '100%' : '0%', transition: `width ${duration}ms linear` }}
-          />
         </div>
       </div>
     </div>

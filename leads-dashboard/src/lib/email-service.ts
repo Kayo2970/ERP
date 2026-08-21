@@ -141,39 +141,39 @@ export function wrapInMasterEmailTemplate(options: {
   const logoUrl = 'https://leadsnextgencentre.online/images/leads-short-logo.png';
 
   const badgeHtml = options.badgeText
-    ? `<span style="font-size: 11px; font-weight: 700; color: ${options.badgeColor || '#38bdf8'}; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.3); padding: 4px 10px; border-radius: 8px; display: inline-block; margin-bottom: 14px;">${options.badgeText}</span>`
+    ? `<span style="font-size: 11px; font-weight: 700; color: ${options.badgeColor || '#0369a1'}; background: #e0f2fe; border: 1px solid #bae6fd; padding: 4px 10px; border-radius: 8px; display: inline-block; margin-bottom: 14px;">${options.badgeText}</span>`
     : '';
 
   return `
-    <div style="background-color: #090d16; padding: 32px 16px; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif; color: #f8fafc; width: 100%; box-sizing: border-box;">
-      <div style="max-width: 580px; margin: 0 auto; background-color: #0f172a; border: 1px solid #1e293b; border-radius: 20px; overflow: hidden; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);">
+    <div style="background-color: #f1f5f9; padding: 32px 16px; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif; color: #1e293b; width: 100%; box-sizing: border-box;">
+      <div style="max-width: 580px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);">
         
         <!-- Header Banner with Logo -->
-        <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 28px 32px; border-bottom: 1px solid #1e293b; text-align: center;">
-          <div style="display: inline-block; width: 56px; height: 56px; margin-bottom: 10px; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 16px; padding: 8px; vertical-align: middle;">
+        <div style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); padding: 28px 32px; border-bottom: 1px solid #e2e8f0; text-align: center;">
+          <div style="display: inline-block; width: 56px; height: 56px; margin-bottom: 10px; background: #e0f2fe; border: 1px solid #bae6fd; border-radius: 14px; padding: 8px; vertical-align: middle;">
             <img src="${logoUrl}" alt="LEADS Logo" style="width: 100%; height: 100%; object-fit: contain;" />
           </div>
-          <h2 style="color: #38bdf8; margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.02em;">LEADS Next Gen Centre</h2>
-          <p style="color: #94a3b8; font-size: 12px; margin: 4px 0 0 0; font-weight: 500;">Ramaiah University of Applied Sciences &middot; Operations Portal</p>
+          <h2 style="color: #0284c7; margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.02em;">LEADS Next Gen Centre</h2>
+          <p style="color: #64748b; font-size: 12px; margin: 4px 0 0 0; font-weight: 500;">Ramaiah University of Applied Sciences &middot; Operations Portal</p>
         </div>
 
         <!-- Main Content Area -->
         <div style="padding: 32px 28px;">
           ${badgeHtml}
-          ${options.headerTitle ? `<h3 style="margin-top: 0; color: #f8fafc; font-size: 18px; font-weight: 700; margin-bottom: ${options.headerSubtitle ? '4px' : '20px'};">${options.headerTitle}</h3>` : ''}
-          ${options.headerSubtitle ? `<p style="color: #94a3b8; font-size: 13px; margin-top: 0; margin-bottom: 20px; font-weight: 400;">${options.headerSubtitle}</p>` : ''}
+          ${options.headerTitle ? `<h3 style="margin-top: 0; color: #0f172a; font-size: 18px; font-weight: 700; margin-bottom: ${options.headerSubtitle ? '4px' : '20px'};">${options.headerTitle}</h3>` : ''}
+          ${options.headerSubtitle ? `<p style="color: #64748b; font-size: 13px; margin-top: 0; margin-bottom: 20px; font-weight: 400;">${options.headerSubtitle}</p>` : ''}
 
-          <div style="background: rgba(30, 41, 59, 0.6); border: 1px solid #334155; border-radius: 14px; padding: 24px; color: #cbd5e1; font-size: 14px; line-height: 1.65;">
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; color: #334155; font-size: 14px; line-height: 1.65;">
             ${options.bodyContentHtml}
           </div>
         </div>
 
         <!-- Standardized Institutional Footer -->
-        <div style="background-color: #0b1120; border-top: 1px solid #1e293b; padding: 24px 28px; text-align: center; font-size: 11px; color: #64748b; line-height: 1.6;">
-          <p style="margin: 0 0 6px 0; color: #94a3b8; font-weight: 600;">© 2026 LEADS Next Gen Centre &middot; MSRUAS Internal Operations Portal</p>
-          <p style="margin: 0 0 8px 0; color: #64748b;">This is an automated operational notification. Authorised recipient access only.</p>
-          <div style="border-top: 1px solid #1e293b; padding-top: 10px; margin-top: 10px; color: #475569; font-size: 10px;">
-            All Intellectual Property, Copyrights & Development Licensing belong exclusively to <strong style="color: #38bdf8;">Kayomarz Pavri</strong>.
+        <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 24px 28px; text-align: center; font-size: 11px; color: #64748b; line-height: 1.6;">
+          <p style="margin: 0 0 6px 0; color: #475569; font-weight: 600;">© 2026 LEADS Next Gen Centre &middot; MSRUAS Internal Operations Portal</p>
+          <p style="margin: 0 0 8px 0; color: #94a3b8;">This is an automated operational notification. Authorised recipient access only.</p>
+          <div style="border-top: 1px solid #e2e8f0; padding-top: 10px; margin-top: 10px; color: #64748b; font-size: 10px;">
+            All Intellectual Property, Copyrights & Development Licensing belong exclusively to <strong style="color: #0284c7;">Kayomarz Pavri</strong>.
           </div>
         </div>
 
@@ -193,15 +193,15 @@ export async function testEmailConnection(testRecipient: string): Promise<{ succ
       headerTitle: `SMTP Mail Server & Client Connection Verified`,
       headerSubtitle: `Diagnostic Health Check Successful`,
       badgeText: `✅ SMTP Operational`,
-      badgeColor: `#22c55e`,
+      badgeColor: `#15803d`,
       bodyContentHtml: `
-        <p style="margin-top: 0; color: #f8fafc; font-weight: 600;">Your LEADS Dashboard email client and SMTP server settings are operational.</p>
-        <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid #334155; padding: 14px 18px; border-radius: 10px; margin: 16px 0; font-size: 12px;">
-          <p style="margin: 0 0 6px 0; color: #94a3b8;"><strong>Service Provider:</strong> <span style="color: #38bdf8; font-weight: 700;">${settings.provider.toUpperCase()}</span></p>
-          <p style="margin: 0 0 6px 0; color: #94a3b8;"><strong>SMTP Host & Port:</strong> <span style="color: #f8fafc; font-family: monospace;">${settings.smtpHost}:${settings.smtpPort}</span></p>
-          <p style="margin: 0; color: #94a3b8;"><strong>Sender Name:</strong> <span style="color: #f8fafc;">${settings.fromName}</span></p>
+        <p style="margin-top: 0; color: #0f172a; font-weight: 600;">Your LEADS Dashboard email client and SMTP server settings are operational.</p>
+        <div style="background: #ffffff; border: 1px solid #e2e8f0; padding: 14px 18px; border-radius: 10px; margin: 16px 0; font-size: 12px;">
+          <p style="margin: 0 0 6px 0; color: #64748b;"><strong>Service Provider:</strong> <span style="color: #0284c7; font-weight: 700;">${settings.provider.toUpperCase()}</span></p>
+          <p style="margin: 0 0 6px 0; color: #64748b;"><strong>SMTP Host & Port:</strong> <span style="color: #0f172a; font-family: monospace;">${settings.smtpHost}:${settings.smtpPort}</span></p>
+          <p style="margin: 0; color: #64748b;"><strong>Sender Name:</strong> <span style="color: #0f172a;">${settings.fromName}</span></p>
         </div>
-        <p style="color: #94a3b8; font-size: 11px; margin-bottom: 0;">Diagnostic executed at ${new Date().toLocaleString()}</p>
+        <p style="color: #64748b; font-size: 11px; margin-bottom: 0;">Diagnostic executed at ${new Date().toLocaleString()}</p>
       `
     });
 
@@ -224,7 +224,7 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
   const defaultFormattedHtml = wrapInMasterEmailTemplate({
     headerTitle: payload.subject,
     badgeText: payload.category ? `📩 ${payload.category}` : undefined,
-    bodyContentHtml: `<div style="white-space: pre-wrap; font-size: 14px; line-height: 1.7; color: #f8fafc;">${payload.bodyText}</div>`
+    bodyContentHtml: `<div style="white-space: pre-wrap; font-size: 14px; line-height: 1.7; color: #1e293b;">${payload.bodyText}</div>`
   });
 
   const bodyHtml = payload.bodyHtml || defaultFormattedHtml;
@@ -281,19 +281,19 @@ export function generateOtpEmailTemplate(name: string, otp: string): { subject: 
     headerTitle: `Password Reset Authorization`,
     headerSubtitle: `Security Verification Code`,
     badgeText: `🔒 5-Minute OTP Code`,
-    badgeColor: `#f43f5e`,
+    badgeColor: `#be123c`,
     bodyContentHtml: `
-      <p style="margin-top: 0; color: #f8fafc; font-size: 14px;">Hello <strong>${name}</strong>,</p>
-      <p style="color: #cbd5e1; font-size: 14px; line-height: 1.6;">You requested a password reset for your LEADS account. Use the 6-digit verification code below to authorize your password update:</p>
+      <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello <strong>${name}</strong>,</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">You requested a password reset for your LEADS account. Use the 6-digit verification code below to authorize your password update:</p>
 
       <div style="text-align: center; margin: 28px 0;">
-        <span style="font-family: monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #38bdf8; background: rgba(56, 189, 248, 0.1); border: 1px dashed rgba(56, 189, 248, 0.4); padding: 14px 28px; border-radius: 12px; display: inline-block;">
+        <span style="font-family: monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #0284c7; background: #f0f9ff; border: 1px dashed #7dd3fc; padding: 14px 28px; border-radius: 12px; display: inline-block;">
           ${otp}
         </span>
-        <p style="color: #f43f5e; font-size: 12px; margin-top: 12px; font-weight: 700;">⏱️ Valid for 5 minutes only</p>
+        <p style="color: #e11d48; font-size: 12px; margin-top: 12px; font-weight: 700;">⏱️ Valid for 5 minutes only</p>
       </div>
 
-      <p style="color: #94a3b8; font-size: 12px; line-height: 1.5; margin-bottom: 0;">If you did not request this, you can safely ignore this message. Your password will remain unchanged.</p>
+      <p style="color: #64748b; font-size: 12px; line-height: 1.5; margin-bottom: 0;">If you did not request this, you can safely ignore this message. Your password will remain unchanged.</p>
     `
   });
 
@@ -318,19 +318,19 @@ export function generateEmailChangeOtpTemplate(name: string, otp: string, newEma
     headerTitle: `Email Change Authorization`,
     headerSubtitle: `Security Verification Code`,
     badgeText: `🔒 5-Minute OTP Code`,
-    badgeColor: `#f43f5e`,
+    badgeColor: `#be123c`,
     bodyContentHtml: `
-      <p style="margin-top: 0; color: #f8fafc; font-size: 14px;">Hello <strong>${name}</strong>,</p>
-      <p style="color: #cbd5e1; font-size: 14px; line-height: 1.6;">A request was made to change the login email on your LEADS account to <strong style="color: #f8fafc;">${newEmail}</strong>. Use the 6-digit verification code below to authorize this change:</p>
+      <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello <strong>${name}</strong>,</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">A request was made to change the login email on your LEADS account to <strong style="color: #0f172a;">${newEmail}</strong>. Use the 6-digit verification code below to authorize this change:</p>
 
       <div style="text-align: center; margin: 28px 0;">
-        <span style="font-family: monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #38bdf8; background: rgba(56, 189, 248, 0.1); border: 1px dashed rgba(56, 189, 248, 0.4); padding: 14px 28px; border-radius: 12px; display: inline-block;">
+        <span style="font-family: monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #0284c7; background: #f0f9ff; border: 1px dashed #7dd3fc; padding: 14px 28px; border-radius: 12px; display: inline-block;">
           ${otp}
         </span>
-        <p style="color: #f43f5e; font-size: 12px; margin-top: 12px; font-weight: 700;">⏱️ Valid for 5 minutes only</p>
+        <p style="color: #e11d48; font-size: 12px; margin-top: 12px; font-weight: 700;">⏱️ Valid for 5 minutes only</p>
       </div>
 
-      <p style="color: #94a3b8; font-size: 12px; line-height: 1.5; margin-bottom: 0;">If you did not request this, do not share this code with anyone — ignore this message and your login email will remain unchanged.</p>
+      <p style="color: #64748b; font-size: 12px; line-height: 1.5; margin-bottom: 0;">If you did not request this, do not share this code with anyone — ignore this message and your login email will remain unchanged.</p>
     `
   });
 
@@ -352,11 +352,11 @@ export function generateAnnouncementEmailTemplate(memberName: string, title: str
     headerTitle: title,
     headerSubtitle: `Published by ${author}`,
     badgeText: `📢 Official Announcement`,
-    badgeColor: `#38bdf8`,
+    badgeColor: `#0369a1`,
     bodyContentHtml: `
-      <p style="margin-top: 0; color: #cbd5e1;">Hello <strong>${memberName}</strong>,</p>
-      <p style="color: #f8fafc; white-space: pre-wrap; font-size: 14px; line-height: 1.7;">${content}</p>
-      <div style="margin-top: 24px; padding-top: 18px; border-top: 1px solid #334155; text-align: center;">
+      <p style="margin-top: 0; color: #334155;">Hello <strong>${memberName}</strong>,</p>
+      <p style="color: #0f172a; white-space: pre-wrap; font-size: 14px; line-height: 1.7;">${content}</p>
+      <div style="margin-top: 24px; padding-top: 18px; border-top: 1px solid #e2e8f0; text-align: center;">
         <a href="https://leadsnextgencentre.online/dashboard/announcements" style="background: #0284c7; color: #ffffff; padding: 10px 20px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 12px; display: inline-block;">View in Dashboard &rarr;</a>
       </div>
     `
@@ -381,19 +381,19 @@ export function generateTaskEmailTemplate(memberName: string, taskTitle: string,
     headerTitle: taskTitle,
     headerSubtitle: `Assigned by ${creatorName || 'Committee Admin'}`,
     badgeText: `📌 Action Required: New Task`,
-    badgeColor: `#eab308`,
+    badgeColor: `#854d0e`,
     bodyContentHtml: `
-      <p style="margin-top: 0; color: #cbd5e1;">Hello <strong>${memberName}</strong>,</p>
-      <p style="color: #cbd5e1; font-size: 14px;">You have been assigned a new deliverable on the LEADS Dashboard:</p>
+      <p style="margin-top: 0; color: #334155;">Hello <strong>${memberName}</strong>,</p>
+      <p style="color: #334155; font-size: 14px;">You have been assigned a new deliverable on the LEADS Dashboard:</p>
       
-      <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #cbd5e1; margin: 16px 0;">
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #334155; margin: 16px 0;">
         <tr>
-          <td style="padding: 8px 0; color: #94a3b8; width: 120px;">Context:</td>
-          <td style="padding: 8px 0; font-weight: 600; color: #f8fafc;">${eventName || 'LEADS Operations'}</td>
+          <td style="padding: 8px 0; color: #64748b; width: 120px;">Context:</td>
+          <td style="padding: 8px 0; font-weight: 600; color: #0f172a;">${eventName || 'LEADS Operations'}</td>
         </tr>
         <tr>
-          <td style="padding: 8px 0; color: #94a3b8;">Due Date:</td>
-          <td style="padding: 8px 0; font-weight: 700; color: #f43f5e;">${dueDate}</td>
+          <td style="padding: 8px 0; color: #64748b;">Due Date:</td>
+          <td style="padding: 8px 0; font-weight: 700; color: #dc2626;">${dueDate}</td>
         </tr>
       </table>
 
@@ -419,13 +419,13 @@ export function generateEventRosterEmailTemplate(memberName: string, eventTitle:
     headerTitle: eventTitle,
     headerSubtitle: `Committee Assignment`,
     badgeText: `🎉 Event Committee Roster`,
-    badgeColor: `#a855f7`,
+    badgeColor: `#6b21a8`,
     bodyContentHtml: `
-      <p style="margin-top: 0; color: #cbd5e1;">Hello <strong>${memberName}</strong>,</p>
-      <p style="color: #cbd5e1; font-size: 14px; line-height: 1.6;">You have been officially added to the <strong>${committeeName}</strong> committee for <strong>${eventTitle}</strong>.</p>
+      <p style="margin-top: 0; color: #334155;">Hello <strong>${memberName}</strong>,</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">You have been officially added to the <strong>${committeeName}</strong> committee for <strong>${eventTitle}</strong>.</p>
       
-      <div style="background: rgba(56, 189, 248, 0.1); border-left: 4px solid #38bdf8; padding: 14px 18px; margin: 18px 0; border-radius: 6px;">
-        <p style="margin: 0; font-size: 13px; color: #f8fafc;">📅 <strong>Event Start Date:</strong> ${startDate}</p>
+      <div style="background: #f0f9ff; border-left: 4px solid #0284c7; padding: 14px 18px; margin: 18px 0; border-radius: 6px;">
+        <p style="margin: 0; font-size: 13px; color: #0f172a;">📅 <strong>Event Start Date:</strong> ${startDate}</p>
       </div>
 
       <div style="margin-top: 20px; text-align: center;">

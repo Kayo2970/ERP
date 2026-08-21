@@ -29,6 +29,21 @@ function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/** Check if user holds an executive role: President, Vice President, or Chief Coordinator. */
+export function isExecutiveRole(user: SessionUser): boolean {
+  if (!user) return false;
+  const role = ((user as any)?.role || '').toLowerCase();
+  return role.includes('president') || role.includes('vice president') || role.includes('chief coordinator');
+}
+
+/** Check if user holds Alumni role/tier. */
+export function isAlumniRole(user: SessionUser): boolean {
+  if (!user) return false;
+  const division = ((user as any)?.division || '').toLowerCase();
+  const role = ((user as any)?.role || '').toLowerCase();
+  return user.tier === 7 || division.includes('alumni') || role.includes('alumni');
+}
+
 /** Build a whole-word, case-insensitive matcher for one configured keyword. */
 function keywordMatches(text: string, keyword: string): boolean {
   const kw = keyword.trim();
@@ -108,9 +123,10 @@ export function isHeadOfEvents(user: SessionUser): boolean {
   return role.includes('head of event') || role.includes('head of events') || role.includes('events head');
 }
 
-/** Check if user is Events Head for GG Campus. */
+/** Check if user is Events Head for GG Campus or holds Tier 2.5 leadership. */
 export function isEventsHeadGgCampus(user: SessionUser): boolean {
   if (!user) return false;
+  if (user.tier === 2.5) return true;
   const role = ((user as any)?.role || '').toLowerCase();
   const committee = ((user as any)?.committee || '').toLowerCase();
   return (role.includes('events head') && role.includes('gg')) || 
@@ -132,36 +148,25 @@ export function isEventsHeadRtcCampus(user: SessionUser): boolean {
 
 /**
  * Strict evaluation rule enforcement:
- * ONLY TWO designations are authorized to evaluate student performance or committee deliverables:
- * 1) Centre Head (evaluates any event across all campuses)
- * 2) Head of Events (must match event campus: GG Events Head evaluates GG events, RTC Events Head evaluates RTC events)
- * All other roles and designations are strictly prohibited from submitting ratings!
+ * 1) Centre Head & GG Campus Event Head (Tier 2.5) can evaluate across both campuses.
+ * 2) RTC Events Head evaluates RTC events ONLY and is strictly blocked from GG events.
  */
 export function canEvaluateEventStudent(user: SessionUser, eventCampus?: string): boolean {
-  if (!user) return false;
+  if (!user || isAlumniRole(user)) return false;
 
   const centreHead = isCentreHead(user);
+  const isGgHead = isEventsHeadGgCampus(user) || user.tier === 2.5;
+  const isRtcHead = isEventsHeadRtcCampus(user);
   const eventsHead = isHeadOfEvents(user);
 
-  // Strictly block anyone who is neither Centre Head nor Head of Events
-  if (!centreHead && !eventsHead) {
-    return false;
-  }
-
-  // Centre Head can evaluate across all campuses
-  if (centreHead) return true;
-
-  // Head of Events must obey campus rules
-  const isGgHead = isEventsHeadGgCampus(user);
-  const isRtcHead = isEventsHeadRtcCampus(user);
+  if (!centreHead && !eventsHead && !isGgHead) return false;
+  if (centreHead || isGgHead) return true;
 
   if (eventCampus === 'GG Campus') {
-    if (isRtcHead) return false;
-    return isGgHead || eventsHead;
+    return false; // RTC Head cannot evaluate GG events
   }
 
   if (eventCampus === 'RTC Campus') {
-    if (isGgHead) return false;
     return isRtcHead || eventsHead;
   }
 
@@ -303,6 +308,7 @@ export function getApprovalRequirement(user: SessionUser, capability: string, bu
 
 /** Sector Head first-stage approval permission. */
 export function canApproveAsSectorHead(user: SessionUser): boolean {
+  if (isExecutiveRole(user) || isAlumniRole(user)) return false;
   return isSectorHead(user);
 }
 
@@ -313,7 +319,7 @@ export function canVerifyReimbursementCentreHead(user: SessionUser): boolean {
 
 /** Finance Head second-stage approval permission for reimbursement claims. */
 export function canApproveAsFinanceHead(user: SessionUser, claim?: ReimbursementItem): boolean {
-  if (!user || !isFinanceHead(user)) return false;
+  if (!user || !isFinanceHead(user) || isExecutiveRole(user) || isAlumniRole(user)) return false;
   if (user.tier === 1 || isCentreHead(user)) return true;
   if (!claim) return true;
   return claim.centreHeadVerified === true || claim.status === 'Verified by Centre Head' || claim.status === 'Under Review';
@@ -386,14 +392,23 @@ export function canManageEvents(user: SessionUser): boolean {
  */
 export function canViewEvent(event: EventItem, user: SessionUser): boolean {
   if (!user) return false;
-  if (isBaseLeadership(user) || isHeadRole(user) || hasCapability(user, 'EVENTS_VIEW_ALL')) return true;
+
+  const isRtcHead = isEventsHeadRtcCampus(user);
+  const isGgHead = isEventsHeadGgCampus(user) || user.tier === 2.5;
+
+  // Asymmetric restriction: RTC Head cannot view GG Campus events
+  if (event.campus === 'GG Campus' && isRtcHead && !isGgHead && !isCentreHead(user) && user.tier !== 1) {
+    return false;
+  }
+
+  if (isBaseLeadership(user) || isHeadRole(user) || user.tier === 2.5 || hasCapability(user, 'EVENTS_VIEW_ALL')) return true;
 
   const member = resolveMember(user);
-  if (!member) return true; // fail-open: an unresolvable session shouldn't lose access it always had
+  if (!member) return true;
 
   const policies = getGroupPolicies().filter(p => isPolicyActive(p) && memberMatchesPolicy(member, p));
   const restricting = policies.find(p => p.eventVisibilityScope === 'OWN_ONLY');
-  if (!restricting) return true; // default: unrestricted, exactly as before this feature
+  if (!restricting) return true;
 
   if (event.createdBy && (event.createdBy === user.name || event.createdBy === user.email)) return true;
   return (event.committees || []).some(c => (c.memberIds || []).includes(member.id));
@@ -401,8 +416,16 @@ export function canViewEvent(event: EventItem, user: SessionUser): boolean {
 
 /** Whether `user` acting under `action` (create/edit) needs approval, and from whom. */
 export function getEventApprovalRequirement(user: SessionUser, action: 'CREATE' | 'EDIT'): ApprovalRequirement {
+  if (isExecutiveRole(user) && !isCentreHead(user) && user?.tier !== 1) {
+    return {
+      requiresApproval: true,
+      approverType: 'CENTER_HEAD',
+      approverName: 'the Center Head',
+      policyName: 'Executive Event Sign-off Requirement'
+    };
+  }
   const capability = action === 'CREATE' ? 'EVENTS_CREATE' : 'EVENTS_EDIT';
-  const builtIn = isBaseLeadership(user) || isCoreCommitteeTier(user) || isHeadRole(user);
+  const builtIn = isBaseLeadership(user) || user?.tier === 2.5 || isCoreCommitteeTier(user) || isHeadRole(user);
   return getApprovalRequirement(user, capability, builtIn);
 }
 
@@ -513,12 +536,20 @@ export function canViewRating(rating: RatingItem, user: SessionUser): boolean {
  * see their own profile.
  */
 export function canViewFullDirectory(user: SessionUser): boolean {
-  return !!user && (user.tier <= 5 || isHeadRole(user) || hasCapability(user, 'VIEW_FULL_DIRECTORY'));
+  if (isAlumniRole(user)) return false;
+  return !!user && (user.tier <= 5 || isHeadRole(user) || isExecutiveRole(user) || hasCapability(user, 'VIEW_FULL_DIRECTORY'));
 }
 
 /** Roster CRUD (add/edit/remove/bulk-edit members) — base leadership, or an explicit Group Policy grant. */
 export function canEditDirectory(user: SessionUser): boolean {
+  if (isExecutiveRole(user) || isAlumniRole(user)) return false;
   return isBaseLeadership(user) || hasCapability(user, 'EDIT_DIRECTORY');
+}
+
+/** Check if user can terminate members (Centre Head or Super User only). */
+export function canTerminateMember(user: SessionUser): boolean {
+  if (isExecutiveRole(user) || isAlumniRole(user)) return false;
+  return isCentreHead(user) || user?.tier === 1;
 }
 
 /** Check if user is in the Faculty division. */
@@ -526,18 +557,33 @@ export function isFaculty(user: SessionUser): boolean {
   return !!user && user.division === 'Faculty';
 }
 
-/** Guest Directory (visiting-card contacts) — Centre Head and Faculty only. */
+/** Guest Directory (visiting-card contacts) — Centre Head, Faculty, and Executive Council. */
 export function canAccessGuestDirectory(user: SessionUser): boolean {
-  return isCentreHead(user) || isFaculty(user);
+  if (isAlumniRole(user)) return false;
+  return isCentreHead(user) || isFaculty(user) || isExecutiveRole(user);
+}
+
+/** Check if user can delete contacts from guest directory. */
+export function canRemoveGuestContact(user: SessionUser): boolean {
+  if (isExecutiveRole(user) || isAlumniRole(user)) return false;
+  return isCentreHead(user) || user?.tier === 1;
 }
 
 /** Form builder access — existing convention (tier 1 or tier 5), plus any Head regardless of tier. */
 export function canBuildForms(user: SessionUser): boolean {
-  return (!!user && (user.tier === 1 || user.tier === 5)) || isHeadRole(user) || hasCapability(user, 'BUILD_FORMS');
+  if (isAlumniRole(user)) return false;
+  return (!!user && (user.tier === 1 || user.tier === 5)) || isHeadRole(user) || isExecutiveRole(user) || hasCapability(user, 'BUILD_FORMS');
+}
+
+/** Check if user can delete public forms (Centre Head or Super User only). */
+export function canDeleteForms(user: SessionUser): boolean {
+  if (isExecutiveRole(user) || isAlumniRole(user)) return false;
+  return isCentreHead(user) || user?.tier === 1;
 }
 
 /** Announcement authoring — leadership, Core Committee, and Heads. */
 export function canCreateAnnouncement(user: SessionUser): boolean {
+  if (isExecutiveRole(user) || isAlumniRole(user)) return false;
   return isBaseLeadership(user) || isCoreCommitteeTier(user) || isHeadRole(user) || hasCapability(user, 'CREATE_ANNOUNCEMENT');
 }
 
@@ -547,6 +593,7 @@ export function canCreateAnnouncement(user: SessionUser): boolean {
  * the page's own "proofread" tab). Leadership and any Head see every submission.
  */
 export function canViewAllDesigns(user: SessionUser): boolean {
+  if (isAlumniRole(user) || isExecutiveRole(user)) return false;
   return isBaseLeadership(user) || isDesignHead(user) || hasCapability(user, 'VIEW_ALL_DESIGNS');
 }
 

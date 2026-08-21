@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  --background: #EEF2F7;
+  --background: #F8FAFC;
   --foreground: #0F172A;
   --card-bg: rgba(255, 255, 255, 0.88);
   --card-border: rgba(15, 23, 42, 0.10);
@@ -10,7 +10,7 @@
   --border-color: rgba(15, 23, 42, 0.12);
   --sidebar-bg: rgba(255, 255, 255, 0.90);
   --sidebar-border: rgba(15, 23, 42, 0.10);
-  --page-gradient: linear-gradient(90deg, #DCE6F5 0%, #EEF3FA 25%, #FBFDFF 50%, #EEF3FA 75%, #DCE6F5 100%);
+  --page-gradient: url('/images/light-bg.jpg') center / cover no-repeat fixed;
 }
 
 .dark {

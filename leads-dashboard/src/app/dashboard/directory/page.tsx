@@ -399,12 +399,30 @@ export default function DirectoryPage() {
     }
   };
 
-  const handleConfirmTerminate = () => {
+  const handleConfirmTerminate = async () => {
     if (!terminatingMember) return;
+    const target = terminatingMember;
     try {
-      terminateMember(terminatingMember.id, user?.name || 'Centre Head');
+      terminateMember(target.id, user?.name || 'Centre Head');
       setMembers(getMembers());
-      triggerSuccess(`${terminatingMember.name} has been terminated and can no longer access the dashboard.`);
+
+      try {
+        await fetch('/api/email/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            scope: 'SINGLE',
+            recipientEmail: target.email,
+            subject: 'Notice: Dashboard Access Status Update',
+            bodyText: `Dear ${target.name},\n\nThis is an automated notification to inform you that your access to the LEADS Dashboard has been terminated by ${user?.name || 'Centre Head'}.\n\nAll historical records and activity retain unchanged in the system.\n\nRegards,\nLEADS Administration`,
+            category: 'SYSTEM_NOTIFICATION',
+          }),
+        });
+      } catch {
+        // Silently ignore mail dispatch error to avoid blocking termination flow
+      }
+
+      triggerSuccess(`${target.name} has been terminated and notified via registered email.`);
     } catch (err: any) {
       triggerError(err.message || 'Failed to terminate member.');
     } finally {
