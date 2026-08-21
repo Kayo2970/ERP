@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   BarChart,
   Bar,
@@ -16,25 +16,32 @@ import {
   Radar,
   Cell
 } from 'recharts';
-import { getRatings, getMembers, RatingItem, Member } from '@/lib/local-data';
+import { getRatings, getMembers, getEvents, RatingItem, Member, EventItem } from '@/lib/local-data';
 import { getRatingColor } from '@/lib/design-tokens';
 import { canViewRating } from '@/lib/permissions';
-import { generatePerformanceReportPdf } from '@/lib/report-generator';
-import { BarChart3, Download, FileText, Star } from 'lucide-react';
+import { generatePerformanceReportPdf, ReportType, CapturedChartImage } from '@/lib/report-generator';
+import { BarChart3, Download, FileText, Star, Loader2 } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 
 export default function ReportsPage() {
   const [ratings, setRatings] = useState<RatingItem[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [events, setEvents] = useState<EventItem[]>([]);
   const [user, setUser] = useState<any>(null);
   const [selectedDivision, setSelectedDivision] = useState<string>('ALL');
   const [selectedTarget, setSelectedTarget] = useState('All');
   const [selectedQuarter, setSelectedQuarter] = useState('ALL');
+  const [reportType, setReportType] = useState<ReportType>('overall');
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+
+  const radarChartRef = useRef<HTMLDivElement>(null);
+  const barChartRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const refreshData = () => {
       setRatings(getRatings());
       setMembers(getMembers());
+      setEvents(getEvents());
     };
     refreshData();
 
@@ -138,21 +145,45 @@ export default function ReportsPage() {
     document.body.removeChild(link);
   };
 
-  const handleGenerateReport = () => {
+  /** Rasterizes an on-screen chart container to a PNG data URL for embedding in the PDF. */
+  const captureChart = async (el: HTMLDivElement | null): Promise<CapturedChartImage | undefined> => {
+    if (!el) return undefined;
+    const html2canvas = (await import('html2canvas')).default;
+    const canvas = await html2canvas(el, { backgroundColor: '#0f172a', scale: 2, logging: false });
+    return { dataUrl: canvas.toDataURL('image/png'), width: canvas.width, height: canvas.height };
+  };
+
+  const handleGenerateReport = async () => {
     if (filteredRatings.length === 0) {
       alert('No data available to generate a report.');
       return;
     }
-    generatePerformanceReportPdf({
-      ratings: filteredRatings,
-      averages,
-      scope: {
-        division: selectedDivision === 'ALL' ? 'All Divisions' : selectedDivision,
-        member: selectedTarget === 'All' ? 'All Evaluated Members' : selectedTarget,
-        quarter: selectedQuarter === 'ALL' ? 'All Quarters (Cumulative)' : selectedQuarter,
-      },
-      generatedBy: user?.name || 'LEADS Dashboard User',
-    });
+    setIsGeneratingReport(true);
+    try {
+      // Capture the same charts currently on screen, so the PDF shows literally
+      // the same graphics as the dashboard rather than rebuilding them.
+      const [radar, bar] = await Promise.all([
+        captureChart(radarChartRef.current),
+        captureChart(barChartRef.current),
+      ]);
+
+      generatePerformanceReportPdf({
+        ratings: filteredRatings,
+        averages,
+        scope: {
+          division: selectedDivision === 'ALL' ? 'All Divisions' : selectedDivision,
+          member: selectedTarget === 'All' ? 'All Evaluated Members' : selectedTarget,
+          quarter: selectedQuarter === 'ALL' ? 'All Quarters (Cumulative)' : selectedQuarter,
+        },
+        generatedBy: user?.name || 'LEADS Dashboard User',
+        reportType,
+        events,
+        members,
+        chartImages: { radar, bar },
+      });
+    } finally {
+      setIsGeneratingReport(false);
+    }
   };
 
   return (
@@ -168,11 +199,12 @@ export default function ReportsPage() {
         <div className="flex items-center gap-2 print:hidden">
           <button
             onClick={handleGenerateReport}
-            className="flex items-center gap-1.5 px-4 py-2 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer"
+            disabled={isGeneratingReport}
+            className="flex items-center gap-1.5 px-4 py-2 bg-accent hover:bg-primary-light disabled:opacity-60 disabled:cursor-not-allowed text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer"
             title="Generate a comprehensive PDF report"
           >
-            <FileText className="h-4 w-4" />
-            Download Report (PDF)
+            {isGeneratingReport ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+            {isGeneratingReport ? 'Generating...' : 'Download Report (PDF)'}
           </button>
 
           <button
@@ -186,8 +218,22 @@ export default function ReportsPage() {
       </div>
 
       {/* Control Selector Filters */}
-      <div className="glass-panel rounded-2xl p-5 grid grid-cols-1 md:grid-cols-3 gap-4 items-center print:hidden">
-        
+      <div className="glass-panel rounded-2xl p-5 grid grid-cols-1 md:grid-cols-4 gap-4 items-center print:hidden">
+
+        {/* Report Type — governs the structure of the downloaded PDF only */}
+        <div className="space-y-1.5">
+          <label className="block text-xs font-semibold text-theme-text-secondary uppercase">Report Type (PDF)</label>
+          <select
+            value={reportType}
+            onChange={(e) => setReportType(e.target.value as ReportType)}
+            className="w-full px-3 py-2 bg-theme-background/30 border border-theme-border/40 rounded-xl text-xs text-theme-text-primary focus:outline-none focus:border-accent"
+          >
+            <option value="overall">Overall (Event-wise + Student-wise)</option>
+            <option value="event">Event-wise Breakdown</option>
+            <option value="student">Student-wise Breakdown</option>
+          </select>
+        </div>
+
         {/* Division Filter */}
         <div className="space-y-1.5">
           <label className="block text-xs font-semibold text-theme-text-secondary uppercase">Division Scope</label>
@@ -300,7 +346,7 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            <div className="h-64 w-full flex items-center justify-center">
+            <div ref={radarChartRef} className="h-64 w-full flex items-center justify-center">
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarData}>
                   <PolarGrid stroke="rgba(255,255,255,0.1)" />
@@ -327,7 +373,7 @@ export default function ReportsPage() {
               <p className="text-[11px] text-theme-text-secondary">Task scores awarded to individual student contributors</p>
             </div>
 
-            <div className="h-64 w-full">
+            <div ref={barChartRef} className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={barData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
