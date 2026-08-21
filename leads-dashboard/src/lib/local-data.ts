@@ -205,6 +205,17 @@ export interface PublicFormItem {
   createdAt: string;
   isSample?: boolean;
   status: 'active' | 'archived';
+  eventId?: string;
+  eventName?: string;
+}
+
+export interface FormTemplateItem {
+  id: string;
+  name: string;
+  description?: string;
+  fields: FormField[];
+  createdBy: string;
+  createdAt: string;
 }
 
 export interface FormSubmissionItem {
@@ -428,6 +439,8 @@ export const initialAnnouncements: AnnouncementItem[] = [];
 
 export const initialForms: PublicFormItem[] = [];
 
+export const initialFormTemplates: FormTemplateItem[] = [];
+
 export const initialSubmissions: FormSubmissionItem[] = [];
 
 export const initialDesigns: DesignSubmissionItem[] = [];
@@ -476,6 +489,7 @@ export async function syncWithServer(): Promise<boolean> {
       hydrateCollection('leads_reimbursements', data.reimbursements);
       hydrateCollection('leads_announcements', data.announcements);
       hydrateCollection('leads_custom_forms', data.forms);
+      hydrateCollection('leads_form_templates', data.formTemplates);
       hydrateCollection('leads_form_submissions', data.submissions);
       hydrateCollection('leads_designs', data.designs);
       hydrateCollection('leads_group_policies', data.groupPolicies);
@@ -1710,6 +1724,54 @@ export function deleteForm(id: string, actorName: string): boolean {
 export function isSlugUnique(slug: string, excludeFormId?: string): boolean {
   const current = getForms();
   return !current.some(f => f.slug.toLowerCase() === slug.toLowerCase() && f.id !== excludeFormId);
+}
+
+// -------------------------------------------------------------
+// Form Templates — reusable field schemas for the form builder
+// -------------------------------------------------------------
+
+export function getFormTemplates(): FormTemplateItem[] {
+  if (typeof window === 'undefined') return initialFormTemplates;
+  const saved = localStorage.getItem('leads_form_templates');
+  if (saved) {
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  return initialFormTemplates;
+}
+
+export function saveFormTemplates(templates: FormTemplateItem[]): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem('leads_form_templates', JSON.stringify(templates));
+}
+
+export function addFormTemplate(template: Omit<FormTemplateItem, 'id' | 'createdAt'>): FormTemplateItem {
+  const current = getFormTemplates();
+  const newTemplate: FormTemplateItem = {
+    ...template,
+    id: 'tmpl_' + Date.now(),
+    createdAt: new Date().toISOString().split('T')[0]
+  };
+  current.unshift(newTemplate);
+  saveFormTemplates(current);
+  serverPost('/api/form-templates', newTemplate);
+  logAuditEvent('FORM_TEMPLATE_CREATED', template.createdBy, `Saved form template "${template.name}"`);
+  return newTemplate;
+}
+
+export function deleteFormTemplate(id: string, actorName: string): boolean {
+  const current = getFormTemplates();
+  const target = current.find(t => t.id === id);
+  if (!target) return false;
+
+  const updated = current.filter(t => t.id !== id);
+  saveFormTemplates(updated);
+  serverDelete('/api/form-templates', id);
+  logAuditEvent('FORM_TEMPLATE_DELETED', actorName, `Deleted form template "${target.name}"`);
+  return true;
 }
 
 export function getSubmissions(): FormSubmissionItem[] {

@@ -155,6 +155,9 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
             <div>
               <h1 className="text-lg font-bold text-white leading-tight">{form?.title}</h1>
               <p className="text-[11px] text-slate-400 mt-1">{form?.description || 'Please complete the requested information below.'}</p>
+              {form?.eventName && (
+                <p className="text-[10px] text-blue-400 font-semibold mt-1">For event: {form.eventName}</p>
+              )}
             </div>
           </div>
 

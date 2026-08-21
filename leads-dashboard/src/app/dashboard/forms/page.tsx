@@ -15,7 +15,10 @@ import {
   Clock,
   Table2,
   BarChart3,
-  Gauge
+  Gauge,
+  LayoutTemplate,
+  CalendarDays,
+  Save
 } from 'lucide-react';
 import {
   BarChart,
@@ -34,9 +37,15 @@ import {
   deleteForm,
   getSubmissions,
   isSlugUnique,
+  getFormTemplates,
+  addFormTemplate,
+  deleteFormTemplate,
+  getEvents,
   PublicFormItem,
   FormField,
-  FormSubmissionItem
+  FormSubmissionItem,
+  FormTemplateItem,
+  EventItem
 } from '@/lib/local-data';
 import { canBuildForms } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
@@ -81,18 +90,24 @@ function computeAverage(field: FormField, subs: FormSubmissionItem[]): number | 
 export default function FormsBuilderPage() {
   const [forms, setForms] = useState<PublicFormItem[]>([]);
   const [submissions, setSubmissions] = useState<FormSubmissionItem[]>([]);
+  const [templates, setTemplates] = useState<FormTemplateItem[]>([]);
+  const [events, setEvents] = useState<EventItem[]>([]);
   const [user, setUser] = useState<any>(null);
-  
+
   // Modals & Active Edit
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingForm, setEditingForm] = useState<PublicFormItem | null>(null);
   const [deletingFormId, setDeletingFormId] = useState<string | null>(null);
+  const [isSaveTemplateOpen, setIsSaveTemplateOpen] = useState(false);
+  const [templateNameDraft, setTemplateNameDraft] = useState('');
 
   // Form Creator State
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
   const [committee, setCommittee] = useState('Senior Student Leadership');
+  const [eventId, setEventId] = useState('');
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [fields, setFields] = useState<FormField[]>([
     { id: 'field_1', label: 'Full Name', type: 'text', required: true },
     { id: 'field_2', label: 'University Email', type: 'email', required: true }
@@ -112,6 +127,8 @@ export default function FormsBuilderPage() {
       const loadedForms = getForms();
       setForms(loadedForms);
       setSubmissions(getSubmissions());
+      setTemplates(getFormTemplates());
+      setEvents(getEvents());
     };
     refreshData();
 
@@ -147,6 +164,8 @@ export default function FormsBuilderPage() {
     setSlug('');
     setDescription('');
     setCommittee(user?.committee === 'All Committees' ? 'Senior Student Leadership' : user?.committee || 'Senior Student Leadership');
+    setEventId('');
+    setSelectedTemplateId('');
     setFields([
       { id: 'f_1', label: 'Full Name', type: 'text', required: true },
       { id: 'f_2', label: 'University Email', type: 'email', required: true }
@@ -161,8 +180,39 @@ export default function FormsBuilderPage() {
     setSlug(form.slug);
     setDescription(form.description);
     setCommittee(form.committee);
+    setEventId(form.eventId || '');
+    setSelectedTemplateId('');
     setFields(form.fields);
     setFormError('');
+  };
+
+  const handleApplyTemplate = (templateId: string) => {
+    setSelectedTemplateId(templateId);
+    if (!templateId) return;
+    const template = templates.find(t => t.id === templateId);
+    if (template) {
+      setFields(template.fields.map((f, i) => ({ ...f, id: `field_${Date.now()}_${i}` })));
+    }
+  };
+
+  const handleSaveTemplate = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!templateNameDraft.trim()) return;
+    addFormTemplate({
+      name: templateNameDraft.trim(),
+      fields,
+      createdBy: user?.name || 'User'
+    });
+    setTemplates(getFormTemplates());
+    setTemplateNameDraft('');
+    setIsSaveTemplateOpen(false);
+    triggerNotification('Field schema saved as a reusable template.');
+  };
+
+  const handleDeleteTemplate = (templateId: string) => {
+    deleteFormTemplate(templateId, user?.name || 'User');
+    setTemplates(getFormTemplates());
+    if (selectedTemplateId === templateId) setSelectedTemplateId('');
   };
 
   const addField = () => {
@@ -189,6 +239,7 @@ export default function FormsBuilderPage() {
     }
 
     const formattedSlug = slug.toLowerCase().replace(/[^a-z0-9-_]/g, '-');
+    const linkedEvent = eventId ? events.find(ev => ev.id === eventId) : undefined;
 
     if (editingForm) {
       if (!isSlugUnique(formattedSlug, editingForm.id)) {
@@ -201,6 +252,8 @@ export default function FormsBuilderPage() {
         description,
         committee,
         fields,
+        eventId: eventId || undefined,
+        eventName: linkedEvent?.title,
       }, user?.name || 'User');
       triggerNotification('Public form updated successfully.');
       setEditingForm(null);
@@ -215,6 +268,8 @@ export default function FormsBuilderPage() {
         description,
         committee,
         fields,
+        eventId: eventId || undefined,
+        eventName: linkedEvent?.title,
         createdBy: user?.name || 'User',
         status: 'active'
       });
@@ -337,6 +392,13 @@ export default function FormsBuilderPage() {
                       {form.description || `${form.fields.length} question fields`}
                     </p>
 
+                    {form.eventName && (
+                      <p className="text-[10px] text-accent flex items-center gap-1 font-semibold">
+                        <CalendarDays className="h-3 w-3" />
+                        Linked to {form.eventName}
+                      </p>
+                    )}
+
                     <div className="flex items-center justify-between pt-1 border-t border-theme-border/20 text-[11px]">
                       <button
                         onClick={(e) => {
@@ -408,6 +470,12 @@ export default function FormsBuilderPage() {
                     <p className="text-xs text-theme-text-secondary mt-0.5">
                       Public URL: <code className="text-accent font-mono">/forms/{selectedForm.slug}</code> &middot; Created by {selectedForm.createdBy}
                     </p>
+                    {selectedForm.eventName && (
+                      <p className="text-[11px] text-accent mt-1 flex items-center gap-1 font-semibold">
+                        <CalendarDays className="h-3.5 w-3.5" />
+                        Linked to event: {selectedForm.eventName}
+                      </p>
+                    )}
                   </div>
                   <button
                     onClick={() => handleCopyLink(selectedForm.slug)}
@@ -559,6 +627,7 @@ export default function FormsBuilderPage() {
                 onClick={() => {
                   setIsCreateModalOpen(false);
                   setEditingForm(null);
+                  setIsSaveTemplateOpen(false);
                 }}
                 className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
               >
@@ -570,6 +639,37 @@ export default function FormsBuilderPage() {
               <div className="p-3 bg-danger/10 border border-danger/25 rounded-xl text-danger text-xs flex items-center gap-2">
                 <ShieldAlert className="h-4 w-4 shrink-0" />
                 <span>{formError}</span>
+              </div>
+            )}
+
+            {!editingForm && templates.length > 0 && (
+              <div className="space-y-1.5 text-xs">
+                <label className="block font-medium text-theme-text-secondary flex items-center gap-1.5">
+                  <LayoutTemplate className="h-3.5 w-3.5" />
+                  Start from Template (optional)
+                </label>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={selectedTemplateId}
+                    onChange={(e) => handleApplyTemplate(e.target.value)}
+                    className="flex-1 px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  >
+                    <option value="">-- Blank Form --</option>
+                    {templates.map(t => (
+                      <option key={t.id} value={t.id}>{t.name} ({t.fields.length} fields)</option>
+                    ))}
+                  </select>
+                  {selectedTemplateId && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteTemplate(selectedTemplateId)}
+                      className="p-2.5 hover:bg-danger/10 rounded-xl text-danger transition-all cursor-pointer"
+                      title="Delete This Template"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -611,20 +711,48 @@ export default function FormsBuilderPage() {
                 />
               </div>
 
+              <div className="space-y-1.5">
+                <label className="block font-medium text-theme-text-secondary flex items-center gap-1.5">
+                  <CalendarDays className="h-3.5 w-3.5" />
+                  Link to Event (optional)
+                </label>
+                <select
+                  value={eventId}
+                  onChange={(e) => setEventId(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                >
+                  <option value="">-- No Event Linked --</option>
+                  {events.map(ev => (
+                    <option key={ev.id} value={ev.id}>{ev.title}</option>
+                  ))}
+                </select>
+              </div>
+
               {/* Dynamic Field Builder */}
               <div className="space-y-3 pt-2 border-t border-theme-border/20">
                 <div className="flex items-center justify-between">
                   <h4 className="font-bold text-xs text-theme-text-primary uppercase tracking-wider">
                     Form Questions & Field Schema ({fields.length})
                   </h4>
-                  <button
-                    type="button"
-                    onClick={addField}
-                    className="px-2.5 py-1 bg-accent/20 hover:bg-accent text-accent hover:text-white rounded-lg transition-all text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Add Question
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => { setTemplateNameDraft(''); setIsSaveTemplateOpen(true); }}
+                      className="px-2.5 py-1 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary rounded-lg transition-all text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                      title="Save these fields as a reusable template"
+                    >
+                      <Save className="h-3.5 w-3.5" />
+                      Save as Template
+                    </button>
+                    <button
+                      type="button"
+                      onClick={addField}
+                      className="px-2.5 py-1 bg-accent/20 hover:bg-accent text-accent hover:text-white rounded-lg transition-all text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Add Question
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-2.5">
@@ -684,6 +812,46 @@ export default function FormsBuilderPage() {
                 className="w-full py-3 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer mt-4"
               >
                 {editingForm ? 'Save Form Changes' : 'Publish Shareable Form Link'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Save as Template Modal */}
+      {isSaveTemplateOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="glass-panel w-full max-w-sm rounded-3xl p-6 flex flex-col space-y-4 relative border border-white/15 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-theme-text-primary flex items-center gap-1.5">
+                <LayoutTemplate className="h-4 w-4" />
+                Save as Template
+              </h2>
+              <button
+                onClick={() => setIsSaveTemplateOpen(false)}
+                className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="text-[11px] text-theme-text-secondary">
+              Saves the current {fields.length} question field{fields.length === 1 ? '' : 's'} as a reusable template you can start future forms from.
+            </p>
+            <form onSubmit={handleSaveTemplate} className="space-y-3 text-xs">
+              <input
+                type="text"
+                required
+                autoFocus
+                value={templateNameDraft}
+                onChange={(e) => setTemplateNameDraft(e.target.value)}
+                placeholder="e.g. Event Registration — Standard"
+                className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+              />
+              <button
+                type="submit"
+                className="w-full py-2.5 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer"
+              >
+                Save Template
               </button>
             </form>
           </div>

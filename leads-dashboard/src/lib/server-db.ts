@@ -27,6 +27,7 @@ import {
   initialReimbursements,
   initialAnnouncements,
   initialForms,
+  initialFormTemplates,
   initialSubmissions,
   initialDesigns,
   initialGroupPolicies,
@@ -49,6 +50,7 @@ export interface DbSchema {
   reimbursements: any[];
   announcements: any[];
   forms: any[];
+  formTemplates: any[];
   submissions: any[];
   designs: any[];
   groupPolicies: any[];
@@ -72,6 +74,7 @@ const EMPTY_DB: DbSchema = {
   reimbursements: [],
   announcements: [],
   forms: [],
+  formTemplates: [],
   submissions: [],
   designs: [],
   groupPolicies: [],
@@ -94,6 +97,7 @@ const SEED_DB: DbSchema = {
   reimbursements: initialReimbursements,
   announcements: initialAnnouncements,
   forms: initialForms,
+  formTemplates: initialFormTemplates,
   submissions: initialSubmissions,
   designs: initialDesigns,
   groupPolicies: initialGroupPolicies,
