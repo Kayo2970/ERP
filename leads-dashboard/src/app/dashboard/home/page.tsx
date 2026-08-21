@@ -152,16 +152,6 @@ export default function DashboardHome() {
         </div>
       )}
 
-      {/* Advisory Board Alert */}
-      {user && user.tier === 4 && (
-        <div className="flex items-center gap-3 p-4 bg-accent/10 border border-accent/20 rounded-2xl text-theme-text-primary text-xs animate-in fade-in duration-300">
-          <AlertCircle className="h-5 w-5 text-accent shrink-0" />
-          <span>
-            <strong>Advisory Board Role Notice:</strong> Advisory Board members provide strategic oversight and do not receive operational task assignments. View event progress, analytics rollups, and performance evaluations below.
-          </span>
-        </div>
-      )}
-
       {/* Banner: Task awaiting acknowledgment */}
       {pendingAckCount > 0 && (
         <div className="flex items-center justify-between p-4 bg-warning/10 border border-warning/20 rounded-2xl text-theme-text-primary animate-in fade-in duration-300">
