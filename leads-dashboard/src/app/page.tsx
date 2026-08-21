@@ -40,6 +40,13 @@ export default function LoginPage() {
     }
     setThemeLoaded(true);
 
+    // Surface why the session ended, if the dashboard shell's inactivity
+    // timer is what sent the user here (see dashboard-shell.tsx).
+    if (localStorage.getItem('logoutReason') === 'inactivity') {
+      setError('You were automatically logged out after 30 minutes of inactivity. Please sign in again.');
+      localStorage.removeItem('logoutReason');
+    }
+
     // If already logged in, route to home
     const currentUser = localStorage.getItem('user');
     if (currentUser) {

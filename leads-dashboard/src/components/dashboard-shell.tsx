@@ -84,6 +84,8 @@ const navSections: NavSection[] = [
 
 const allSidebarItems = navSections.flatMap(s => s.items);
 
+const INACTIVITY_LOGOUT_MS = 30 * 60 * 1000; // 30 minutes
+
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -251,6 +253,44 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Security: auto-logout after 30 minutes with no mouse/keyboard/touch/scroll
+  // activity, so a session left open on a shared or unattended machine doesn't
+  // stay signed in indefinitely. Any of those events resets the timer.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    const doAutoLogout = () => {
+      const currentUser = localStorage.getItem('user');
+      if (currentUser) {
+        try {
+          const parsed = JSON.parse(currentUser);
+          logAuditEvent('SESSION_AUTO_LOGOUT', parsed.name || 'User', 'Automatically logged out after 30 minutes of inactivity', parsed.email);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      localStorage.removeItem('user');
+      localStorage.setItem('logoutReason', 'inactivity');
+      router.replace('/');
+    };
+
+    const resetTimer = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(doAutoLogout, INACTIVITY_LOGOUT_MS);
+    };
+
+    const activityEvents = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart'];
+    activityEvents.forEach(evt => window.addEventListener(evt, resetTimer, { passive: true }));
+    resetTimer();
+
+    return () => {
+      clearTimeout(timeoutId);
+      activityEvents.forEach(evt => window.removeEventListener(evt, resetTimer));
+    };
+  }, [isAuthenticated, router]);
 
   // Super User only: jump straight into any real member's session, no password.
   // The Super User's own identity is stashed so "Return to my account" always works,
