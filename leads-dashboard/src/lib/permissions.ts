@@ -521,6 +521,16 @@ export function canEditDirectory(user: SessionUser): boolean {
   return isBaseLeadership(user) || hasCapability(user, 'EDIT_DIRECTORY');
 }
 
+/** Check if user is in the Faculty division. */
+export function isFaculty(user: SessionUser): boolean {
+  return !!user && user.division === 'Faculty';
+}
+
+/** Guest Directory (visiting-card contacts) — Centre Head and Faculty only. */
+export function canAccessGuestDirectory(user: SessionUser): boolean {
+  return isCentreHead(user) || isFaculty(user);
+}
+
 /** Form builder access — existing convention (tier 1 or tier 5), plus any Head regardless of tier. */
 export function canBuildForms(user: SessionUser): boolean {
   return (!!user && (user.tier === 1 || user.tier === 5)) || isHeadRole(user) || hasCapability(user, 'BUILD_FORMS');

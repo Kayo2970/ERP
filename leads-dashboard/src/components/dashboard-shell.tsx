@@ -30,10 +30,11 @@ import {
   Undo2,
   DatabaseBackup,
   Mail,
-  Send
+  Send,
+  Contact
 } from 'lucide-react';
 import { getAnnouncements, getTasks, getDesigns, getMembers, logAuditEvent, Member, syncWithServer, getSystemSettings } from '@/lib/local-data';
-import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead } from '@/lib/permissions';
+import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, canAccessGuestDirectory } from '@/lib/permissions';
 import { TermsModal } from '@/components/terms-modal';
 import { NotFoundScreen } from '@/components/not-found-screen';
 
@@ -43,6 +44,7 @@ interface SidebarItem {
   icon: React.ComponentType<any>;
   superUserOnly?: boolean;
   centreHeadOnly?: boolean;
+  guestDirectoryOnly?: boolean;
 }
 
 interface NavSection {
@@ -70,6 +72,7 @@ const navSections: NavSection[] = [
       { name: 'Reports', href: '/dashboard/reports', icon: BarChart3 },
       { name: 'Announcements', href: '/dashboard/announcements', icon: Megaphone },
       { name: 'Directory', href: '/dashboard/directory', icon: FolderGit2 },
+      { name: 'Guest Directory', href: '/dashboard/guest-directory', icon: Contact, guestDirectoryOnly: true },
       { name: 'Guest Invites', href: '/dashboard/guest-invites', icon: Send, centreHeadOnly: true },
       { name: 'Group Policies', href: '/dashboard/policies', icon: ShieldCheck, superUserOnly: true },
       { name: 'Backup & Restore', href: '/dashboard/backup', icon: DatabaseBackup, superUserOnly: true },
@@ -331,7 +334,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                 {section.title}
               </h3>
               <div className="space-y-1 pt-1">
-                {section.items.filter(item => (!item.superUserOnly || user.tier === 1) && (!item.centreHeadOnly || isCentreHead(user))).map((item) => {
+                {section.items.filter(item => (!item.superUserOnly || user.tier === 1) && (!item.centreHeadOnly || isCentreHead(user)) && (!item.guestDirectoryOnly || canAccessGuestDirectory(user))).map((item) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
                   return (
@@ -420,7 +423,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                   <h4 className="px-2 text-[10px] font-bold text-theme-text-secondary uppercase tracking-wider">
                     {section.title}
                   </h4>
-                  {section.items.filter(item => (!item.superUserOnly || user.tier === 1) && (!item.centreHeadOnly || isCentreHead(user))).map((item) => {
+                  {section.items.filter(item => (!item.superUserOnly || user.tier === 1) && (!item.centreHeadOnly || isCentreHead(user)) && (!item.guestDirectoryOnly || canAccessGuestDirectory(user))).map((item) => {
                     const Icon = item.icon;
                     const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
                     return (
