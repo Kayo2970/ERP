@@ -272,6 +272,47 @@ function ensureSubhadeepEmailFixed(): Promise<void> {
   return subhadeepEmailFixPromise;
 }
 
+/**
+ * One-off correction: an instance already running before local-data.ts's
+ * seed was corrected may still have Dr. Pallabi Mund's and Dr. Ajay R's old
+ * emails baked into its members.json — same situation as the Subhadeep fix
+ * above. Runs once per boot, only touches a record if its stale address is
+ * still present, and is a permanent no-op afterward.
+ */
+let staleEmailFixPromise: Promise<void> | null = null;
+function ensureStaleEmailsFixed(): Promise<void> {
+  if (!staleEmailFixPromise) {
+    staleEmailFixPromise = (async () => {
+      const CORRECTIONS: Record<string, string> = {
+        'pallabi.mund@msruas.ac.in': 'pallabimund.ms.mc@msruas.ac.in',
+        'ajay.r@msruas.ac.in': 'ajay.ca.mc@msruas.ac.in',
+      };
+      try {
+        const raw = await fs.readFile(collectionPath('members'), 'utf-8');
+        const members = JSON.parse(raw);
+        if (!Array.isArray(members)) return;
+        let changed = false;
+        const updated = members.map((m: any) => {
+          const correct = CORRECTIONS[m?.email?.toLowerCase()];
+          if (correct) {
+            changed = true;
+            return { ...m, email: correct };
+          }
+          return m;
+        });
+        if (changed) {
+          await fs.writeFile(collectionPath('members'), JSON.stringify(updated, null, 2), 'utf-8');
+        }
+      } catch (err: any) {
+        if (err?.code !== 'ENOENT') {
+          console.error('[server-db] Stale email correction check failed:', err);
+        }
+      }
+    })();
+  }
+  return staleEmailFixPromise;
+}
+
 async function migrateDesignFilesToDisk(): Promise<void> {
   let designs: any[];
   try {
@@ -343,6 +384,7 @@ async function readCollectionFile<T = any>(key: keyof DbSchema): Promise<T[]> {
   await ensureMigrated();
   await ensureFilesMigrated();
   await ensureSubhadeepEmailFixed();
+  await ensureStaleEmailsFixed();
   try {
     const raw = await fs.readFile(collectionPath(key), 'utf-8');
     const parsed = JSON.parse(raw);
