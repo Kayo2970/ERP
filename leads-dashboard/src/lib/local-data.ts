@@ -235,6 +235,11 @@ export interface DesignSubmissionItem {
   styleDecidedAt?: string;
   eventId?: string;
   eventName?: string;
+  // Set once a Style Approved design linked to an event auto-creates a
+  // matching Completed task (see updateDesignStyleReview) — lets repeat
+  // approvals (e.g. approved -> changes requested -> re-approved) reuse the
+  // same task instead of creating a duplicate each time.
+  linkedTaskId?: string;
   isSample?: boolean;
 }
 
@@ -1802,7 +1807,7 @@ export function updateDesignStyleReview(
   if (idx === -1) return null;
 
   const item = current[idx];
-  current[idx] = {
+  const updated: DesignSubmissionItem = {
     ...item,
     styleStatus,
     styleFeedback,
@@ -1810,6 +1815,35 @@ export function updateDesignStyleReview(
     styleDecidedAt: new Date().toISOString()
   };
 
+  // A design approved for an event is a real deliverable for that event, so
+  // it should show up on the Events page and the Tasks page and go through
+  // the same performance-rating workflow every other task does — rather than
+  // building a second, parallel "rate a design" flow, surface it as a
+  // Completed task tied to the same event/assignee (the ratings queue already
+  // picks up any Completed task). Reuses the same task across repeat
+  // approvals (approved -> changes requested -> re-approved) instead of
+  // creating a duplicate each time.
+  if (styleStatus === 'Style Approved' && item.eventId) {
+    if (item.linkedTaskId) {
+      updateTask(item.linkedTaskId, { status: 'Completed' }, reviewerName);
+    } else {
+      const task = addTask({
+        title: `Design Approved: ${item.title}`,
+        event: item.eventName,
+        eventId: item.eventId,
+        assignee: item.designerName,
+        assigneeId: item.designerId,
+        assigneeEmail: item.designerEmail,
+        assigneeType: 'individual',
+        dueDate: new Date().toISOString().split('T')[0],
+        status: 'Completed',
+        creatorName: reviewerName,
+      });
+      updated.linkedTaskId = task.id;
+    }
+  }
+
+  current[idx] = updated;
   saveDesigns(current);
   serverPatch('/api/designs', id, current[idx]);
   logAuditEvent('DESIGN_STYLE_REVIEW_UPDATED', reviewerName, `Design Head updated style review for design "${item.title}" to ${styleStatus}`);
