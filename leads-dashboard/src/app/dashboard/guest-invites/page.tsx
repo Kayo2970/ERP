@@ -15,8 +15,12 @@ import {
   Eye,
   Code2,
   Loader2,
+  BookUser,
+  Search,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
-import { logAuditEvent } from '@/lib/local-data';
+import { logAuditEvent, getGuests, Guest as DirectoryGuest } from '@/lib/local-data';
 import { isCentreHead } from '@/lib/permissions';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -48,6 +52,13 @@ export default function GuestInvitesPage() {
   const [sendProgress, setSendProgress] = useState({ sent: 0, failed: 0, total: 0 });
   const [resultMsg, setResultMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Guest Directory picker — lets a Centre Head add people already on file
+  // instead of retyping their name/email by hand each time.
+  const [directoryGuests, setDirectoryGuests] = useState<DirectoryGuest[]>([]);
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState('');
+  const [pickerSelectedIds, setPickerSelectedIds] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
@@ -58,6 +69,15 @@ export default function GuestInvitesPage() {
       }
     }
     setUserHydrated(true);
+
+    const refreshDirectory = () => setDirectoryGuests(getGuests());
+    refreshDirectory();
+    window.addEventListener('leads-data-sync', refreshDirectory);
+    window.addEventListener('storage', refreshDirectory);
+    return () => {
+      window.removeEventListener('leads-data-sync', refreshDirectory);
+      window.removeEventListener('storage', refreshDirectory);
+    };
   }, []);
 
   const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -106,6 +126,52 @@ export default function GuestInvitesPage() {
   };
 
   const handleClearGuests = () => setGuests([]);
+
+  // Guests in the Directory that have an email on file — invites need one, so
+  // records without an email address aren't selectable here.
+  const eligibleDirectoryGuests = directoryGuests.filter(g => isValidEmail(g.email || ''));
+
+  const filteredDirectoryGuests = eligibleDirectoryGuests.filter(g => {
+    const q = pickerSearch.toLowerCase();
+    if (!q) return true;
+    return (
+      g.name.toLowerCase().includes(q) ||
+      (g.organization || '').toLowerCase().includes(q) ||
+      (g.email || '').toLowerCase().includes(q)
+    );
+  });
+
+  const openPicker = () => {
+    setPickerSearch('');
+    setPickerSelectedIds(new Set());
+    setIsPickerOpen(true);
+  };
+
+  const togglePickerSelection = (id: string) => {
+    setPickerSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const handleAddFromDirectory = () => {
+    const existingEmails = new Set(guests.map(g => g.email));
+    const toAdd = eligibleDirectoryGuests
+      .filter(g => pickerSelectedIds.has(g.id))
+      .filter(g => !existingEmails.has((g.email || '').toLowerCase()))
+      .map(g => ({
+        id: `guest_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        name: g.name,
+        email: (g.email || '').toLowerCase(),
+      }));
+
+    if (toAdd.length > 0) {
+      setGuests(prev => [...prev, ...toAdd]);
+      setResultMsg({ type: 'success', text: `Added ${toAdd.length} guest(s) from the Guest Directory.` });
+    }
+    setIsPickerOpen(false);
+  };
 
   const handleSendInvites = async () => {
     if (guests.length === 0 || !subject.trim() || !bodyText.trim()) return;
@@ -174,7 +240,7 @@ export default function GuestInvitesPage() {
           Guest Invites
         </h1>
         <p className="text-xs text-theme-text-secondary">
-          Compose one invitation and personalize it for each guest using <code className="px-1 py-0.5 bg-theme-border/30 rounded text-[11px]">{'{{name}}'}</code> — this list is a one-off invite batch, separate from the Guest Directory.
+          Compose one invitation and personalize it for each guest using <code className="px-1 py-0.5 bg-theme-border/30 rounded text-[11px]">{'{{name}}'}</code> — pick people from the Guest Directory or add them by hand. This is a one-off invite batch and isn&apos;t saved back to the Directory.
         </p>
       </div>
 
@@ -195,12 +261,21 @@ export default function GuestInvitesPage() {
             Guest List ({guests.length})
           </h2>
 
+          <button
+            type="button"
+            onClick={openPicker}
+            className="w-full flex items-center justify-center gap-1.5 px-3.5 py-2 bg-accent/15 hover:bg-accent/25 border border-accent/30 text-accent text-xs font-semibold rounded-xl transition-all cursor-pointer"
+          >
+            <BookUser className="h-3.5 w-3.5" />
+            Select from Guest Directory{eligibleDirectoryGuests.length > 0 ? ` (${eligibleDirectoryGuests.length})` : ''}
+          </button>
+
           <form onSubmit={handleAddGuest} className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
               value={guestName}
               onChange={e => setGuestName(e.target.value)}
-              placeholder="Guest name"
+              placeholder="Or type a guest name"
               className="flex-1 px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl text-xs text-theme-text-primary focus:outline-none focus:border-accent"
             />
             <input
@@ -350,6 +425,86 @@ export default function GuestInvitesPage() {
           </button>
         </div>
       </div>
+
+      {/* Guest Directory Picker Modal */}
+      {isPickerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="glass-panel w-full max-w-lg rounded-3xl p-6 flex flex-col space-y-4 relative border border-white/15 shadow-2xl max-h-[85vh]">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-theme-text-primary flex items-center gap-2">
+                <BookUser className="h-4.5 w-4.5 text-accent" />
+                Select from Guest Directory
+              </h2>
+              <button
+                onClick={() => setIsPickerOpen(false)}
+                className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl">
+              <Search className="h-4 w-4 text-theme-text-secondary shrink-0" />
+              <input
+                type="text"
+                value={pickerSearch}
+                onChange={e => setPickerSearch(e.target.value)}
+                placeholder="Search by name, organization, or email..."
+                className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-xs text-theme-text-primary placeholder-theme-text-secondary"
+              />
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-1.5 min-h-[12rem]">
+              {eligibleDirectoryGuests.length === 0 ? (
+                <p className="text-xs text-theme-text-secondary py-8 text-center">
+                  No Guest Directory entries with an email address on file yet.
+                </p>
+              ) : filteredDirectoryGuests.length === 0 ? (
+                <p className="text-xs text-theme-text-secondary py-8 text-center">No matches for your search.</p>
+              ) : (
+                filteredDirectoryGuests.map(g => {
+                  const isSelected = pickerSelectedIds.has(g.id);
+                  const alreadyAdded = guests.some(existing => existing.email === (g.email || '').toLowerCase());
+                  return (
+                    <button
+                      key={g.id}
+                      type="button"
+                      disabled={alreadyAdded}
+                      onClick={() => togglePickerSelection(g.id)}
+                      className={`w-full flex items-center gap-2.5 text-left px-3 py-2.5 rounded-xl text-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                        isSelected ? 'bg-accent/10 border border-accent/40' : 'bg-theme-background/30 border border-theme-border/20 hover:bg-theme-border/20'
+                      }`}
+                    >
+                      {isSelected ? (
+                        <CheckSquare className="h-4 w-4 text-accent shrink-0" />
+                      ) : (
+                        <Square className="h-4 w-4 text-theme-text-secondary/60 shrink-0" />
+                      )}
+                      <div className="min-w-0">
+                        <span className="font-semibold text-theme-text-primary block truncate">
+                          {g.name}{g.organization ? ` — ${g.organization}` : ''}
+                        </span>
+                        <span className="text-theme-text-secondary block truncate">
+                          {g.email}{alreadyAdded ? ' (already in list)' : ''}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleAddFromDirectory}
+              disabled={pickerSelectedIds.size === 0}
+              className="w-full py-3 bg-accent hover:bg-primary-light disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer text-xs"
+            >
+              Add {pickerSelectedIds.size > 0 ? `${pickerSelectedIds.size} Selected` : 'Selected'} Guest{pickerSelectedIds.size === 1 ? '' : 's'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
