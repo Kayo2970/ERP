@@ -1659,6 +1659,48 @@ export function updateDesignStyleReview(
   return current[idx];
 }
 
+/**
+ * Replace the uploaded asset on an existing design submission — e.g. after
+ * "Changes Requested" — without creating a new record. Resets any prior
+ * proofread/style decision back to pending, since the reviewed file no
+ * longer exists.
+ */
+export function updateDesignFile(
+  id: string,
+  fileData: string,
+  fileName: string,
+  fileSize: number,
+  fileType: string,
+  actorName: string
+): DesignSubmissionItem | null {
+  if (fileSize > 25 * 1024 * 1024) {
+    throw new Error('File size exceeds the 25 MB limit.');
+  }
+
+  const current = getDesigns();
+  const idx = current.findIndex(d => d.id === id);
+  if (idx === -1) return null;
+
+  const item = current[idx];
+  const updated: DesignSubmissionItem = {
+    ...item,
+    fileData,
+    fileName,
+    fileSize,
+    fileType,
+    review: item.review ? { ...item.review, status: 'Pending Proofread', comments: undefined, reviewedAt: undefined } : item.review,
+    styleStatus: item.styleStatus ? 'Pending' : item.styleStatus,
+    styleFeedback: undefined,
+  };
+
+  current[idx] = updated;
+  saveDesigns(current);
+  serverPatch('/api/designs', id, updated);
+  logAuditEvent('DESIGN_FILE_REPLACED', actorName, `Replaced the uploaded file for design "${item.title}"`);
+
+  return updated;
+}
+
 export function deleteDesign(id: string, actorName: string): boolean {
   const current = getDesigns();
   const target = current.find(d => d.id === id);
