@@ -19,6 +19,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { deleteStoredFile, saveBase64File } from './file-storage';
+import { encryptData, decryptData, isEncryptedPayload } from './encryption';
 import {
   initialMembers,
   initialEvents,
@@ -392,7 +393,19 @@ async function readCollectionFile<T = any>(key: keyof DbSchema): Promise<T[]> {
   try {
     const raw = await fs.readFile(collectionPath(key), 'utf-8');
     const parsed = JSON.parse(raw);
-    let arr: any[] = Array.isArray(parsed) ? parsed : ((EMPTY_DB[key] as any[]) ?? []);
+    let jsonContent: any = parsed;
+
+    if (isEncryptedPayload(parsed)) {
+      try {
+        const decryptedText = decryptData(parsed);
+        jsonContent = JSON.parse(decryptedText);
+      } catch (decErr) {
+        console.error(`[server-db] Decryption failed for collection "${String(key)}":`, decErr);
+        return ((EMPTY_DB[key] as any[]) ?? []) as T[];
+      }
+    }
+
+    let arr: any[] = Array.isArray(jsonContent) ? jsonContent : ((EMPTY_DB[key] as any[]) ?? []);
     if (key === 'designs') arr = processDesignRetention(arr);
     return arr as T[];
   } catch (err: any) {
@@ -401,7 +414,8 @@ async function readCollectionFile<T = any>(key: keyof DbSchema): Promise<T[]> {
     const seeded = ((SEED_DB[key] as any[]) ?? []) as T[];
     try {
       await fs.mkdir(DATA_DIR, { recursive: true });
-      await fs.writeFile(collectionPath(key), JSON.stringify(seeded, null, 2), 'utf-8');
+      const encryptedPayload = encryptData(JSON.stringify(seeded));
+      await fs.writeFile(collectionPath(key), JSON.stringify(encryptedPayload, null, 2), 'utf-8');
     } catch (writeErr) {
       console.error(`[server-db] First-boot seed write failed for "${String(key)}":`, writeErr);
     }
@@ -411,7 +425,9 @@ async function readCollectionFile<T = any>(key: keyof DbSchema): Promise<T[]> {
 
 async function writeCollectionFile<T = any>(key: keyof DbSchema, data: T[]): Promise<void> {
   await fs.mkdir(DATA_DIR, { recursive: true });
-  await fs.writeFile(collectionPath(key), JSON.stringify(data, null, 2), 'utf-8');
+  const jsonString = JSON.stringify(data);
+  const encryptedPayload = encryptData(jsonString);
+  await fs.writeFile(collectionPath(key), JSON.stringify(encryptedPayload, null, 2), 'utf-8');
 }
 
 /** Best-effort shared freshness marker — nothing depends on this for correctness. */
