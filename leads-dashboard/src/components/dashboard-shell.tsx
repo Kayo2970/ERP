@@ -38,6 +38,7 @@ import { getAnnouncements, getTasks, getDesigns, getMembers, logAuditEvent, Memb
 import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isFinanceHead, canAccessGuestDirectory } from '@/lib/permissions';
 import { TermsModal } from '@/components/terms-modal';
 import { NotFoundScreen } from '@/components/not-found-screen';
+import { LoadingScreen } from '@/components/loading-screen';
 
 interface SidebarItem {
   name: string;
@@ -99,6 +100,12 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const [isTermsOpen, setIsTermsOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const notifRefMobile = useRef<HTMLDivElement>(null);
+
+  // Brief branded splash shown whenever navigation crosses into a different
+  // top-level module (e.g. Tasks -> Events), not for sub-routes within the
+  // same module (e.g. Events -> Events/[id]).
+  const [isModuleTransitioning, setIsModuleTransitioning] = useState(false);
+  const prevModuleRef = useRef<string | null>(null);
 
   // Super User-only quick account switch — jumps straight into any real member's
   // session without a password. originalUser is the Super User's own identity,
@@ -256,6 +263,20 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    const currentModule = pathname.split('/')[2] || 'home';
+    if (prevModuleRef.current === null) {
+      // Skip on first mount — the login page already showed its own splash
+      // for this transition into the dashboard.
+      prevModuleRef.current = currentModule;
+      return;
+    }
+    if (prevModuleRef.current !== currentModule) {
+      prevModuleRef.current = currentModule;
+      setIsModuleTransitioning(true);
+    }
+  }, [pathname]);
 
   // Security: auto-logout after 30 minutes with no mouse/keyboard/touch/scroll
   // activity, so a session left open on a shared or unattended machine doesn't
@@ -446,6 +467,14 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
   return (
     <div className="min-h-screen bg-space-theme flex flex-col md:flex-row transition-all duration-300">
+      {isModuleTransitioning && (
+        <LoadingScreen
+          duration={2000}
+          subtitle="Loading module..."
+          onComplete={() => setIsModuleTransitioning(false)}
+        />
+      )}
+
       {/* Sidebar - Desktop */}
       <aside className="hidden md:flex flex-col w-64 glass-panel bg-theme-sidebar/80 border-r border-theme-sidebar-border h-screen sticky top-0 z-40">
         {/* Brand Logo Link to Dashboard Home */}

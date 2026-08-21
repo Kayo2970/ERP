@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { ShieldAlert, LogIn, Mail, Lock, Eye, EyeOff, KeyRound, CheckCircle2, Clock, ArrowLeft, Send } from 'lucide-react';
 import { logAuditEvent, requestPasswordReset, submitPasswordReset } from '@/lib/local-data';
 import { TermsModal } from '@/components/terms-modal';
+import { LoadingScreen } from '@/components/loading-screen';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,6 +15,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showLoginSplash, setShowLoginSplash] = useState(false);
   const [themeLoaded, setThemeLoaded] = useState(false);
   const [isTermsOpen, setIsTermsOpen] = useState(false);
 
@@ -104,7 +106,8 @@ export default function LoginPage() {
       localStorage.setItem('user', JSON.stringify(data.user));
       logAuditEvent('USER_LOGIN', data.user.name, `Logged in successfully with role ${data.user.role} (Tier ${data.user.tier})`);
 
-      router.push('/dashboard/home');
+      setIsLoading(false);
+      setShowLoginSplash(true);
     } catch {
       setError('Network error — could not reach the server. Please try again.');
       setIsLoading(false);
@@ -184,6 +187,16 @@ export default function LoginPage() {
   };
 
   if (!themeLoaded) return null;
+
+  if (showLoginSplash) {
+    return (
+      <LoadingScreen
+        duration={5000}
+        subtitle="Signing you in..."
+        onComplete={() => router.push('/dashboard/home')}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-space-theme flex flex-col items-center justify-center p-4">
