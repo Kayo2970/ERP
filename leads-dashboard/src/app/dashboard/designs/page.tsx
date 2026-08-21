@@ -743,8 +743,8 @@ export default function DesignPortalPage() {
 
       {/* Upload Modal */}
       {showUploadModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-card border border-border rounded-xl max-w-lg w-full p-6 space-y-5 shadow-2xl relative">
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
+          <div className="glass-panel bg-slate-900/95 dark:bg-[#0B1B2E]/95 bg-white/95 backdrop-blur-2xl border border-white/20 dark:border-white/15 rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl relative">
             <button
               onClick={() => setShowUploadModal(false)}
               className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"
@@ -955,8 +955,8 @@ export default function DesignPortalPage() {
 
       {/* Design Inspector & Proofreader Review Modal */}
       {showInspectorModal && selectedDesign && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-card border border-border rounded-xl max-w-2xl w-full p-6 space-y-6 shadow-2xl relative">
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
+          <div className="glass-panel bg-slate-900/95 dark:bg-[#0B1B2E]/95 bg-white/95 backdrop-blur-2xl border border-white/20 dark:border-white/15 rounded-2xl max-w-2xl w-full p-6 space-y-6 shadow-2xl relative">
             <button
               onClick={() => {
                 setShowInspectorModal(false);
