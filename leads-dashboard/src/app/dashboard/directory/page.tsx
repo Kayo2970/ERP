@@ -691,10 +691,10 @@ export default function DirectoryPage() {
       </div>
 
       {/* Division Category Selector Tabs */}
-      <div className="flex flex-wrap gap-2 pt-1 border-b border-theme-border/30 pb-3 text-xs font-semibold">
+      <div className="flex items-center gap-2 overflow-x-auto pb-3 pt-1 border-b border-theme-border/30 text-xs font-semibold scrollbar-none max-w-full -mx-2 px-2 sm:mx-0 sm:px-0">
         <button
           onClick={() => { setSelectedDivision('ALL'); setCurrentPage(1); }}
-          className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+          className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
             selectedDivision === 'ALL'
               ? 'bg-accent text-white shadow-sm'
               : 'bg-theme-border/20 text-theme-text-secondary hover:text-theme-text-primary'
@@ -706,7 +706,7 @@ export default function DirectoryPage() {
 
         <button
           onClick={() => { setSelectedDivision('Advisory Board'); setCurrentPage(1); }}
-          className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+          className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
             selectedDivision === 'Advisory Board'
               ? 'bg-accent text-white shadow-sm'
               : 'bg-theme-border/20 text-theme-text-secondary hover:text-theme-text-primary'
@@ -718,7 +718,7 @@ export default function DirectoryPage() {
 
         <button
           onClick={() => { setSelectedDivision('Faculty'); setCurrentPage(1); }}
-          className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+          className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
             selectedDivision === 'Faculty'
               ? 'bg-accent text-white shadow-sm'
               : 'bg-theme-border/20 text-theme-text-secondary hover:text-theme-text-primary'
@@ -730,7 +730,7 @@ export default function DirectoryPage() {
 
         <button
           onClick={() => { setSelectedDivision('Core Committee'); setCurrentPage(1); }}
-          className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+          className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
             selectedDivision === 'Core Committee'
               ? 'bg-accent text-white shadow-sm'
               : 'bg-theme-border/20 text-theme-text-secondary hover:text-theme-text-primary'
@@ -742,7 +742,7 @@ export default function DirectoryPage() {
 
         <button
           onClick={() => { setSelectedDivision('Training Associate'); setCurrentPage(1); }}
-          className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+          className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
             selectedDivision === 'Training Associate'
               ? 'bg-accent text-white shadow-sm'
               : 'bg-theme-border/20 text-theme-text-secondary hover:text-theme-text-primary'
@@ -754,7 +754,7 @@ export default function DirectoryPage() {
 
         <button
           onClick={() => { setSelectedDivision('Alumni'); setCurrentPage(1); }}
-          className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+          className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
             selectedDivision === 'Alumni'
               ? 'bg-accent text-white shadow-sm'
               : 'bg-theme-border/20 text-theme-text-secondary hover:text-theme-text-primary'
@@ -767,7 +767,7 @@ export default function DirectoryPage() {
         {terminatedCount > 0 && (
           <button
             onClick={() => { setSelectedDivision('TERMINATED'); setCurrentPage(1); }}
-            className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
               selectedDivision === 'TERMINATED'
                 ? 'bg-accent text-white shadow-sm'
                 : 'bg-theme-border/20 text-theme-text-secondary hover:text-theme-text-primary'

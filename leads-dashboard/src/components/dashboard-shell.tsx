@@ -406,45 +406,53 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       </button>
 
       {isNotificationsOpen && (
-        <div className="absolute right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] glass-panel rounded-2xl p-4 shadow-2xl border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150">
-          <div className="flex items-center justify-between pb-2.5 border-b border-theme-border/30">
-            <h4 className="text-xs font-bold text-theme-text-primary">Notifications</h4>
-            {unreadCount > 0 && (
-              <button
-                onClick={markAllNotificationsAsRead}
-                className="text-[10px] text-accent hover:underline font-semibold flex items-center gap-1 cursor-pointer"
-              >
-                <Check className="h-3 w-3" />
-                Mark all read
-              </button>
-            )}
-          </div>
+        <>
+          {/* Mobile backdrop dim overlay to prevent bleed-through and dismiss on backdrop click */}
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
+            onClick={() => setIsNotificationsOpen(false)}
+          />
 
-          <div className="divide-y divide-theme-border/20 max-h-64 overflow-y-auto pt-1 space-y-1">
-            {notifications.length === 0 ? (
-              <div className="text-center py-6 text-theme-text-secondary text-xs">
-                No notifications at this time.
-              </div>
-            ) : (
-              notifications.map(notif => (
+          <div className="fixed top-16 right-3 left-3 md:static md:left-auto md:right-0 md:absolute md:top-full md:mt-2 md:w-80 bg-[#0d1629] dark:bg-[#0d1629] rounded-2xl p-4 shadow-[0_20px_60px_rgba(0,0,0,0.85)] border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-2.5 border-b border-theme-border/30">
+              <h4 className="text-xs font-bold text-theme-text-primary">Notifications</h4>
+              {unreadCount > 0 && (
                 <button
-                  key={notif.id}
-                  type="button"
-                  onClick={() => handleNotifClick(notif)}
-                  className={`w-full text-left py-2.5 px-2 rounded-lg text-xs transition-all cursor-pointer hover:bg-accent/10 ${notif.read ? 'opacity-60' : 'bg-accent/5'}`}
+                  onClick={markAllNotificationsAsRead}
+                  className="text-[10px] text-accent hover:underline font-semibold flex items-center gap-1 cursor-pointer"
                 >
-                  <div className="flex items-start gap-2">
-                    <Info className="h-3.5 w-3.5 text-accent shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-medium text-theme-text-primary text-xs leading-snug">{notif.title}</p>
-                      <p className="text-[10px] text-theme-text-secondary mt-0.5">{notif.time}</p>
-                    </div>
-                  </div>
+                  <Check className="h-3 w-3" />
+                  Mark all read
                 </button>
-              ))
-            )}
+              )}
+            </div>
+
+            <div className="divide-y divide-theme-border/20 max-h-64 overflow-y-auto pt-1 space-y-1">
+              {notifications.length === 0 ? (
+                <div className="text-center py-6 text-theme-text-secondary text-xs">
+                  No notifications at this time.
+                </div>
+              ) : (
+                notifications.map(notif => (
+                  <button
+                    key={notif.id}
+                    type="button"
+                    onClick={() => handleNotifClick(notif)}
+                    className={`w-full text-left py-2.5 px-2 rounded-lg text-xs transition-all cursor-pointer hover:bg-accent/10 ${notif.read ? 'opacity-60' : 'bg-accent/5'}`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <Info className="h-3.5 w-3.5 text-accent shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-medium text-theme-text-primary text-xs leading-snug">{notif.title}</p>
+                        <p className="text-[10px] text-theme-text-secondary mt-0.5">{notif.time}</p>
+                      </div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
