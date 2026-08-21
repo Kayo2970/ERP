@@ -439,7 +439,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             onClick={() => setIsNotificationsOpen(false)}
           />
 
-          <div className="fixed top-16 right-3 left-3 md:static md:left-auto md:right-0 md:absolute md:top-full md:mt-2 md:w-80 bg-[#0d1629] dark:bg-[#0d1629] rounded-2xl p-4 shadow-[0_20px_60px_rgba(0,0,0,0.85)] border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150">
+          <div className="fixed top-16 right-3 left-3 md:static md:left-auto md:right-0 md:absolute md:top-full md:mt-2 md:w-80 glass-panel rounded-2xl p-4 shadow-2xl border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-2.5 border-b border-theme-border/30">
               <h4 className="text-xs font-bold text-theme-text-primary">Notifications</h4>
               {unreadCount > 0 && (

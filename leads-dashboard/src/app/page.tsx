@@ -364,32 +364,6 @@ export default function LoginPage() {
               </div>
             </div>
           </div>
-
-          {/* Quotes Controls Footer */}
-          <div className="flex items-center justify-between z-10 pt-3 md:pt-4 border-t border-white/10">
-            <div className="flex items-center gap-1.5">
-              {INSPIRATIONAL_QUOTES.map((_, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => {
-                    setIsQuoteFading(true);
-                    setTimeout(() => {
-                      setQuoteIndex(idx);
-                      setIsQuoteFading(false);
-                    }, 250);
-                  }}
-                  aria-label={`Go to quote ${idx + 1}`}
-                  className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
-                    idx === quoteIndex ? 'w-6 bg-accent' : 'w-2 bg-white/20 hover:bg-white/40'
-                  }`}
-                />
-              ))}
-            </div>
-            <span className="text-[10px] font-mono text-theme-text-secondary">
-              {quoteIndex + 1} / {INSPIRATIONAL_QUOTES.length}
-            </span>
-          </div>
         </div>
 
         {/* Login Form Panel — comes first on mobile so signing in is immediate. */}
