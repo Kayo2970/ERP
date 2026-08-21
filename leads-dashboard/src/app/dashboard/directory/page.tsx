@@ -24,7 +24,6 @@ import {
   Square,
   MinusSquare,
   Layers,
-  Sparkles,
   BookOpen
 } from 'lucide-react';
 import {
@@ -373,7 +372,7 @@ export default function DirectoryPage() {
         } else {
           triggerError('No valid member rows found in the CSV.');
         }
-      } catch (err) {
+      } catch {
         triggerError('Error parsing CSV file. Please verify formatting.');
       }
     };

@@ -1,21 +1,18 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { 
-  Receipt, 
-  Check, 
-  X, 
-  Download, 
-  FileText, 
-  Plus, 
-  ShieldAlert, 
-  CheckCircle, 
-  Eye, 
-  EyeOff, 
+import {
+  Check,
+  X,
+  Download,
+  FileText,
+  ShieldAlert,
+  CheckCircle,
+  Eye,
+  EyeOff,
   Upload,
   Clock,
   CheckCircle2,
-  AlertTriangle,
   BarChart3,
   Filter,
   Calendar,
@@ -26,11 +23,10 @@ import {
   Paperclip,
   Trash2
 } from 'lucide-react';
-import { 
-  getReimbursements, 
-  addReimbursement, 
-  updateReimbursementStatus, 
-  deleteReimbursement,
+import {
+  getReimbursements,
+  addReimbursement,
+  updateReimbursementStatus,
   getEvents,
   getMembers,
   Member,
@@ -38,16 +34,11 @@ import {
   EventItem,
   ReceiptFile
 } from '@/lib/local-data';
-import { maskBankDetails } from '@/lib/design-tokens';
-import { 
-  canApproveAsSectorHead, 
-  canApproveAsFinanceHead, 
-  canViewReimbursement,
-  isSectorHead,
-  isFinanceHead
+import {
+  canApproveAsSectorHead,
+  canApproveAsFinanceHead,
+  canViewReimbursement
 } from '@/lib/permissions';
-import { ConfirmModal } from '@/components/ui/confirm-modal';
-import { EmptyState } from '@/components/ui/empty-state';
 
 export default function ReimbursementsPage() {
   const [reimbursements, setReimbursements] = useState<ReimbursementItem[]>([]);

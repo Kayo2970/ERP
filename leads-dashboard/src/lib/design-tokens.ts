@@ -44,24 +44,3 @@ export function getRatingColor(score: number): {
   }
 }
 
-export function maskBankDetails(details: string, revealed = false): string {
-  if (!details) return 'N/A';
-  if (revealed) return details;
-  // If details contain account number or digits, mask all except last 4
-  const digits = details.replace(/\D/g, '');
-  if (digits.length >= 4) {
-    const last4 = digits.slice(-4);
-    // Keep bank name if present
-    const parts = details.split('-');
-    const bankPrefix = parts.length > 1 ? parts[0].trim() : 'Bank A/C';
-    return `${bankPrefix} - •••• •••• ${last4}`;
-  }
-  return '•••• •••• ••••';
-}
-
-export function maskEmail(email: string): string {
-  if (!email || !email.includes('@')) return email;
-  const [local, domain] = email.split('@');
-  if (local.length <= 2) return `${local}***@${domain}`;
-  return `${local.slice(0, 2)}***${local.slice(-1)}@${domain}`;
-}

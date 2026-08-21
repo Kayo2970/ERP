@@ -8,14 +8,11 @@ import {
   User,
   Briefcase,
   CheckCircle2,
-  FileClock,
   Users,
   Edit2,
   Trash2,
   AlertCircle,
   Clock,
-  ShieldCheck,
-  ShieldAlert,
   Search
 } from 'lucide-react';
 import { 

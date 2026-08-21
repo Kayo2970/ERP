@@ -98,7 +98,7 @@ export default function LoginPage() {
       logAuditEvent('USER_LOGIN', data.user.name, `Logged in successfully with role ${data.user.role} (Tier ${data.user.tier})`);
 
       router.push('/dashboard/home');
-    } catch (err) {
+    } catch {
       setError('Network error — could not reach the server. Please try again.');
       setIsLoading(false);
     }

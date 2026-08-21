@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
+import { useState, useEffect } from 'react';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
   ResponsiveContainer,
   RadarChart,
   PolarGrid,
@@ -16,17 +16,16 @@ import {
   Radar,
   Cell
 } from 'recharts';
-import { getRatings, getMembers, getTasks, RatingItem, Member, TaskItem } from '@/lib/local-data';
+import { getRatings, getMembers, RatingItem, Member } from '@/lib/local-data';
 import { getRatingColor } from '@/lib/design-tokens';
 import { canViewRating } from '@/lib/permissions';
 import { generatePerformanceReportPdf } from '@/lib/report-generator';
-import { BarChart3, Users, User, Download, FileText, Filter, Star, Info, Layers, CheckSquare } from 'lucide-react';
+import { BarChart3, Download, FileText, Star } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 
 export default function ReportsPage() {
   const [ratings, setRatings] = useState<RatingItem[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
-  const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [user, setUser] = useState<any>(null);
   const [selectedDivision, setSelectedDivision] = useState<string>('ALL');
   const [selectedTarget, setSelectedTarget] = useState('All');
@@ -36,7 +35,6 @@ export default function ReportsPage() {
     const refreshData = () => {
       setRatings(getRatings());
       setMembers(getMembers());
-      setTasks(getTasks());
     };
     refreshData();
 

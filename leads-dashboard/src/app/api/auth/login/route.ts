@@ -33,6 +33,7 @@ export async function POST(request: Request) {
       );
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- stripped from the response on purpose
     const { passwordHash, ...safeUser } = matchedUser;
     return NextResponse.json({ user: safeUser });
   } catch (err: any) {

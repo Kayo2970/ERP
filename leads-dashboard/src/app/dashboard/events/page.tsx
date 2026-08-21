@@ -12,23 +12,20 @@ import {
   Trash2,
   CheckCircle2,
   ShieldAlert,
-  ShieldCheck,
   ArrowRight,
-  Sparkles,
   Download,
   Upload,
   Clock,
   Check,
   Ban
 } from 'lucide-react';
-import { getEvents, addEvent, updateEvent, deleteEvent, approveEvent, rejectEvent, submitEventEdit, getTasks, getEffectiveEventStatus, EventItem, TaskItem } from '@/lib/local-data';
+import { getEvents, addEvent, updateEvent, deleteEvent, approveEvent, rejectEvent, submitEventEdit, getEffectiveEventStatus, EventItem } from '@/lib/local-data';
 import { canCreateEvent, canEditEvent, canDeleteEvent, canManageEvents, canViewEvent, canApprovePendingEvent, getEventApprovalRequirement } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 
 export default function EventsPage() {
   const [events, setEvents] = useState<EventItem[]>([]);
-  const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [user, setUser] = useState<any>(null);
   
   // Modals
@@ -54,7 +51,6 @@ export default function EventsPage() {
   useEffect(() => {
     const refreshData = () => {
       setEvents(getEvents());
-      setTasks(getTasks());
     };
     refreshData();
 
@@ -185,7 +181,7 @@ export default function EventsPage() {
         } else {
           triggerError('No valid event rows found in the CSV — check that Title, StartDate, and EndDate are filled in and dates are valid.');
         }
-      } catch (err) {
+      } catch {
         triggerError('Error parsing CSV file. Please verify formatting.');
       }
     };
@@ -440,8 +436,6 @@ export default function EventsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {sortedEvents.map((event) => {
-            const eventTasks = tasks.filter(t => t.eventId === event.id || t.event === event.title);
-            const totalStudentsAssigned = Array.from(new Set((event.committees || []).flatMap(c => c.memberIds))).length;
             const effectiveStatus = getEffectiveEventStatus(event);
             const isPast = effectiveStatus === 'completed' || effectiveStatus === 'archived';
 

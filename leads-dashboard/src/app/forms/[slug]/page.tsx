@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, use } from 'react';
-import { CheckCircle2, ChevronLeft, Send, Sparkles, AlertTriangle, ShieldCheck, FileText, AlertCircle } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, Send, Sparkles, AlertTriangle, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { getForms, addSubmission, PublicFormItem } from '@/lib/local-data';
 import { TermsModal } from '@/components/terms-modal';

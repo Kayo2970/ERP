@@ -1,36 +1,28 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { 
-  User, 
-  ShieldCheck, 
-  History, 
-  Lock, 
-  Key, 
-  CheckCircle2, 
-  ShieldAlert, 
-  Users, 
-  Sliders, 
-  Clock, 
-  Sun, 
-  Moon,
+import {
+  User,
+  ShieldCheck,
+  History,
+  Key,
+  CheckCircle2,
+  ShieldAlert,
   Save,
   Building2,
   CreditCard,
   Hash,
-  Receipt,
   Mail,
   Send,
   Eye,
   RefreshCw,
   FileText
 } from 'lucide-react';
-import { getAuditLogs, getMembers, updateMember, Member, AuditLogItem, getEmailLogs, requestEmailChange, confirmEmailChange } from '@/lib/local-data';
+import { getAuditLogs, getMembers, updateMember, AuditLogItem, getEmailLogs, requestEmailChange, confirmEmailChange } from '@/lib/local-data';
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<'account' | 'reimbursement' | 'roles' | 'audit' | 'emails'>('account');
   const [user, setUser] = useState<any>(null);
-  const [members, setMembers] = useState<Member[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
   const [emailLogs, setEmailLogs] = useState<any[]>([]);
   const [emailFilter, setEmailFilter] = useState<string>('ALL');
@@ -71,7 +63,6 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const allMembers = getMembers();
-    setMembers(allMembers);
     setAuditLogs(getAuditLogs());
     fetchEmails();
 
@@ -170,7 +161,6 @@ export default function SettingsPage() {
     const updatedUser = { ...user, email: res.newEmail };
     setUser(updatedUser);
     localStorage.setItem('user', JSON.stringify(updatedUser));
-    setMembers(getMembers());
     setAuditLogs(getAuditLogs());
 
     resetEmailChangeFlow();
@@ -237,7 +227,6 @@ export default function SettingsPage() {
     const updatedUser = { ...user, ...changes };
     setUser(updatedUser);
     localStorage.setItem('user', JSON.stringify(updatedUser));
-    setMembers(getMembers());
     setAuditLogs(getAuditLogs());
 
     setCurrentPassword('');
