@@ -24,10 +24,13 @@ import { canCreateEvent, canEditEvent, canDeleteEvent, canManageEvents, canViewE
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 
+type EventStatusFilter = 'ALL' | 'ONGOING' | 'COMPLETED' | 'ARCHIVED';
+
 export default function EventsPage() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [user, setUser] = useState<any>(null);
-  
+  const [statusFilter, setStatusFilter] = useState<EventStatusFilter>('ALL');
+
   // Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
@@ -361,6 +364,14 @@ export default function EventsPage() {
     return isPast ? bTime - aTime : aTime - bTime;
   });
 
+  const statusFilteredEvents = sortedEvents.filter(event => {
+    if (statusFilter === 'ALL') return true;
+    const effective = getEffectiveEventStatus(event);
+    if (statusFilter === 'ONGOING') return effective === 'planned' || effective === 'active';
+    if (statusFilter === 'COMPLETED') return effective === 'completed';
+    return effective === 'archived';
+  });
+
   return (
     <div className="p-6 md:p-8 space-y-6">
       
@@ -424,6 +435,30 @@ export default function EventsPage() {
         )}
       </div>
 
+      {/* Status Filter Tabs */}
+      {visibleEvents.length > 0 && (
+        <div className="flex items-center gap-1 bg-theme-border/20 rounded-xl p-1 w-fit">
+          {([
+            { key: 'ALL', label: 'All Events' },
+            { key: 'ONGOING', label: 'Ongoing' },
+            { key: 'COMPLETED', label: 'Completed' },
+            { key: 'ARCHIVED', label: 'Archived' },
+          ] as { key: EventStatusFilter; label: string }[]).map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setStatusFilter(tab.key)}
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                statusFilter === tab.key
+                  ? 'bg-accent text-white shadow-sm'
+                  : 'text-theme-text-secondary hover:text-theme-text-primary'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Grid of Events Cards */}
       {visibleEvents.length === 0 ? (
         <EmptyState
@@ -433,9 +468,15 @@ export default function EventsPage() {
           actionLabel={canCreate ? "Create Event" : undefined}
           onAction={canCreate ? handleOpenCreate : undefined}
         />
+      ) : statusFilteredEvents.length === 0 ? (
+        <EmptyState
+          icon={Calendar}
+          title="No events match this filter"
+          description="Try a different status tab to see other events."
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {sortedEvents.map((event) => {
+          {statusFilteredEvents.map((event) => {
             const effectiveStatus = getEffectiveEventStatus(event);
             const isPast = effectiveStatus === 'completed' || effectiveStatus === 'archived';
 

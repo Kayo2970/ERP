@@ -29,6 +29,8 @@ import {
 import { getRatingColor } from '@/lib/design-tokens';
 import { canViewRating, canEvaluateEventStudent } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
+import { PeriodFilter } from '@/components/period-filter';
+import { PeriodFilterValue, extractAvailableMonths, isWithinPeriod } from '@/lib/period-filter';
 
 export default function RatingsPage() {
   const [ratings, setRatings] = useState<RatingItem[]>([]);
@@ -40,7 +42,7 @@ export default function RatingsPage() {
   // Search & Filter state
   const [taskSearchQuery, setTaskSearchQuery] = useState('');
   const [historySearchQuery, setHistorySearchQuery] = useState('');
-  const [selectedQuarterFilter, setSelectedQuarterFilter] = useState('ALL');
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilterValue>({ mode: 'ALL' });
 
   // Evaluation Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -176,7 +178,6 @@ export default function RatingsPage() {
         collaboration,
         overallScore: overall,
         notes,
-        quarter: '2026-Q3'
       });
 
       const committeeNotice = isCommittee ? ' (Evaluation propagated to all student members of this committee)' : '';
@@ -224,9 +225,10 @@ export default function RatingsPage() {
       r.raterName.toLowerCase().includes(historySearchQuery.toLowerCase()) ||
       (r.notes && r.notes.toLowerCase().includes(historySearchQuery.toLowerCase()));
 
-    if (selectedQuarterFilter === 'ALL') return matchesSearch;
-    return matchesSearch && (r.quarter === selectedQuarterFilter || (!r.quarter && selectedQuarterFilter === '2026-Q3'));
+    return matchesSearch && isWithinPeriod(r.createdAt, periodFilter);
   });
+
+  const availableRatingMonths = extractAvailableMonths(ratings.map(r => r.createdAt));
 
   return (
     <div className="p-6 md:p-8 space-y-6">
@@ -368,18 +370,13 @@ export default function RatingsPage() {
               <p className="text-xs text-theme-text-secondary">Audited ratings tied directly to student task deliverables</p>
             </div>
 
-            <div className="flex items-center gap-2.5">
-              {/* Quarter Filter */}
-              <select
-                value={selectedQuarterFilter}
-                onChange={(e) => setSelectedQuarterFilter(e.target.value)}
-                className="px-3 py-1.5 bg-theme-background/30 border border-theme-border/40 rounded-xl text-xs text-theme-text-primary focus:outline-none focus:border-accent"
-              >
-                <option value="ALL">All Quarters</option>
-                <option value="2026-Q3">2026 Q3 (Current)</option>
-                <option value="2026-Q2">2026 Q2</option>
-                <option value="2026-Q1">2026 Q1</option>
-              </select>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              {/* Period Filter: month or custom date range */}
+              <PeriodFilter
+                value={periodFilter}
+                onChange={setPeriodFilter}
+                availableMonths={availableRatingMonths}
+              />
 
               {/* Search filter */}
               <div className="relative">

@@ -22,6 +22,8 @@ import { canViewRating } from '@/lib/permissions';
 import { generatePerformanceReportPdf, ReportType, CapturedChartImage } from '@/lib/report-generator';
 import { BarChart3, Download, FileText, Star, Loader2 } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
+import { PeriodFilter } from '@/components/period-filter';
+import { PeriodFilterValue, extractAvailableMonths, isWithinPeriod, periodLabel } from '@/lib/period-filter';
 
 export default function ReportsPage() {
   const [ratings, setRatings] = useState<RatingItem[]>([]);
@@ -30,7 +32,7 @@ export default function ReportsPage() {
   const [user, setUser] = useState<any>(null);
   const [selectedDivision, setSelectedDivision] = useState<string>('ALL');
   const [selectedTarget, setSelectedTarget] = useState('All');
-  const [selectedQuarter, setSelectedQuarter] = useState('ALL');
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilterValue>({ mode: 'ALL' });
   const [reportType, setReportType] = useState<ReportType>('overall');
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
@@ -62,7 +64,7 @@ export default function ReportsPage() {
     };
   }, []);
 
-  // Filter ratings based on viewer's access, then selected division, target member, and quarter
+  // Filter ratings based on viewer's access, then selected division, target member, and time period
   const filteredRatings = ratings.filter(r => {
     if (!canViewRating(r, user)) return false;
     // If division filter is active, check the target member's division
@@ -71,12 +73,10 @@ export default function ReportsPage() {
       if (!member || member.division !== selectedDivision) return false;
     }
     if (selectedTarget !== 'All' && r.targetName !== selectedTarget) return false;
-    if (selectedQuarter !== 'ALL') {
-      const q = r.quarter || '2026-Q3';
-      if (q !== selectedQuarter) return false;
-    }
-    return true;
+    return isWithinPeriod(r.createdAt, periodFilter);
   });
+
+  const availableReportMonths = extractAvailableMonths(ratings.map(r => r.createdAt));
 
   // Calculate Average Metrics
   const calculateAverages = () => {
@@ -130,9 +130,9 @@ export default function ReportsPage() {
       return;
     }
     
-    let csvContent = 'Student Member,Task Deliverable,Event,Rater,Quarter,Quality,Timeliness,Initiative,Collaboration,Overall Score,Evaluation Date,Remarks\n';
+    let csvContent = 'Student Member,Task Deliverable,Event,Rater,Month,Quality,Timeliness,Initiative,Collaboration,Overall Score,Evaluation Date,Remarks\n';
     filteredRatings.forEach(r => {
-      csvContent += `"${r.targetName}","${r.taskTitle}","${r.eventName || ''}","${r.raterName}","${r.quarter || '2026-Q3'}",${r.quality},${r.timeliness},${r.initiative},${r.collaboration},${r.overallScore},"${r.createdAt}","${r.notes || ''}"\n`;
+      csvContent += `"${r.targetName}","${r.taskTitle}","${r.eventName || ''}","${r.raterName}","${r.createdAt?.slice(0, 7) || ''}",${r.quality},${r.timeliness},${r.initiative},${r.collaboration},${r.overallScore},"${r.createdAt}","${r.notes || ''}"\n`;
     });
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -173,7 +173,7 @@ export default function ReportsPage() {
         scope: {
           division: selectedDivision === 'ALL' ? 'All Divisions' : selectedDivision,
           member: selectedTarget === 'All' ? 'All Evaluated Members' : selectedTarget,
-          quarter: selectedQuarter === 'ALL' ? 'All Quarters (Cumulative)' : selectedQuarter,
+          period: periodLabel(periodFilter),
         },
         generatedBy: user?.name || 'LEADS Dashboard User',
         reportType,
@@ -267,19 +267,15 @@ export default function ReportsPage() {
           </select>
         </div>
 
-        {/* Quarterly Selector */}
+        {/* Time Period Selector: month or custom date range */}
         <div className="space-y-1.5">
-          <label className="block text-xs font-semibold text-theme-text-secondary uppercase">Quarterly Period</label>
-          <select
-            value={selectedQuarter}
-            onChange={(e) => setSelectedQuarter(e.target.value)}
-            className="w-full px-3 py-2 bg-theme-background/30 border border-theme-border/40 rounded-xl text-xs text-theme-text-primary focus:outline-none focus:border-accent"
-          >
-            <option value="ALL">All Quarters (Cumulative)</option>
-            <option value="2026-Q3">2026 Q3 (Current Quarter)</option>
-            <option value="2026-Q2">2026 Q2</option>
-            <option value="2026-Q1">2026 Q1</option>
-          </select>
+          <label className="block text-xs font-semibold text-theme-text-secondary uppercase">Time Period</label>
+          <PeriodFilter
+            value={periodFilter}
+            onChange={setPeriodFilter}
+            availableMonths={availableReportMonths}
+            className="w-full [&>select]:w-full"
+          />
         </div>
 
       </div>

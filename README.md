@@ -60,7 +60,7 @@ Sign-ins are validated server-side (`/api/auth/login`) against the registered me
 | :--- | :--- | :--- |
 | **Super User** | `kayomarz.pavri@msruas.ac.in` | **Tier 1** — Full Operations & Settings Control |
 | **Centre Head** | `subhadeep.mukherjee@msruas.ac.in` | **Tier 2** — Member uploads & reimbursement audits |
-| **Events Head** | `pallabi.mund@msruas.ac.in` | **Tier 3** — Event creation and task assignments |
+| **Events Head** | `pallabimund.ms.mc@msruas.ac.in` | **Tier 3** — Event creation and task assignments |
 | **Advisory Board** | `sharath.kumar@msruas.ac.in` | **Tier 4** — Read-only performance and rating reviewer |
 | **Core Committee** | `gurutejas.c@msruas.ac.in` | **Tier 5** — Operations control, task setup, form builder |
 | **Training Associate** | `kunal.bhadauria@msruas.ac.in` | **Tier 6** — Member dashboard, task completion, claim submission |

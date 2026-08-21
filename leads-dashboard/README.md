@@ -20,18 +20,22 @@ An enterprise-grade, institutional management and operations platform designed f
 
 #### 3. Events Desk (`/dashboard/events`)
 - **Lifecycle Management**: End-to-end event workflow: *Draft* → *Pending Approval* → *Published* → *Completed*.
+- **Status Filter Tabs**: Filter the events grid by *All Events*, *Ongoing*, *Completed*, or *Archived* — computed from each event's actual end date, not just its stored status, so a past-dated event reads as completed even if nobody manually flipped it.
 - **Sub-Committee Formation**: Create specialized committees (Logistics, Technical, Media, Operations) and assign member rosters.
+- **Bulk Roster Import**: Download a CSV template and bulk-upload events, same pattern as the Member Directory and Guest Directory importers.
 - **Approval Engine**: Event creation by Executive Council members (President, VP, Chief Coordinator) automatically triggers a Centre Head sign-off requirement.
 - **Student Performance Evaluation**: Integrated dual-gate rating system for Centre Head and campus-specific Events Heads.
 
 #### 4. Tasks Desk (`/dashboard/tasks`)
 - **Task Delegation**: Assign tasks to individual members or entire sub-committees with priority tagging (*Urgent*, *High*, *Normal*, *Low*).
 - **Status Tracking**: Visual progress pipeline: *To Do* → *In Progress* → *Under Review* → *Completed*.
+- **Auto-Generated Design Tasks**: A finalized Design Portal submission (style-approved, and proofread-approved if proofreading was requested) automatically creates or completes a task here — linked to its event when tagged to one, or standalone otherwise — so it flows straight into the rating queue with no manual re-entry.
 - **Extension Requests**: Assignees can submit task deadline extension requests, which Faculty Advisors or the Centre Head can approve or reject.
 - **Executive Task Allotment**: Executive Council task assignments require Event Head approval before activation.
 
 #### 5. Ratings & Student Performance (`/dashboard/ratings`)
 - **Rubric Evaluation**: 5-point performance scoring system for student deliverables and leadership contributions.
+- **Time Period Filter**: Filter the evaluation history by a specific month or a custom date range — no fixed quarters.
 - **Scoped Visibility**:
   - *Super User / Centre Head*: Universal visibility across all members and campuses.
   - *Department Heads*: Visibility over team members in their department.
@@ -40,7 +44,8 @@ An enterprise-grade, institutional management and operations platform designed f
 
 #### 6. Design Portal (`/dashboard/designs`)
 - **Asset Review Desk**: Dedicated portal for Design and Social Media department asset requests, proofreading, and approval workflows.
-- **Proofreading Pipeline**: Upload design files, assign proofreaders, and manage review decisions (*Approved*, *Revisions Requested*, *Pending Proofread*).
+- **Proofreading Pipeline**: Upload design files, assign proofreaders, and manage review decisions (*Approved*, *Revisions Requested*, *Pending Proofread*). Feedback/comments are only required when requesting changes or rejecting — a plain approval doesn't need typed justification.
+- **Design Style Approval**: A separate Design Head/Centre Head sign-off (*Style Approved* / *Style Rejected*) on top of proofreading — once both gates clear (or style alone, if proofreading wasn't requested), the design is finalized and its linked task completes automatically.
 - **Asset Replacements**: Support for uploading updated asset revisions while retaining review logs.
 - **Scoped Access**: Restricted to Design Head, Super User, and assigned proofreaders.
 
@@ -61,6 +66,8 @@ An enterprise-grade, institutional management and operations platform designed f
 
 #### 9. Public Forms Builder (`/dashboard/forms` & `/forms/[slug]`)
 - **Interactive Form Builder**: Custom form creation engine for student signups, feedback collection, and event registrations.
+- **Reusable Field Templates**: Save a form's field schema as a template, then start any future form from one instead of rebuilding it from scratch.
+- **Event Linking**: Tag a form to a specific event — shown as a badge in the builder and on the public form page itself.
 - **Field Customization**: Text inputs, textareas, dropdowns, checkboxes, and file upload fields.
 - **Public Form Slugs**: Custom public landing pages rendered at `/forms/[slug]`.
 - **Form Protection**: Deletion of public forms is strictly restricted to Centre Head and Super User.
@@ -68,6 +75,7 @@ An enterprise-grade, institutional management and operations platform designed f
 #### 10. Analytics & Reports (`/dashboard/reports`)
 - **Executive Report Generator**: Styled PDF report generation and CSV data exports.
 - **Report Types**: Performance scorecards, event post-mortems, financial audit summaries, and member activity reports.
+- **Time Period Filter**: Scope any report to a specific month or a custom date range instead of a fixed quarter.
 
 #### 11. Announcements Engine (`/dashboard/announcements`)
 - **Targeted Broadcasting**: Multi-scope message delivery (`ALL_MEMBERS`, `CORE_COMMITTEE`, `DEPARTMENTS`, `INDIVIDUAL`).
@@ -76,13 +84,15 @@ An enterprise-grade, institutional management and operations platform designed f
 
 #### 12. Member Directory & Roster (`/dashboard/directory`)
 - **Central Roster**: Complete roster management covering Advisory Board, Core Committee, Training Associates, and Alumni.
+- **Bulk Roster Import**: Download a CSV template and bulk-upload members.
 - **Tier & Persona Control**: Manage Tiers 1 through 7, roles, divisions, and departments.
-- **Status Controls**: Active vs. Terminated account status toggles.
-- **Automated Termination Email**: Terminating a member automatically dispatches an official notification email to their registered address while retaining historical records in the database.
+- **Status Controls**: Active vs. Terminated account status toggles — restricted to the Centre Head, and requires a typed reason for the record.
+- **Automated Termination Email**: Terminating a member automatically dispatches an official notification email (including the stated reason) to their registered address, retaining historical records in the database.
 - **Member Protection**: Member removal and termination controls are strictly blocked for Executive Council roles.
 
 #### 13. Guest Directory (`/dashboard/guest-directory`)
 - **External Contact Cards**: Directory for visiting guests, external VIPs, faculty advisors, and industry partners.
+- **Bulk Roster Import**: Download a CSV template and bulk-upload guests, same pattern as the Member Directory.
 - **Access Scoping**: View and add contacts allowed for Executive Council, Centre Head, and Faculty; contact deletion restricted to Centre Head and Super User.
 
 #### 14. Guest Invites Dispatcher (`/dashboard/guest-invites`)
@@ -108,9 +118,12 @@ An enterprise-grade, institutional management and operations platform designed f
 - **Master Light Mode Template Engine**: Centralized HTML email wrapper styling.
 
 #### 18. System & Account Settings (`/dashboard/settings`)
-- **Personal Profile**: Profile customization, password updates, and avatar settings.
+- **Personal Profile**: Profile customization and password updates.
+- **Profile Photo Upload**: Upload a profile photo (max 2 MB) — shows immediately in the header, sidebar, and Settings itself.
 - **Secure Email Update**: Updating login email sends a 5-minute OTP code to the CURRENT email inbox for security verification.
 - **Emergency System Lockdown**: Super User toggle to lock the dashboard site-wide (renders plain 404 for non-admin session attempts).
+
+Settings is also reachable directly from the dashboard header: clicking the name/avatar in the top navbar opens a dropdown with **Settings** and **Sign Out**, alongside the sidebar's own links.
 
 ---
 
@@ -132,16 +145,17 @@ The system enforces a multi-tiered permission model backed by dynamic policy gra
 
 ## 🎨 UI Aesthetics & Light Mode Styling
 
-- **Dynamic Inspirational Quotes Carousel**: Auto-rotating hero banner on the login screen (`src/app/page.tsx`) featuring timeless wisdom from Mahatma Gandhi, Nelson Mandela, Dr. A.P.J. Abdul Kalam, Martin Luther King Jr., Swami Vivekananda, Mother Teresa, Peter Drucker, and Steve Jobs with smooth cross-fade transitions and manual controls.
+- **Dynamic Inspirational Quotes Carousel**: Auto-rotating hero banner on the login screen (`src/app/page.tsx`) cycling through 20 quotes on leadership and inspiring young minds — global and Indian leaders, education advocates, and business leaders — every ~3.5 seconds, with smooth cross-fade transitions (no manual prev/next controls; the dot indicators still allow jumping to a specific quote).
+- **Branded Loading Splash**: A centered LEADS logo splash (spinning ring, timed progress bar) shows for 5 seconds after login and for 2 seconds when switching between dashboard modules.
+- **Collapsible Sidebar**: The desktop sidebar collapses to an icon-only rail to reclaim page width, and temporarily flies out to full width on hover without shifting the page content underneath. The collapsed/expanded preference persists across reloads.
 - **Isometric Light Mode Background**: Custom geometric isometric cube background image (`/images/light-bg.jpg`) rendered fixed across Light Mode layout ([`src/app/globals.css`](file:///Users/kayo/ERP/leads-dashboard/src/app/globals.css)).
-- **Fast Module Transitions**: Optimized 1-second (1000ms) transition animations between workspace modules.
 - **Master Light Mode Email Template**: Institutional HTML email wrapper with clean white cards (`#ffffff`), soft slate borders (`#e2e8f0`), LEADS institutional blue accents (`#0284c7`), and dark slate body text (`#0f172a`, `#334155`) ([`src/lib/email-service.ts`](file:///Users/kayo/ERP/leads-dashboard/src/lib/email-service.ts)).
 
 ---
 
 ## 🛠️ Technology Stack
 
-- **Framework**: [Next.js 15](https://nextjs.org) (App Router, Client Components)
+- **Framework**: [Next.js 16](https://nextjs.org) (App Router, Client Components)
 - **Language**: [TypeScript](https://www.typescriptlang.org) (Strict type checking)
 - **Styling**: Vanilla CSS & TailwindCSS v4 with custom glassmorphism effects (`.glass-panel`)
 - **Icons**: [Lucide React](https://lucide.dev)
