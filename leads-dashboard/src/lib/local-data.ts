@@ -23,6 +23,25 @@ export interface Member {
   terminatedBy?: string;
 }
 
+// A person encountered outside the org (event guest, sponsor contact, vendor,
+// etc.) — sourced from a visiting card, kept in a directory of its own,
+// separate from the Member roster and from the ad-hoc Guest Invites tool.
+export interface Guest {
+  id: string;
+  name: string;
+  organization?: string;
+  designation?: string;
+  phone?: string;
+  email?: string;
+  notes?: string;
+  metBy?: string; // name of the member who met them
+  metDate?: string; // YYYY-MM-DD
+  visitingCardData?: string; // transient: base64 data URL sent on upload, converted server-side
+  visitingCardUrl?: string;  // servable path under /api/files, backed by a real file on disk
+  visitingCardStorageKey?: string;
+  createdAt: string;
+}
+
 export interface EventCommittee {
   id: string;
   name: string; // e.g. "Stage & Audio-Visual", "Hospitality & Logistics", "Design & Media"
@@ -389,6 +408,8 @@ export const initialDesigns: DesignSubmissionItem[] = [];
 
 export const initialGroupPolicies: GroupPolicy[] = [];
 
+export const initialGuests: Guest[] = [];
+
 export const initialAccessLevelSettings: AccessLevelSettings[] = [DEFAULT_ACCESS_LEVEL_SETTINGS];
 
 // -------------------------------------------------------------
@@ -434,6 +455,7 @@ export async function syncWithServer(): Promise<boolean> {
       hydrateCollection('leads_group_policies', data.groupPolicies);
       hydrateCollection('leads_access_level_settings', data.accessLevelSettings);
       hydrateCollection('leads_system_settings', data.systemSettings);
+      hydrateCollection('leads_guests', data.guests);
       if (Array.isArray(data.auditLogs)) {
         localStorage.setItem('leads_audit_logs', JSON.stringify(data.auditLogs));
       }
@@ -672,6 +694,68 @@ export function reactivateMember(id: string, actorName: string): Member | null {
     current[idx].email
   );
   return current[idx];
+}
+
+// -------------------------------------------------------------
+// Guest Directory (visiting-card contacts — separate from Members)
+// -------------------------------------------------------------
+
+export function getGuests(): Guest[] {
+  if (typeof window === 'undefined') return initialGuests;
+  const saved = localStorage.getItem('leads_guests');
+  if (saved) {
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  return initialGuests;
+}
+
+export function saveGuests(guests: Guest[]): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem('leads_guests', JSON.stringify(guests));
+}
+
+export function addGuest(guest: Omit<Guest, 'id' | 'createdAt'>, actorName: string): Guest {
+  const current = getGuests();
+  const newGuest: Guest = {
+    ...guest,
+    id: 'guest_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+    createdAt: new Date().toISOString(),
+  };
+  current.unshift(newGuest);
+  saveGuests(current);
+  // The server converts visitingCardData (base64) to a real file on disk and
+  // returns storageKey/visitingCardUrl — the next syncWithServer() poll picks
+  // that up, same fire-and-forget pattern as designs/addDesign.
+  serverPost('/api/guests', newGuest);
+  logAuditEvent('GUEST_ADDED', actorName, `Added guest "${newGuest.name}"${newGuest.organization ? ` (${newGuest.organization})` : ''} to the Guest Directory`);
+  return newGuest;
+}
+
+export function updateGuest(id: string, updates: Partial<Guest>, actorName: string): Guest | null {
+  const current = getGuests();
+  const idx = current.findIndex(g => g.id === id);
+  if (idx === -1) return null;
+
+  current[idx] = { ...current[idx], ...updates };
+  saveGuests(current);
+  serverPatch('/api/guests', id, current[idx]);
+  logAuditEvent('GUEST_UPDATED', actorName, `Updated guest record for "${current[idx].name}"`);
+  return current[idx];
+}
+
+export function deleteGuest(id: string, actorName: string): void {
+  const current = getGuests();
+  const target = current.find(g => g.id === id);
+  if (!target) return;
+
+  const updated = current.filter(g => g.id !== id);
+  saveGuests(updated);
+  serverDelete('/api/guests', id);
+  logAuditEvent('GUEST_DELETED', actorName, `Removed guest "${target.name}" from the Guest Directory`);
 }
 
 // -------------------------------------------------------------

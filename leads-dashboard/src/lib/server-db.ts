@@ -32,6 +32,7 @@ import {
   initialGroupPolicies,
   initialAccessLevelSettings,
   initialSystemSettings,
+  initialGuests,
 } from './local-data';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -57,6 +58,7 @@ export interface DbSchema {
   passwordResets: any[];
   emailChanges: any[];
   emailSettings: any[];
+  guests: any[];
   lastUpdated?: string;
 }
 
@@ -78,6 +80,7 @@ const EMPTY_DB: DbSchema = {
   passwordResets: [],
   emailChanges: [],
   emailSettings: [],
+  guests: [],
 };
 
 const SEED_DB: DbSchema = {
@@ -112,6 +115,7 @@ const SEED_DB: DbSchema = {
       updatedAt: new Date().toISOString()
     }
   ],
+  guests: initialGuests,
 };
 
 const COLLECTION_KEYS = Object.keys(EMPTY_DB) as (keyof DbSchema)[];
