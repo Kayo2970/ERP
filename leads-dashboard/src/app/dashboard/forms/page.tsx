@@ -12,22 +12,71 @@ import {
   Edit2,
   ShieldAlert,
   FileText,
-  Clock
+  Clock,
+  Table2,
+  BarChart3,
+  Gauge
 } from 'lucide-react';
-import { 
-  getForms, 
-  addForm, 
-  updateForm, 
-  deleteForm, 
-  getSubmissions, 
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell
+} from 'recharts';
+import {
+  getForms,
+  addForm,
+  updateForm,
+  deleteForm,
+  getSubmissions,
   isSlugUnique,
-  PublicFormItem, 
+  PublicFormItem,
   FormField,
-  FormSubmissionItem 
+  FormSubmissionItem
 } from '@/lib/local-data';
 import { canBuildForms } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
+
+const CHART_COLORS = ['#3b82f6', '#6366f1', '#8b5cf6', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4'];
+
+const CHARTABLE_TYPES: FormField['type'][] = ['scale', 'number', 'select', 'checkbox'];
+
+/** Value -> count for one field across a form's submissions, keyed by the raw answer. */
+function buildFieldCounts(field: FormField, subs: FormSubmissionItem[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  subs.forEach(s => {
+    const raw = s.data[field.id] ?? s.data[field.label];
+    if (raw === undefined || raw === null || raw === '') return;
+    const key = String(raw);
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  return counts;
+}
+
+function buildScaleChartData(field: FormField, subs: FormSubmissionItem[]) {
+  const counts = buildFieldCounts(field, subs);
+  return [1, 2, 3, 4, 5].map(n => ({ name: String(n), count: counts[String(n)] || 0 }));
+}
+
+function buildCategoryChartData(field: FormField, subs: FormSubmissionItem[]) {
+  const counts = buildFieldCounts(field, subs);
+  return Object.entries(counts)
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+function computeAverage(field: FormField, subs: FormSubmissionItem[]): number | null {
+  const values = subs
+    .map(s => Number(s.data[field.id] ?? s.data[field.label]))
+    .filter(v => !isNaN(v));
+  if (values.length === 0) return null;
+  return values.reduce((a, b) => a + b, 0) / values.length;
+}
 
 export default function FormsBuilderPage() {
   const [forms, setForms] = useState<PublicFormItem[]>([]);
@@ -51,6 +100,7 @@ export default function FormsBuilderPage() {
 
   // Selected Form for submissions view
   const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'table' | 'charts'>('table');
 
   // Notification States
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
@@ -368,17 +418,33 @@ export default function FormsBuilderPage() {
                   </button>
                 </div>
 
-                {/* Submissions Table */}
+                {/* Submissions: Table / Charts toggle */}
                 <div className="space-y-3">
-                  <h4 className="text-xs font-bold text-theme-text-primary uppercase tracking-wider">
-                    Received Submissions ({selectedSubmissions.length})
-                  </h4>
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-theme-text-primary uppercase tracking-wider">
+                      Received Submissions ({selectedSubmissions.length})
+                    </h4>
+                    <div className="flex items-center gap-1 bg-theme-border/20 rounded-xl p-1">
+                      <button
+                        onClick={() => setViewMode('table')}
+                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1 ${viewMode === 'table' ? 'bg-accent text-white' : 'text-theme-text-secondary'}`}
+                      >
+                        <Table2 className="h-3 w-3" /> Table
+                      </button>
+                      <button
+                        onClick={() => setViewMode('charts')}
+                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1 ${viewMode === 'charts' ? 'bg-accent text-white' : 'text-theme-text-secondary'}`}
+                      >
+                        <BarChart3 className="h-3 w-3" /> Charts
+                      </button>
+                    </div>
+                  </div>
 
                   {selectedSubmissions.length === 0 ? (
                     <div className="text-center py-12 text-theme-text-secondary text-xs bg-theme-border/5 rounded-xl border border-theme-border/20">
                       No student responses submitted yet for this form link.
                     </div>
-                  ) : (
+                  ) : viewMode === 'table' ? (
                     <div className="overflow-x-auto">
                       <table className="min-w-full text-xs text-left">
                         <thead>
@@ -408,6 +474,66 @@ export default function FormsBuilderPage() {
                         </tbody>
                       </table>
                     </div>
+                  ) : (
+                    (() => {
+                      const chartableFields = selectedForm.fields.filter(f => CHARTABLE_TYPES.includes(f.type));
+                      if (chartableFields.length === 0) {
+                        return (
+                          <div className="text-center py-12 text-theme-text-secondary text-xs bg-theme-border/5 rounded-xl border border-theme-border/20">
+                            This form has no scale, number, or choice questions to chart yet — open text answers can't be charted.
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {chartableFields.map(f => {
+                            const isNumeric = f.type === 'scale' || f.type === 'number';
+                            const data = f.type === 'scale' ? buildScaleChartData(f, selectedSubmissions) : buildCategoryChartData(f, selectedSubmissions);
+                            const average = isNumeric ? computeAverage(f, selectedSubmissions) : null;
+                            return (
+                              <div key={f.id} className="p-4 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <h5 className="text-xs font-bold text-theme-text-primary">{f.label}</h5>
+                                  {average !== null && (
+                                    <span className="flex items-center gap-1 text-[11px] font-bold text-accent">
+                                      <Gauge className="h-3 w-3" />
+                                      Avg {average.toFixed(1)}{f.type === 'scale' ? ' / 5.0' : ''}
+                                    </span>
+                                  )}
+                                </div>
+                                {data.length === 0 ? (
+                                  <p className="text-[11px] text-theme-text-secondary py-6 text-center">No responses to this question yet.</p>
+                                ) : (
+                                  <div className="h-48 w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                      <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                                        <XAxis dataKey="name" tick={{ fill: 'currentColor', fontSize: 10 }} interval={0} angle={f.type === 'scale' ? 0 : -20} textAnchor={f.type === 'scale' ? 'middle' : 'end'} />
+                                        <YAxis allowDecimals={false} tick={{ fill: 'currentColor', fontSize: 10 }} />
+                                        <Tooltip
+                                          formatter={(value: any) => [`${value} response${value === 1 ? '' : 's'}`, f.label]}
+                                          contentStyle={{
+                                            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                                            borderColor: 'rgba(255,255,255,0.1)',
+                                            borderRadius: '12px',
+                                            fontSize: '11px'
+                                          }}
+                                        />
+                                        <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+                                          {data.map((_, index) => (
+                                            <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                                          ))}
+                                        </Bar>
+                                      </BarChart>
+                                    </ResponsiveContainer>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()
                   )}
                 </div>
               </>
@@ -525,6 +651,7 @@ export default function FormsBuilderPage() {
                           <option value="email">Email</option>
                           <option value="number">Number</option>
                           <option value="textarea">Paragraph</option>
+                          <option value="scale">Scale (1-5)</option>
                         </select>
                       </div>
 

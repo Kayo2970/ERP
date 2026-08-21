@@ -172,7 +172,7 @@ export interface AnnouncementItem {
 export interface FormField {
   id: string;
   label: string;
-  type: 'text' | 'email' | 'textarea' | 'select' | 'checkbox' | 'number';
+  type: 'text' | 'email' | 'textarea' | 'select' | 'checkbox' | 'number' | 'scale';
   options?: string[];
   required: boolean;
 }
