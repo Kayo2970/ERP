@@ -34,9 +34,10 @@ import {
   Mail,
   ChevronDown
 } from 'lucide-react';
-import { getAnnouncements, getTasks, getDesigns, getMembers, logAuditEvent, Member, TaskItem, AnnouncementItem, syncWithServer } from '@/lib/local-data';
+import { getAnnouncements, getTasks, getDesigns, getMembers, logAuditEvent, Member, TaskItem, AnnouncementItem, syncWithServer, getSystemSettings } from '@/lib/local-data';
 import { canViewTaskExtended, getAnnouncementScopeMatch } from '@/lib/permissions';
 import { TermsModal } from '@/components/terms-modal';
+import { NotFoundScreen } from '@/components/not-found-screen';
 
 interface SidebarItem {
   name: string;
@@ -110,6 +111,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     committee: 'All Committees'
   });
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [lockdownEnabled, setLockdownEnabled] = useState(false);
 
   // Initialize theme, user session, notifications, and server sync
   useEffect(() => {
@@ -136,6 +138,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       setUser(parsedUser);
       setIsAuthenticated(true);
       setAllMembers(getMembers());
+      setLockdownEnabled(getSystemSettings().lockdownEnabled);
 
       const stashedOriginal = localStorage.getItem('impersonatorOriginalUser');
       if (stashedOriginal) {
@@ -193,6 +196,15 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     }
 
   }, [router]);
+
+  // Re-check the lockdown flag every time a server sync lands (initial load,
+  // the 7-second poll, or another tab's write) so flipping it takes effect
+  // for everyone already inside the dashboard without needing a reload.
+  useEffect(() => {
+    const handleSync = () => setLockdownEnabled(getSystemSettings().lockdownEnabled);
+    window.addEventListener('leads-data-sync', handleSync);
+    return () => window.removeEventListener('leads-data-sync', handleSync);
+  }, []);
 
   // Click outside to close dropdowns
   useEffect(() => {
@@ -280,6 +292,14 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent"></div>
       </div>
     );
+  }
+
+  // Site-wide lockdown: everyone except the real Super User (tier 1) sees a
+  // plain 404 instead of the dashboard. Applies during impersonation too —
+  // if the Super User is viewing the app as someone else, they see what that
+  // person would see.
+  if (lockdownEnabled && user.tier !== 1) {
+    return <NotFoundScreen />;
   }
 
   return (
