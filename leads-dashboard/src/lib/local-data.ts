@@ -1841,6 +1841,17 @@ export function updateDesignStyleReview(
       });
       updated.linkedTaskId = task.id;
     }
+  } else if (styleStatus === 'Style Rejected' && item.linkedTaskId) {
+    // A previously Style Approved design just got its decision flipped back
+    // to Rejected — pull its linked task out of "Completed" so it stops
+    // looking done/ratable, since the deliverable is no longer signed off.
+    // Skipped if it's already been rated: a rating already on record reflects
+    // real work that happened and shouldn't be silently invalidated by a
+    // later decision change.
+    const linkedTask = getTasks().find(t => t.id === item.linkedTaskId);
+    if (linkedTask && !linkedTask.ratingScore) {
+      updateTask(item.linkedTaskId, { status: 'In Progress' }, reviewerName);
+    }
   }
 
   current[idx] = updated;

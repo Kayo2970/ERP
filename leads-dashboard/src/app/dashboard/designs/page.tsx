@@ -85,7 +85,16 @@ export default function DesignPortalPage() {
 
   const openInspector = (design: DesignSubmissionItem) => {
     setSelectedDesign(design);
+    // Pre-fill both decision forms with this design's actual current state —
+    // previously these stayed at whatever was left over from the last design's
+    // Inspector session (or the hardcoded defaults), so reopening an already
+    // Changes-Requested/Style-Rejected design silently showed "Approved"
+    // pre-selected. A reviewer changing their mind needs to see what's
+    // actually on record before deliberately flipping it, not a stale guess.
     setReviewComments(design.review?.comments || '');
+    setReviewStatus(design.review?.status === 'Changes Requested' ? 'Changes Requested' : 'Proofread Approved');
+    setStyleFeedback(design.styleFeedback || '');
+    setStyleStatus(design.styleStatus === 'Style Rejected' ? 'Style Rejected' : 'Style Approved');
     setShowInspectorModal(true);
   };
 
@@ -1085,7 +1094,7 @@ export default function DesignPortalPage() {
 
               {(isDesignHead(user) || isCentreHead(user)) ? (
                 <form onSubmit={handleSaveStyleReview} className="space-y-3 text-xs bg-accent/5 p-4 rounded-xl border border-accent/20">
-                  <p className="font-medium text-foreground">Submit Design Style Decision:</p>
+                  <p className="font-medium text-foreground">{selectedDesign.styleStatus ? 'Update Design Style Decision:' : 'Submit Design Style Decision:'}</p>
 
                   <div className="flex items-center gap-4">
                     <label className="flex items-center gap-2 cursor-pointer font-medium">
