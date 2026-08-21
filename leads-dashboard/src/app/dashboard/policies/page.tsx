@@ -19,6 +19,7 @@ import {
   BookLock,
   RotateCcw,
   Save,
+  Clock,
 } from 'lucide-react';
 import {
   getGroupPolicies,
@@ -103,6 +104,9 @@ export default function GroupPoliciesPage() {
   const [targetDesignationKeyword, setTargetDesignationKeyword] = useState('');
   const [targetMemberIds, setTargetMemberIds] = useState<string[]>([]);
   const [enabled, setEnabled] = useState(true);
+  // Optional temporary-grant expiry — blank means the policy never expires on
+  // its own (still has to be manually disabled/deleted), same as before this existed.
+  const [expiresAt, setExpiresAt] = useState('');
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
   const [isMemberDropdownOpen, setIsMemberDropdownOpen] = useState(false);
   const memberDropdownRef = useRef<HTMLDivElement>(null);
@@ -180,6 +184,7 @@ export default function GroupPoliciesPage() {
     setTargetDesignationKeyword('');
     setTargetMemberIds([]);
     setEnabled(true);
+    setExpiresAt('');
     setMemberSearchQuery('');
     setIsMemberDropdownOpen(false);
     setRestrictEventVisibility(false);
@@ -209,6 +214,7 @@ export default function GroupPoliciesPage() {
     setTargetDesignationKeyword(policy.targetDesignationKeyword || '');
     setTargetMemberIds(policy.targetMemberIds || []);
     setEnabled(policy.enabled !== false);
+    setExpiresAt(policy.expiresAt ? policy.expiresAt.split('T')[0] : '');
     setMemberSearchQuery('');
     setIsMemberDropdownOpen(false);
     setRestrictEventVisibility(policy.eventVisibilityScope === 'OWN_ONLY');
@@ -284,6 +290,9 @@ export default function GroupPoliciesPage() {
       targetDesignationKeyword: targetDesignationKeyword.trim() || undefined,
       targetMemberIds,
       enabled,
+      // Expires at the END of the chosen day, so the policy stays active through
+      // the whole date the admin picked rather than lapsing at midnight.
+      expiresAt: expiresAt ? new Date(`${expiresAt}T23:59:59.999Z`).toISOString() : undefined,
       eventVisibilityScope: restrictEventVisibility ? ('OWN_ONLY' as const) : undefined,
       requiresApproval,
       approverType: requiresApproval ? approverType : undefined,
@@ -448,6 +457,17 @@ export default function GroupPoliciesPage() {
                         <span className="text-[10px] font-semibold px-2 py-0.5 bg-theme-border/30 text-theme-text-secondary rounded-md">
                           Disabled
                         </span>
+                      )}
+                      {policy.expiresAt && (
+                        policy.expiresAt <= new Date().toISOString() ? (
+                          <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 bg-danger/10 text-danger rounded-md border border-danger/20">
+                            <Clock className="h-3 w-3" /> Expired {policy.expiresAt.split('T')[0]}
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 bg-warning/10 text-warning rounded-md border border-warning/20">
+                            <Clock className="h-3 w-3" /> Expires {policy.expiresAt.split('T')[0]}
+                          </span>
+                        )
                       )}
                     </div>
                     {policy.description && (
@@ -1047,6 +1067,22 @@ export default function GroupPoliciesPage() {
                 />
                 Enabled (grants access immediately on save)
               </label>
+
+              <div className="space-y-1.5">
+                <label className="block font-medium text-theme-text-secondary">
+                  Expires On <span className="font-normal">(optional — leave blank for a permanent grant)</span>
+                </label>
+                <input
+                  type="date"
+                  value={expiresAt}
+                  min={new Date().toISOString().split('T')[0]}
+                  onChange={(e) => setExpiresAt(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                />
+                <p className="text-[11px] text-theme-text-secondary">
+                  Once this date passes, the policy stops granting anything automatically — no need to come back and disable it. The record itself stays, so it's easy to see it expired and re-enable it later with a new date.
+                </p>
+              </div>
 
               <button
                 type="submit"

@@ -217,6 +217,13 @@ export const CAPABILITY_CATALOG: { key: string; label: string; description: stri
   { key: 'APPROVE_REIMBURSEMENTS_FINANCE', label: 'Approve Reimbursements (Finance Head stage)', description: 'Final-stage reimbursement approval.' },
 ];
 
+/** True if a policy is enabled and, when it has an expiry date, hasn't passed it yet. */
+function isPolicyActive(policy: GroupPolicy): boolean {
+  if (policy.enabled === false) return false;
+  if (policy.expiresAt && policy.expiresAt <= new Date().toISOString()) return false;
+  return true;
+}
+
 /** True if a member satisfies ANY of a policy's non-empty target criteria. */
 function memberMatchesPolicy(member: Member, policy: GroupPolicy): boolean {
   if (policy.targetMemberIds?.includes(member.id)) return true;
@@ -239,7 +246,7 @@ export function hasCapability(user: SessionUser, capability: string): boolean {
   if (user.tier === 1) return true;
   const member = resolveMember(user);
   if (!member) return false;
-  const policies = getGroupPolicies().filter(p => p.enabled !== false);
+  const policies = getGroupPolicies().filter(isPolicyActive);
   return policies.some(p => p.capabilities?.includes(capability) && memberMatchesPolicy(member, p));
 }
 
@@ -278,7 +285,7 @@ export function getApprovalRequirement(user: SessionUser, capability: string, bu
   if (!member) return { requiresApproval: false };
 
   const policies = getGroupPolicies().filter(
-    p => p.enabled !== false && p.capabilities?.includes(capability) && memberMatchesPolicy(member, p)
+    p => isPolicyActive(p) && p.capabilities?.includes(capability) && memberMatchesPolicy(member, p)
   );
   if (policies.length === 0) return { requiresApproval: false };
   if (policies.some(p => !p.requiresApproval)) return { requiresApproval: false };
@@ -384,7 +391,7 @@ export function canViewEvent(event: EventItem, user: SessionUser): boolean {
   const member = resolveMember(user);
   if (!member) return true; // fail-open: an unresolvable session shouldn't lose access it always had
 
-  const policies = getGroupPolicies().filter(p => p.enabled !== false && memberMatchesPolicy(member, p));
+  const policies = getGroupPolicies().filter(p => isPolicyActive(p) && memberMatchesPolicy(member, p));
   const restricting = policies.find(p => p.eventVisibilityScope === 'OWN_ONLY');
   if (!restricting) return true; // default: unrestricted, exactly as before this feature
 
