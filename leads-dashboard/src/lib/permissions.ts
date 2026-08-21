@@ -466,13 +466,21 @@ export function canViewTaskExtended(task: TaskItem, user: SessionUser): boolean 
   return false;
 }
 
+/** Check if user is Dr. Subhadeep / Centre Head Leadership. */
+export function isDrSubhadeep(user: SessionUser): boolean {
+  if (!user) return false;
+  const name = (user.name || '').toLowerCase();
+  const email = (user.email || '').toLowerCase();
+  return name.includes('subhadeep') || name.includes('subhadip') || name.includes('subhadeepmukherjee') || email.includes('subhadeep');
+}
+
 /**
- * Rating visibility: leadership sees everything; a Head sees ratings for members of
- * their own department (their "team"); everyone else sees only ratings given to them.
+ * Rating & Report visibility: leadership, Centre Head, and Dr. Subhadeep Mukherjee see everything;
+ * a Head sees ratings for members of their own department (their "team"); everyone else sees only ratings given to them.
  */
 export function canViewRating(rating: RatingItem, user: SessionUser): boolean {
   if (!user) return false;
-  if (isBaseLeadership(user)) return true;
+  if (isBaseLeadership(user) || isCentreHead(user) || isDrSubhadeep(user) || hasCapability(user, 'VIEW_ALL_REPORTS')) return true;
 
   const isOwn =
     rating.targetId === user.id ||
