@@ -790,9 +790,28 @@ export default function GroupPoliciesPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="block font-medium text-theme-text-secondary">
-                  Grants These Capabilities * <span className="font-normal">(select at least one)</span>
-                </label>
+                <div className="flex items-center justify-between gap-2">
+                  <label className="block font-medium text-theme-text-secondary">
+                    Grants These Capabilities * <span className="font-normal">(select at least one)</span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCapabilities(CAPABILITY_CATALOG.map(c => c.key))}
+                      className="text-[11px] font-semibold text-accent hover:underline cursor-pointer"
+                    >
+                      Select All
+                    </button>
+                    <span className="text-theme-text-secondary text-[11px]">•</span>
+                    <button
+                      type="button"
+                      onClick={() => setCapabilities([])}
+                      className="text-[11px] font-semibold text-theme-text-secondary hover:text-theme-text-primary hover:underline cursor-pointer"
+                    >
+                      Select None
+                    </button>
+                  </div>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {CAPABILITY_CATALOG.map(cap => (
                     <label
@@ -840,7 +859,26 @@ export default function GroupPoliciesPage() {
                 </label>
 
                 <div className="space-y-1.5">
-                  <span className="block text-[11px] font-medium text-theme-text-secondary">By Division</span>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="block text-[11px] font-medium text-theme-text-secondary">By Division</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setTargetDivisions([...ALL_DIVISIONS])}
+                        className="text-[10px] font-semibold text-accent hover:underline cursor-pointer"
+                      >
+                        Select All
+                      </button>
+                      <span className="text-theme-text-secondary text-[10px]">•</span>
+                      <button
+                        type="button"
+                        onClick={() => setTargetDivisions([])}
+                        className="text-[10px] font-semibold text-theme-text-secondary hover:text-theme-text-primary hover:underline cursor-pointer"
+                      >
+                        Select None
+                      </button>
+                    </div>
+                  </div>
                   <div className="flex flex-wrap gap-1.5">
                     {ALL_DIVISIONS.map(division => (
                       <button
@@ -860,7 +898,26 @@ export default function GroupPoliciesPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <span className="block text-[11px] font-medium text-theme-text-secondary">By Tier</span>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="block text-[11px] font-medium text-theme-text-secondary">By Tier</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setTargetTiers([...ALL_TIERS])}
+                        className="text-[10px] font-semibold text-accent hover:underline cursor-pointer"
+                      >
+                        Select All
+                      </button>
+                      <span className="text-theme-text-secondary text-[10px]">•</span>
+                      <button
+                        type="button"
+                        onClick={() => setTargetTiers([])}
+                        className="text-[10px] font-semibold text-theme-text-secondary hover:text-theme-text-primary hover:underline cursor-pointer"
+                      >
+                        Select None
+                      </button>
+                    </div>
+                  </div>
                   <div className="flex flex-wrap gap-1.5">
                     {ALL_TIERS.map(tierNum => (
                       <button
