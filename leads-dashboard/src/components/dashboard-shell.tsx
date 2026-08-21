@@ -31,10 +31,11 @@ import {
   DatabaseBackup,
   Mail,
   Send,
-  Contact
+  Contact,
+  Wallet
 } from 'lucide-react';
 import { getAnnouncements, getTasks, getDesigns, getMembers, logAuditEvent, Member, syncWithServer, getSystemSettings } from '@/lib/local-data';
-import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, canAccessGuestDirectory } from '@/lib/permissions';
+import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isFinanceHead, canAccessGuestDirectory } from '@/lib/permissions';
 import { TermsModal } from '@/components/terms-modal';
 import { NotFoundScreen } from '@/components/not-found-screen';
 
@@ -45,6 +46,7 @@ interface SidebarItem {
   superUserOnly?: boolean;
   centreHeadOnly?: boolean;
   guestDirectoryOnly?: boolean;
+  budgetAccessOnly?: boolean;
 }
 
 interface NavSection {
@@ -68,6 +70,7 @@ const navSections: NavSection[] = [
     title: 'Administration',
     items: [
       { name: 'Reimbursements', href: '/dashboard/reimbursements', icon: Receipt },
+      { name: 'Budget & Funds', href: '/dashboard/budget', icon: Wallet, budgetAccessOnly: true },
       { name: 'Public Forms', href: '/dashboard/forms', icon: FileText },
       { name: 'Reports', href: '/dashboard/reports', icon: BarChart3 },
       { name: 'Announcements', href: '/dashboard/announcements', icon: Megaphone },
@@ -472,7 +475,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                 {section.title}
               </h3>
               <div className="space-y-1 pt-1">
-                {section.items.filter(item => (!item.superUserOnly || user.tier === 1) && (!item.centreHeadOnly || isCentreHead(user)) && (!item.guestDirectoryOnly || canAccessGuestDirectory(user))).map((item) => {
+                {section.items.filter(item => (!item.superUserOnly || user.tier === 1) && (!item.centreHeadOnly || isCentreHead(user)) && (!item.guestDirectoryOnly || canAccessGuestDirectory(user)) && (!item.budgetAccessOnly || isCentreHead(user) || isFinanceHead(user))).map((item) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
                   return (
@@ -563,7 +566,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                   <h4 className="px-2 text-[10px] font-bold text-theme-text-secondary uppercase tracking-wider">
                     {section.title}
                   </h4>
-                  {section.items.filter(item => (!item.superUserOnly || user.tier === 1) && (!item.centreHeadOnly || isCentreHead(user)) && (!item.guestDirectoryOnly || canAccessGuestDirectory(user))).map((item) => {
+                  {section.items.filter(item => (!item.superUserOnly || user.tier === 1) && (!item.centreHeadOnly || isCentreHead(user)) && (!item.guestDirectoryOnly || canAccessGuestDirectory(user)) && (!item.budgetAccessOnly || isCentreHead(user) || isFinanceHead(user))).map((item) => {
                     const Icon = item.icon;
                     const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
                     return (

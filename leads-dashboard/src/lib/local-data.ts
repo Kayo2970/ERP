@@ -156,6 +156,23 @@ export interface ReimbursementItem {
   eventName?: string;
 }
 
+export interface BudgetItem {
+  id: string;
+  type: 'event' | 'monthly';
+  eventId?: string;  // set when type === 'event'
+  eventName?: string;
+  month?: string;    // set when type === 'monthly', 'YYYY-MM'
+  amount: number;
+  notes?: string;
+  submittedBy: string;
+  submittedByEmail?: string;
+  submittedAt: string;
+  status: 'Pending' | 'Approved' | 'Rejected';
+  decidedBy?: string;
+  decidedAt?: string;
+  decisionNotes?: string;
+}
+
 export interface AnnouncementItem {
   id: string;
   title: string;
@@ -405,6 +422,8 @@ export const initialRatings: RatingItem[] = [];
 
 export const initialReimbursements: ReimbursementItem[] = [];
 
+export const initialBudgets: BudgetItem[] = [];
+
 export const initialAnnouncements: AnnouncementItem[] = [];
 
 export const initialForms: PublicFormItem[] = [];
@@ -463,6 +482,7 @@ export async function syncWithServer(): Promise<boolean> {
       hydrateCollection('leads_access_level_settings', data.accessLevelSettings);
       hydrateCollection('leads_system_settings', data.systemSettings);
       hydrateCollection('leads_guests', data.guests);
+      hydrateCollection('leads_budgets', data.budgets);
       if (Array.isArray(data.auditLogs)) {
         localStorage.setItem('leads_audit_logs', JSON.stringify(data.auditLogs));
       }
@@ -1437,6 +1457,67 @@ export function updateReimbursementStatus(
   saveReimbursements(current);
   serverPatch('/api/reimbursements', id, claim);
   return claim;
+}
+
+// -------------------------------------------------------------
+// Budgets — Centre Head submits event/monthly requests, Finance Head decides
+// -------------------------------------------------------------
+
+export function getBudgets(): BudgetItem[] {
+  if (typeof window === 'undefined') return initialBudgets;
+  const saved = localStorage.getItem('leads_budgets');
+  if (saved) {
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  return initialBudgets;
+}
+
+export function saveBudgets(budgets: BudgetItem[]): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem('leads_budgets', JSON.stringify(budgets));
+}
+
+export function addBudget(item: Omit<BudgetItem, 'id' | 'status' | 'submittedAt'>): BudgetItem {
+  const current = getBudgets();
+  const newBudget: BudgetItem = {
+    ...item,
+    id: 'bud_' + Date.now(),
+    status: 'Pending',
+    submittedAt: new Date().toISOString().split('T')[0],
+  };
+  current.unshift(newBudget);
+  saveBudgets(current);
+  serverPost('/api/budgets', newBudget);
+  const scopeLabel = item.type === 'event' ? (item.eventName || 'an event') : (item.month || 'a month');
+  logAuditEvent('BUDGET_SUBMITTED', item.submittedBy, `Submitted a ₹${item.amount.toLocaleString()} budget request for ${scopeLabel}`, item.submittedByEmail);
+  return newBudget;
+}
+
+export function decideBudget(
+  id: string,
+  status: 'Approved' | 'Rejected',
+  decidedBy: string,
+  decisionNotes?: string
+): BudgetItem | null {
+  const current = getBudgets();
+  const idx = current.findIndex(b => b.id === id);
+  if (idx === -1) return null;
+
+  current[idx] = {
+    ...current[idx],
+    status,
+    decidedBy,
+    decidedAt: new Date().toISOString().split('T')[0],
+    decisionNotes,
+  };
+  saveBudgets(current);
+  serverPatch('/api/budgets', id, current[idx]);
+  logAuditEvent('BUDGET_DECIDED', decidedBy, `${status} the ₹${current[idx].amount.toLocaleString()} budget request from ${current[idx].submittedBy}`);
+  return current[idx];
 }
 
 export function verifyReimbursementByCentreHead(id: string, reviewerName: string): ReimbursementItem | null {
