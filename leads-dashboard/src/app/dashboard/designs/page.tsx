@@ -1,40 +1,38 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { 
-  Palette, 
-  UploadCloud, 
-  FileText, 
-  CheckCircle2, 
-  Clock, 
-  AlertCircle, 
-  MessageSquare, 
-  Trash2, 
-  Eye, 
-  Filter, 
-  Sparkles, 
-  ShieldAlert, 
-  UserCheck, 
+import {
+  Palette,
+  UploadCloud,
+  FileText,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  MessageSquare,
+  Trash2,
+  Eye,
+  ShieldAlert,
+  UserCheck,
   Calendar,
   FileCheck,
   Search,
   X,
   Send,
   Lock,
-  Download
+  Download,
+  Sparkles
 } from 'lucide-react';
-import { 
-  getDesigns, 
-  addDesign, 
-  updateDesignReview, 
+import {
+  getDesigns,
+  addDesign,
+  updateDesignReview,
   updateDesignStyleReview,
-  deleteDesign, 
-  getMembers, 
-  getEvents, 
-  DesignSubmissionItem, 
-  Member, 
-  EventItem,
-  syncWithServer
+  deleteDesign,
+  getMembers,
+  getEvents,
+  DesignSubmissionItem,
+  Member,
+  EventItem
 } from '@/lib/local-data';
 import { canViewAllDesigns, isDesignHead } from '@/lib/permissions';
 

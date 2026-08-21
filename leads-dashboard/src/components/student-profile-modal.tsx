@@ -1,26 +1,16 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { 
-  X, 
-  User, 
-  Mail, 
-  Award, 
-  Calendar, 
-  CheckSquare, 
-  Star, 
-  ShieldCheck, 
-  GraduationCap, 
-  Layers, 
+import { useState } from 'react';
+import {
+  X,
+  Calendar,
+  CheckSquare,
+  Star,
+  Layers,
   ExternalLink,
-  MessageSquare,
-  Clock,
-  Sparkles,
-  TrendingUp,
-  UserCheck
+  TrendingUp
 } from 'lucide-react';
 import { getStudentProfile, StudentProfileData } from '@/lib/local-data';
-import { getRatingColor } from '@/lib/design-tokens';
 import Link from 'next/link';
 
 interface StudentProfileModalProps {
@@ -29,22 +19,12 @@ interface StudentProfileModalProps {
 }
 
 export function StudentProfileModal({ memberIdOrName, onClose }: StudentProfileModalProps) {
-  const [profile, setProfile] = useState<StudentProfileData | null>(null);
   const [activeTab, setActiveTab] = useState<'tasks' | 'events' | 'ratings'>('tasks');
-
-  useEffect(() => {
-    if (memberIdOrName) {
-      const data = getStudentProfile(memberIdOrName);
-      setProfile(data);
-    } else {
-      setProfile(null);
-    }
-  }, [memberIdOrName]);
+  const profile: StudentProfileData | null = memberIdOrName ? getStudentProfile(memberIdOrName) : null;
 
   if (!memberIdOrName || !profile) return null;
 
   const { member, stats, tasks, assignedEvents, ratings } = profile;
-  const ratingColor = getRatingColor(stats.averageRating);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in duration-200">

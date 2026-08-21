@@ -2,19 +2,17 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { 
-  Plus, 
-  Trash2, 
-  Link as LinkIcon, 
-  Eye, 
-  Copy, 
-  CheckCircle2, 
-  X, 
-  Edit2, 
-  ShieldAlert, 
+import {
+  Plus,
+  Trash2,
+  Eye,
+  Copy,
+  CheckCircle2,
+  X,
+  Edit2,
+  ShieldAlert,
   FileText,
-  Clock,
-  Sparkles
+  Clock
 } from 'lucide-react';
 import { 
   getForms, 

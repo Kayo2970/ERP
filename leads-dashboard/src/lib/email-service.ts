@@ -49,8 +49,6 @@ export const DEFAULT_EMAIL_SETTINGS: EmailSettings = {
   updatedAt: new Date().toISOString(),
 };
 
-let transporter: Transporter | null = null;
-
 export async function getEmailSettings(): Promise<EmailSettings> {
   try {
     const list = await readCollection<EmailSettings>('emailSettings');
@@ -73,7 +71,6 @@ export async function updateEmailSettings(settings: Partial<EmailSettings>, acto
   };
 
   await mutateCollection<EmailSettings>('emailSettings', () => [updated]);
-  transporter = null;
   return updated;
 }
 

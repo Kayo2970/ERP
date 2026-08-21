@@ -107,7 +107,7 @@ export function generatePerformanceReportPdf(params: PerformanceReportParams): v
     count: ratings.filter(r => scoreBand(r.overallScore) === band).length,
   }));
 
-  let afterSummaryY = (doc as any).lastAutoTable.finalY + 22;
+  const afterSummaryY = (doc as any).lastAutoTable.finalY + 22;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
   doc.setTextColor(...TEXT_DARK);

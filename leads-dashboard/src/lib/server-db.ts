@@ -381,12 +381,6 @@ export async function readDb(): Promise<DbSchema> {
   return db;
 }
 
-/** Write every collection out to its own file. Rarely used directly — mutateCollection is the normal write path. */
-export async function writeDb(data: DbSchema): Promise<void> {
-  await Promise.all(COLLECTION_KEYS.map(key => writeCollectionFile(key, (data[key] as any[]) ?? [])));
-  await touchMeta();
-}
-
 /**
  * Read a single collection from its own file.
  */

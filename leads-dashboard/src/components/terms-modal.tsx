@@ -1,6 +1,5 @@
 'use client';
 
-import React from 'react';
 import { ShieldCheck, Copyright, X, Lock, FileText, CheckCircle2 } from 'lucide-react';
 
 interface TermsModalProps {
