@@ -10,7 +10,8 @@ import {
   Search,
   Edit2,
   Trash2,
-  CheckSquare
+  CheckSquare,
+  Palette
 } from 'lucide-react';
 import {
   getRatings,
@@ -291,12 +292,21 @@ export default function RatingsPage() {
                           Assignee: <strong className="text-theme-text-primary">{task.assignee}</strong>
                         </p>
                         <div className="flex items-center flex-wrap gap-1.5 mt-1">
-                          {task.event && (
+                          {task.event ? (
                             <span className="text-[10px] text-accent font-semibold">{task.event}</span>
+                          ) : (
+                            <span className="text-[9px] font-medium px-1.5 py-0.5 bg-theme-border/20 text-theme-text-secondary rounded">
+                              Standalone Deliverable
+                            </span>
                           )}
                           <span className="text-[9px] font-bold px-1.5 py-0.5 bg-accent/10 text-accent rounded border border-accent/20">
                             {eventCampus}
                           </span>
+                          {(task.title.toLowerCase().includes('design approved') || task.title.toLowerCase().includes('design deliverable')) && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-purple-500/15 text-purple-400 rounded border border-purple-500/20 flex items-center gap-1">
+                              <Palette className="h-2.5 w-2.5" /> Design Deliverable
+                            </span>
+                          )}
                           {(task.assigneeType === 'committee' || task.eventCommitteeId) && (
                             <span className="text-[9px] font-bold px-1.5 py-0.5 bg-warning/15 text-warning rounded border border-warning/20 flex items-center gap-1">
                               <Users className="h-2.5 w-2.5" /> Committee Task

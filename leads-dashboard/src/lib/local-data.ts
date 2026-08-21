@@ -1924,6 +1924,55 @@ export async function addDesign(design: Omit<DesignSubmissionItem, 'id' | 'submi
   return newDesign;
 }
 
+/**
+ * Synchronize design finalization state with the Task & Rating system.
+ * A design is considered finalized when:
+ * 1. styleStatus === 'Style Approved'
+ * 2. If proofreadRequested is true, review?.status === 'Proofread Approved'
+ *
+ * Once finalized, it automatically creates or completes a Task (linked to an Event
+ * if present, or as a standalone deliverable if not), entering the Task Evaluation Queue
+ * on the Ratings page.
+ */
+function syncDesignTask(item: DesignSubmissionItem, reviewerName: string): DesignSubmissionItem {
+  const isStyleApproved = item.styleStatus === 'Style Approved';
+  const isProofreadApproved = !item.proofreadRequested || item.review?.status === 'Proofread Approved';
+  const isFullyFinalized = isStyleApproved && isProofreadApproved;
+
+  if (isFullyFinalized) {
+    if (item.linkedTaskId) {
+      updateTask(item.linkedTaskId, { status: 'Completed' }, reviewerName);
+      return item;
+    } else {
+      const task = addTask({
+        title: `Design Approved: ${item.title}`,
+        event: item.eventName || undefined,
+        eventId: item.eventId || undefined,
+        assignee: item.designerName,
+        assigneeId: item.designerId,
+        assigneeEmail: item.designerEmail,
+        assigneeType: 'individual',
+        dueDate: new Date().toISOString().split('T')[0],
+        status: 'Completed',
+        creatorName: reviewerName,
+      });
+      return {
+        ...item,
+        linkedTaskId: task.id,
+      };
+    }
+  } else if (item.linkedTaskId) {
+    // If a previously approved design is no longer fully finalized (e.g. proofreader requested changes or style rejected),
+    // revert its task to 'In Progress' if not already rated.
+    const linkedTask = getTasks().find(t => t.id === item.linkedTaskId);
+    if (linkedTask && !linkedTask.ratingScore) {
+      updateTask(item.linkedTaskId, { status: 'In Progress' }, reviewerName);
+    }
+  }
+
+  return item;
+}
+
 export function updateDesignReview(
   id: string,
   reviewStatus: 'Proofread Approved' | 'Changes Requested',
@@ -1943,11 +1992,14 @@ export function updateDesignReview(
     reviewedAt: new Date().toISOString()
   };
 
-  current[idx] = {
+  let updatedItem: DesignSubmissionItem = {
     ...item,
     review: updatedReview
   };
 
+  updatedItem = syncDesignTask(updatedItem, reviewerName);
+
+  current[idx] = updatedItem;
   saveDesigns(current);
   serverPatch('/api/designs', id, current[idx]);
   logAuditEvent('DESIGN_PROOFREAD_UPDATED', reviewerName, `Updated proofread review for design "${item.title}" to ${reviewStatus}`);
@@ -1966,7 +2018,7 @@ export function updateDesignStyleReview(
   if (idx === -1) return null;
 
   const item = current[idx];
-  const updated: DesignSubmissionItem = {
+  let updated: DesignSubmissionItem = {
     ...item,
     styleStatus,
     styleFeedback,
@@ -1974,44 +2026,7 @@ export function updateDesignStyleReview(
     styleDecidedAt: new Date().toISOString()
   };
 
-  // A design approved for an event is a real deliverable for that event, so
-  // it should show up on the Events page and the Tasks page and go through
-  // the same performance-rating workflow every other task does — rather than
-  // building a second, parallel "rate a design" flow, surface it as a
-  // Completed task tied to the same event/assignee (the ratings queue already
-  // picks up any Completed task). Reuses the same task across repeat
-  // approvals (approved -> changes requested -> re-approved) instead of
-  // creating a duplicate each time.
-  if (styleStatus === 'Style Approved' && item.eventId) {
-    if (item.linkedTaskId) {
-      updateTask(item.linkedTaskId, { status: 'Completed' }, reviewerName);
-    } else {
-      const task = addTask({
-        title: `Design Approved: ${item.title}`,
-        event: item.eventName,
-        eventId: item.eventId,
-        assignee: item.designerName,
-        assigneeId: item.designerId,
-        assigneeEmail: item.designerEmail,
-        assigneeType: 'individual',
-        dueDate: new Date().toISOString().split('T')[0],
-        status: 'Completed',
-        creatorName: reviewerName,
-      });
-      updated.linkedTaskId = task.id;
-    }
-  } else if (styleStatus === 'Style Rejected' && item.linkedTaskId) {
-    // A previously Style Approved design just got its decision flipped back
-    // to Rejected — pull its linked task out of "Completed" so it stops
-    // looking done/ratable, since the deliverable is no longer signed off.
-    // Skipped if it's already been rated: a rating already on record reflects
-    // real work that happened and shouldn't be silently invalidated by a
-    // later decision change.
-    const linkedTask = getTasks().find(t => t.id === item.linkedTaskId);
-    if (linkedTask && !linkedTask.ratingScore) {
-      updateTask(item.linkedTaskId, { status: 'In Progress' }, reviewerName);
-    }
-  }
+  updated = syncDesignTask(updated, reviewerName);
 
   current[idx] = updated;
   saveDesigns(current);
@@ -2047,7 +2062,7 @@ export async function updateDesignFile(
   if (idx === -1) return null;
 
   const item = current[idx];
-  const updated: DesignSubmissionItem = {
+  let updated: DesignSubmissionItem = {
     ...item,
     fileData,
     fileName,
@@ -2057,6 +2072,8 @@ export async function updateDesignFile(
     styleStatus: item.styleStatus ? 'Pending' : item.styleStatus,
     styleFeedback: undefined,
   };
+
+  updated = syncDesignTask(updated, actorName);
 
   current[idx] = updated;
   saveDesigns(current);

@@ -20,7 +20,9 @@ import {
   Send,
   Lock,
   Download,
-  Sparkles
+  Sparkles,
+  CheckSquare,
+  Star
 } from 'lucide-react';
 import {
   getDesigns,
@@ -31,9 +33,11 @@ import {
   deleteDesign,
   getMembers,
   getEvents,
+  getTasks,
   DesignSubmissionItem,
   Member,
-  EventItem
+  EventItem,
+  TaskItem
 } from '@/lib/local-data';
 import { canViewAllDesigns, isDesignHead, isCentreHead } from '@/lib/permissions';
 
@@ -41,6 +45,7 @@ export default function DesignPortalPage() {
   const [designs, setDesigns] = useState<DesignSubmissionItem[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [user, setUser] = useState<any>(null);
 
   // Filter & Search states
@@ -195,6 +200,7 @@ export default function DesignPortalPage() {
     setDesigns(getDesigns());
     setMembers(getMembers());
     setEvents(getEvents());
+    setTasks(getTasks());
   };
 
   useEffect(() => {
@@ -1069,6 +1075,37 @@ export default function DesignPortalPage() {
                   </div>
                 )}
               </form>
+            )}
+
+            {/* Task & Performance Rating Integration Status Card */}
+            {selectedDesign.linkedTaskId && (
+              <div className="bg-accent/10 border border-accent/20 p-3.5 rounded-xl space-y-1 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-foreground flex items-center gap-1.5">
+                    <CheckSquare className="h-4 w-4 text-accent" />
+                    Task & Rating Workflow Integration
+                  </span>
+                  {(() => {
+                    const linkedTask = tasks.find(t => t.id === selectedDesign.linkedTaskId);
+                    if (linkedTask?.ratingScore) {
+                      return (
+                        <span className="flex items-center gap-1 font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full text-[10px]">
+                          <Star className="h-3 w-3 fill-amber-500" /> Rated {linkedTask.ratingScore.toFixed(1)}/5.0
+                        </span>
+                      );
+                    }
+                    return (
+                      <span className="font-bold text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full text-[10px]">
+                        Task Registered — Ready for Rating
+                      </span>
+                    );
+                  })()}
+                </div>
+                <p className="text-muted-foreground text-[11px]">
+                  This finalized design deliverable is active as a task assigned to <strong className="text-foreground">{selectedDesign.designerName}</strong>
+                  {selectedDesign.eventName ? ` for event "${selectedDesign.eventName}"` : ' (Standalone Deliverable)'}. Evaluators can score performance under the <strong>Ratings</strong> tab.
+                </p>
+              </div>
             )}
 
             {/* Description & Event */}
