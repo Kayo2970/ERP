@@ -191,7 +191,7 @@ export default function LoginPage() {
   if (showLoginSplash) {
     return (
       <LoadingScreen
-        duration={5000}
+        duration={2000}
         subtitle="Signing you in..."
         onComplete={() => router.push('/dashboard/home')}
       />
