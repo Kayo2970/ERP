@@ -6,7 +6,7 @@ import { Member } from '@/lib/local-data';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { scope, recipientEmail, subject, bodyText, bodyHtml, category } = body;
+    const { scope, recipientEmail, subject, bodyText, bodyHtml, category, badgeText, badgeColor } = body;
 
     if (!subject || !bodyText) {
       return NextResponse.json({ error: 'Subject and email content are required' }, { status: 400 });
@@ -22,6 +22,8 @@ export async function POST(request: Request) {
         subject,
         bodyText,
         bodyHtml,
+        badgeText,
+        badgeColor,
         category: category || 'DIRECT_MESSAGE',
       });
       return NextResponse.json({ count: 1, dispatched: [log] });
@@ -47,6 +49,8 @@ export async function POST(request: Request) {
         subject,
         bodyText,
         bodyHtml,
+        badgeText,
+        badgeColor,
         category: category || 'ANNOUNCEMENT',
       });
       dispatchedLogs.push(log);

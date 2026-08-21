@@ -173,6 +173,9 @@ export default function GuestInvitesPage() {
     setIsPickerOpen(false);
   };
 
+  const [badgeOption, setBadgeOption] = useState<string>('NONE');
+  const [customBadgeText, setCustomBadgeText] = useState<string>('');
+
   const handleSendInvites = async () => {
     if (guests.length === 0 || !subject.trim() || !bodyText.trim()) return;
     setIsSending(true);
@@ -181,6 +184,14 @@ export default function GuestInvitesPage() {
 
     let sent = 0;
     let failed = 0;
+
+    let resolvedBadgeText: string | undefined = undefined;
+    if (badgeOption === 'INVITATION') resolvedBadgeText = '🎉 Official Invitation';
+    else if (badgeOption === 'ANNOUNCEMENT') resolvedBadgeText = '📢 Official Announcement';
+    else if (badgeOption === 'ACTION_REQUIRED') resolvedBadgeText = '📌 Action Required';
+    else if (badgeOption === 'IMPORTANT') resolvedBadgeText = '⚠️ Important Notice';
+    else if (badgeOption === 'CUSTOM') resolvedBadgeText = customBadgeText.trim() || undefined;
+    else resolvedBadgeText = undefined;
 
     for (const guest of guests) {
       try {
@@ -193,6 +204,7 @@ export default function GuestInvitesPage() {
             subject: applyMailMerge(subject, guest.name),
             bodyText: applyMailMerge(bodyText, guest.name),
             category: 'GUEST_INVITE',
+            badgeText: resolvedBadgeText,
           }),
         });
         if (res.ok) sent++; else failed++;
@@ -375,6 +387,30 @@ export default function GuestInvitesPage() {
 
           {previewMode === 'edit' ? (
             <>
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-medium text-theme-text-secondary">Header Tag / Badge Style</label>
+                <select
+                  value={badgeOption}
+                  onChange={e => setBadgeOption(e.target.value)}
+                  className="w-full px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl text-xs text-theme-text-primary focus:outline-none focus:border-accent"
+                >
+                  <option value="NONE">None (Clean Corporate Email - Recommended)</option>
+                  <option value="INVITATION">🎉 Official Invitation</option>
+                  <option value="ANNOUNCEMENT">📢 Official Announcement</option>
+                  <option value="ACTION_REQUIRED">📌 Action Required</option>
+                  <option value="IMPORTANT">⚠️ Important Notice</option>
+                  <option value="CUSTOM">Custom Tag...</option>
+                </select>
+                {badgeOption === 'CUSTOM' && (
+                  <input
+                    type="text"
+                    value={customBadgeText}
+                    onChange={e => setCustomBadgeText(e.target.value)}
+                    placeholder="Enter custom badge text (e.g. 🎓 Guest Invite)"
+                    className="w-full px-3 py-1.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-xs text-theme-text-primary focus:outline-none focus:border-accent mt-1"
+                  />
+                )}
+              </div>
               <div className="space-y-1.5">
                 <label className="block text-[11px] font-medium text-theme-text-secondary">Subject</label>
                 <input

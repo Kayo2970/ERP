@@ -17,6 +17,8 @@ export interface SendEmailPayload {
   subject: string;
   bodyText: string;
   bodyHtml?: string;
+  badgeText?: string;
+  badgeColor?: string;
   category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE';
 }
 
@@ -126,10 +128,11 @@ async function buildTransporter(): Promise<{ transporter: Transporter; settings:
 
 /**
  * Master Institutional Email Wrapper Template
- * Wraps email content in a high-end dark slate email container with:
- * 1. Institution Header Banner & High-Res LEADS Logo
- * 2. Styled Content Card
- * 3. Standardized Institutional Footer with Copyright & IP Ownership Notice for Kayomarz Pavri
+ * Clean, standard corporate email layout (inspired by PayPal/Stripe transactional notices) with:
+ * 1. Minimalist Institution Header Banner & LEADS Logo
+ * 2. Styled Content Area (plain white container, high contrast, clean typography)
+ * 3. Optional Badge Header Tag (can be omitted completely for clean direct emails & invites)
+ * 4. Standardized Institutional Footer with Copyright & IP Licensing Notice for Kayomarz Pavri
  */
 export function wrapInMasterEmailTemplate(options: {
   headerTitle?: string;
@@ -139,47 +142,55 @@ export function wrapInMasterEmailTemplate(options: {
   bodyContentHtml: string;
 }): string {
   const logoUrl = 'https://leadsnextgencentre.online/images/leads-short-logo.png';
-  const bgImageUrl = 'https://leadsnextgencentre.online/images/light-bg.jpg';
 
-  const badgeHtml = options.badgeText
-    ? `<span style="font-size: 11px; font-weight: 700; color: ${options.badgeColor || '#0369a1'}; background: #e0f2fe; border: 1px solid #bae6fd; padding: 4px 10px; border-radius: 8px; display: inline-block; margin-bottom: 14px;">${options.badgeText}</span>`
-    : '';
+  const isOmittedBadge = !options.badgeText || ['NONE', 'None', 'NO_BADGE', 'none'].includes(options.badgeText.trim());
+
+  const badgeHtml = isOmittedBadge
+    ? ''
+    : `<span style="font-size: 11px; font-weight: 700; color: ${options.badgeColor || '#0369a1'}; background: #e0f2fe; border: 1px solid #bae6fd; padding: 4px 10px; border-radius: 6px; display: inline-block; margin-bottom: 16px;">${options.badgeText}</span>`;
 
   return `
-    <div style="background: #f1f5f9 url('${bgImageUrl}') center / cover no-repeat; padding: 32px 16px; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif; color: #1e293b; width: 100%; box-sizing: border-box;">
-      <div style="max-width: 580px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);">
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body style="background-color: #f4f4f7; margin: 0; padding: 28px 12px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; width: 100%; box-sizing: border-box;">
+      <div style="max-width: 580px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);">
         
         <!-- Header Banner with Logo -->
-        <div style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); padding: 28px 32px; border-bottom: 1px solid #e2e8f0; text-align: center;">
-          <div style="display: inline-block; width: 56px; height: 56px; margin-bottom: 10px; background: #e0f2fe; border: 1px solid #bae6fd; border-radius: 14px; padding: 8px; vertical-align: middle;">
+        <div style="background-color: #ffffff; padding: 24px 32px; border-bottom: 1px solid #f1f5f9; text-align: center;">
+          <div style="display: inline-block; width: 48px; height: 48px; margin-bottom: 8px; vertical-align: middle;">
             <img src="${logoUrl}" alt="LEADS Logo" style="width: 100%; height: 100%; object-fit: contain;" />
           </div>
-          <h2 style="color: #0284c7; margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.02em;">LEADS Next Gen Centre</h2>
-          <p style="color: #64748b; font-size: 12px; margin: 4px 0 0 0; font-weight: 500;">Ramaiah University of Applied Sciences &middot; Operations Portal</p>
+          <h2 style="color: #0f172a; margin: 0; font-size: 19px; font-weight: 800; letter-spacing: -0.01em;">LEADS Next Gen Centre</h2>
+          <p style="color: #64748b; font-size: 12px; margin: 3px 0 0 0; font-weight: 500;">Ramaiah University of Applied Sciences &middot; Operations Portal</p>
         </div>
 
         <!-- Main Content Area -->
-        <div style="padding: 32px 28px;">
+        <div style="padding: 28px 32px;">
           ${badgeHtml}
-          ${options.headerTitle ? `<h3 style="margin-top: 0; color: #0f172a; font-size: 18px; font-weight: 700; margin-bottom: ${options.headerSubtitle ? '4px' : '20px'};">${options.headerTitle}</h3>` : ''}
-          ${options.headerSubtitle ? `<p style="color: #64748b; font-size: 13px; margin-top: 0; margin-bottom: 20px; font-weight: 400;">${options.headerSubtitle}</p>` : ''}
+          ${options.headerTitle ? `<h3 style="margin-top: 0; color: #0f172a; font-size: 18px; font-weight: 700; margin-bottom: ${options.headerSubtitle ? '4px' : '18px'};">${options.headerTitle}</h3>` : ''}
+          ${options.headerSubtitle ? `<p style="color: #64748b; font-size: 13px; margin-top: 0; margin-bottom: 18px; font-weight: 400;">${options.headerSubtitle}</p>` : ''}
 
-          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; color: #334155; font-size: 14px; line-height: 1.65;">
+          <div style="color: #334155; font-size: 14px; line-height: 1.65;">
             ${options.bodyContentHtml}
           </div>
         </div>
 
         <!-- Standardized Institutional Footer -->
-        <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 24px 28px; text-align: center; font-size: 11px; color: #64748b; line-height: 1.6;">
+        <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 28px; text-align: center; font-size: 11px; color: #64748b; line-height: 1.6;">
           <p style="margin: 0 0 6px 0; color: #475569; font-weight: 600;">© 2026 LEADS Next Gen Centre &middot; MSRUAS Internal Operations Portal</p>
-          <p style="margin: 0 0 8px 0; color: #94a3b8;">This is an automated operational notification. Authorised recipient access only.</p>
-          <div style="border-top: 1px solid #e2e8f0; padding-top: 10px; margin-top: 10px; color: #64748b; font-size: 10px;">
-            All Intellectual Property, Copyrights & Development Licensing belong exclusively to <strong style="color: #0284c7;">Kayomarz Pavri</strong>.
+          <p style="margin: 0 0 6px 0; color: #94a3b8;">This is an operational notification. Authorised recipient access only.</p>
+          <div style="border-top: 1px solid #e2e8f0; padding-top: 8px; margin-top: 8px; color: #64748b; font-size: 10px;">
+            All Intellectual Property, Copyrights & Licensing belong exclusively to <strong style="color: #0284c7;">Kayomarz Pavri</strong>.
           </div>
         </div>
 
       </div>
-    </div>
+    </body>
+    </html>
   `;
 }
 
@@ -191,7 +202,7 @@ export async function testEmailConnection(testRecipient: string): Promise<{ succ
     const from = `${settings.fromName || 'LEADS Next Gen Centre'} <${settings.fromEmail || 'leads@msruas.ac.in'}>`;
     
     const bodyHtml = wrapInMasterEmailTemplate({
-      headerTitle: `SMTP Mail Server & Client Connection Verified`,
+      headerTitle: `SMTP Connection Verified`,
       headerSubtitle: `Diagnostic Health Check Successful`,
       badgeText: `✅ SMTP Operational`,
       badgeColor: `#15803d`,
@@ -212,6 +223,10 @@ export async function testEmailConnection(testRecipient: string): Promise<{ succ
       subject: `[LEADS Test Email] SMTP Client Verification`,
       text: `Hello,\n\nThis is a test notification verifying that your LEADS Dashboard email client and SMTP server (${settings.provider.toUpperCase()} @ ${settings.smtpHost}) are properly configured and operational.\n\nSent at: ${new Date().toLocaleString()}`,
       html: bodyHtml,
+      headers: {
+        'X-Mailer': 'LEADS-Operations-Portal',
+        'X-Priority': '3',
+      },
     });
 
     return { success: true, message: `SMTP verification successful! Test message delivered to ${testRecipient}.` };
@@ -222,9 +237,18 @@ export async function testEmailConnection(testRecipient: string): Promise<{ succ
 }
 
 export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog> {
+  let badgeTextToUse: string | undefined = payload.badgeText;
+  if (!badgeTextToUse) {
+    if (payload.category === 'ANNOUNCEMENT') badgeTextToUse = '📢 Official Announcement';
+    else if (payload.category === 'TASK_ASSIGNMENT') badgeTextToUse = '📌 Action Required';
+    else if (payload.category === 'EVENT_ROSTER') badgeTextToUse = '🎉 Event Roster';
+    else badgeTextToUse = undefined; // Omit badge completely for direct messages and guest invites
+  }
+
   const defaultFormattedHtml = wrapInMasterEmailTemplate({
     headerTitle: payload.subject,
-    badgeText: payload.category ? `📩 ${payload.category}` : undefined,
+    badgeText: badgeTextToUse,
+    badgeColor: payload.badgeColor,
     bodyContentHtml: `<div style="white-space: pre-wrap; font-size: 14px; line-height: 1.7; color: #1e293b;">${payload.bodyText}</div>`
   });
 
@@ -234,6 +258,10 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
   try {
     const { transporter: t, settings } = await buildTransporter();
     const from = `${settings.fromName || 'LEADS Next Gen Centre'} <${settings.fromEmail || 'leads@msruas.ac.in'}>`;
+    
+    const domain = (settings.fromEmail || 'leadsnextgencentre.online').split('@')[1] || 'leadsnextgencentre.online';
+    const messageId = `<${Date.now()}.${Math.random().toString(36).substring(2, 9)}@${domain}>`;
+
     await t.sendMail({
       from,
       to: payload.to,
@@ -241,6 +269,12 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
       text: payload.bodyText,
       html: bodyHtml,
       replyTo: settings.replyTo || settings.fromEmail,
+      headers: {
+        'X-Mailer': 'LEADS-Operations-Portal',
+        'X-Priority': '3',
+        'X-Auto-Response-Suppress': 'OOF, AutoReply',
+        'Message-ID': messageId,
+      },
     });
     status = 'SENT';
   } catch (err) {

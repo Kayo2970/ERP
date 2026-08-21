@@ -199,16 +199,28 @@ export default function EmailManagementPage() {
     }
   };
 
+  const [badgeOption, setBadgeOption] = useState<string>('NONE');
+  const [customBadgeText, setCustomBadgeText] = useState<string>('');
+
   const handleExecuteDispatch = async () => {
     setShowDispatchConfirm(false);
     setIsSendingDispatch(true);
     try {
+      let resolvedBadgeText: string | undefined = undefined;
+      if (badgeOption === 'INVITATION') resolvedBadgeText = '🎉 Official Invitation';
+      else if (badgeOption === 'ANNOUNCEMENT') resolvedBadgeText = '📢 Official Announcement';
+      else if (badgeOption === 'ACTION_REQUIRED') resolvedBadgeText = '📌 Action Required';
+      else if (badgeOption === 'IMPORTANT') resolvedBadgeText = '⚠️ Important Notice';
+      else if (badgeOption === 'CUSTOM') resolvedBadgeText = customBadgeText.trim() || undefined;
+      else resolvedBadgeText = undefined;
+
       const payload = {
         scope: dispatchScope,
         recipientEmail: dispatchScope === 'SINGLE' ? customRecipient : undefined,
         subject,
         bodyText,
         category,
+        badgeText: resolvedBadgeText,
       };
       const res = await fetch('/api/email/send', {
         method: 'POST',
@@ -675,6 +687,31 @@ export default function EmailManagementPage() {
                     </select>
                   </div>
                 )}
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="block font-medium text-theme-text-secondary">Header Tag / Badge Style</label>
+                  <select
+                    value={badgeOption}
+                    onChange={e => setBadgeOption(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  >
+                    <option value="NONE">None (Clean Corporate Email - Recommended)</option>
+                    <option value="INVITATION">🎉 Official Invitation</option>
+                    <option value="ANNOUNCEMENT">📢 Official Announcement</option>
+                    <option value="ACTION_REQUIRED">📌 Action Required</option>
+                    <option value="IMPORTANT">⚠️ Important Notice</option>
+                    <option value="CUSTOM">Custom Tag...</option>
+                  </select>
+                  {badgeOption === 'CUSTOM' && (
+                    <input
+                      type="text"
+                      value={customBadgeText}
+                      onChange={e => setCustomBadgeText(e.target.value)}
+                      placeholder="Enter custom badge text (e.g. 🎓 Orientation 2026)"
+                      className="w-full px-4 py-2 bg-theme-background/40 border border-theme-card-border rounded-xl text-xs text-theme-text-primary mt-2"
+                    />
+                  )}
+                </div>
               </div>
 
               <div className="space-y-1.5">
