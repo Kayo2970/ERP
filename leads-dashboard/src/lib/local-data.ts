@@ -15,6 +15,11 @@ export interface Member {
   bankName?: string;
   accountNumber?: string;
   ifscCode?: string;
+  // "YYYY-MM-DD". Collected once at account activation (or added later from
+  // Settings) — used only to match month+day for the daily birthday email
+  // (see src/lib/birthday-scheduler.ts). Optional: older members activated
+  // before this field existed simply won't get a birthday email until set.
+  dateOfBirth?: string;
   // Undefined/'Active' = normal login access. 'Terminated' = login is blocked
   // (see /api/auth/login) but the member row itself, and every historical
   // record that references it by id/name/email, is left untouched.

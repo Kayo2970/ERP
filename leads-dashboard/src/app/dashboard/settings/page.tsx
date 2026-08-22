@@ -39,6 +39,7 @@ export default function SettingsPage() {
 
   // Account form state
   const [displayName, setDisplayName] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -84,6 +85,7 @@ export default function SettingsPage() {
         setSavedBankName(u.bankName || me?.bankName || '');
         setSavedAccountNumber(u.accountNumber || me?.accountNumber || '');
         setSavedIfscCode(u.ifscCode || me?.ifscCode || '');
+        setDateOfBirth(u.dateOfBirth || me?.dateOfBirth || '');
         setTestTo(u.email || '');
       } catch (e) {
         console.error(e);
@@ -276,7 +278,8 @@ export default function SettingsPage() {
       name: displayName.trim(),
       bankName: savedBankName.trim(),
       accountNumber: savedAccountNumber.trim(),
-      ifscCode: savedIfscCode.trim().toUpperCase()
+      ifscCode: savedIfscCode.trim().toUpperCase(),
+      dateOfBirth: dateOfBirth || undefined,
     };
     const updatedMember = updateMember(user.id, changes, user.name);
     if (!updatedMember) {
@@ -625,6 +628,18 @@ export default function SettingsPage() {
                     value={user?.committee || 'All Committees'}
                     className="w-full px-4 py-2.5 bg-theme-background/10 border border-theme-border/30 rounded-xl text-theme-text-secondary cursor-not-allowed opacity-70"
                   />
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="block font-medium text-theme-text-secondary">Date of Birth</label>
+                  <input
+                    type="date"
+                    value={dateOfBirth}
+                    onChange={(e) => setDateOfBirth(e.target.value)}
+                    max={new Date().toISOString().split('T')[0]}
+                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  />
+                  <p className="text-[11px] text-theme-text-secondary">We&apos;ll send you a birthday email from the Centre on this date each year.</p>
                 </div>
               </div>
 

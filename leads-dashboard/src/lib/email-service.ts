@@ -18,7 +18,7 @@ export interface EmailLog {
   subject: string;
   bodyText: string;
   bodyHtml: string;
-  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION';
+  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION' | 'BIRTHDAY';
   status: 'SENT' | 'FAILED';
   sentAt: string;
   // Diagnostics for "shows SENT but never arrives" — a resolved sendMail()
@@ -37,7 +37,7 @@ export interface SendEmailPayload {
   bodyHtml?: string;
   badgeText?: string;
   badgeColor?: string;
-  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION';
+  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION' | 'BIRTHDAY';
 }
 
 export interface EmailSettings {
@@ -322,6 +322,7 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
     else if (payload.category === 'TASK_ASSIGNMENT') badgeTextToUse = '📌 Action Required';
     else if (payload.category === 'EVENT_ROSTER') badgeTextToUse = '🎉 Event Roster';
     else if (payload.category === 'ACCOUNT_ACTIVATION') badgeTextToUse = '👋 Welcome';
+    else if (payload.category === 'BIRTHDAY') badgeTextToUse = '🎂 Happy Birthday';
     else badgeTextToUse = undefined; // Omit badge completely for direct messages and guest invites
   }
 
@@ -625,6 +626,35 @@ export function generateEventRosterEmailTemplate(memberName: string, eventTitle:
       <div style="margin-top: 20px; text-align: center;">
         <a href="https://leadsnextgencentre.online/dashboard/events" style="background: #0284c7; color: #ffffff; padding: 10px 20px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 12px; display: inline-block;">View Event Details &rarr;</a>
       </div>
+    `
+  });
+
+  return { subject, bodyText, bodyHtml };
+}
+
+/**
+ * Template Generator: Happy Birthday
+ * Sent by the daily birthday scheduler (src/lib/birthday-scheduler.ts) to
+ * every member whose stored date of birth matches today.
+ */
+export function generateBirthdayEmailTemplate(memberName: string): { subject: string; bodyText: string; bodyHtml: string } {
+  const firstName = memberName.split(' ')[0] || memberName;
+  const subject = `🎂 Happy Birthday, ${firstName}!`;
+  const bodyText = `Hello ${memberName},\n\n` +
+    `Wishing you a very Happy Birthday from all of us at LEADS Next Gen Centre!\n\n` +
+    `Thank you for being part of the team — we hope your day is filled with celebration.\n\n` +
+    `Warm regards,\nLEADS Next Gen Centre, MSRUAS`;
+
+  const bodyHtml = wrapInMasterEmailTemplate({
+    headerTitle: `Happy Birthday, ${firstName}! 🎉`,
+    headerSubtitle: `From everyone at LEADS Next Gen Centre`,
+    badgeText: `🎂 Happy Birthday`,
+    badgeColor: `#be185d`,
+    bodyContentHtml: `
+      <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Dear <strong>${memberName}</strong>,</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">On behalf of the entire LEADS Next Gen Centre family, we wish you a wonderful birthday! Thank you for the energy and dedication you bring to the team — we hope your special day is filled with joy and celebration.</p>
+      <p style="text-align: center; font-size: 40px; margin: 24px 0;">🎂🎉🎈</p>
+      <p style="color: #64748b; font-size: 13px; line-height: 1.6; margin-bottom: 0;">Have a fantastic year ahead!</p>
     `
   });
 
