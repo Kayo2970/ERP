@@ -37,9 +37,90 @@ import {
   DesignSubmissionItem,
   Member,
   EventItem,
-  TaskItem
+  TaskItem,
+  OcrScanResult
 } from '@/lib/local-data';
 import { canViewAllDesigns, isDesignHead, isCentreHead } from '@/lib/permissions';
+
+/** Renders an OCR scan's flagged spelling issues + extracted text preview. Advisory only. */
+function OcrScanPanel({
+  result,
+  error,
+  showExtractedText,
+  onToggleExtractedText,
+}: {
+  result: OcrScanResult | null;
+  error: string;
+  showExtractedText: boolean;
+  onToggleExtractedText: () => void;
+}) {
+  if (error) {
+    return (
+      <p className="text-rose-500 font-medium text-[11px] flex items-center gap-1 pt-2">
+        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+        {error}
+      </p>
+    );
+  }
+  if (!result) return null;
+
+  return (
+    <div className="mt-2 p-3 bg-muted/20 border border-border rounded-lg space-y-2 text-xs">
+      <div className="flex items-center justify-between">
+        <span className="font-semibold text-foreground">
+          {result.issues.length === 0 ? 'No spelling issues detected' : `${result.issues.length} possible spelling issue${result.issues.length === 1 ? '' : 's'} found`}
+        </span>
+        <span className="text-[10px] text-muted-foreground font-mono">
+          {new Date(result.scannedAt).toLocaleTimeString()}
+        </span>
+      </div>
+
+      {result.partial && (
+        <p className="text-[11px] text-amber-500 flex items-center gap-1">
+          <AlertCircle className="h-3 w-3 shrink-0" />
+          Scanned the first {result.pageCount} of {result.totalPages} pages.
+        </p>
+      )}
+
+      {result.issues.length > 0 && (
+        <ul className="space-y-1">
+          {result.issues.map((issue, i) => (
+            <li key={i} className="flex items-center gap-1.5 flex-wrap">
+              <span className="font-mono font-semibold text-rose-500">{issue.word}</span>
+              {issue.suggestions.length > 0 && (
+                <>
+                  <span className="text-muted-foreground">&rarr;</span>
+                  <span className="text-emerald-500 font-medium">{issue.suggestions.join(', ')}</span>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <p className="text-[10px] text-muted-foreground italic">
+        Automatic suggestions only — review manually. This never blocks submission.
+      </p>
+
+      {result.extractedText && (
+        <div className="pt-1 border-t border-border">
+          <button
+            type="button"
+            onClick={onToggleExtractedText}
+            className="text-[11px] text-accent hover:underline font-medium cursor-pointer"
+          >
+            {showExtractedText ? 'Hide extracted text' : 'Show extracted text'}
+          </button>
+          {showExtractedText && (
+            <pre className="mt-1.5 p-2 bg-background border border-border rounded-lg text-[10px] whitespace-pre-wrap max-h-40 overflow-y-auto text-muted-foreground">
+              {result.extractedText}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function DesignPortalPage() {
   const [designs, setDesigns] = useState<DesignSubmissionItem[]>([]);
@@ -76,6 +157,12 @@ export default function DesignPortalPage() {
   const [readProgress, setReadProgress] = useState<number>(0);
   const [submitError, setSubmitError] = useState<string>('');
 
+  // OCR + spell-check scan (advisory only — never blocks submission)
+  const [ocrScanResult, setOcrScanResult] = useState<OcrScanResult | null>(null);
+  const [isScanning, setIsScanning] = useState<boolean>(false);
+  const [scanError, setScanError] = useState<string>('');
+  const [showExtractedText, setShowExtractedText] = useState<boolean>(false);
+
   // Proofread Review form state inside Inspector Modal
   const [reviewStatus, setReviewStatus] = useState<'Proofread Approved' | 'Changes Requested'>('Proofread Approved');
   const [reviewComments, setReviewComments] = useState('');
@@ -91,6 +178,9 @@ export default function DesignPortalPage() {
   const [isReplacingFile, setIsReplacingFile] = useState<boolean>(false);
   const [isReadingReplaceFile, setIsReadingReplaceFile] = useState<boolean>(false);
   const [replaceReadProgress, setReplaceReadProgress] = useState<number>(0);
+  const [replaceOcrScanResult, setReplaceOcrScanResult] = useState<OcrScanResult | null>(null);
+  const [isScanningReplace, setIsScanningReplace] = useState<boolean>(false);
+  const [replaceScanError, setReplaceScanError] = useState<string>('');
 
   // Deep link from a notification (?highlight=<designId>) — auto-open its Inspector once
   const [highlightDesignId, setHighlightDesignId] = useState<string | null>(null);
@@ -108,6 +198,9 @@ export default function DesignPortalPage() {
     setReviewStatus(design.review?.status === 'Changes Requested' ? 'Changes Requested' : 'Proofread Approved');
     setStyleFeedback(design.styleFeedback || '');
     setStyleStatus(design.styleStatus === 'Style Rejected' ? 'Style Rejected' : 'Style Approved');
+    setShowExtractedText(false);
+    setReplaceOcrScanResult(null);
+    setReplaceScanError('');
     setShowInspectorModal(true);
   };
 
@@ -142,6 +235,8 @@ export default function DesignPortalPage() {
     setReplaceFileData('');
     setIsReadingReplaceFile(true);
     setReplaceReadProgress(0);
+    setReplaceOcrScanResult(null);
+    setReplaceScanError('');
     const reader = new FileReader();
     reader.onprogress = (ev) => {
       if (ev.lengthComputable) setReplaceReadProgress(Math.round((ev.loaded / ev.total) * 100));
@@ -181,13 +276,16 @@ export default function DesignPortalPage() {
         replaceFile.name,
         replaceFile.size,
         replaceFile.type || 'application/octet-stream',
-        user.name
+        user.name,
+        replaceOcrScanResult || undefined
       );
       if (updated) {
         setSelectedDesign(updated);
         setDesigns(getDesigns());
         setReplaceFile(null);
         setReplaceFileData('');
+        setReplaceOcrScanResult(null);
+        setReplaceScanError('');
       }
     } catch (err: any) {
       setReplaceFileError(err.message || 'Failed to replace file.');
@@ -255,6 +353,8 @@ export default function DesignPortalPage() {
     setFileData('');
     setIsReadingFile(true);
     setReadProgress(0);
+    setOcrScanResult(null);
+    setScanError('');
 
     // Convert file to base64 DataURL for storage & preview. This can take a
     // moment for a large PNG/PDF, so it's tracked as its own progress step —
@@ -278,6 +378,43 @@ export default function DesignPortalPage() {
       setIsReadingFile(false);
     };
     reader.readAsDataURL(selected);
+  };
+
+  const runOcrScan = async (
+    dataUrl: string,
+    fileType: string,
+    setResult: (r: OcrScanResult | null) => void,
+    setScanning: (b: boolean) => void,
+    setError: (s: string) => void
+  ) => {
+    setScanning(true);
+    setError('');
+    setResult(null);
+    try {
+      const res = await fetch('/api/designs/ocr-scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileData: dataUrl, fileType }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || 'OCR scan failed.');
+      setResult(body as OcrScanResult);
+    } catch (err: any) {
+      setError(err.message || 'OCR scan failed. You can still submit without scanning.');
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const handleScanFile = () => {
+    if (!file || !fileData.startsWith('data:')) return;
+    setShowExtractedText(false);
+    runOcrScan(fileData, file.type || 'application/octet-stream', setOcrScanResult, setIsScanning, setScanError);
+  };
+
+  const handleScanReplaceFile = () => {
+    if (!replaceFile || !replaceFileData.startsWith('data:')) return;
+    runOcrScan(replaceFileData, replaceFile.type || 'application/octet-stream', setReplaceOcrScanResult, setIsScanningReplace, setReplaceScanError);
   };
 
   const handleUploadSubmit = async (e: React.FormEvent) => {
@@ -319,6 +456,7 @@ export default function DesignPortalPage() {
         assignedProofreaderEmail: requestProofread ? selectedProofreader?.email : undefined,
         eventId: selectedEvent?.id,
         eventName: selectedEvent?.title,
+        ocrScan: ocrScanResult || undefined,
       });
 
       refreshData();
@@ -334,6 +472,8 @@ export default function DesignPortalPage() {
       setFileError('');
       setRequestProofread(false);
       setAssignedProofreaderId('');
+      setOcrScanResult(null);
+      setScanError('');
     } catch (err: any) {
       // Deliberately doesn't close the modal or reset the form on failure —
       // the file is still selected, so the designer can just hit Submit again.
@@ -874,6 +1014,26 @@ export default function DesignPortalPage() {
                     {fileError}
                   </p>
                 )}
+
+                {file && !isReadingFile && fileData.startsWith('data:') && (
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={handleScanFile}
+                      disabled={isScanning}
+                      className="w-full py-2 rounded-lg bg-muted border border-border text-foreground font-medium hover:bg-muted/70 text-xs flex items-center justify-center gap-1.5 disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
+                    >
+                      <Search className="h-3.5 w-3.5" />
+                      {isScanning ? 'Scanning for typos... this can take a while for multi-page PDFs' : 'Scan for Typos & Spelling'}
+                    </button>
+                    <OcrScanPanel
+                      result={ocrScanResult}
+                      error={scanError}
+                      showExtractedText={showExtractedText}
+                      onToggleExtractedText={() => setShowExtractedText(v => !v)}
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Proofreading Toggle & Person Selector */}
@@ -1069,6 +1229,25 @@ export default function DesignPortalPage() {
                     </div>
                   </div>
                 )}
+                {replaceFile && !isReadingReplaceFile && replaceFileData.startsWith('data:') && (
+                  <div>
+                    <button
+                      type="button"
+                      onClick={handleScanReplaceFile}
+                      disabled={isScanningReplace}
+                      className="w-full py-2 rounded-lg bg-muted border border-border text-foreground font-medium hover:bg-muted/70 text-xs flex items-center justify-center gap-1.5 disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
+                    >
+                      <Search className="h-3.5 w-3.5" />
+                      {isScanningReplace ? 'Scanning for typos...' : 'Scan for Typos & Spelling'}
+                    </button>
+                    <OcrScanPanel
+                      result={replaceOcrScanResult}
+                      error={replaceScanError}
+                      showExtractedText={showExtractedText}
+                      onToggleExtractedText={() => setShowExtractedText(v => !v)}
+                    />
+                  </div>
+                )}
                 {isReplacingFile && (
                   <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
                     <div className="h-full w-full bg-accent rounded-full animate-pulse" />
@@ -1115,6 +1294,22 @@ export default function DesignPortalPage() {
                 <p className="text-muted-foreground bg-muted/20 p-3 rounded-lg border border-border">
                   {selectedDesign.description}
                 </p>
+              </div>
+            )}
+
+            {/* Automated OCR + Spell-Check pass (run by the designer at upload time) */}
+            {selectedDesign.ocrScan && (
+              <div className="border-t border-border pt-4 space-y-2">
+                <h3 className="text-sm font-bold flex items-center gap-2">
+                  <Search className="h-4 w-4 text-accent" />
+                  Automated Spelling Scan
+                </h3>
+                <OcrScanPanel
+                  result={selectedDesign.ocrScan}
+                  error=""
+                  showExtractedText={showExtractedText}
+                  onToggleExtractedText={() => setShowExtractedText(v => !v)}
+                />
               </div>
             )}
 
