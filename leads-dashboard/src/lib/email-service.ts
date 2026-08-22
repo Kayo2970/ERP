@@ -10,6 +10,13 @@ export interface EmailLog {
   category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION';
   status: 'SENT' | 'FAILED';
   sentAt: string;
+  // Diagnostics for "shows SENT but never arrives" — a resolved sendMail()
+  // only means the SMTP server ACCEPTED the message for delivery, not that
+  // it reached the recipient's inbox. These surface what the server
+  // actually said, without needing shell/log access on the VPS.
+  errorMessage?: string;       // set when the send itself threw (auth failure, connection refused, timeout, ...)
+  smtpResponse?: string;       // the raw final SMTP response line, e.g. "250 2.0.0 OK ..."
+  rejectedRecipients?: string[]; // addresses the SMTP server explicitly rejected, if any
 }
 
 export interface SendEmailPayload {
@@ -76,7 +83,7 @@ export async function updateEmailSettings(settings: Partial<EmailSettings>, acto
   return updated;
 }
 
-async function buildTransporter(): Promise<{ transporter: Transporter; settings: EmailSettings }> {
+async function buildTransporter(): Promise<{ transporter: Transporter; settings: EmailSettings; effectiveHost: string; effectivePort: number }> {
   const settings = await getEmailSettings();
   
   let host = settings.smtpHost;
@@ -123,7 +130,7 @@ async function buildTransporter(): Promise<{ transporter: Transporter; settings:
     socketTimeout: 10000,
   });
 
-  return { transporter: t, settings };
+  return { transporter: t, settings, effectiveHost: host, effectivePort: port };
 }
 
 /**
@@ -196,11 +203,11 @@ export function wrapInMasterEmailTemplate(options: {
 
 export async function testEmailConnection(testRecipient: string): Promise<{ success: boolean; message: string }> {
   try {
-    const { transporter: t, settings } = await buildTransporter();
+    const { transporter: t, settings, effectiveHost, effectivePort } = await buildTransporter();
     await t.verify();
-    
+
     const from = `${settings.fromName || 'LEADS Next Gen Centre'} <${settings.fromEmail || 'leads@msruas.ac.in'}>`;
-    
+
     const bodyHtml = wrapInMasterEmailTemplate({
       headerTitle: `SMTP Connection Verified`,
       headerSubtitle: `Diagnostic Health Check Successful`,
@@ -210,18 +217,18 @@ export async function testEmailConnection(testRecipient: string): Promise<{ succ
         <p style="margin-top: 0; color: #0f172a; font-weight: 600;">Your LEADS Dashboard email client and SMTP server settings are operational.</p>
         <div style="background: #ffffff; border: 1px solid #e2e8f0; padding: 14px 18px; border-radius: 10px; margin: 16px 0; font-size: 12px;">
           <p style="margin: 0 0 6px 0; color: #64748b;"><strong>Service Provider:</strong> <span style="color: #0284c7; font-weight: 700;">${settings.provider.toUpperCase()}</span></p>
-          <p style="margin: 0 0 6px 0; color: #64748b;"><strong>SMTP Host & Port:</strong> <span style="color: #0f172a; font-family: monospace;">${settings.smtpHost}:${settings.smtpPort}</span></p>
+          <p style="margin: 0 0 6px 0; color: #64748b;"><strong>SMTP Host & Port:</strong> <span style="color: #0f172a; font-family: monospace;">${effectiveHost}:${effectivePort}</span></p>
           <p style="margin: 0; color: #64748b;"><strong>Sender Name:</strong> <span style="color: #0f172a;">${settings.fromName}</span></p>
         </div>
         <p style="color: #64748b; font-size: 11px; margin-bottom: 0;">Diagnostic executed at ${new Date().toLocaleString()}</p>
       `
     });
 
-    await t.sendMail({
+    const info = await t.sendMail({
       from,
       to: testRecipient,
       subject: `[LEADS Test Email] SMTP Client Verification`,
-      text: `Hello,\n\nThis is a test notification verifying that your LEADS Dashboard email client and SMTP server (${settings.provider.toUpperCase()} @ ${settings.smtpHost}) are properly configured and operational.\n\nSent at: ${new Date().toLocaleString()}`,
+      text: `Hello,\n\nThis is a test notification verifying that your LEADS Dashboard email client and SMTP server (${settings.provider.toUpperCase()} @ ${effectiveHost}) are properly configured and operational.\n\nSent at: ${new Date().toLocaleString()}`,
       html: bodyHtml,
       headers: {
         'X-Mailer': 'LEADS-Operations-Portal',
@@ -229,7 +236,22 @@ export async function testEmailConnection(testRecipient: string): Promise<{ succ
       },
     });
 
-    return { success: true, message: `SMTP verification successful! Test message delivered to ${testRecipient}.` };
+    // A resolved sendMail() only means the server ACCEPTED the message for
+    // delivery, not that it will actually reach the inbox — surface the raw
+    // SMTP response (and any outright-rejected recipients) rather than a
+    // blind "success," since that gap is exactly what makes "sent but never
+    // received" so hard to diagnose without shell access to the mail server.
+    if (info.rejected && info.rejected.length > 0) {
+      return {
+        success: false,
+        message: `SMTP server rejected the recipient (${info.rejected.join(', ')}). Server said: ${info.response || 'no response text'}`,
+      };
+    }
+
+    return {
+      success: true,
+      message: `SMTP accepted the message for ${testRecipient} (server said: "${info.response || 'OK'}"). This confirms the SMTP handoff worked — if it still doesn't arrive, check spam/junk, and check that "${settings.fromEmail}" is allowed to send as this domain (SPF/DKIM) rather than the app's connection to the mail server, since that part is already confirmed working.`,
+    };
   } catch (err: any) {
     console.error('[email-service] SMTP Connection Test Failed:', err);
     return { success: false, message: err?.message || 'Failed to establish connection to SMTP server.' };
@@ -255,15 +277,18 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
 
   const bodyHtml = payload.bodyHtml || defaultFormattedHtml;
   let status: 'SENT' | 'FAILED' = 'FAILED';
+  let errorMessage: string | undefined;
+  let smtpResponse: string | undefined;
+  let rejectedRecipients: string[] | undefined;
 
   try {
     const { transporter: t, settings } = await buildTransporter();
     const from = `${settings.fromName || 'LEADS Next Gen Centre'} <${settings.fromEmail || 'leads@msruas.ac.in'}>`;
-    
+
     const domain = (settings.fromEmail || 'leadsnextgencentre.online').split('@')[1] || 'leadsnextgencentre.online';
     const messageId = `<${Date.now()}.${Math.random().toString(36).substring(2, 9)}@${domain}>`;
 
-    await t.sendMail({
+    const info = await t.sendMail({
       from,
       to: payload.to,
       subject: payload.subject,
@@ -277,9 +302,28 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
         'Message-ID': messageId,
       },
     });
-    status = 'SENT';
+
+    smtpResponse = info.response;
+    // sendMail() resolving only means the SMTP server ACCEPTED the message
+    // for delivery — not that every recipient will actually get it. A
+    // server that rejects some/all recipients outright (bad address,
+    // relay-denied, etc.) reports that in `rejected` without necessarily
+    // throwing, so treat a fully-rejected send as FAILED rather than SENT.
+    if (info.rejected && info.rejected.length > 0) {
+      const rejectedList = info.rejected.map(String);
+      rejectedRecipients = rejectedList;
+      if (!info.accepted || info.accepted.length === 0) {
+        status = 'FAILED';
+        errorMessage = `SMTP server rejected all recipients: ${rejectedList.join(', ')}`;
+      } else {
+        status = 'SENT';
+      }
+    } else {
+      status = 'SENT';
+    }
   } catch (err) {
-    console.error(`[email-service] Failed to send to ${payload.to}:`, err instanceof Error ? err.message : err);
+    errorMessage = err instanceof Error ? err.message : String(err);
+    console.error(`[email-service] Failed to send to ${payload.to}:`, errorMessage);
   }
 
   const newEmail: EmailLog = {
@@ -291,6 +335,9 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
     category: payload.category,
     status,
     sentAt: new Date().toISOString(),
+    errorMessage,
+    smtpResponse,
+    rejectedRecipients,
   };
 
   try {
