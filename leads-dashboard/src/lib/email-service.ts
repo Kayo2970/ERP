@@ -1,15 +1,5 @@
 import nodemailer, { Transporter } from 'nodemailer';
-import path from 'path';
 import { mutateCollection, readCollection } from './server-db';
-
-// Referenced as cid:leads-logo in wrapInMasterEmailTemplate — attach this
-// to every sendMail() call so the header logo is embedded, not fetched
-// from a remote URL.
-const EMAIL_LOGO_ATTACHMENT = {
-  filename: 'leads-logo.png',
-  path: path.join(process.cwd(), 'src', 'assets', 'leads-email-logo.png'),
-  cid: 'leads-logo',
-};
 
 export interface EmailLog {
   id: string;
@@ -236,34 +226,20 @@ export function wrapInMasterEmailTemplate(options: {
 
 export async function testEmailConnection(testRecipient: string): Promise<{ success: boolean; message: string }> {
   try {
-    const { transporter: t, settings, effectiveHost, effectivePort } = await buildTransporter();
+    const { transporter: t, settings, effectiveHost } = await buildTransporter();
     await t.verify();
 
     const from = `${settings.fromName || 'LEADS Next Gen Centre'} <${settings.fromEmail || 'leads@msruas.ac.in'}>`;
 
-    const bodyHtml = wrapInMasterEmailTemplate({
-      headerTitle: `SMTP Connection Verified`,
-      headerSubtitle: `Diagnostic Health Check Successful`,
-      badgeText: `✅ SMTP Operational`,
-      badgeColor: `#15803d`,
-      bodyContentHtml: `
-        <p style="margin-top: 0; color: #0f172a; font-weight: 600;">Your LEADS Dashboard email client and SMTP server settings are operational.</p>
-        <div style="background: #ffffff; border: 1px solid #e2e8f0; padding: 14px 18px; border-radius: 10px; margin: 16px 0; font-size: 12px;">
-          <p style="margin: 0 0 6px 0; color: #64748b;"><strong>Service Provider:</strong> <span style="color: #0284c7; font-weight: 700;">${settings.provider.toUpperCase()}</span></p>
-          <p style="margin: 0 0 6px 0; color: #64748b;"><strong>SMTP Host & Port:</strong> <span style="color: #0f172a; font-family: monospace;">${effectiveHost}:${effectivePort}</span></p>
-          <p style="margin: 0; color: #64748b;"><strong>Sender Name:</strong> <span style="color: #0f172a;">${settings.fromName}</span></p>
-        </div>
-        <p style="color: #64748b; font-size: 11px; margin-bottom: 0;">Diagnostic executed at ${new Date().toLocaleString()}</p>
-      `
-    });
-
+    // Plain text only, no HTML part, no attachments — as close as possible
+    // to a manually-typed email, since HTML/branding templates were the
+    // suspected trigger for automated mail being flagged/junked at
+    // Microsoft-hosted recipients (e.g. @msruas.ac.in).
     const info = await t.sendMail({
       from,
       to: testRecipient,
-      subject: `[LEADS Test Email] SMTP Client Verification`,
+      subject: `LEADS Dashboard - SMTP Test`,
       text: `Hello,\n\nThis is a test notification verifying that your LEADS Dashboard email client and SMTP server (${settings.provider.toUpperCase()} @ ${effectiveHost}) are properly configured and operational.\n\nSent at: ${new Date().toLocaleString()}`,
-      html: bodyHtml,
-      attachments: [EMAIL_LOGO_ATTACHMENT],
       // No custom/default X-Mailer — a value like "Nodemailer" or a
       // custom app name is one of the more recognizable "this is a mail
       // engine, not a person" signals to spam filters.
@@ -302,6 +278,13 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
     else badgeTextToUse = undefined; // Omit badge completely for direct messages and guest invites
   }
 
+  // The stored bodyHtml is used only for the admin Inspector preview in the
+  // dashboard (src/app/dashboard/settings/page.tsx) — it is NOT what
+  // actually gets sent on the wire anymore (see sendMail below). Every
+  // outbound automated email is now plain text only, with no HTML part, no
+  // logo attachment, and no bulk-mail headers, to look as close as possible
+  // to a manually-typed email after HTML-templated mail was found to be
+  // getting flagged/blocked at Microsoft-hosted recipients (@msruas.ac.in).
   const defaultFormattedHtml = wrapInMasterEmailTemplate({
     headerTitle: payload.subject,
     badgeText: badgeTextToUse,
@@ -319,35 +302,15 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
     const { transporter: t, settings } = await buildTransporter();
     const from = `${settings.fromName || 'LEADS Next Gen Centre'} <${settings.fromEmail || 'leads@msruas.ac.in'}>`;
 
-    const domain = (settings.fromEmail || 'leadsnextgencentre.online').split('@')[1] || 'leadsnextgencentre.online';
-    const messageId = `<${Date.now()}.${Math.random().toString(36).substring(2, 9)}@${domain}>`;
-
-    // A List-Unsubscribe header is a real, well-recognized deliverability
-    // signal to Gmail/Yahoo-class spam filters — but only makes sense for
-    // the genuinely bulk/broadcast categories, not a 1:1 OTP or welcome
-    // email, where offering an "unsubscribe" would just be confusing.
-    const isBulkCategory = payload.category === 'ANNOUNCEMENT' || payload.category === 'EVENT_ROSTER' || payload.category === 'GUEST_INVITE';
-    const unsubscribeAddress = settings.replyTo || settings.fromEmail;
-    const headers: Record<string, string> = {
-      'X-Auto-Response-Suppress': 'OOF, AutoReply',
-      'Message-ID': messageId,
-    };
-    if (isBulkCategory && unsubscribeAddress) {
-      headers['List-Unsubscribe'] = `<mailto:${unsubscribeAddress}?subject=Unsubscribe>`;
-    }
-
     const info = await t.sendMail({
       from,
       to: payload.to,
       subject: payload.subject,
       text: payload.bodyText,
-      html: bodyHtml,
       replyTo: settings.replyTo || settings.fromEmail,
-      attachments: [EMAIL_LOGO_ATTACHMENT],
       // No custom/default X-Mailer — a recognizable "sent by a mail
       // engine, not a person" signal that doesn't help deliverability.
       xMailer: false,
-      headers,
     });
 
     smtpResponse = info.response;
