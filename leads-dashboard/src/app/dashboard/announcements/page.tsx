@@ -145,15 +145,51 @@ export default function AnnouncementsPage() {
   };
 
   const handleApproveAnnouncement = (id: string) => {
-    const updated = approveAnnouncement(id, user?.name || 'Centre Head');
+    const updated = approveAnnouncement(id, user?.name || 'Centre Head / GG Campus Events Head');
     if (updated) {
-      triggerSuccess(`Announcement "${updated.title}" approved and published to all members!`);
       setAnnouncements(getAnnouncements());
+
+      // Resolve recipient list from announcement scope
+      let recipients: Member[] = [];
+      const scopeStr = updated.scope || 'All Members';
+
+      if (scopeStr.includes('Specific Member')) {
+        recipients = allMembers;
+      } else if (scopeStr.includes('→')) {
+        const parts = scopeStr.split('→').map(s => s.trim());
+        const eventMatch = events.find(e => e.title.toLowerCase().includes(parts[0].toLowerCase()));
+        const commMatch = eventMatch?.committees.find(c => c.name.toLowerCase().includes(parts[1].toLowerCase()));
+        if (commMatch) {
+          const idSet = new Set(commMatch.memberIds || []);
+          if (commMatch.leadMemberId) idSet.add(commMatch.leadMemberId);
+          recipients = allMembers.filter(m => idSet.has(m.id));
+        }
+      } else if (scopeStr === 'Advisory Board') {
+        recipients = allMembers.filter(m => m.tier === 4);
+      } else if (scopeStr === 'Core Committee') {
+        recipients = allMembers.filter(m => m.tier === 5);
+      } else if (scopeStr === 'Training Associates' || scopeStr === 'Training Associate') {
+        recipients = allMembers.filter(m => m.tier === 6);
+      } else if (scopeStr === 'Faculty Members' || scopeStr === 'Faculty') {
+        recipients = allMembers.filter(m => m.division === 'Faculty');
+      } else if (scopeStr === 'Executive Leadership' || scopeStr === 'Executive Council') {
+        recipients = allMembers.filter(m => m.tier <= 2 || m.role.toLowerCase().includes('president') || m.role.toLowerCase().includes('secretary'));
+      } else {
+        recipients = allMembers;
+      }
+
+      setTitle(updated.title);
+      setContent(updated.content);
+      setEmailRecipients(recipients);
+      setFinalScopeLabel(scopeStr);
+      setIsSimulatorOpen(true);
+      setSimulatedLogs([`[System] Announcement "${updated.title}" approved by ${user?.name || 'Leadership'}. Ready to circulate to ${recipients.length} queued recipient(s)...`]);
+      triggerSuccess(`✔ Announcement "${updated.title}" approved! Dispatcher opened to circulate emails.`);
     }
   };
 
   const handleRejectAnnouncement = (id: string) => {
-    const updated = rejectAnnouncement(id, user?.name || 'Centre Head');
+    const updated = rejectAnnouncement(id, user?.name || 'Centre Head / GG Campus Events Head');
     if (updated) {
       triggerSuccess(`Announcement submission rejected.`);
       setAnnouncements(getAnnouncements());
@@ -219,7 +255,7 @@ export default function AnnouncementsPage() {
       triggerSuccess('Announcement updated.');
       setEditingAnnouncement(null);
     } else {
-      const isApproved = isCentreHead(user) || user.tier === 1;
+      const isApproved = canApproveAnnouncement(user);
 
       addAnnouncement({
         title,
@@ -230,7 +266,7 @@ export default function AnnouncementsPage() {
       });
 
       if (!isApproved) {
-        triggerSuccess('Announcement submitted! Awaiting Centre Head approval before publication.');
+        triggerSuccess('Announcement submitted! Awaiting approval by the Centre Head or GG Campus Events Head before circulation.');
         setIsModalOpen(false);
         setAnnouncements(getAnnouncements());
         return;
@@ -242,7 +278,7 @@ export default function AnnouncementsPage() {
 
       // Open Email Dispatch Simulator
       setIsSimulatorOpen(true);
-      setSimulatedLogs([`[System] Initializing announcement dispatch queue for target scope: "${scopeLabel}" (${recipients.length} recipients queued)...`]);
+      setSimulatedLogs([`[System] Initializing announcement dispatch queue for scope: "${scopeLabel}" (${recipients.length} recipients queued)...`]);
     }
 
     setAnnouncements(getAnnouncements());
@@ -261,7 +297,7 @@ export default function AnnouncementsPage() {
             scope: 'SINGLE',
             recipientEmail: r.email,
             subject: `Announcement: ${title}`,
-            bodyText: `Dear ${r.name},\n\nAnnouncement from ${user?.name || 'LEADS Administration'}:\n\n${title}\n\n${content}\n\nTarget Scope: ${finalScopeLabel}\n\nRegards,\nLEADS Next Gen Centre`,
+            bodyText: `Dear ${r.name},\n\n${content}\n\nRegards,\nLEADS Next Gen Centre`,
             category: 'ANNOUNCEMENT',
             badgeText: 'ANNOUNCEMENT',
             badgeColor: '#6366f1',

@@ -331,9 +331,10 @@ export function canApproveAsFinanceHead(user: SessionUser, claim?: Reimbursement
   return claim.centreHeadVerified === true || claim.status === 'Verified by Centre Head' || claim.status === 'Under Review';
 }
 
-/** Announcement approval permission — Centre Head or Super User. */
+/** Announcement approval gatekeeper — Centre Head or GG Campus Events Head (Tier 2.5). */
 export function canApproveAnnouncement(user: SessionUser): boolean {
-  return isCentreHead(user) || user?.tier === 1;
+  if (!user) return false;
+  return isCentreHead(user) || isEventsHeadGgCampus(user) || user.tier === 1 || user.tier === 2.5;
 }
 
 /**
@@ -587,10 +588,10 @@ export function canDeleteForms(user: SessionUser): boolean {
   return isCentreHead(user) || user?.tier === 1;
 }
 
-/** Announcement authoring — leadership, Core Committee, and Heads. */
+/** Announcement authoring — Core Committee, Advisory Board, Faculty, Heads, Centre Head & GG Campus Events Head. */
 export function canCreateAnnouncement(user: SessionUser): boolean {
-  if (isExecutiveRole(user) || isAlumniRole(user)) return false;
-  return isBaseLeadership(user) || isCoreCommitteeTier(user) || isHeadRole(user) || hasCapability(user, 'CREATE_ANNOUNCEMENT');
+  if (!user || isAlumniRole(user)) return false;
+  return isBaseLeadership(user) || isCoreCommitteeTier(user) || user.tier === 4 || user.tier === 5 || isFaculty(user) || isHeadRole(user) || hasCapability(user, 'CREATE_ANNOUNCEMENT');
 }
 
 /**
