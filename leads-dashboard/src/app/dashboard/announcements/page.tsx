@@ -58,17 +58,29 @@ export default function AnnouncementsPage() {
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [memberQuery, setMemberQuery] = useState<string>('');
   
-  // Email Simulator & Dispatcher State
-  const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
-  const [simulatedLogs, setSimulatedLogs] = useState<string[]>([]);
-  const [emailRecipients, setEmailRecipients] = useState<Member[]>([]);
-  const [finalScopeLabel, setFinalScopeLabel] = useState<string>('All Members');
-  const [isDispatching, setIsDispatching] = useState(false);
-  const [successMsg, setSuccessMsg] = useState('');
+  // Bottom-Right Floating Dispatch Progress State
+  const [dispatchProgress, setDispatchProgress] = useState<{
+    active: boolean;
+    current: number;
+    total: number;
+    title: string;
+    lastSentName: string;
+    completed: boolean;
+    minimized: boolean;
+  }>({
+    active: false,
+    current: 0,
+    total: 0,
+    title: '',
+    lastSentName: '',
+    completed: false,
+    minimized: false,
+  });
 
   // Deep link from a notification (?highlight=<announcementId>) — scroll to it once
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [hasScrolledToHighlight, setHasScrolledToHighlight] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
 
   useEffect(() => {
     const refreshData = () => {
@@ -144,6 +156,60 @@ export default function AnnouncementsPage() {
     setTargetCategory('All Members');
   };
 
+  // Helper to trigger sequential background email dispatch with bottom-right floating progress bar
+  const triggerEmailDispatchLoop = async (annTitle: string, annContent: string, recipients: Member[]) => {
+    if (!recipients || recipients.length === 0) return;
+
+    setDispatchProgress({
+      active: true,
+      current: 0,
+      total: recipients.length,
+      title: annTitle,
+      lastSentName: recipients[0]?.name || '',
+      completed: false,
+      minimized: false,
+    });
+
+    for (let i = 0; i < recipients.length; i++) {
+      const r = recipients[i];
+      setDispatchProgress(prev => ({
+        ...prev,
+        current: i + 1,
+        lastSentName: r.name,
+      }));
+
+      try {
+        await fetch('/api/email/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            scope: 'SINGLE',
+            recipientEmail: r.email,
+            subject: `Announcement: ${annTitle}`,
+            bodyText: `Dear ${r.name},\n\n${annContent}\n\nRegards,\nLEADS Next Gen Centre`,
+            category: 'ANNOUNCEMENT',
+            badgeText: 'ANNOUNCEMENT',
+            badgeColor: '#6366f1',
+          }),
+        });
+      } catch (err) {
+        console.error('[announcements] Email dispatch failed for recipient:', r.email, err);
+      }
+
+      await new Promise(res => setTimeout(res, 180));
+    }
+
+    setDispatchProgress(prev => ({
+      ...prev,
+      completed: true,
+    }));
+
+    // Auto-dismiss bottom-right widget after 6 seconds when complete
+    setTimeout(() => {
+      setDispatchProgress(prev => ({ ...prev, active: false }));
+    }, 6000);
+  };
+
   const handleApproveAnnouncement = (id: string) => {
     const updated = approveAnnouncement(id, user?.name || 'Centre Head / GG Campus Events Head');
     if (updated) {
@@ -178,13 +244,9 @@ export default function AnnouncementsPage() {
         recipients = allMembers;
       }
 
-      setTitle(updated.title);
-      setContent(updated.content);
-      setEmailRecipients(recipients);
-      setFinalScopeLabel(scopeStr);
-      setIsSimulatorOpen(true);
-      setSimulatedLogs([`[System] Announcement "${updated.title}" approved by ${user?.name || 'Leadership'}. Ready to circulate to ${recipients.length} queued recipient(s)...`]);
-      triggerSuccess(`✔ Announcement "${updated.title}" approved! Dispatcher opened to circulate emails.`);
+      // Immediately start background dispatch & show bottom-right progress bar
+      triggerEmailDispatchLoop(updated.title, updated.content, recipients);
+      triggerSuccess(`✔ Announcement "${updated.title}" approved! Email circulation started.`);
     }
   };
 
@@ -265,75 +327,20 @@ export default function AnnouncementsPage() {
         status: isApproved ? 'Approved' : 'Pending Approval',
       });
 
+      setIsModalOpen(false);
+
       if (!isApproved) {
         triggerSuccess('Announcement submitted! Awaiting approval by the Centre Head or GG Campus Events Head before circulation.');
-        setIsModalOpen(false);
         setAnnouncements(getAnnouncements());
         return;
       }
 
-      setEmailRecipients(recipients);
-      setFinalScopeLabel(scopeLabel);
-      setIsModalOpen(false);
-
-      // Open Email Dispatch Simulator
-      setIsSimulatorOpen(true);
-      setSimulatedLogs([`[System] Initializing announcement dispatch queue for scope: "${scopeLabel}" (${recipients.length} recipients queued)...`]);
+      // If created by Centre Head / GG Campus Events Head, start immediate background dispatch
+      triggerEmailDispatchLoop(title, content, recipients);
+      triggerSuccess('✔ Announcement published! Email circulation started.');
     }
 
     setAnnouncements(getAnnouncements());
-  };
-
-  const startEmailDispatch = async () => {
-    setIsDispatching(true);
-    let logIndex = 0;
-
-    for (const r of emailRecipients) {
-      try {
-        await fetch('/api/email/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            scope: 'SINGLE',
-            recipientEmail: r.email,
-            subject: `Announcement: ${title}`,
-            bodyText: `Dear ${r.name},\n\n${content}\n\nRegards,\nLEADS Next Gen Centre`,
-            category: 'ANNOUNCEMENT',
-            badgeText: 'ANNOUNCEMENT',
-            badgeColor: '#6366f1',
-          }),
-        });
-
-        setSimulatedLogs(prev => [
-          ...prev,
-          `[Email Dispatcher] Dispatched notification email to "${r.name}" (${r.email}) - SENT SUCCESS`
-        ]);
-      } catch {
-        setSimulatedLogs(prev => [
-          ...prev,
-          `[Email Dispatcher] Dispatched notification email to "${r.name}" (${r.email}) - QUEUED`
-        ]);
-      }
-
-      logIndex++;
-      await new Promise(res => setTimeout(res, 200));
-    }
-
-    setSimulatedLogs(prev => [
-      ...prev,
-      `[System] Dispatch sequence completed. Total announcement notifications sent: ${emailRecipients.length}`
-    ]);
-    setIsDispatching(false);
-  };
-
-  const closeSimulator = () => {
-    setTitle('');
-    setContent('');
-    setTargetCategory('All Members');
-    setSelectedMemberIds([]);
-    setIsSimulatorOpen(false);
-    setSimulatedLogs([]);
-    setEmailRecipients([]);
   };
 
   const handleConfirmDelete = () => {
@@ -420,7 +427,7 @@ export default function AnnouncementsPage() {
                   </span>
                   {ann.status === 'Pending Approval' && (
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 border border-amber-500/20">
-                      Pending Centre Head Approval
+                      Pending Approval (Centre Head / GG Campus Events Head)
                     </span>
                   )}
                   {ann.status === 'Approved' && (
@@ -454,7 +461,7 @@ export default function AnnouncementsPage() {
                     onClick={() => handleApproveAnnouncement(ann.id)}
                     className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1 shadow-sm"
                   >
-                    <CheckCircle className="h-3.5 w-3.5" /> Approve & Publish
+                    <CheckCircle className="h-3.5 w-3.5" /> Approve & Circulate Announcement
                   </button>
                   <button
                     onClick={() => handleRejectAnnouncement(ann.id)}
@@ -691,74 +698,77 @@ export default function AnnouncementsPage() {
                 type="submit"
                 className="w-full py-3 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer mt-4"
               >
-                {editingAnnouncement ? 'Save Updates' : 'Publish & Dispatch Announcement'}
+                {editingAnnouncement ? 'Save Updates' : 'Publish & Submit Announcement'}
               </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* Email Dispatch Simulator Modal */}
-      {isSimulatorOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="glass-panel w-full max-w-xl rounded-3xl p-6 flex flex-col space-y-4 relative border border-white/20 shadow-2xl bg-zinc-900/90 text-white">
-            
-            {/* Simulator Header & Disclaimer */}
-            <div className="flex items-start justify-between border-b border-white/10 pb-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Terminal className="h-5 w-5 text-accent" />
-                  <h3 className="text-sm font-bold text-white">Announcement Email Broadcast Dispatcher</h3>
-                </div>
-                <div className="mt-1 flex items-center gap-1.5 px-2 py-0.5 bg-accent/20 border border-accent/30 text-accent rounded-md text-[10px] font-semibold">
-                  <Info className="h-3 w-3 shrink-0" />
-                  <span>Targeted Announcement Broadcast & Email Notification Engine</span>
-                </div>
-              </div>
-              <button 
-                onClick={closeSimulator}
-                disabled={isDispatching}
-                className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all cursor-pointer disabled:opacity-30"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="text-xs text-zinc-300 space-y-1">
-              <p>Target Scope: <strong className="text-accent">{finalScopeLabel}</strong></p>
-              <p>Queued Recipients: <strong className="text-white">{emailRecipients.length} members</strong></p>
-            </div>
-
-            {/* Terminal output box */}
-            <div className="h-48 bg-black/70 border border-white/10 rounded-xl p-3 font-mono text-[11px] text-emerald-400 overflow-y-auto space-y-1">
-              {simulatedLogs.map((log, i) => (
-                <div key={i} className="leading-snug">{log}</div>
-              ))}
-              {isDispatching && (
-                <div className="animate-pulse text-accent">&gt; Dispatching announcement emails...</div>
+      {/* Floating Bottom-Right Chat-Style Progress Bar Widget */}
+      {dispatchProgress.active && (
+        <div className="fixed bottom-6 right-6 z-50 w-80 md:w-96 glass-panel rounded-2xl p-4 border border-accent/40 shadow-2xl bg-zinc-900/95 text-white animate-in slide-in-from-bottom-5 duration-300">
+          <div className="flex items-center justify-between pb-2 border-b border-white/10">
+            <div className="flex items-center gap-2">
+              {dispatchProgress.completed ? (
+                <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
+              ) : (
+                <div className="h-2.5 w-2.5 rounded-full bg-accent animate-ping shrink-0" />
               )}
+              <span className="font-bold text-xs text-white truncate max-w-[210px]">
+                {dispatchProgress.completed ? 'Email Dispatch Complete' : 'Circulating Emails...'}
+              </span>
             </div>
 
-            <div className="flex justify-end gap-2.5 pt-2">
+            <div className="flex items-center gap-1.5">
               <button
-                onClick={closeSimulator}
-                disabled={isDispatching}
-                className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold rounded-xl transition-all cursor-pointer disabled:opacity-30"
+                onClick={() => setDispatchProgress(prev => ({ ...prev, minimized: !prev.minimized }))}
+                className="px-2 py-0.5 hover:bg-white/10 rounded-md text-zinc-400 hover:text-white transition-all cursor-pointer text-[10px] font-medium"
               >
-                Close Dispatcher
+                {dispatchProgress.minimized ? 'Expand' : 'Minimize'}
               </button>
-              
-              {!isDispatching && (
-                <button
-                  onClick={startEmailDispatch}
-                  className="px-4 py-2 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/25 cursor-pointer flex items-center gap-1.5"
-                >
-                  <Play className="h-3.5 w-3.5" />
-                  Send Announcement Emails
-                </button>
-              )}
+              <button
+                onClick={() => setDispatchProgress(prev => ({ ...prev, active: false }))}
+                className="p-1 hover:bg-white/10 rounded-md text-zinc-400 hover:text-white transition-all cursor-pointer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
             </div>
           </div>
+
+          {!dispatchProgress.minimized && (
+            <div className="mt-3 space-y-2 text-xs">
+              <div className="flex justify-between items-center text-[11px] text-zinc-300">
+                <span className="truncate max-w-[210px]">
+                  {dispatchProgress.completed
+                    ? `Successfully sent ${dispatchProgress.total} emails`
+                    : `Sending: ${dispatchProgress.lastSentName}`}
+                </span>
+                <span className="font-mono font-bold text-accent">
+                  {dispatchProgress.current}/{dispatchProgress.total}
+                </span>
+              </div>
+
+              {/* Progress bar track */}
+              <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className={`h-full transition-all duration-300 rounded-full ${
+                    dispatchProgress.completed ? 'bg-emerald-400' : 'bg-accent'
+                  }`}
+                  style={{
+                    width: `${Math.round((dispatchProgress.current / (dispatchProgress.total || 1)) * 100)}%`,
+                  }}
+                />
+              </div>
+
+              <div className="flex justify-between items-center text-[10px] text-zinc-400 pt-0.5">
+                <span className="truncate max-w-[220px]">"{dispatchProgress.title}"</span>
+                <span className="font-mono font-semibold">
+                  {Math.round((dispatchProgress.current / (dispatchProgress.total || 1)) * 100)}%
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
