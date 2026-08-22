@@ -228,6 +228,19 @@ openssl rsa -in dkim-private.pem -pubout -outform PEM -out dkim-public.pem</code
   <div class="step">
     <div class="step-header">
       <div class="step-num">6</div>
+      <h2>Optional: sender logo (BIMI) <span class="badge">not required to send mail</span></h2>
+    </div>
+    <p>The LEADS logo (converted from the SVG added to the repo) is published at <code>https://leadsnextgencentre.online/bimi-logo.svg</code> (<code>public/bimi-logo.svg</code>). To make it appear as the sender's profile icon in supporting mail clients, add one more DNS TXT record:</p>
+    <table>
+      <tr><th>Type</th><th>Name</th><th>Value</th></tr>
+      <tr><td>TXT</td><td><code>default._bimi</code></td><td><code>v=BIMI1; l=https://leadsnextgencentre.online/bimi-logo.svg;</code></td></tr>
+    </table>
+    <div class="callout">Two real limits, not bugs: (1) BIMI only activates once DMARC is enforced at <code>p=quarantine</code> or <code>p=reject</code> — it's currently <code>p=none</code> (monitor-only) on purpose, so the logo won't show until that's deliberately tightened after confirming mail authenticates cleanly for a while. (2) <strong>Gmail specifically requires a paid Verified Mark Certificate</strong> (~$1,300+/year, needs a registered trademark on the logo) to show the logo at all — without it, this only works in Yahoo Mail and a few smaller clients.</div>
+  </div>
+
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num">7</div>
       <h2>Wait for propagation, then test</h2>
     </div>
     <p>Give DNS 15&ndash;30 minutes to propagate. Then in the same Email settings page, use <strong>Test Connection &amp; Send Email</strong> — send to a Gmail address you personally control first, <em>before</em> trying an <code>@msruas.ac.in</code> address. Check whether it lands in inbox or spam, and share the result — the dashboard's diagnostic panel will show the raw SMTP response either way.</p>
