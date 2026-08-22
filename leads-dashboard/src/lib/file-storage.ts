@@ -30,10 +30,22 @@ function sanitizeFileName(name: string): string {
  * with nothing before the semicolon, which used to fail this parse outright
  * and silently drop the whole upload.
  */
+/**
+ * Parse a `data:<mime>;base64,<data>` URL into its MIME type and raw buffer.
+ * Handles data URL variants including missing mime headers, octet-stream fallbacks,
+ * and additional parameters.
+ */
 export function parseDataUrl(dataUrl: string): { mime: string; buffer: Buffer } {
-  const match = /^data:([^;]*);base64,([\s\S]*)$/.exec(dataUrl);
-  if (!match) throw new Error('Expected a base64 data URL.');
-  return { mime: match[1], buffer: Buffer.from(match[2], 'base64') };
+  const match = /^data:([^;]*)(?:;[^;]*)*;base64,([\s\S]*)$/.exec(dataUrl);
+  if (!match) {
+    const parts = (dataUrl || '').split(';base64,');
+    if (parts.length === 2) {
+      const mimePart = parts[0].replace(/^data:/, '').split(';')[0];
+      return { mime: mimePart || 'application/octet-stream', buffer: Buffer.from(parts[1], 'base64') };
+    }
+    throw new Error('Expected a base64 data URL.');
+  }
+  return { mime: match[1] || 'application/octet-stream', buffer: Buffer.from(match[2], 'base64') };
 }
 
 export interface StoredFile {
@@ -103,6 +115,16 @@ const MIME_BY_EXTENSION: Record<string, string> = {
   '.webp': 'image/webp',
   '.svg': 'image/svg+xml',
   '.pdf': 'application/pdf',
+  '.psd': 'image/vnd.adobe.photoshop',
+  '.ai': 'application/postscript',
+  '.eps': 'application/postscript',
+  '.tif': 'image/tiff',
+  '.tiff': 'image/tiff',
+  '.zip': 'application/zip',
+  '.rar': 'application/x-rar-compressed',
+  '.cdr': 'application/coreldraw',
+  '.fig': 'application/octet-stream',
+  '.xd': 'application/octet-stream',
 };
 
 export function guessMimeType(fileName: string): string {

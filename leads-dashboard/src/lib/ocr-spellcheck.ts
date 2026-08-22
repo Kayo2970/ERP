@@ -29,8 +29,16 @@ const MAX_PREVIEW_DIMENSION = 1400;
 // A handful of org-specific/proper-noun terms that would otherwise be
 // flagged on nearly every poster. Kept intentionally small — this is an
 // advisory pass, not a validator, so an occasional false positive is fine.
-const CUSTOM_WHITELIST = [
+// Indian English academic, institution, and regional term whitelist (checked FIRST)
+const INDIAN_ENGLISH_WHITELIST = [
   'leads', 'msruas', 'ruas', 'ramaiah', 'bengaluru', 'bangalore', 'ms', 'msr',
+  'peenya', 'mathikere', 'karnataka', 'kannada', 'lakh', 'lakhs', 'crore', 'crores',
+  'rupee', 'rupees', 'paisa', 'paise', 'ugc', 'aicte', 'nba', 'naac', 'nirf',
+  'centre', 'centres', 'colour', 'colours', 'organise', 'organised', 'organising',
+  'organisation', 'organisations', 'honour', 'honours', 'honoured', 'favour', 'favours',
+  'programme', 'programmes', 'theatre', 'theatres', 'defence', 'licence', 'realise',
+  'realised', 'travelling', 'enrolment', 'catalogue', 'neighbor', 'neighbour',
+  'pizzas', 'webinar', 'hackathon', 'symposium', 'valedictory', 'inaugural', 'coordinator'
 ];
 
 let workerPromise: Promise<Worker> | null = null;
@@ -46,20 +54,31 @@ async function getWorker(): Promise<Worker> {
   return workerPromise;
 }
 
-let spellPromise: Promise<ReturnType<typeof nspell>> | null = null;
-async function getSpellChecker() {
-  if (!spellPromise) {
-    spellPromise = (async () => {
-      // British/Indian-English spellings (e.g. "Centre", "organise") are the
-      // norm across this app's own copy — dictionary-en-gb avoids flagging
-      // those as errors, unlike the American-English dictionary.
+let spellUkPromise: Promise<ReturnType<typeof nspell>> | null = null;
+let spellUsPromise: Promise<ReturnType<typeof nspell>> | null = null;
+
+async function getSpellCheckerUK() {
+  if (!spellUkPromise) {
+    spellUkPromise = (async () => {
       const dictionary = (await import('dictionary-en-gb')).default;
       const spell = nspell({ aff: Buffer.from(dictionary.aff), dic: Buffer.from(dictionary.dic) });
-      for (const word of CUSTOM_WHITELIST) spell.add(word);
+      for (const word of INDIAN_ENGLISH_WHITELIST) spell.add(word);
       return spell;
     })();
   }
-  return spellPromise;
+  return spellUkPromise;
+}
+
+async function getSpellCheckerUS() {
+  if (!spellUsPromise) {
+    spellUsPromise = (async () => {
+      const dictionary = (await import('dictionary-en')).default;
+      const spell = nspell({ aff: Buffer.from(dictionary.aff), dic: Buffer.from(dictionary.dic) });
+      for (const word of INDIAN_ENGLISH_WHITELIST) spell.add(word);
+      return spell;
+    })();
+  }
+  return spellUsPromise;
 }
 
 /** Render a PDF's pages (up to `maxPages`) to PNG buffers using pdfjs-dist. */
@@ -114,7 +133,8 @@ export async function scanForTextIssues(buffer: Buffer, mimeType: string): Promi
   }
 
   const worker = await getWorker();
-  const spell = await getSpellChecker();
+  const spellUK = await getSpellCheckerUK();
+  const spellUS = await getSpellCheckerUS();
   const { loadImage, createCanvas } = await import('@napi-rs/canvas');
 
   const pageTexts: string[] = [];
@@ -149,10 +169,32 @@ export async function scanForTextIssues(buffer: Buffer, mimeType: string): Promi
           for (const word of line.words) {
             const cleaned = cleanWord(word.text);
             if (cleaned.length < 3 || !/^[A-Za-z'-]+$/.test(cleaned)) continue;
-            if (spell.correct(cleaned)) continue;
+
+            const cleanLower = cleaned.toLowerCase();
+            // 1. Check Indian English / Whitelist FIRST
+            const isIndianValid = INDIAN_ENGLISH_WHITELIST.includes(cleanLower) || spellUK.correct(cleaned);
+            if (isIndianValid) continue;
+
+            // 2. Check US English
+            const isUSValid = spellUS.correct(cleaned);
+            if (isUSValid) continue;
+
+            // Word is flagged as misspelled! Generate regional suggestions
+            const ukSuggestions = spellUK.suggest(cleaned).slice(0, 2);
+            const usSuggestions = spellUS.suggest(cleaned).slice(0, 2);
+            const combinedSuggestions = Array.from(new Set([...ukSuggestions, ...usSuggestions])).slice(0, 3);
+
+            const taggedSuggestions = combinedSuggestions.map(sugg => {
+              const inUK = spellUK.correct(sugg);
+              const inUS = spellUS.correct(sugg);
+              if (inUK && !inUS) return `${sugg} (Indian/UK)`;
+              if (inUS && !inUK) return `${sugg} (US)`;
+              return sugg;
+            });
+
             issues.push({
               word: cleaned,
-              suggestions: spell.suggest(cleaned).slice(0, 3),
+              suggestions: taggedSuggestions,
               pageIndex,
               bbox: word.bbox,
             });

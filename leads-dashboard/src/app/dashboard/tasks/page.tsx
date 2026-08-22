@@ -118,11 +118,32 @@ export default function TasksPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Read the ?highlight=<taskId> query param (set by a notification click) once on mount
+  // Read the ?highlight=<taskId> or ?ack=<taskIds> query params (set by email links) on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setHighlightTaskId(params.get('highlight'));
-  }, []);
+
+    const ackParam = params.get('ack');
+    const emailParam = params.get('email');
+    if (ackParam) {
+      fetch('/api/tasks/ack', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          taskIds: ackParam.split(','),
+          email: emailParam || user?.email,
+        }),
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.acknowledgedCount > 0) {
+            triggerSuccess(`✔ ${data.acknowledgedCount} task assignment(s) acknowledged!`);
+            setTasks(getTasks());
+          }
+        })
+        .catch(err => console.error('[tasks-ack] Auto-acknowledgment failed:', err));
+    }
+  }, [user]);
 
   // Once the highlighted task has actually rendered, scroll to it — retries on every
   // tasks refresh until found, since it may not exist locally yet on first paint.

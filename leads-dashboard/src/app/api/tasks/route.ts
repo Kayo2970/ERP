@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
-import { dispatchEmail, generateTaskEmailTemplate } from '@/lib/email-service';
+import { enqueueTaskEmailNotification } from '@/lib/task-email-queue';
 
 export async function GET() {
   const items = await readCollection('tasks');
@@ -21,50 +21,40 @@ export async function POST(request: Request) {
     });
     const created = updated.find((t: any) => t.id === item.id);
 
-    // Automated Email Dispatch for Task Assignment
+    // Queue task email notification with 10-minute quiet buffer
     if (created) {
       try {
         const members = await readCollection('members');
-        let recipientEmails: { email: string; name: string }[] = [];
+        let targetEmail = created.assigneeEmail;
+        let targetName = created.assignee;
 
-        if (created.assigneeEmail) {
-          const match = members.find((m: any) => m.email.toLowerCase() === created.assigneeEmail.toLowerCase());
-          recipientEmails.push({
-            email: created.assigneeEmail,
-            name: match ? match.name : created.assignee || 'Member',
-          });
-        } else if (created.assigneeId) {
+        if (!targetEmail && created.assigneeId) {
           const match = members.find((m: any) => m.id === created.assigneeId);
           if (match) {
-            recipientEmails.push({ email: match.email, name: match.name });
+            targetEmail = match.email;
+            targetName = match.name;
           }
-        } else if (created.assignee) {
+        } else if (!targetEmail && created.assignee) {
           const match = members.find((m: any) => m.name.toLowerCase() === created.assignee.toLowerCase());
           if (match) {
-            recipientEmails.push({ email: match.email, name: match.name });
+            targetEmail = match.email;
+            targetName = match.name;
           }
         }
 
-        for (const recipient of recipientEmails) {
-          if (recipient.email) {
-            const template = generateTaskEmailTemplate(
-              recipient.name,
-              created.title,
-              created.event || created.eventName || 'LEADS Operations',
-              created.dueDate,
-              created.creatorName || 'Committee Lead'
-            );
-            await dispatchEmail({
-              to: recipient.email,
-              subject: template.subject,
-              bodyText: template.bodyText,
-              bodyHtml: template.bodyHtml,
-              category: 'TASK_ASSIGNMENT',
-            });
-          }
+        if (targetEmail) {
+          await enqueueTaskEmailNotification({
+            id: created.id,
+            title: created.title,
+            event: created.event || created.eventName,
+            dueDate: created.dueDate,
+            creatorName: created.creatorName || created.assignerName,
+            assigneeEmail: targetEmail,
+            assigneeName: targetName || 'Member',
+          });
         }
       } catch (emailErr) {
-        console.error('[tasks-api] Email dispatch failed:', emailErr);
+        console.error('[tasks-api] Failed to enqueue task notification:', emailErr);
       }
     }
 
