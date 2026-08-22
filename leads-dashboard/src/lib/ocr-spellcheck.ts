@@ -8,14 +8,23 @@
  * A PDF's first 5 pages are rendered to images (via pdfjs-dist + the
  * @napi-rs/canvas it uses under the hood on Node) and OCR'd individually;
  * a longer PDF is scanned partially rather than rejected outright.
+ *
+ * Each flagged word carries the pixel bounding box tesseract detected it
+ * at, plus a page preview image, so the UI can draw a highlight box right
+ * over the mistake instead of just listing it in prose.
  */
 import path from 'path';
 import { createWorker, type Worker } from 'tesseract.js';
 import nspell from 'nspell';
-import type { OcrScanResult, OcrScanIssue } from './local-data';
+import type { OcrScanResult, OcrScanIssue, OcrScanPageImage } from './local-data';
 
 const OCR_CACHE_DIR = path.join(process.cwd(), 'data', 'ocr-cache');
 const MAX_PDF_PAGES = 5;
+// Preview images are capped on their longest side purely to keep the JSON
+// response small — bbox percentages are computed against the ORIGINAL
+// (pre-downscale) pixel dimensions, so highlight boxes stay accurate
+// regardless of what resolution the preview itself was saved at.
+const MAX_PREVIEW_DIMENSION = 1400;
 
 // A handful of org-specific/proper-noun terms that would otherwise be
 // flagged on nearly every poster. Kept intentionally small — this is an
@@ -82,65 +91,89 @@ async function renderPdfPagesToPngBuffers(buffer: Buffer, maxPages: number): Pro
   return { pages, totalPages };
 }
 
-/** Split OCR'd text into candidate words, dropping numbers/URLs/emails/short tokens. */
-function extractCandidateWords(text: string): string[] {
-  const tokens = text.match(/[A-Za-z][A-Za-z'-]*/g) || [];
-  const seen = new Set<string>();
-  const candidates: string[] = [];
-  for (const raw of tokens) {
-    const word = raw.replace(/^'+|'+$/g, '');
-    if (word.length < 3) continue;
-    const lower = word.toLowerCase();
-    if (seen.has(lower)) continue;
-    seen.add(lower);
-    candidates.push(word);
-  }
-  return candidates;
+/** Strip leading/trailing punctuation tesseract sometimes attaches to a word. */
+function cleanWord(raw: string): string {
+  return raw.replace(/^[^A-Za-z]+|[^A-Za-z]+$/g, '');
 }
 
 export async function scanForTextIssues(buffer: Buffer, mimeType: string): Promise<OcrScanResult> {
-  let pageImages: Buffer[];
+  let pageBuffers: Buffer[];
   let totalPages: number;
   let partial = false;
 
   if (mimeType === 'application/pdf') {
     const rendered = await renderPdfPagesToPngBuffers(buffer, MAX_PDF_PAGES);
-    pageImages = rendered.pages;
+    pageBuffers = rendered.pages;
     totalPages = rendered.totalPages;
     partial = totalPages > MAX_PDF_PAGES;
   } else if (mimeType.startsWith('image/')) {
-    pageImages = [buffer];
+    pageBuffers = [buffer];
     totalPages = 1;
   } else {
     throw new Error('Unsupported file type for OCR scan. Only images and PDFs are supported.');
   }
 
   const worker = await getWorker();
+  const spell = await getSpellChecker();
+  const { loadImage, createCanvas } = await import('@napi-rs/canvas');
+
   const pageTexts: string[] = [];
-  for (const pageImage of pageImages) {
-    const { data } = await worker.recognize(pageImage);
+  const pageImages: OcrScanPageImage[] = [];
+  const issues: OcrScanIssue[] = [];
+
+  for (let pageIndex = 0; pageIndex < pageBuffers.length; pageIndex++) {
+    const pageBuffer = pageBuffers[pageIndex];
+    const { data } = await worker.recognize(pageBuffer, {}, { blocks: true });
     pageTexts.push(data.text.trim());
+
+    const img = await loadImage(pageBuffer);
+    const width = img.width;
+    const height = img.height;
+
+    // Downscale only the returned preview, never the buffer OCR already ran against.
+    const scale = Math.min(1, MAX_PREVIEW_DIMENSION / Math.max(width, height));
+    let previewDataUrl: string;
+    if (scale < 1) {
+      const previewCanvas = createCanvas(Math.round(width * scale), Math.round(height * scale));
+      const ctx = previewCanvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, previewCanvas.width, previewCanvas.height);
+      previewDataUrl = `data:image/png;base64,${previewCanvas.encodeSync('png').toString('base64')}`;
+    } else {
+      previewDataUrl = `data:image/png;base64,${pageBuffer.toString('base64')}`;
+    }
+    pageImages.push({ dataUrl: previewDataUrl, width, height });
+
+    for (const block of data.blocks || []) {
+      for (const paragraph of block.paragraphs) {
+        for (const line of paragraph.lines) {
+          for (const word of line.words) {
+            const cleaned = cleanWord(word.text);
+            if (cleaned.length < 3 || !/^[A-Za-z'-]+$/.test(cleaned)) continue;
+            if (spell.correct(cleaned)) continue;
+            issues.push({
+              word: cleaned,
+              suggestions: spell.suggest(cleaned).slice(0, 3),
+              pageIndex,
+              bbox: word.bbox,
+            });
+          }
+        }
+      }
+    }
   }
+
   const extractedText = pageTexts
-    .map((text, i) => (pageImages.length > 1 ? `--- Page ${i + 1} ---\n${text}` : text))
+    .map((text, i) => (pageBuffers.length > 1 ? `--- Page ${i + 1} ---\n${text}` : text))
     .join('\n\n')
     .trim();
 
-  const spell = await getSpellChecker();
-  const candidates = extractCandidateWords(extractedText);
-  const issues: OcrScanIssue[] = [];
-  for (const word of candidates) {
-    if (spell.correct(word)) continue;
-    const suggestions = spell.suggest(word).slice(0, 3);
-    issues.push({ word, suggestions });
-  }
-
   return {
     extractedText,
-    pageCount: pageImages.length,
+    pageCount: pageBuffers.length,
     totalPages,
     partial,
     issues,
+    pageImages,
     scannedAt: new Date().toISOString(),
   };
 }

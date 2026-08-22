@@ -54,6 +54,8 @@ function OcrScanPanel({
   showExtractedText: boolean;
   onToggleExtractedText: () => void;
 }) {
+  const [activeIssue, setActiveIssue] = useState<number | null>(null);
+
   if (error) {
     return (
       <p className="text-rose-500 font-medium text-[11px] flex items-center gap-1 pt-2">
@@ -82,11 +84,57 @@ function OcrScanPanel({
         </p>
       )}
 
+      {/* Page previews with a highlight box drawn directly over each flagged word */}
+      {result.pageImages.length > 0 && result.issues.length > 0 && (
+        <div className="space-y-2">
+          {result.pageImages.map((page, pageIndex) => {
+            const pageIssues = result.issues
+              .map((issue, i) => ({ issue, i }))
+              .filter(({ issue }) => issue.pageIndex === pageIndex);
+            if (pageIssues.length === 0) return null;
+            return (
+              <div key={pageIndex} className="space-y-1">
+                {result.pageImages.length > 1 && (
+                  <p className="text-[10px] font-semibold text-muted-foreground">Page {pageIndex + 1}</p>
+                )}
+                <div className="relative w-full border border-border rounded-lg overflow-hidden bg-background">
+                  <img src={page.dataUrl} alt={`Scanned page ${pageIndex + 1}`} className="w-full h-auto block" />
+                  {pageIssues.map(({ issue, i }) => (
+                    <div
+                      key={i}
+                      onMouseEnter={() => setActiveIssue(i)}
+                      onMouseLeave={() => setActiveIssue(null)}
+                      className={`absolute rounded-sm transition-colors cursor-help ${
+                        activeIssue === i ? 'border-2 border-accent bg-accent/20' : 'border-2 border-rose-500 bg-rose-500/10'
+                      }`}
+                      style={{
+                        left: `${(issue.bbox.x0 / page.width) * 100}%`,
+                        top: `${(issue.bbox.y0 / page.height) * 100}%`,
+                        width: `${Math.max(((issue.bbox.x1 - issue.bbox.x0) / page.width) * 100, 0.5)}%`,
+                        height: `${Math.max(((issue.bbox.y1 - issue.bbox.y0) / page.height) * 100, 0.5)}%`,
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {result.issues.length > 0 && (
         <ul className="space-y-1">
           {result.issues.map((issue, i) => (
-            <li key={i} className="flex items-center gap-1.5 flex-wrap">
+            <li
+              key={i}
+              onMouseEnter={() => setActiveIssue(i)}
+              onMouseLeave={() => setActiveIssue(null)}
+              className={`flex items-center gap-1.5 flex-wrap px-1.5 py-1 rounded-md transition-colors ${activeIssue === i ? 'bg-accent/15' : ''}`}
+            >
               <span className="font-mono font-semibold text-rose-500">{issue.word}</span>
+              {result.pageImages.length > 1 && (
+                <span className="text-[10px] text-muted-foreground">(page {issue.pageIndex + 1})</span>
+              )}
               {issue.suggestions.length > 0 && (
                 <>
                   <span className="text-muted-foreground">&rarr;</span>

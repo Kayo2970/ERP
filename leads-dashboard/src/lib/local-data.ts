@@ -95,7 +95,11 @@ export interface TaskItem {
   assignee: string;
   assigneeId?: string;
   assigneeEmail?: string;
-  assigneeType: 'individual' | 'committee';
+  // 'group' is an ad-hoc set of individual students picked directly for this
+  // task (assigneeIds) — unlike 'committee', it isn't tied to any event's
+  // formal EventCommittee record and doesn't require an event at all.
+  assigneeType: 'individual' | 'committee' | 'group';
+  assigneeIds?: string[]; // set when assigneeType === 'group'
   dueDate: string;
   status: 'Assigned' | 'In Progress' | 'Completed' | 'Pending Extension';
   creatorName?: string;
@@ -160,6 +164,12 @@ export interface ReimbursementItem {
   eventName?: string;
 }
 
+export interface BudgetLineItem {
+  eventId?: string;  // set when the line item points at an existing event
+  eventName: string; // display label — an existing event's title, or a free-typed name for an event not created yet
+  amount: number;
+}
+
 export interface BudgetItem {
   id: string;
   type: 'event' | 'monthly';
@@ -167,6 +177,12 @@ export interface BudgetItem {
   eventName?: string;
   month?: string;    // set when type === 'monthly', 'YYYY-MM'
   amount: number;
+  // Set on a 'monthly' budget proposed as a breakdown of per-event costs
+  // (the Centre Head lists each planned event for the month and what it
+  // will cost); `amount` is always kept equal to the sum of these.
+  // A 'monthly' budget submitted without a breakdown (or an 'event' one)
+  // leaves this undefined.
+  lineItems?: BudgetLineItem[];
   notes?: string;
   submittedBy: string;
   submittedByEmail?: string;
@@ -283,6 +299,18 @@ export interface DesignSubmissionItem {
 export interface OcrScanIssue {
   word: string;
   suggestions: string[];
+  pageIndex: number;
+  bbox: { x0: number; y0: number; x1: number; y1: number };
+}
+
+export interface OcrScanPageImage {
+  dataUrl: string;
+  // Pixel dimensions of the ORIGINAL page the bbox coordinates above were
+  // measured against — not necessarily the dataUrl's own resolution, which
+  // may be downscaled for payload size. Highlight boxes are positioned by
+  // percentage, so this is all a consumer needs regardless of preview size.
+  width: number;
+  height: number;
 }
 
 export interface OcrScanResult {
@@ -291,6 +319,7 @@ export interface OcrScanResult {
   totalPages: number;
   partial: boolean; // true if a PDF had more pages than were scanned
   issues: OcrScanIssue[];
+  pageImages: OcrScanPageImage[];
   scannedAt: string;
 }
 
@@ -1227,12 +1256,18 @@ export function saveRatings(ratings: RatingItem[]): void {
 function propagateCommitteeRating(task: TaskItem, parentRating: RatingItem): void {
   const events = getEvents();
   const event = events.find(e => e.id === task.eventId || e.title === task.event);
-  if (!event) return;
+  if (!event) {
+    console.warn(`[propagateCommitteeRating] No linked event found for committee task "${task.title}" — no student ratings were created.`);
+    return;
+  }
 
   const committee = (event.committees || []).find(
     c => c.id === task.eventCommitteeId || c.name.toLowerCase() === task.assignee.toLowerCase()
   );
-  if (!committee || !committee.memberIds || committee.memberIds.length === 0) return;
+  if (!committee || !committee.memberIds || committee.memberIds.length === 0) {
+    console.warn(`[propagateCommitteeRating] No matching committee with members found for task "${task.title}" (eventCommitteeId: ${task.eventCommitteeId || 'unset'}) — no student ratings were created.`);
+    return;
+  }
 
   const members = getMembers();
   const ratings = getRatings();
@@ -1272,6 +1307,52 @@ function propagateCommitteeRating(task: TaskItem, parentRating: RatingItem): voi
   }
 }
 
+/**
+ * Same fan-out as propagateCommitteeRating, but for an ad-hoc 'group' task —
+ * there's no EventCommittee to look up, just the assigneeIds already stored
+ * directly on the task.
+ */
+function propagateGroupRating(task: TaskItem, parentRating: RatingItem): void {
+  if (!task.assigneeIds || task.assigneeIds.length === 0) return;
+
+  const members = getMembers();
+  const ratings = getRatings();
+  let updated = false;
+
+  task.assigneeIds.forEach(mId => {
+    const memberObj = members.find(m => m.id === mId);
+    if (!memberObj) return;
+
+    const alreadyRated = ratings.some(r => r.taskId === task.id && r.targetId === memberObj.id);
+    if (alreadyRated) return;
+
+    const studentRating: RatingItem = {
+      id: 'r_group_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      taskId: task.id,
+      taskTitle: task.title,
+      eventId: task.eventId,
+      eventName: task.event,
+      targetId: memberObj.id,
+      targetName: memberObj.name,
+      raterName: parentRating.raterName,
+      quality: parentRating.quality,
+      timeliness: parentRating.timeliness,
+      initiative: parentRating.initiative,
+      collaboration: parentRating.collaboration,
+      overallScore: parentRating.overallScore,
+      notes: `[Group Evaluation] ${parentRating.notes || ''}`.trim(),
+      createdAt: parentRating.createdAt
+    };
+    ratings.unshift(studentRating);
+    serverPost('/api/ratings', studentRating);
+    updated = true;
+  });
+
+  if (updated) {
+    saveRatings(ratings);
+  }
+}
+
 export function addRating(rating: Omit<RatingItem, 'id' | 'createdAt'>): RatingItem {
   const ratings = getRatings();
   const newRating: RatingItem = {
@@ -1290,6 +1371,8 @@ export function addRating(rating: Omit<RatingItem, 'id' | 'createdAt'>): RatingI
     const task = getTasks().find(t => t.id === rating.taskId);
     if (task && (task.assigneeType === 'committee' || task.eventCommitteeId)) {
       propagateCommitteeRating(task, newRating);
+    } else if (task && task.assigneeType === 'group') {
+      propagateGroupRating(task, newRating);
     }
   }
 

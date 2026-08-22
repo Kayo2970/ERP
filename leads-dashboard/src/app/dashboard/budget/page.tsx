@@ -20,6 +20,7 @@ import {
   getEvents,
   getReimbursements,
   BudgetItem,
+  BudgetLineItem,
   EventItem,
   ReimbursementItem,
 } from '@/lib/local-data';
@@ -39,6 +40,11 @@ export default function BudgetPage() {
   const [eventId, setEventId] = useState('');
   const [month, setMonth] = useState('');
   const [amount, setAmount] = useState('');
+  // A monthly budget is proposed as a set of planned events with their own
+  // cost, which must sum to the monthly total — not one blind figure.
+  const [monthlyLineItems, setMonthlyLineItems] = useState<{ eventId: string; eventName: string; amount: string }[]>([
+    { eventId: '', eventName: '', amount: '' },
+  ]);
   const [notes, setNotes] = useState('');
   const [formError, setFormError] = useState('');
 
@@ -86,6 +92,7 @@ export default function BudgetPage() {
     setEventId('');
     setMonth('');
     setAmount('');
+    setMonthlyLineItems([{ eventId: '', eventName: '', amount: '' }]);
     setNotes('');
     setFormError('');
   };
@@ -95,33 +102,67 @@ export default function BudgetPage() {
     setIsModalOpen(true);
   };
 
+  const addLineItemRow = () => {
+    setMonthlyLineItems(rows => [...rows, { eventId: '', eventName: '', amount: '' }]);
+  };
+  const removeLineItemRow = (index: number) => {
+    setMonthlyLineItems(rows => rows.filter((_, i) => i !== index));
+  };
+  const updateLineItemRow = (index: number, patch: Partial<{ eventId: string; eventName: string; amount: string }>) => {
+    setMonthlyLineItems(rows => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  };
+  const monthlyTotal = monthlyLineItems.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
+
   const handleSubmitBudget = (e: React.FormEvent) => {
     e.preventDefault();
-    const amountNum = Number(amount);
-    if (!amountNum || amountNum <= 0) {
-      setFormError('Enter a valid budget amount.');
-      return;
-    }
-    if (budgetType === 'event' && !eventId) {
-      setFormError('Select an event for this budget request.');
-      return;
-    }
-    if (budgetType === 'monthly' && !month) {
-      setFormError('Select a month for this budget request.');
-      return;
-    }
 
-    const selectedEvent = events.find(ev => ev.id === eventId);
-    addBudget({
-      type: budgetType,
-      eventId: budgetType === 'event' ? eventId : undefined,
-      eventName: budgetType === 'event' ? selectedEvent?.title : undefined,
-      month: budgetType === 'monthly' ? month : undefined,
-      amount: amountNum,
-      notes: notes.trim() || undefined,
-      submittedBy: user?.name || 'Centre Head',
-      submittedByEmail: user?.email,
-    });
+    if (budgetType === 'event') {
+      const amountNum = Number(amount);
+      if (!amountNum || amountNum <= 0) {
+        setFormError('Enter a valid budget amount.');
+        return;
+      }
+      if (!eventId) {
+        setFormError('Select an event for this budget request.');
+        return;
+      }
+      const selectedEvent = events.find(ev => ev.id === eventId);
+      addBudget({
+        type: 'event',
+        eventId,
+        eventName: selectedEvent?.title,
+        amount: amountNum,
+        notes: notes.trim() || undefined,
+        submittedBy: user?.name || 'Centre Head',
+        submittedByEmail: user?.email,
+      });
+    } else {
+      if (!month) {
+        setFormError('Select a month for this budget request.');
+        return;
+      }
+      const cleanedLineItems: BudgetLineItem[] = monthlyLineItems
+        .filter(row => row.eventName.trim() && Number(row.amount) > 0)
+        .map(row => ({
+          eventId: row.eventId || undefined,
+          eventName: row.eventName.trim(),
+          amount: Number(row.amount),
+        }));
+      if (cleanedLineItems.length === 0) {
+        setFormError('Add at least one planned event with a cost.');
+        return;
+      }
+      const total = cleanedLineItems.reduce((sum, li) => sum + li.amount, 0);
+      addBudget({
+        type: 'monthly',
+        month,
+        amount: total,
+        lineItems: cleanedLineItems,
+        notes: notes.trim() || undefined,
+        submittedBy: user?.name || 'Centre Head',
+        submittedByEmail: user?.email,
+      });
+    }
 
     setBudgets(getBudgets());
     setIsModalOpen(false);
@@ -315,6 +356,16 @@ export default function BudgetPage() {
                   </span>
                 </div>
                 <p className="text-sm font-bold text-accent">₹{b.amount.toLocaleString()}</p>
+                {b.lineItems && b.lineItems.length > 0 && (
+                  <ul className="pl-1 space-y-0.5 border-l-2 border-theme-border/30">
+                    {b.lineItems.map((li, i) => (
+                      <li key={i} className="pl-2 flex items-center justify-between text-[11px] text-theme-text-secondary">
+                        <span>{li.eventName}</span>
+                        <span className="font-mono">₹{li.amount.toLocaleString()}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {b.notes && <p className="text-[11px] text-theme-text-secondary italic">"{b.notes}"</p>}
                 {b.decidedBy && (
                   <p className="text-[10px] text-theme-text-secondary">
@@ -397,17 +448,79 @@ export default function BudgetPage() {
                 </div>
               )}
 
-              <div className="space-y-1.5">
-                <label className="block font-medium text-theme-text-secondary">Amount Requested (₹) *</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={amount}
-                  onChange={e => setAmount(e.target.value)}
-                  placeholder="e.g. 25000"
-                  className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                />
-              </div>
+              {budgetType === 'event' ? (
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">Amount Requested (₹) *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={amount}
+                    onChange={e => setAmount(e.target.value)}
+                    placeholder="e.g. 25000"
+                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  />
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block font-medium text-theme-text-secondary">Planned Events & Costs *</label>
+                    <button
+                      type="button"
+                      onClick={addLineItemRow}
+                      className="flex items-center gap-1 text-[11px] font-semibold text-accent hover:underline cursor-pointer"
+                    >
+                      <Plus className="h-3 w-3" /> Add Event
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {monthlyLineItems.map((row, index) => (
+                      <div key={index} className="flex items-center gap-1.5">
+                        <select
+                          value={row.eventId}
+                          onChange={e => {
+                            const ev = events.find(ev2 => ev2.id === e.target.value);
+                            updateLineItemRow(index, { eventId: e.target.value, eventName: ev ? ev.title : row.eventName });
+                          }}
+                          className="w-28 shrink-0 px-2 py-2 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary text-[11px] focus:outline-none focus:border-accent"
+                        >
+                          <option value="">Not yet created</option>
+                          {events.map(ev => (
+                            <option key={ev.id} value={ev.id}>{ev.title}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="text"
+                          value={row.eventName}
+                          onChange={e => updateLineItemRow(index, { eventName: e.target.value })}
+                          placeholder="Event name"
+                          disabled={!!row.eventId}
+                          className="flex-1 min-w-0 px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent disabled:opacity-60"
+                        />
+                        <input
+                          type="number"
+                          min="1"
+                          value={row.amount}
+                          onChange={e => updateLineItemRow(index, { amount: e.target.value })}
+                          placeholder="₹"
+                          className="w-24 shrink-0 px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeLineItemRow(index)}
+                          disabled={monthlyLineItems.length === 1}
+                          className="h-8 w-8 shrink-0 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-danger transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between pt-1.5 border-t border-theme-border/20">
+                    <span className="font-semibold text-theme-text-secondary">Monthly Total</span>
+                    <span className="text-sm font-bold text-accent">₹{monthlyTotal.toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <label className="block font-medium text-theme-text-secondary">Notes / Justification</label>
@@ -451,6 +564,16 @@ export default function BudgetPage() {
               </p>
               <p className="text-theme-text-secondary">Requested by {decidingBudget.submittedBy}</p>
               <p className="text-accent font-bold text-sm">₹{decidingBudget.amount.toLocaleString()}</p>
+              {decidingBudget.lineItems && decidingBudget.lineItems.length > 0 && (
+                <ul className="pl-1 space-y-0.5 border-l-2 border-theme-border/30">
+                  {decidingBudget.lineItems.map((li, i) => (
+                    <li key={i} className="pl-2 flex items-center justify-between text-theme-text-secondary">
+                      <span>{li.eventName}</span>
+                      <span className="font-mono">₹{li.amount.toLocaleString()}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
               {decidingBudget.notes && <p className="text-theme-text-secondary italic">"{decidingBudget.notes}"</p>}
             </div>
 
