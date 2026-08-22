@@ -62,6 +62,11 @@ export interface EventItem {
   description: string;
   startDate: string;
   endDate: string;
+  // When true, startDate/endDate are placeholders (empty) — the event is
+  // confirmed to happen but exact dates aren't set yet. Every date-range
+  // display/sort/day-grid-match site must check this before trusting
+  // startDate/endDate (see formatEventDateRange below).
+  datesTBD?: boolean;
   status: 'planned' | 'active' | 'completed' | 'archived';
   location?: string;
   campus?: 'GG Campus' | 'RTC Campus' | 'Both Campuses';
@@ -1028,6 +1033,22 @@ export function rejectEvent(id: string, actorName: string, reason?: string): Eve
   return result;
 }
 
+/** Human-readable date range for an event, honoring a "dates to be decided" placeholder. */
+export function formatEventDateRange(event: Pick<EventItem, 'startDate' | 'endDate' | 'datesTBD'>): string {
+  if (event.datesTBD || !event.startDate || !event.endDate) return 'Dates To Be Decided';
+  return event.startDate === event.endDate ? event.startDate : `${event.startDate} – ${event.endDate}`;
+}
+
+/**
+ * Sort key for an event's start date, pushing "dates to be decided" events to
+ * the end of a chronological sort instead of letting `new Date('').getTime()`
+ * (NaN) produce an unstable order.
+ */
+export function getEventSortTime(event: Pick<EventItem, 'startDate' | 'datesTBD'>): number {
+  if (event.datesTBD || !event.startDate) return Number.MAX_SAFE_INTEGER;
+  return new Date(event.startDate).getTime();
+}
+
 /**
  * An event's stored `status` is set manually (planned/active/completed/archived),
  * but nothing ever moved it to "completed" once its end date passed — it just sat
@@ -1673,6 +1694,37 @@ export function decideBudget(
   saveBudgets(current);
   serverPatch('/api/budgets', id, current[idx]);
   logAuditEvent('BUDGET_DECIDED', decidedBy, `${status} the ₹${current[idx].amount.toLocaleString()} budget request from ${current[idx].submittedBy}`);
+  return current[idx];
+}
+
+/**
+ * Lets the Centre Head revise their own budget request — before Finance
+ * Head has decided, or even after it was already Approved. Either way the
+ * edit always resets it to Pending: a changed Approved budget no longer
+ * reflects what was actually approved, so it must be re-approved rather
+ * than silently keeping its old Approved status with new numbers.
+ */
+export function updateBudget(id: string, updates: Partial<BudgetItem>, actorName: string): BudgetItem | null {
+  const current = getBudgets();
+  const idx = current.findIndex(b => b.id === id);
+  if (idx === -1) return null;
+
+  const wasApproved = current[idx].status === 'Approved';
+  current[idx] = {
+    ...current[idx],
+    ...updates,
+    status: 'Pending',
+    decidedBy: undefined,
+    decidedAt: undefined,
+    decisionNotes: undefined,
+  };
+  saveBudgets(current);
+  serverPatch('/api/budgets', id, current[idx]);
+  logAuditEvent(
+    'BUDGET_EDITED',
+    actorName,
+    `Edited a ₹${current[idx].amount.toLocaleString()} budget request${wasApproved ? ' that was previously Approved — now pending re-approval' : ''}`
+  );
   return current[idx];
 }
 

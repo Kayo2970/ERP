@@ -14,7 +14,7 @@
  */
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { RatingItem, EventItem, Member } from './local-data';
+import { RatingItem, EventItem, Member, formatEventDateRange } from './local-data';
 
 const BRAND_PRIMARY: [number, number, number] = [15, 42, 71]; // #0F2A47
 const BRAND_ACCENT: [number, number, number] = [46, 117, 182]; // #2E75B6
@@ -239,9 +239,7 @@ export function generatePerformanceReportPdf(params: PerformanceReportParams): v
       doc.setFontSize(8.5);
       doc.setTextColor(...TEXT_MUTED);
       if (matchedEvent) {
-        const dateRange = matchedEvent.startDate === matchedEvent.endDate
-          ? matchedEvent.startDate
-          : `${matchedEvent.startDate} – ${matchedEvent.endDate}`;
+        const dateRange = formatEventDateRange(matchedEvent);
         const detailLine = [dateRange, matchedEvent.location, matchedEvent.campus].filter(Boolean).join(' · ');
         if (detailLine) {
           doc.text(detailLine, margin, y);

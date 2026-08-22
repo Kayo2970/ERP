@@ -10,7 +10,7 @@ import {
   ExternalLink,
   TrendingUp
 } from 'lucide-react';
-import { getStudentProfile, StudentProfileData } from '@/lib/local-data';
+import { getStudentProfile, formatEventDateRange, StudentProfileData } from '@/lib/local-data';
 import Link from 'next/link';
 
 interface StudentProfileModalProps {
@@ -252,7 +252,7 @@ export function StudentProfileModal({ memberIdOrName, onClose }: StudentProfileM
                         <Layers className="h-3 w-3" />
                         {committee.name}
                       </p>
-                      <span className="text-[10px] text-theme-text-secondary">{event.startDate} &mdash; {event.endDate}</span>
+                      <span className="text-[10px] text-theme-text-secondary">{formatEventDateRange(event)}</span>
                     </div>
 
                     <Link

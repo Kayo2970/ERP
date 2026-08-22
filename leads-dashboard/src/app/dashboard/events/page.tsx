@@ -19,7 +19,7 @@ import {
   Check,
   Ban
 } from 'lucide-react';
-import { getEvents, addEvent, updateEvent, deleteEvent, approveEvent, rejectEvent, submitEventEdit, getEffectiveEventStatus, EventItem } from '@/lib/local-data';
+import { getEvents, addEvent, updateEvent, deleteEvent, approveEvent, rejectEvent, submitEventEdit, getEffectiveEventStatus, formatEventDateRange, getEventSortTime, EventItem } from '@/lib/local-data';
 import { canCreateEvent, canEditEvent, canDeleteEvent, canManageEvents, canViewEvent, canApprovePendingEvent, getEventApprovalRequirement } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -43,6 +43,7 @@ export default function EventsPage() {
   const [description, setDescription] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [datesTBD, setDatesTBD] = useState(false);
   const [location, setLocation] = useState('');
   const [campus, setCampus] = useState<'GG Campus' | 'RTC Campus' | 'Both Campuses'>('GG Campus');
   const [status, setStatus] = useState<EventItem['status']>('planned');
@@ -197,6 +198,7 @@ export default function EventsPage() {
     setDescription('');
     setStartDate('');
     setEndDate('');
+    setDatesTBD(false);
     setLocation('');
     setCampus('GG Campus');
     setStatus('planned');
@@ -210,6 +212,7 @@ export default function EventsPage() {
     setDescription(event.description);
     setStartDate(event.startDate);
     setEndDate(event.endDate);
+    setDatesTBD(!!event.datesTBD);
     setLocation(event.location || '');
     setCampus(event.campus || 'GG Campus');
     setStatus(event.status);
@@ -220,12 +223,12 @@ export default function EventsPage() {
     e.preventDefault();
     setFormError('');
 
-    if (!title.trim() || !startDate || !endDate) {
-      setFormError('Please fill in event title and active dates.');
+    if (!title.trim() || (!datesTBD && (!startDate || !endDate))) {
+      setFormError('Please fill in event title and active dates (or mark dates as To Be Decided).');
       return;
     }
 
-    if (new Date(endDate) < new Date(startDate)) {
+    if (!datesTBD && new Date(endDate) < new Date(startDate)) {
       setFormError('End Date must be on or after Start Date.');
       return;
     }
@@ -234,8 +237,9 @@ export default function EventsPage() {
       const changes = {
         title: title.trim(),
         description: description.trim(),
-        startDate,
-        endDate,
+        startDate: datesTBD ? '' : startDate,
+        endDate: datesTBD ? '' : endDate,
+        datesTBD,
         location: location.trim(),
         campus,
         status,
@@ -258,8 +262,9 @@ export default function EventsPage() {
       const newEventBase = {
         title: title.trim(),
         description: description.trim(),
-        startDate,
-        endDate,
+        startDate: datesTBD ? '' : startDate,
+        endDate: datesTBD ? '' : endDate,
+        datesTBD,
         location: location.trim(),
         campus,
         status,
@@ -358,8 +363,8 @@ export default function EventsPage() {
     const bStatus = getEffectiveEventStatus(b);
     const rankDiff = statusRank(aStatus) - statusRank(bStatus);
     if (rankDiff !== 0) return rankDiff;
-    const aTime = new Date(a.startDate).getTime();
-    const bTime = new Date(b.startDate).getTime();
+    const aTime = getEventSortTime(a);
+    const bTime = getEventSortTime(b);
     const isPast = aStatus === 'completed' || aStatus === 'archived';
     return isPast ? bTime - aTime : aTime - bTime;
   });
@@ -553,7 +558,7 @@ export default function EventsPage() {
                   <div className="space-y-1 text-xs text-theme-text-secondary pt-1">
                     <div className="flex items-center gap-1.5 text-[11px]">
                       <Calendar className="h-3.5 w-3.5 text-accent" />
-                      <span>{event.startDate} &mdash; {event.endDate}</span>
+                      <span className={event.datesTBD ? 'text-warning font-semibold' : ''}>{formatEventDateRange(event)}</span>
                     </div>
                     {event.location && (
                       <div className="flex items-center gap-1.5 text-[11px]">
@@ -666,29 +671,41 @@ export default function EventsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Start Date *</label>
-                  <input
-                    type="date"
-                    required
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                  />
-                </div>
+              <label className="flex items-center gap-2 cursor-pointer font-medium text-theme-text-primary">
+                <input
+                  type="checkbox"
+                  checked={datesTBD}
+                  onChange={(e) => setDatesTBD(e.target.checked)}
+                  className="accent-accent"
+                />
+                Dates To Be Decided
+              </label>
 
-                <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">End Date *</label>
-                  <input
-                    type="date"
-                    required
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                  />
+              {!datesTBD && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="block font-medium text-theme-text-secondary">Start Date *</label>
+                    <input
+                      type="date"
+                      required={!datesTBD}
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block font-medium text-theme-text-secondary">End Date *</label>
+                    <input
+                      type="date"
+                      required={!datesTBD}
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="space-y-1.5">
                 <label className="block font-medium text-theme-text-secondary">Event Status</label>
