@@ -32,6 +32,12 @@ import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { PeriodFilter } from '@/components/period-filter';
 import { PeriodFilterValue, extractAvailableMonths, isWithinPeriod } from '@/lib/period-filter';
 
+// Falls back to the title-string convention for tasks created before
+// isDesignDeliverable existed, so already-created Design Portal tasks don't
+// lose their Design Head evaluation rights after this deploys.
+const isDesignTask = (task: TaskItem): boolean =>
+  task.isDesignDeliverable === true || /design approved|design deliverable/i.test(task.title);
+
 export default function RatingsPage() {
   const [ratings, setRatings] = useState<RatingItem[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
@@ -98,7 +104,7 @@ export default function RatingsPage() {
     const linkedEvent = events.find(ev => ev.id === task.eventId || ev.title === task.event);
     const eventCampus = linkedEvent?.campus || task.eventCampus || 'GG Campus';
 
-    if (!canEvaluateEventStudent(user, eventCampus)) {
+    if (!canEvaluateEventStudent(user, eventCampus, isDesignTask(task))) {
       setAlertMsg(`Campus Evaluation Rule: Events Head for ${user?.role || 'your campus'} cannot evaluate student performance for ${eventCampus} events.`);
       setTimeout(() => setAlertMsg(''), 5000);
       return;
@@ -142,7 +148,7 @@ export default function RatingsPage() {
     if (selectedTask) {
       const linkedEvent = events.find(ev => ev.id === selectedTask.eventId || ev.title === selectedTask.event);
       const eventCampus = linkedEvent?.campus || selectedTask.eventCampus || 'GG Campus';
-      if (!canEvaluateEventStudent(user, eventCampus)) {
+      if (!canEvaluateEventStudent(user, eventCampus, isDesignTask(selectedTask))) {
         setFormError(`Evaluation Access Denied: Only the Centre Head or Head of Events (${eventCampus}) are authorized to evaluate student performance.`);
         return;
       }
@@ -285,7 +291,8 @@ export default function RatingsPage() {
               ratableTasks.map(task => {
                 const linkedEvent = events.find(ev => ev.id === task.eventId || ev.title === task.event);
                 const eventCampus = linkedEvent?.campus || task.eventCampus || 'GG Campus';
-                const canEval = canEvaluateEventStudent(user, eventCampus);
+                const isDesignDeliverable = isDesignTask(task);
+                const canEval = canEvaluateEventStudent(user, eventCampus, isDesignDeliverable);
 
                 return (
                   <div 
@@ -309,7 +316,7 @@ export default function RatingsPage() {
                           <span className="text-[9px] font-bold px-1.5 py-0.5 bg-accent/10 text-accent rounded border border-accent/20">
                             {eventCampus}
                           </span>
-                          {(task.title.toLowerCase().includes('design approved') || task.title.toLowerCase().includes('design deliverable')) && (
+                          {isDesignDeliverable && (
                             <span className="text-[9px] font-bold px-1.5 py-0.5 bg-purple-500/15 text-purple-400 rounded border border-purple-500/20 flex items-center gap-1">
                               <Palette className="h-2.5 w-2.5" /> Design Deliverable
                             </span>
@@ -345,7 +352,9 @@ export default function RatingsPage() {
                       <div className="pt-1 border-t border-theme-border/20 flex items-center justify-between gap-2">
                         {!canEval ? (
                           <span className="text-[10px] text-warning font-medium italic">
-                            Evaluations restricted to Centre Head or Head of Events ({eventCampus})
+                            {isDesignDeliverable
+                              ? 'Evaluations restricted to Centre Head, Head of Events, or Design Head'
+                              : `Evaluations restricted to Centre Head or Head of Events (${eventCampus})`}
                           </span>
                         ) : (
                           <span className="text-[10px] text-theme-text-secondary">
