@@ -170,13 +170,9 @@ export default function DirectoryPage() {
       }
     } else if (div === 'Training Associate') {
       tier = 6;
-      if (opts.associatePosition === 'Department Associate' && opts.departmentSelect) {
-        role = `Associate - ${opts.departmentSelect}`;
-        department = opts.departmentSelect;
-      } else {
-        role = 'Training Associate';
-        department = opts.departmentSelect || 'General';
-      }
+      const dept = opts.departmentSelect || STANDARDIZED_DEPARTMENTS[0];
+      role = `Associate - ${dept}`;
+      department = dept;
     } else if (div === 'Alumni') {
       tier = 7;
       role = 'Alumni Member';
@@ -1378,14 +1374,15 @@ export default function DirectoryPage() {
 
                   {division === 'Training Associate' && (
                     <div className="space-y-1.5">
-                      <label className="block font-medium text-theme-text-secondary">Associate Position</label>
+                      <label className="block font-medium text-theme-text-secondary">Select Department *</label>
                       <select
-                        value={associatePosition}
-                        onChange={(e) => setAssociatePosition(e.target.value as AssociatePosition)}
-                        className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                        value={departmentSelect}
+                        onChange={(e) => setDepartmentSelect(e.target.value)}
+                        className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-semibold"
                       >
-                        <option value="Associate">General Associate</option>
-                        <option value="Department Associate">Department Associate</option>
+                        {STANDARDIZED_DEPARTMENTS.map(dept => (
+                          <option key={dept} value={dept}>{dept}</option>
+                        ))}
                       </select>
                     </div>
                   )}
@@ -1422,22 +1419,21 @@ export default function DirectoryPage() {
                   </div>
                 )}
 
-                {/* Department Selection for Department Heads or Department Associates */}
-                {((division === 'Core Committee' || division === 'Advisory Board') && corePosition === 'Department Head') ||
-                 (division === 'Training Associate' && associatePosition === 'Department Associate') ? (
+                {/* Department Selection for Department Heads */}
+                {(division === 'Core Committee' || division === 'Advisory Board') && corePosition === 'Department Head' && (
                   <div className="space-y-1.5">
                     <label className="block font-medium text-theme-text-secondary">Select Department *</label>
                     <select
                       value={departmentSelect}
                       onChange={(e) => setDepartmentSelect(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-semibold"
                     >
                       {STANDARDIZED_DEPARTMENTS.map(dept => (
                         <option key={dept} value={dept}>{dept}</option>
                       ))}
                     </select>
                   </div>
-                ) : null}
+                )}
 
                 {/* Live Derived Designation Preview Banner */}
                 <div className="p-3.5 bg-accent/10 border border-accent/30 rounded-2xl flex flex-col space-y-1">
@@ -1591,14 +1587,15 @@ export default function DirectoryPage() {
 
                   {editDivision === 'Training Associate' && (
                     <div className="space-y-1.5">
-                      <label className="block font-medium text-theme-text-secondary">Associate Position</label>
+                      <label className="block font-medium text-theme-text-secondary">Select Department *</label>
                       <select
-                        value={editAssociatePosition}
-                        onChange={(e) => setEditAssociatePosition(e.target.value as AssociatePosition)}
-                        className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                        value={editDepartmentSelect}
+                        onChange={(e) => setEditDepartmentSelect(e.target.value)}
+                        className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-semibold"
                       >
-                        <option value="Associate">General Associate</option>
-                        <option value="Department Associate">Department Associate</option>
+                        {STANDARDIZED_DEPARTMENTS.map(dept => (
+                          <option key={dept} value={dept}>{dept}</option>
+                        ))}
                       </select>
                     </div>
                   )}
@@ -1635,22 +1632,21 @@ export default function DirectoryPage() {
                   </div>
                 )}
 
-                {/* Department Selection for Department Heads or Department Associates */}
-                {((editDivision === 'Core Committee' || editDivision === 'Advisory Board') && editCorePosition === 'Department Head') ||
-                 (editDivision === 'Training Associate' && editAssociatePosition === 'Department Associate') ? (
+                {/* Department Selection for Department Heads */}
+                {(editDivision === 'Core Committee' || editDivision === 'Advisory Board') && editCorePosition === 'Department Head' && (
                   <div className="space-y-1.5">
                     <label className="block font-medium text-theme-text-secondary">Select Department *</label>
                     <select
                       value={editDepartmentSelect}
                       onChange={(e) => setEditDepartmentSelect(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-semibold"
                     >
                       {STANDARDIZED_DEPARTMENTS.map(dept => (
                         <option key={dept} value={dept}>{dept}</option>
                       ))}
                     </select>
                   </div>
-                ) : null}
+                )}
 
                 {/* Live Derived Designation Preview Banner */}
                 <div className="p-3.5 bg-accent/10 border border-accent/30 rounded-2xl flex flex-col space-y-1">
