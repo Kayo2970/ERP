@@ -253,6 +253,20 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       setLockdownEnabled(getSystemSettings().lockdownEnabled);
       const currentUser = userRef.current;
       if (!currentUser?.email) return;
+
+      // Security: a member terminated while actively logged in gets kicked
+      // out on the next poll (within ~7s) rather than staying signed in
+      // until their session naturally expires or they navigate somewhere
+      // that re-checks status.
+      const liveRecord = getMembers().find(m => m.email.toLowerCase() === currentUser.email.toLowerCase());
+      if (liveRecord?.status === 'Terminated') {
+        logAuditEvent('SESSION_TERMINATED_LOGOUT', currentUser.name || 'User', 'Force-logged out — account was terminated while session was active', currentUser.email);
+        localStorage.removeItem('user');
+        localStorage.setItem('logoutReason', 'terminated');
+        router.replace('/');
+        return;
+      }
+
       setNotifications(prev => {
         const readIds = new Set(prev.filter(n => n.read).map(n => n.id));
         return buildNotifications(currentUser).map(n => readIds.has(n.id) ? { ...n, read: true } : n);
@@ -260,7 +274,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     };
     window.addEventListener('leads-data-sync', handleSync);
     return () => window.removeEventListener('leads-data-sync', handleSync);
-  }, []);
+  }, [router]);
 
   // Click outside to close dropdowns. The notification bell renders twice (desktop
   // header + mobile header, only one visible at a time via CSS), so both refs must

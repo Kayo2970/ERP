@@ -173,6 +173,9 @@ export default function LoginPage() {
     if (localStorage.getItem('logoutReason') === 'inactivity') {
       setError('You were automatically logged out after 30 minutes of inactivity. Please sign in again.');
       localStorage.removeItem('logoutReason');
+    } else if (localStorage.getItem('logoutReason') === 'terminated') {
+      setError('Your account has been terminated and you have lost access to the portal. Contact your Centre Head if you believe this is a mistake.');
+      localStorage.removeItem('logoutReason');
     }
 
     // If already logged in, route to home

@@ -27,8 +27,15 @@ export async function POST(request: Request) {
     }
 
     if (matchedUser.status === 'Terminated') {
+      const terminatedDate = matchedUser.terminatedAt
+        ? new Date(matchedUser.terminatedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+        : null;
       return NextResponse.json(
-        { error: 'This account has been deactivated. Contact your Centre Head if you believe this is a mistake.' },
+        {
+          error: terminatedDate
+            ? `You have been terminated from LEADS Next Gen Centre effective ${terminatedDate}. You have lost access to the portal. Contact your Centre Head if you believe this is a mistake.`
+            : 'You have been terminated from LEADS Next Gen Centre and have lost access to the portal. Contact your Centre Head if you believe this is a mistake.',
+        },
         { status: 403 }
       );
     }
