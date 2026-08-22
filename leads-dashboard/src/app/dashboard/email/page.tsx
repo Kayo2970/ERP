@@ -962,6 +962,35 @@ export default function EmailManagementPage() {
                 </div>
               </div>
 
+              {/* Diagnostics — "SENT" here only means the SMTP server accepted the
+                  message for delivery, not that it actually reached the inbox.
+                  This is the raw server response, so "sent but never arrives"
+                  can be diagnosed without shell access to the mail server. */}
+              {selectedLog.errorMessage && (
+                <div>
+                  <span className="font-bold text-danger block mb-1">Error:</span>
+                  <div className="p-2.5 bg-danger/10 border border-danger/25 rounded-xl text-danger font-mono text-[11px] whitespace-pre-wrap">
+                    {selectedLog.errorMessage}
+                  </div>
+                </div>
+              )}
+              {selectedLog.smtpResponse && (
+                <div>
+                  <span className="font-bold text-theme-text-primary block mb-1">SMTP Server Response:</span>
+                  <div className="p-2.5 bg-theme-background/50 rounded-xl border border-theme-border/20 font-mono text-[11px] text-theme-text-secondary">
+                    {selectedLog.smtpResponse}
+                  </div>
+                </div>
+              )}
+              {selectedLog.rejectedRecipients && selectedLog.rejectedRecipients.length > 0 && (
+                <div>
+                  <span className="font-bold text-warning block mb-1">Rejected Recipients:</span>
+                  <div className="p-2.5 bg-warning/10 border border-warning/25 rounded-xl text-warning font-mono text-[11px]">
+                    {selectedLog.rejectedRecipients.join(', ')}
+                  </div>
+                </div>
+              )}
+
               <div>
                 <span className="font-bold text-theme-text-primary block mb-1">Raw Body Content:</span>
                 <div className="p-3 bg-slate-900 text-slate-200 rounded-xl border border-slate-800 font-mono text-[11px] max-h-48 overflow-y-auto whitespace-pre-wrap leading-relaxed">
