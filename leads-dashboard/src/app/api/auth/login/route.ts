@@ -33,6 +33,13 @@ export async function POST(request: Request) {
       );
     }
 
+    if (!matchedUser.passwordHash) {
+      return NextResponse.json(
+        { error: "This account hasn't been activated yet. Check your email for the \"Set Up My Account\" link, or ask an admin to resend it." },
+        { status: 403 }
+      );
+    }
+
     if (!verifyPassword(password, matchedUser.passwordHash)) {
       return NextResponse.json(
         { error: "Incorrect password. If you forgot your password, click 'Forgot Password?' below." },

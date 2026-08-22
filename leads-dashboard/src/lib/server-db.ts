@@ -61,6 +61,7 @@ export interface DbSchema {
   emails: any[];
   passwordResets: any[];
   emailChanges: any[];
+  accountActivations: any[];
   emailSettings: any[];
   guests: any[];
   budgets: any[];
@@ -85,6 +86,7 @@ const EMPTY_DB: DbSchema = {
   emails: [],
   passwordResets: [],
   emailChanges: [],
+  accountActivations: [],
   emailSettings: [],
   guests: [],
   budgets: [],
@@ -108,6 +110,7 @@ const SEED_DB: DbSchema = {
   emails: [],
   passwordResets: [],
   emailChanges: [],
+  accountActivations: [],
   emailSettings: [
     {
       id: 'default',

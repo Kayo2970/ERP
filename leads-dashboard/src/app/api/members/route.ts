@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
+import { createActivationTokenAndSendEmail } from '@/lib/account-activation';
 
 export async function GET() {
   const members = await readCollection('members');
@@ -17,6 +18,18 @@ export async function POST(request: Request) {
       return [...current, member];
     });
     const created = updated.find((m: any) => m.id === member.id);
+
+    // Send the "welcome, set up your account" email — never lets a mail
+    // hiccup fail the member-creation response itself (see tasks/events
+    // routes for the same pattern with their own notification emails).
+    if (created && created.email && !created.passwordHash) {
+      try {
+        await createActivationTokenAndSendEmail({ id: created.id, name: created.name, email: created.email });
+      } catch (emailErr) {
+        console.error('[members-api] Welcome email dispatch failed:', emailErr);
+      }
+    }
+
     return NextResponse.json(created, { status: 201 });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 });
