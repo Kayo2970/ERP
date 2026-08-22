@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
-import { getEvents, getEffectiveEventStatus, EventItem } from '@/lib/local-data';
+import { getEvents, getEffectiveEventStatus, formatEventDateRange, getEventSortTime, EventItem } from '@/lib/local-data';
 import { canViewEvent, canApprovePendingEvent } from '@/lib/permissions';
 
 export default function CalendarPage() {
@@ -80,7 +80,9 @@ export default function CalendarPage() {
 
   const getDayEvents = (day: number) => {
     const checkStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    return visibleEvents.filter(e => checkStr >= e.startDate && checkStr <= e.endDate);
+    // A "dates to be decided" event has no real date to place on the grid —
+    // it still shows up in the Upcoming Events list below instead.
+    return visibleEvents.filter(e => !e.datesTBD && checkStr >= e.startDate && checkStr <= e.endDate);
   };
 
   const upcomingEvents = [...visibleEvents]
@@ -88,7 +90,7 @@ export default function CalendarPage() {
       const effective = getEffectiveEventStatus(e);
       return effective !== 'completed' && effective !== 'archived';
     })
-    .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
+    .sort((a, b) => getEventSortTime(a) - getEventSortTime(b))
     .slice(0, 6);
 
   return (
@@ -230,7 +232,7 @@ export default function CalendarPage() {
                   className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl flex flex-col gap-1 hover:bg-theme-border/20 transition-all block cursor-pointer"
                 >
                   <h5 className="font-semibold text-theme-text-primary text-xs hover:text-accent transition-colors">{ev.title}</h5>
-                  <p className="text-[10px] text-theme-text-secondary">{ev.startDate} — {ev.endDate}</p>
+                  <p className={`text-[10px] ${ev.datesTBD ? 'text-warning font-semibold' : 'text-theme-text-secondary'}`}>{formatEventDateRange(ev)}</p>
                 </Link>
               ))
             )}

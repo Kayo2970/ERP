@@ -23,6 +23,8 @@ import {
   updateTaskStatus,
   getStudentLeaderboard,
   getEffectiveEventStatus,
+  formatEventDateRange,
+  getEventSortTime,
   TaskItem,
   EventItem,
   AnnouncementItem
@@ -50,7 +52,7 @@ export default function DashboardHome() {
   useEffect(() => {
     const refreshData = () => {
       const allEvents = getEvents();
-      setEvents(allEvents.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()));
+      setEvents(allEvents.sort((a, b) => getEventSortTime(a) - getEventSortTime(b)));
 
       const allTasks = getTasks();
       setTasks(allTasks);
@@ -120,7 +122,7 @@ export default function DashboardHome() {
 
   const getEventsOnDate = (date: Date) => {
     const checkStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-    return visibleEvents.filter(e => checkStr >= e.startDate && checkStr <= e.endDate);
+    return visibleEvents.filter(e => !e.datesTBD && checkStr >= e.startDate && checkStr <= e.endDate);
   };
 
   // Filter tasks based on shared permission helper
@@ -460,7 +462,7 @@ export default function DashboardHome() {
                       <span className="text-[10px] px-2 py-0.5 bg-accent/15 text-accent font-semibold rounded-md capitalize">{getEffectiveEventStatus(ev, tasks)}</span>
                     </div>
                     <p className="text-[10px] text-theme-text-secondary line-clamp-2">{ev.description}</p>
-                    <p className="text-[10px] text-theme-text-secondary font-medium pt-1">{ev.startDate} to {ev.endDate}</p>
+                    <p className={`text-[10px] font-medium pt-1 ${ev.datesTBD ? 'text-warning' : 'text-theme-text-secondary'}`}>{formatEventDateRange(ev)}</p>
                   </div>
                 ));
               })()

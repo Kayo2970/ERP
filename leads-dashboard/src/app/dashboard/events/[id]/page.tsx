@@ -23,6 +23,7 @@ import {
   addEventCommittee,
   updateEventCommitteeMembers,
   deleteEventCommittee,
+  formatEventDateRange,
   EventItem,
   EventCommittee,
   Member,
@@ -221,7 +222,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
         <div className="flex flex-wrap items-center gap-6 pt-3 border-t border-theme-border/20 text-xs text-theme-text-secondary">
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 text-accent" />
-            <span>{event.startDate} &mdash; {event.endDate}</span>
+            <span className={event.datesTBD ? 'text-warning font-semibold' : ''}>{formatEventDateRange(event)}</span>
           </div>
           {event.location && (
             <div className="flex items-center gap-2">

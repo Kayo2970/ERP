@@ -12,19 +12,25 @@ import {
   ShieldAlert,
   Landmark,
   ArrowRight,
+  Edit2,
+  Eye,
+  EyeOff,
+  CalendarPlus,
 } from 'lucide-react';
 import {
   getBudgets,
   addBudget,
+  updateBudget,
   decideBudget,
   getEvents,
+  addEvent,
   getReimbursements,
   BudgetItem,
   BudgetLineItem,
   EventItem,
   ReimbursementItem,
 } from '@/lib/local-data';
-import { isCentreHead, isFinanceHead } from '@/lib/permissions';
+import { isCentreHead, isFinanceHead, getEventApprovalRequirement } from '@/lib/permissions';
 import { EmptyState } from '@/components/ui/empty-state';
 
 export default function BudgetPage() {
@@ -36,12 +42,15 @@ export default function BudgetPage() {
   const [reimbursements, setReimbursements] = useState<ReimbursementItem[]>([]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingBudget, setEditingBudget] = useState<BudgetItem | null>(null);
   const [budgetType, setBudgetType] = useState<'event' | 'monthly'>('event');
   const [eventId, setEventId] = useState('');
   const [month, setMonth] = useState('');
   const [amount, setAmount] = useState('');
   // A monthly budget is proposed as a set of planned events with their own
-  // cost, which must sum to the monthly total — not one blind figure.
+  // cost, which must sum to the monthly total — not one blind figure. Each
+  // row must point at a real EventItem (existing or newly created inline),
+  // never a free-typed label.
   const [monthlyLineItems, setMonthlyLineItems] = useState<{ eventId: string; eventName: string; amount: string }[]>([
     { eventId: '', eventName: '', amount: '' },
   ]);
@@ -52,6 +61,22 @@ export default function BudgetPage() {
   const [decisionNotes, setDecisionNotes] = useState('');
 
   const [toastMsg, setToastMsg] = useState('');
+  // Rejected requests are hidden by default — only Approved (and Pending,
+  // since those need action) show without opting in.
+  const [showRejected, setShowRejected] = useState(false);
+
+  // Inline "create a new event on the spot" for a monthly line item — a
+  // real EventItem gets created (synced with the Events module & Calendar
+  // like any other event), not a free-text label.
+  const [isCreateEventModalOpen, setIsCreateEventModalOpen] = useState(false);
+  const [newEventLineItemIndex, setNewEventLineItemIndex] = useState<number | null>(null);
+  const [newEventTitle, setNewEventTitle] = useState('');
+  const [newEventCampus, setNewEventCampus] = useState<'GG Campus' | 'RTC Campus' | 'Both Campuses'>('GG Campus');
+  const [newEventLocation, setNewEventLocation] = useState('');
+  const [newEventDatesTBD, setNewEventDatesTBD] = useState(true);
+  const [newEventStartDate, setNewEventStartDate] = useState('');
+  const [newEventEndDate, setNewEventEndDate] = useState('');
+  const [newEventError, setNewEventError] = useState('');
 
   useEffect(() => {
     const savedUser = localStorage.getItem('user');
@@ -99,6 +124,23 @@ export default function BudgetPage() {
 
   const openModal = () => {
     resetForm();
+    setEditingBudget(null);
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (b: BudgetItem) => {
+    setEditingBudget(b);
+    setBudgetType(b.type);
+    setEventId(b.eventId || '');
+    setMonth(b.month || '');
+    setAmount(b.type === 'event' ? String(b.amount) : '');
+    setMonthlyLineItems(
+      b.lineItems && b.lineItems.length > 0
+        ? b.lineItems.map(li => ({ eventId: li.eventId || '', eventName: li.eventName, amount: String(li.amount) }))
+        : [{ eventId: '', eventName: '', amount: '' }]
+    );
+    setNotes(b.notes || '');
+    setFormError('');
     setIsModalOpen(true);
   };
 
@@ -113,8 +155,86 @@ export default function BudgetPage() {
   };
   const monthlyTotal = monthlyLineItems.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
 
+  const openCreateEventModal = (lineItemIndex: number) => {
+    setNewEventLineItemIndex(lineItemIndex);
+    setNewEventTitle('');
+    setNewEventCampus('GG Campus');
+    setNewEventLocation('');
+    setNewEventDatesTBD(true);
+    setNewEventStartDate('');
+    setNewEventEndDate('');
+    setNewEventError('');
+    setIsCreateEventModalOpen(true);
+  };
+
+  // Creates a real EventItem — the exact same way the Events module itself
+  // does (default sub-committees, the same approval-requirement check) — so
+  // it's a fully live event on the Calendar/Events module immediately, not
+  // a free-text label that only means something inside this budget request.
+  const handleCreateEventForLineItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    setNewEventError('');
+
+    if (!newEventTitle.trim()) {
+      setNewEventError('Enter an event title.');
+      return;
+    }
+    if (!newEventDatesTBD && (!newEventStartDate || !newEventEndDate)) {
+      setNewEventError('Enter both dates, or mark dates as To Be Decided.');
+      return;
+    }
+    if (!newEventDatesTBD && new Date(newEventEndDate) < new Date(newEventStartDate)) {
+      setNewEventError('End Date must be on or after Start Date.');
+      return;
+    }
+
+    const newEventBase = {
+      title: newEventTitle.trim(),
+      description: '',
+      startDate: newEventDatesTBD ? '' : newEventStartDate,
+      endDate: newEventDatesTBD ? '' : newEventEndDate,
+      datesTBD: newEventDatesTBD,
+      location: newEventLocation.trim(),
+      campus: newEventCampus,
+      status: 'planned' as EventItem['status'],
+      createdBy: user?.name || 'User',
+      committees: [
+        { id: 'c_' + Date.now() + '_1', name: 'Logistics & Venue Committee', memberIds: [] },
+        { id: 'c_' + Date.now() + '_2', name: 'Technical & AV Committee', memberIds: [] },
+        { id: 'c_' + Date.now() + '_3', name: 'Design & Media Committee', memberIds: [] }
+      ]
+    };
+
+    const approval = getEventApprovalRequirement(user, 'CREATE');
+    const created = approval.requiresApproval
+      ? addEvent({
+          ...newEventBase,
+          approvalStatus: 'pending_create',
+          approverType: approval.approverType,
+          approverMemberId: approval.approverMemberId,
+          approverPolicyTagId: approval.approverPolicyTagId,
+          approvalPolicyName: approval.policyName,
+          submittedBy: user?.name,
+          submittedByEmail: user?.email,
+        })
+      : addEvent(newEventBase);
+
+    setEvents(getEvents());
+    if (newEventLineItemIndex !== null) {
+      updateLineItemRow(newEventLineItemIndex, { eventId: created.id, eventName: created.title });
+    }
+    setIsCreateEventModalOpen(false);
+    triggerToast(
+      approval.requiresApproval
+        ? `Event submitted for approval from ${approval.approverName}. It will go live once approved.`
+        : 'New event created and linked to this line item.'
+    );
+  };
+
   const handleSubmitBudget = (e: React.FormEvent) => {
     e.preventDefault();
+
+    let payload: Partial<BudgetItem>;
 
     if (budgetType === 'event') {
       const amountNum = Number(amount);
@@ -127,38 +247,48 @@ export default function BudgetPage() {
         return;
       }
       const selectedEvent = events.find(ev => ev.id === eventId);
-      addBudget({
+      payload = {
         type: 'event',
         eventId,
         eventName: selectedEvent?.title,
+        month: undefined,
+        lineItems: undefined,
         amount: amountNum,
         notes: notes.trim() || undefined,
-        submittedBy: user?.name || 'Centre Head',
-        submittedByEmail: user?.email,
-      });
+      };
     } else {
       if (!month) {
         setFormError('Select a month for this budget request.');
         return;
       }
       const cleanedLineItems: BudgetLineItem[] = monthlyLineItems
-        .filter(row => row.eventName.trim() && Number(row.amount) > 0)
+        .filter(row => row.eventId && Number(row.amount) > 0)
         .map(row => ({
-          eventId: row.eventId || undefined,
-          eventName: row.eventName.trim(),
+          eventId: row.eventId,
+          eventName: row.eventName,
           amount: Number(row.amount),
         }));
       if (cleanedLineItems.length === 0) {
-        setFormError('Add at least one planned event with a cost.');
+        setFormError('Add at least one planned event with a cost — pick an existing event or create a new one.');
         return;
       }
       const total = cleanedLineItems.reduce((sum, li) => sum + li.amount, 0);
-      addBudget({
+      payload = {
         type: 'monthly',
+        eventId: undefined,
+        eventName: undefined,
         month,
         amount: total,
         lineItems: cleanedLineItems,
         notes: notes.trim() || undefined,
+      };
+    }
+
+    if (editingBudget) {
+      updateBudget(editingBudget.id, payload, user?.name || 'Centre Head');
+    } else {
+      addBudget({
+        ...(payload as Omit<BudgetItem, 'id' | 'status' | 'submittedAt'>),
         submittedBy: user?.name || 'Centre Head',
         submittedByEmail: user?.email,
       });
@@ -166,8 +296,15 @@ export default function BudgetPage() {
 
     setBudgets(getBudgets());
     setIsModalOpen(false);
+    setEditingBudget(null);
     resetForm();
-    triggerToast('Budget request submitted to the Finance Head.');
+    triggerToast(
+      editingBudget
+        ? (editingBudget.status === 'Approved'
+            ? 'Budget request updated — sent back to the Finance Head for re-approval.'
+            : 'Budget request updated.')
+        : 'Budget request submitted to the Finance Head.'
+    );
   };
 
   const handleDecide = (status: 'Approved' | 'Rejected') => {
@@ -223,13 +360,74 @@ export default function BudgetPage() {
     ? budgets
     : budgets.filter(b => (user?.email && b.submittedByEmail === user.email) || b.submittedBy === user?.name);
 
-  const pendingCount = visibleBudgets.filter(b => b.status === 'Pending').length;
+  const pendingBudgets = visibleBudgets.filter(b => b.status === 'Pending');
+  const approvedBudgets = visibleBudgets.filter(b => b.status === 'Approved');
+  const rejectedBudgets = visibleBudgets.filter(b => b.status === 'Rejected');
+  const pendingCount = pendingBudgets.length;
+
+  const isOwnBudget = (b: BudgetItem) => (user?.email && b.submittedByEmail === user.email) || b.submittedBy === user?.name;
 
   const statusBadge = (status: BudgetItem['status']) => {
     if (status === 'Approved') return 'bg-success/15 text-success border border-success/20';
     if (status === 'Rejected') return 'bg-danger/15 text-danger border border-danger/20';
     return 'bg-warning/15 text-warning border border-warning/20';
   };
+
+  const renderBudgetCard = (b: BudgetItem) => (
+    <div key={b.id} className="p-4 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2 text-xs">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <span className="font-bold text-theme-text-primary">
+            {b.type === 'event' ? (b.eventName || 'Event') : `Monthly — ${b.month}`}
+          </span>
+          <p className="text-[11px] text-theme-text-secondary">
+            Submitted by {b.submittedBy} on {b.submittedAt}
+          </p>
+        </div>
+        <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${statusBadge(b.status)}`}>
+          {b.status}
+        </span>
+      </div>
+      <p className="text-sm font-bold text-accent">₹{b.amount.toLocaleString()}</p>
+      {b.lineItems && b.lineItems.length > 0 && (
+        <ul className="pl-1 space-y-0.5 border-l-2 border-theme-border/30">
+          {b.lineItems.map((li, i) => (
+            <li key={i} className="pl-2 flex items-center justify-between text-[11px] text-theme-text-secondary">
+              <span>{li.eventName}</span>
+              <span className="font-mono">₹{li.amount.toLocaleString()}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {b.notes && <p className="text-[11px] text-theme-text-secondary italic">"{b.notes}"</p>}
+      {b.decidedBy && (
+        <p className="text-[10px] text-theme-text-secondary">
+          Decision by {b.decidedBy} on {b.decidedAt}{b.decisionNotes ? ` — "${b.decisionNotes}"` : ''}
+        </p>
+      )}
+      <div className="flex gap-2 pt-1">
+        {canDecide && b.status === 'Pending' && (
+          <button
+            onClick={() => setDecidingBudget(b)}
+            className="flex-1 py-1.5 bg-accent hover:bg-primary-light text-white font-semibold text-[11px] rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1"
+          >
+            Review Request
+            <ArrowRight className="h-3 w-3" />
+          </button>
+        )}
+        {canSubmit && isOwnBudget(b) && (
+          <button
+            onClick={() => openEditModal(b)}
+            title={b.status === 'Approved' ? 'Editing this will send it back to the Finance Head for re-approval' : 'Edit request'}
+            className="flex-1 py-1.5 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary font-semibold text-[11px] rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1"
+          >
+            <Edit2 className="h-3 w-3" />
+            {b.status === 'Approved' ? 'Edit (Needs Re-approval)' : 'Edit Request'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div className="p-6 md:p-8 space-y-6">
@@ -324,68 +522,58 @@ export default function BudgetPage() {
       )}
 
       {/* Budget Requests */}
-      <div className="glass-panel rounded-2xl p-6 space-y-4">
-        <h3 className="text-sm font-bold text-theme-text-primary">
-          {canDecide ? `Budget Requests (${visibleBudgets.length})` : `My Budget Requests (${visibleBudgets.length})`}
-          {pendingCount > 0 && (
-            <span className="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-warning/15 text-warning border border-warning/20">
-              {pendingCount} pending
-            </span>
+      <div className="glass-panel rounded-2xl p-6 space-y-5">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h3 className="text-sm font-bold text-theme-text-primary">
+            {canDecide ? 'Budget Requests' : 'My Budget Requests'}
+            {pendingCount > 0 && (
+              <span className="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-warning/15 text-warning border border-warning/20">
+                {pendingCount} pending
+              </span>
+            )}
+          </h3>
+          {rejectedBudgets.length > 0 && (
+            <button
+              onClick={() => setShowRejected(v => !v)}
+              className="flex items-center gap-1.5 text-[11px] font-semibold text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
+            >
+              {showRejected ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              {showRejected ? 'Hide' : 'Show'} Rejected ({rejectedBudgets.length})
+            </button>
           )}
-        </h3>
+        </div>
 
         {visibleBudgets.length === 0 ? (
           <div className="text-center py-10 text-theme-text-secondary text-xs bg-theme-border/5 rounded-xl border border-theme-border/20">
             No budget requests {canDecide ? 'submitted yet' : 'submitted by you yet'}.
           </div>
         ) : (
-          <div className="space-y-2.5">
-            {visibleBudgets.map(b => (
-              <div key={b.id} className="p-4 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2 text-xs">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <span className="font-bold text-theme-text-primary">
-                      {b.type === 'event' ? (b.eventName || 'Event') : `Monthly — ${b.month}`}
-                    </span>
-                    <p className="text-[11px] text-theme-text-secondary">
-                      Submitted by {b.submittedBy} on {b.submittedAt}
-                    </p>
-                  </div>
-                  <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${statusBadge(b.status)}`}>
-                    {b.status}
-                  </span>
-                </div>
-                <p className="text-sm font-bold text-accent">₹{b.amount.toLocaleString()}</p>
-                {b.lineItems && b.lineItems.length > 0 && (
-                  <ul className="pl-1 space-y-0.5 border-l-2 border-theme-border/30">
-                    {b.lineItems.map((li, i) => (
-                      <li key={i} className="pl-2 flex items-center justify-between text-[11px] text-theme-text-secondary">
-                        <span>{li.eventName}</span>
-                        <span className="font-mono">₹{li.amount.toLocaleString()}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {b.notes && <p className="text-[11px] text-theme-text-secondary italic">"{b.notes}"</p>}
-                {b.decidedBy && (
-                  <p className="text-[10px] text-theme-text-secondary">
-                    Decision by {b.decidedBy} on {b.decidedAt}{b.decisionNotes ? ` — "${b.decisionNotes}"` : ''}
-                  </p>
-                )}
-                {canDecide && b.status === 'Pending' && (
-                  <div className="flex gap-2 pt-1">
-                    <button
-                      onClick={() => setDecidingBudget(b)}
-                      className="flex-1 py-1.5 bg-accent hover:bg-primary-light text-white font-semibold text-[11px] rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1"
-                    >
-                      Review Request
-                      <ArrowRight className="h-3 w-3" />
-                    </button>
-                  </div>
-                )}
+          <>
+            {pendingBudgets.length > 0 && (
+              <div className="space-y-2.5">
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-warning">Pending Review</h4>
+                <div className="space-y-2.5">{pendingBudgets.map(renderBudgetCard)}</div>
               </div>
-            ))}
-          </div>
+            )}
+
+            <div className="space-y-2.5">
+              <h4 className="text-[11px] font-bold uppercase tracking-wider text-success">Approved</h4>
+              {approvedBudgets.length === 0 ? (
+                <div className="text-center py-6 text-theme-text-secondary text-xs bg-theme-border/5 rounded-xl border border-theme-border/20">
+                  No approved budgets yet.
+                </div>
+              ) : (
+                <div className="space-y-2.5">{approvedBudgets.map(renderBudgetCard)}</div>
+              )}
+            </div>
+
+            {showRejected && rejectedBudgets.length > 0 && (
+              <div className="space-y-2.5">
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-danger">Rejected</h4>
+                <div className="space-y-2.5">{rejectedBudgets.map(renderBudgetCard)}</div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -394,14 +582,23 @@ export default function BudgetPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="glass-panel w-full max-w-md rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl">
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-theme-text-primary">Request Budget</h2>
+              <h2 className="text-base font-bold text-theme-text-primary">
+                {editingBudget ? 'Edit Budget Request' : 'Request Budget'}
+              </h2>
               <button
-                onClick={() => setIsModalOpen(false)}
+                onClick={() => { setIsModalOpen(false); setEditingBudget(null); }}
                 className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
+
+            {editingBudget?.status === 'Approved' && (
+              <div className="p-3 bg-warning/10 border border-warning/25 rounded-xl text-warning text-xs flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4 shrink-0" />
+                <span>This request was already Approved. Saving changes sends it back to the Finance Head for re-approval.</span>
+              </div>
+            )}
 
             {formError && (
               <div className="p-3 bg-danger/10 border border-danger/25 rounded-xl text-danger text-xs flex items-center gap-2">
@@ -475,27 +672,38 @@ export default function BudgetPage() {
                   <div className="space-y-2">
                     {monthlyLineItems.map((row, index) => (
                       <div key={index} className="flex items-center gap-1.5">
-                        <select
-                          value={row.eventId}
-                          onChange={e => {
-                            const ev = events.find(ev2 => ev2.id === e.target.value);
-                            updateLineItemRow(index, { eventId: e.target.value, eventName: ev ? ev.title : row.eventName });
-                          }}
-                          className="w-28 shrink-0 px-2 py-2 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary text-[11px] focus:outline-none focus:border-accent"
+                        {row.eventId ? (
+                          <button
+                            type="button"
+                            onClick={() => updateLineItemRow(index, { eventId: '', eventName: '' })}
+                            title="Click to change the linked event"
+                            className="flex-1 min-w-0 px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary truncate text-left cursor-pointer hover:border-accent"
+                          >
+                            {row.eventName}
+                          </button>
+                        ) : (
+                          <select
+                            value=""
+                            onChange={e => {
+                              const ev = events.find(ev2 => ev2.id === e.target.value);
+                              if (ev) updateLineItemRow(index, { eventId: ev.id, eventName: ev.title });
+                            }}
+                            className="flex-1 min-w-0 px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent"
+                          >
+                            <option value="">-- Select Event --</option>
+                            {events.map(ev => (
+                              <option key={ev.id} value={ev.id}>{ev.title}</option>
+                            ))}
+                          </select>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => openCreateEventModal(index)}
+                          title="Create a new event for this line item"
+                          className="h-9 w-9 shrink-0 flex items-center justify-center rounded-lg bg-accent/10 hover:bg-accent/20 text-accent transition-all cursor-pointer"
                         >
-                          <option value="">Not yet created</option>
-                          {events.map(ev => (
-                            <option key={ev.id} value={ev.id}>{ev.title}</option>
-                          ))}
-                        </select>
-                        <input
-                          type="text"
-                          value={row.eventName}
-                          onChange={e => updateLineItemRow(index, { eventName: e.target.value })}
-                          placeholder="Event name"
-                          disabled={!!row.eventId}
-                          className="flex-1 min-w-0 px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent disabled:opacity-60"
-                        />
+                          <CalendarPlus className="h-4 w-4" />
+                        </button>
                         <input
                           type="number"
                           min="1"
@@ -515,6 +723,9 @@ export default function BudgetPage() {
                       </div>
                     ))}
                   </div>
+                  <p className="text-[10px] text-theme-text-secondary">
+                    Pick an existing event, or tap <CalendarPlus className="h-2.5 w-2.5 inline" /> to create a new one on the spot — it's added to the Events module and Calendar immediately.
+                  </p>
                   <div className="flex items-center justify-between pt-1.5 border-t border-theme-border/20">
                     <span className="font-semibold text-theme-text-secondary">Monthly Total</span>
                     <span className="text-sm font-bold text-accent">₹{monthlyTotal.toLocaleString()}</span>
@@ -537,7 +748,9 @@ export default function BudgetPage() {
                 type="submit"
                 className="w-full py-3 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer mt-2"
               >
-                Submit to Finance Head
+                {editingBudget
+                  ? (editingBudget.status === 'Approved' ? 'Save & Send for Re-approval' : 'Save Changes')
+                  : 'Submit to Finance Head'}
               </button>
             </form>
           </div>
@@ -604,6 +817,115 @@ export default function BudgetPage() {
                 Approve
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Event Modal — for a monthly line item, opened over the Request Budget modal */}
+      {isCreateEventModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="glass-panel w-full max-w-sm rounded-3xl p-6 flex flex-col space-y-4 relative border border-white/15 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-theme-text-primary flex items-center gap-1.5">
+                <CalendarPlus className="h-4 w-4 text-accent" />
+                Create New Event
+              </h2>
+              <button
+                onClick={() => setIsCreateEventModalOpen(false)}
+                className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {newEventError && (
+              <div className="p-3 bg-danger/10 border border-danger/25 rounded-xl text-danger text-xs flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4 shrink-0" />
+                <span>{newEventError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCreateEventForLineItem} className="space-y-3 text-xs">
+              <div className="space-y-1.5">
+                <label className="block font-medium text-theme-text-secondary">Event Title *</label>
+                <input
+                  type="text"
+                  value={newEventTitle}
+                  onChange={e => setNewEventTitle(e.target.value)}
+                  placeholder="e.g. Freshers Orientation"
+                  className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">Campus</label>
+                  <select
+                    value={newEventCampus}
+                    onChange={e => setNewEventCampus(e.target.value as any)}
+                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  >
+                    <option value="GG Campus">GG Campus</option>
+                    <option value="RTC Campus">RTC Campus</option>
+                    <option value="Both Campuses">Both Campuses</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">Location</label>
+                  <input
+                    type="text"
+                    value={newEventLocation}
+                    onChange={e => setNewEventLocation(e.target.value)}
+                    placeholder="Optional"
+                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  />
+                </div>
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer font-medium text-theme-text-primary">
+                <input
+                  type="checkbox"
+                  checked={newEventDatesTBD}
+                  onChange={e => setNewEventDatesTBD(e.target.checked)}
+                  className="accent-accent"
+                />
+                Dates To Be Decided
+              </label>
+
+              {!newEventDatesTBD && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="block font-medium text-theme-text-secondary">Start Date *</label>
+                    <input
+                      type="date"
+                      value={newEventStartDate}
+                      onChange={e => setNewEventStartDate(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block font-medium text-theme-text-secondary">End Date *</label>
+                    <input
+                      type="date"
+                      value={newEventEndDate}
+                      onChange={e => setNewEventEndDate(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <p className="text-[10px] text-theme-text-secondary">
+                This creates a real event in the Events module and Calendar, with its own default sub-committees, immediately.
+              </p>
+
+              <button
+                type="submit"
+                className="w-full py-2.5 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer mt-1"
+              >
+                Create Event
+              </button>
+            </form>
           </div>
         </div>
       )}
