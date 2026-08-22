@@ -328,6 +328,59 @@ function ensureStaleEmailsFixed(): Promise<void> {
   return staleEmailFixPromise;
 }
 
+const REMOVED_SEED_MEMBER_IDS = new Set([
+  'm5', 'm6', 'm8', 'm13', 'm14', 'm15', 'm16', 'm17', 'm18', 'm19',
+  'm20', 'm21', 'm22', 'm23', 'm24', 'm25', 'm26', 'm27', 'm28', 'm29',
+  'm30', 'm31', 'm32', 'm33', 'm34', 'm35'
+]);
+
+let productionRosterPrunePromise: Promise<void> | null = null;
+function ensureProductionRosterPruned(): Promise<void> {
+  if (!productionRosterPrunePromise) {
+    productionRosterPrunePromise = (async () => {
+      try {
+        const raw = await fs.readFile(collectionPath('members'), 'utf-8');
+        const parsed = JSON.parse(raw);
+        let jsonContent: any = parsed;
+        if (isEncryptedPayload(parsed)) {
+          try {
+            jsonContent = JSON.parse(decryptData(parsed));
+          } catch {
+            return;
+          }
+        }
+        if (!Array.isArray(jsonContent)) return;
+
+        let changed = false;
+        const updated = jsonContent
+          .filter((m: any) => !REMOVED_SEED_MEMBER_IDS.has(m?.id))
+          .map((m: any) => {
+            if (['m2', 'm3', 'm4', 'm7', 'm10', 'm11', 'm12'].includes(m?.id)) {
+              if (m.division !== 'Faculty') {
+                changed = true;
+                return { ...m, division: 'Faculty' };
+              }
+            }
+            return m;
+          });
+
+        if (updated.length < jsonContent.length) {
+          changed = true;
+        }
+
+        if (changed) {
+          await writeCollectionFile('members', updated);
+        }
+      } catch (err: any) {
+        if (err?.code !== 'ENOENT') {
+          console.error('[server-db] Production roster prune check failed:', err);
+        }
+      }
+    })();
+  }
+  return productionRosterPrunePromise;
+}
+
 async function migrateDesignFilesToDisk(): Promise<void> {
   let designs: any[];
   try {
@@ -400,6 +453,7 @@ async function readCollectionFile<T = any>(key: keyof DbSchema): Promise<T[]> {
   await ensureFilesMigrated();
   await ensureSubhadeepEmailFixed();
   await ensureStaleEmailsFixed();
+  await ensureProductionRosterPruned();
   try {
     const raw = await fs.readFile(collectionPath(key), 'utf-8');
     const parsed = JSON.parse(raw);

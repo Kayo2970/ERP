@@ -643,16 +643,25 @@ export function getMembers(): Member[] {
   if (saved) {
     try {
       const parsed = JSON.parse(saved);
-      // Migrate legacy members without division
-      return parsed.map((m: any) => {
-        if (!m.division) {
-          if (m.tier <= 4) m.division = 'Advisory Board';
-          else if (m.tier === 5) m.division = 'Core Committee';
-          else if (m.tier === 7) m.division = 'Alumni';
-          else m.division = 'Training Associate';
+      if (Array.isArray(parsed)) {
+        const REMOVED_IDS = new Set(['m5', 'm6', 'm8', 'm13', 'm14', 'm15', 'm16', 'm17', 'm18', 'm19', 'm20', 'm21', 'm22', 'm23', 'm24', 'm25', 'm26', 'm27', 'm28', 'm29', 'm30', 'm31', 'm32', 'm33', 'm34', 'm35']);
+        const filtered = parsed.filter((m: any) => !REMOVED_IDS.has(m?.id)).map((m: any) => {
+          if (!m.division) {
+            if (m.tier <= 4) m.division = 'Faculty';
+            else if (m.tier === 5) m.division = 'Core Committee';
+            else if (m.tier === 7) m.division = 'Alumni';
+            else m.division = 'Training Associate';
+          }
+          if (['m2', 'm3', 'm4', 'm7', 'm10', 'm11', 'm12'].includes(m?.id)) {
+            m.division = 'Faculty';
+          }
+          return m;
+        });
+        if (filtered.length < parsed.length) {
+          localStorage.setItem('leads_members', JSON.stringify(filtered));
         }
-        return m;
-      });
+        return filtered;
+      }
     } catch (e) {
       console.error(e);
     }
