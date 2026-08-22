@@ -23,15 +23,34 @@ import {
   ChevronDown,
   ChevronUp,
   ShieldCheck,
-  Rocket
+  Rocket,
+  Clock,
+  Inbox,
+  Play,
+  Filter
 } from 'lucide-react';
 import { EmailSettings, EmailLog } from '@/lib/email-service';
+import { isCentreHead } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 
+interface PendingQueueItem {
+  email: string;
+  assigneeName: string;
+  taskCount: number;
+  tasks: Array<{
+    id: string;
+    title: string;
+    event?: string;
+    dueDate?: string;
+    creatorName?: string;
+    assignedAt: string;
+  }>;
+}
+
 export default function EmailManagementPage() {
   const [user, setUser] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'settings' | 'client' | 'outbox'>('settings');
+  const [activeTab, setActiveTab] = useState<'outbox' | 'queue' | 'composer' | 'settings'>('outbox');
 
   // Email Settings Form State
   const [settings, setSettings] = useState<EmailSettings>({
@@ -65,11 +84,16 @@ export default function EmailManagementPage() {
   const [isSendingDispatch, setIsSendingDispatch] = useState(false);
   const [showDispatchConfirm, setShowDispatchConfirm] = useState(false);
 
-  // Outbox Logs State
+  // Outbox & Audit Logs State
   const [outboxLogs, setOutboxLogs] = useState<EmailLog[]>([]);
   const [logSearchQuery, setLogSearchQuery] = useState('');
   const [logStatusFilter, setLogStatusFilter] = useState<'ALL' | 'SENT' | 'FAILED'>('ALL');
+  const [logCategoryFilter, setLogCategoryFilter] = useState<string>('ALL');
   const [selectedLog, setSelectedLog] = useState<EmailLog | null>(null);
+
+  // Pending Buffer Queues State
+  const [pendingQueues, setPendingQueues] = useState<PendingQueueItem[]>([]);
+  const [isFlushingQueue, setIsFlushingQueue] = useState<string | null>(null);
 
   // Toast notifications
   const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -87,6 +111,7 @@ export default function EmailManagementPage() {
     }
     fetchSettings();
     fetchLogs();
+    fetchQueues();
   }, []);
 
   const triggerToast = (type: 'success' | 'error', text: string) => {
@@ -115,6 +140,40 @@ export default function EmailManagementPage() {
       }
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const fetchQueues = async () => {
+    try {
+      const res = await fetch('/api/email/queue');
+      if (res.ok) {
+        const data = await res.json();
+        setPendingQueues(data.queues || []);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleFlushQueue = async (email: string) => {
+    setIsFlushingQueue(email);
+    try {
+      const res = await fetch('/api/email/queue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      if (res.ok) {
+        triggerToast('success', `Flushed and dispatched task digest email to ${email}`);
+        fetchQueues();
+        fetchLogs();
+      } else {
+        triggerToast('error', 'Failed to flush queue.');
+      }
+    } catch (err: any) {
+      triggerToast('error', err?.message || 'Error flushing queue');
+    } finally {
+      setIsFlushingQueue(null);
     }
   };
 
@@ -257,6 +316,7 @@ export default function EmailManagementPage() {
   // Filter Outbox Logs
   const filteredLogs = outboxLogs.filter(log => {
     if (logStatusFilter !== 'ALL' && log.status !== logStatusFilter) return false;
+    if (logCategoryFilter !== 'ALL' && log.category !== logCategoryFilter) return false;
     const q = logSearchQuery.toLowerCase();
     return !q || log.to.toLowerCase().includes(q) || log.subject.toLowerCase().includes(q) || log.category.toLowerCase().includes(q);
   });
@@ -265,17 +325,19 @@ export default function EmailManagementPage() {
   const sentCount = outboxLogs.filter(l => l.status === 'SENT').length;
   const failedCount = outboxLogs.filter(l => l.status === 'FAILED').length;
 
-  // Super User Gate
-  if (user && user.tier !== 1) {
+  // Strict Access Guard — Centre Head / Super User Only
+  const isAuthorized = user && (user.tier === 1 || isCentreHead(user));
+
+  if (user && !isAuthorized) {
     return (
       <div className="p-8 max-w-2xl mx-auto">
         <div className="glass-panel p-8 rounded-3xl border border-danger/30 text-center space-y-4 shadow-2xl">
           <div className="h-16 w-16 bg-danger/15 rounded-2xl flex items-center justify-center mx-auto text-danger border border-danger/25">
             <Lock className="h-8 w-8" />
           </div>
-          <h2 className="text-xl font-bold text-theme-text-primary">Super User Authorization Required</h2>
+          <h2 className="text-xl font-bold text-theme-text-primary">Centre Head Access Only</h2>
           <p className="text-xs text-theme-text-secondary leading-relaxed">
-            The Email Client and SMTP Server Management Module handles global email server configurations, App Passwords, and mail server dispatches. Access is strictly reserved for Tier-1 Super Users.
+            The Mailroom Audit Portal handles global SMTP server configurations, outbox delivery logs, dispatch queues, and system transmission histories. Access is strictly restricted to the Centre Head.
           </p>
         </div>
       </div>
@@ -304,22 +366,64 @@ export default function EmailManagementPage() {
             <div className="p-2 rounded-xl bg-accent/15 text-accent border border-accent/20">
               <Mail className="h-5 w-5" />
             </div>
-            <h1 className="text-xl font-bold text-theme-text-primary">Email Client & Server Management Desk</h1>
+            <h1 className="text-xl font-bold text-theme-text-primary">Centre Head Operational Mailbox & Audit Desk</h1>
           </div>
           <p className="text-xs text-theme-text-secondary">
-            Configure SMTP credentials (Gmail, Outlook 365, Custom), test mail server health, and compose broadcast announcements.
+            View outbox dispatch histories, inspect pending email queues, compose broadcasts, and manage SMTP mail servers.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-semibold px-3 py-1 bg-accent/15 text-accent rounded-xl border border-accent/20 flex items-center gap-1.5">
             <Server className="h-3.5 w-3.5" />
-            Provider: {settings.provider.toUpperCase()}
+            SMTP Relay: {settings.provider.toUpperCase()}
           </span>
         </div>
       </div>
 
-      {/* Tab Navigation */}
+      {/* Mailbox Suite Tab Navigation */}
       <div className="flex items-center gap-2 border-b border-theme-border/30 pb-3 text-xs font-semibold overflow-x-auto">
+        <button
+          onClick={() => setActiveTab('outbox')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all cursor-pointer ${
+            activeTab === 'outbox' 
+              ? 'bg-accent text-white shadow-md shadow-accent/20' 
+              : 'text-theme-text-secondary hover:bg-theme-border/20'
+          }`}
+        >
+          <Inbox className="h-4 w-4" />
+          Sent Outbox & Delivery Audit ({totalLogs})
+        </button>
+
+        <button
+          onClick={() => {
+            setActiveTab('queue');
+            fetchQueues();
+          }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all cursor-pointer relative ${
+            activeTab === 'queue' 
+              ? 'bg-accent text-white shadow-md shadow-accent/20' 
+              : 'text-theme-text-secondary hover:bg-theme-border/20'
+          }`}
+        >
+          <Clock className="h-4 w-4" />
+          Sending Queue & Buffers ({pendingQueues.length})
+          {pendingQueues.length > 0 && (
+            <span className="h-2 w-2 rounded-full bg-amber-400 animate-ping absolute top-1 right-1" />
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('composer')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all cursor-pointer ${
+            activeTab === 'composer' 
+              ? 'bg-accent text-white shadow-md shadow-accent/20' 
+              : 'text-theme-text-secondary hover:bg-theme-border/20'
+          }`}
+        >
+          <Send className="h-4 w-4" />
+          Compose Broadcast
+        </button>
+
         <button
           onClick={() => setActiveTab('settings')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all cursor-pointer ${
@@ -331,37 +435,366 @@ export default function EmailManagementPage() {
           <Server className="h-4 w-4" />
           SMTP Server Credentials
         </button>
-
-        <button
-          onClick={() => setActiveTab('client')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all cursor-pointer ${
-            activeTab === 'client' 
-              ? 'bg-accent text-white shadow-md shadow-accent/20' 
-              : 'text-theme-text-secondary hover:bg-theme-border/20'
-          }`}
-        >
-          <Send className="h-4 w-4" />
-          Email Client & Composer
-        </button>
-
-        <button
-          onClick={() => setActiveTab('outbox')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all cursor-pointer ${
-            activeTab === 'outbox' 
-              ? 'bg-accent text-white shadow-md shadow-accent/20' 
-              : 'text-theme-text-secondary hover:bg-theme-border/20'
-          }`}
-        >
-          <FileText className="h-4 w-4" />
-          Sent Outbox & Logs ({totalLogs})
-        </button>
       </div>
 
-      {/* TAB 1: SMTP Server Settings & Diagnostics */}
+      {/* TAB 1: SENT OUTBOX & DELIVERY AUDIT LOGS */}
+      {activeTab === 'outbox' && (
+        <div className="glass-panel p-6 rounded-3xl space-y-5 border border-theme-card-border">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-base font-bold text-theme-text-primary flex items-center gap-2">
+                <FileText className="h-4 w-4 text-accent" />
+                Sent Email History & Operational Audit Logs
+              </h3>
+              <p className="text-xs text-theme-text-secondary">Comprehensive history of every email notification, OTP, task digest, and announcement dispatched.</p>
+            </div>
+
+            <button
+              onClick={fetchLogs}
+              className="px-3 py-1.5 bg-theme-border/20 hover:bg-theme-border/40 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Refresh Outbox Logs
+            </button>
+          </div>
+
+          {/* Outbox Metrics Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="p-4 bg-theme-border/10 rounded-2xl border border-theme-border/20 space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-theme-text-secondary">Total Sent Emails</span>
+              <h4 className="text-2xl font-bold text-theme-text-primary">{totalLogs}</h4>
+            </div>
+
+            <div className="p-4 bg-success/10 rounded-2xl border border-success/20 space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-success">Successful Handshakes</span>
+              <h4 className="text-2xl font-bold text-success">{sentCount}</h4>
+            </div>
+
+            <div className="p-4 bg-danger/10 rounded-2xl border border-danger/20 space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-danger">Delivery Failures</span>
+              <h4 className="text-2xl font-bold text-danger">{failedCount}</h4>
+            </div>
+          </div>
+
+          {/* Filters & Search */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <div className="relative w-full sm:w-80">
+              <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-theme-text-secondary" />
+              <input
+                type="text"
+                value={logSearchQuery}
+                onChange={e => setLogSearchQuery(e.target.value)}
+                placeholder="Search recipient email, subject line, category..."
+                className="w-full pl-9 pr-3 py-2 bg-theme-background/40 border border-theme-card-border rounded-xl text-xs text-theme-text-primary focus:outline-none focus:border-accent"
+              />
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <Filter className="h-3.5 w-3.5 text-theme-text-secondary shrink-0" />
+                <select
+                  value={logStatusFilter}
+                  onChange={e => setLogStatusFilter(e.target.value as any)}
+                  className="px-3 py-1.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-xs text-theme-text-primary focus:outline-none"
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="SENT">Sent Successfully</option>
+                  <option value="FAILED">Delivery Failed</option>
+                </select>
+              </div>
+
+              <select
+                value={logCategoryFilter}
+                onChange={e => setLogCategoryFilter(e.target.value)}
+                className="px-3 py-1.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-xs text-theme-text-primary focus:outline-none"
+              >
+                <option value="ALL">All Categories</option>
+                <option value="ANNOUNCEMENT">Announcements</option>
+                <option value="DIRECT_MESSAGE">Direct Messages</option>
+                <option value="SYSTEM">System Broadcasts</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Logs Table */}
+          {filteredLogs.length === 0 ? (
+            <EmptyState
+              icon={Mail}
+              title="No email logs found"
+              description="Dispatched emails and server delivery records will appear here."
+            />
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-theme-border/20">
+              <table className="w-full text-left text-xs text-theme-text-primary">
+                <thead className="bg-theme-border/15 text-[11px] uppercase tracking-wider text-theme-text-secondary border-b border-theme-border/20">
+                  <tr>
+                    <th className="p-3.5 font-bold">Status</th>
+                    <th className="p-3.5 font-bold">Recipient Email</th>
+                    <th className="p-3.5 font-bold">Subject Line</th>
+                    <th className="p-3.5 font-bold">Category</th>
+                    <th className="p-3.5 font-bold">Dispatched Date</th>
+                    <th className="p-3.5 font-bold text-right">Inspect Payload</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-theme-border/15">
+                  {filteredLogs.map(log => (
+                    <tr key={log.id} className="hover:bg-theme-border/10 transition-colors">
+                      <td className="p-3.5">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                          log.status === 'SENT' 
+                            ? 'bg-success/15 text-success border border-success/20' 
+                            : 'bg-danger/15 text-danger border border-danger/20'
+                        }`}>
+                          {log.status === 'SENT' ? 'DELIVERED / SENT' : 'FAILED'}
+                        </span>
+                      </td>
+                      <td className="p-3.5 font-semibold text-theme-text-primary">{log.to}</td>
+                      <td className="p-3.5 max-w-xs truncate font-medium">{log.subject}</td>
+                      <td className="p-3.5">
+                        <span className="px-2 py-0.5 bg-accent/10 text-accent rounded-md font-mono text-[10px]">
+                          {log.category}
+                        </span>
+                      </td>
+                      <td className="p-3.5 text-theme-text-secondary text-[11px] whitespace-nowrap">
+                        {new Date(log.sentAt).toLocaleString()}
+                      </td>
+                      <td className="p-3.5 text-right">
+                        <button
+                          onClick={() => setSelectedLog(log)}
+                          className="px-2.5 py-1 bg-accent/15 hover:bg-accent/25 text-accent text-[11px] font-bold rounded-lg border border-accent/20 transition-all cursor-pointer"
+                        >
+                          Inspect Payload
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 2: SENDING QUEUE & BUFFERS */}
+      {activeTab === 'queue' && (
+        <div className="glass-panel p-6 rounded-3xl space-y-5 border border-theme-card-border">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-base font-bold text-theme-text-primary flex items-center gap-2">
+                <Clock className="h-4 w-4 text-accent" />
+                Active Sending Queues & Debounced Buffers
+              </h3>
+              <p className="text-xs text-theme-text-secondary">Inspect task assignment digest queues currently held in the 10-minute quiet buffer before dispatch.</p>
+            </div>
+
+            <button
+              onClick={fetchQueues}
+              className="px-3 py-1.5 bg-theme-border/20 hover:bg-theme-border/40 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Refresh Queues
+            </button>
+          </div>
+
+          {pendingQueues.length === 0 ? (
+            <EmptyState
+              icon={CheckCircle2}
+              title="No pending email queues"
+              description="All task assignment digests and notifications have been flushed and dispatched."
+            />
+          ) : (
+            <div className="space-y-4">
+              {pendingQueues.map(q => (
+                <div key={q.email} className="p-5 bg-theme-background/30 border border-theme-card-border rounded-2xl space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-theme-border/20 pb-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-theme-text-primary">{q.assigneeName}</span>
+                        <span className="text-xs text-accent font-mono">({q.email})</span>
+                      </div>
+                      <span className="text-[10px] text-amber-400 font-semibold flex items-center gap-1 mt-1">
+                        <Clock className="h-3 w-3" /> 10-Minute Buffer Active ({q.taskCount} queued task notifications)
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={() => handleFlushQueue(q.email)}
+                      disabled={isFlushingQueue === q.email}
+                      className="px-4 py-2 bg-accent hover:bg-primary-light text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-accent/20 cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shrink-0"
+                    >
+                      <Play className="h-3.5 w-3.5" />
+                      {isFlushingQueue === q.email ? 'Flushing Email...' : 'Dispatch Digest Now'}
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    <span className="text-[11px] font-bold text-theme-text-secondary block">Queued Tasks in Digest Payload:</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {q.tasks.map(t => (
+                        <div key={t.id} className="p-2.5 bg-theme-background/60 rounded-xl border border-theme-border/20 text-xs">
+                          <span className="font-bold text-theme-text-primary block">{t.title}</span>
+                          <span className="text-[10px] text-theme-text-secondary block">Context: {t.event || 'LEADS Operations'} &middot; Due: {t.dueDate}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 3: COMPOSE BROADCAST */}
+      {activeTab === 'composer' && (
+        <div className="glass-panel p-6 md:p-8 rounded-3xl space-y-6 border border-theme-card-border">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-theme-border/20 pb-4">
+            <div>
+              <h3 className="text-base font-bold text-theme-text-primary flex items-center gap-2">
+                <Send className="h-4 w-4 text-accent" />
+                Broadcast Email Composer
+              </h3>
+              <p className="text-xs text-theme-text-secondary mt-0.5">
+                Compose custom HTML/text email broadcasts to member divisions or individual recipients directly via your configured mail server.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPreviewTab('edit')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${
+                  previewTab === 'edit' ? 'bg-accent text-white' : 'bg-theme-border/20 text-theme-text-secondary'
+                }`}
+              >
+                Edit Content
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewTab('preview')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${
+                  previewTab === 'preview' ? 'bg-accent text-white' : 'bg-theme-border/20 text-theme-text-secondary'
+                }`}
+              >
+                Live Preview
+              </button>
+            </div>
+          </div>
+
+          {previewTab === 'edit' ? (
+            <div className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">Target Recipient Scope *</label>
+                  <select
+                    value={dispatchScope}
+                    onChange={e => setDispatchScope(e.target.value as any)}
+                    className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-semibold"
+                  >
+                    <option value="SINGLE">Single Recipient Email</option>
+                    <option value="All Members">All Members (Full Roster Broadcast)</option>
+                    <option value="Core Committee">Core Committee</option>
+                    <option value="Training Associate">Training Associates</option>
+                    <option value="Advisory Board">Advisory Board</option>
+                    <option value="Alumni">Alumni Roster</option>
+                  </select>
+                </div>
+
+                {dispatchScope === 'SINGLE' ? (
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <label className="block font-medium text-theme-text-secondary">Recipient Email Address *</label>
+                    <input
+                      type="email"
+                      required
+                      value={customRecipient}
+                      onChange={e => setCustomRecipient(e.target.value)}
+                      placeholder="student@msruas.ac.in"
+                      className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <label className="block font-medium text-theme-text-secondary">Category Tag</label>
+                    <select
+                      value={category}
+                      onChange={e => setCategory(e.target.value as any)}
+                      className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                    >
+                      <option value="ANNOUNCEMENT">Announcement Broadcast</option>
+                      <option value="DIRECT_MESSAGE">Direct Notification</option>
+                      <option value="SYSTEM">System Broadcast</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block font-medium text-theme-text-secondary">Subject Line *</label>
+                <input
+                  type="text"
+                  required
+                  value={subject}
+                  onChange={e => setSubject(e.target.value)}
+                  placeholder="e.g. [LEADS Announcement] General Body Meeting Schedule & Deliverables"
+                  className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-semibold"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block font-medium text-theme-text-secondary">Email Message Body *</label>
+                <textarea
+                  rows={8}
+                  required
+                  value={bodyText}
+                  onChange={e => setBodyText(e.target.value)}
+                  placeholder="Type message content here..."
+                  className="w-full px-4 py-3 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-mono text-xs leading-relaxed"
+                />
+              </div>
+
+              <div className="flex items-center justify-end pt-3">
+                <button
+                  type="button"
+                  disabled={!subject || !bodyText || (dispatchScope === 'SINGLE' && !customRecipient) || isSendingDispatch}
+                  onClick={() => setShowDispatchConfirm(true)}
+                  className="px-6 py-2.5 bg-accent hover:bg-primary-light text-white font-bold rounded-xl transition-all shadow-md shadow-accent/20 cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                >
+                  <Send className="h-4 w-4" />
+                  {isSendingDispatch ? 'Dispatching...' : 'Broadcast Email Payload'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Live HTML Preview Box */
+            <div className="space-y-4">
+              <div className="p-4 bg-theme-background/60 border border-theme-card-border rounded-2xl space-y-3">
+                <div className="border-b border-theme-border/20 pb-3 text-xs space-y-1">
+                  <p className="text-theme-text-secondary">From: <strong className="text-theme-text-primary">{settings.fromName} &lt;{settings.fromEmail}&gt;</strong></p>
+                  <p className="text-theme-text-secondary">To: <strong className="text-theme-text-primary">{dispatchScope === 'SINGLE' ? customRecipient || 'recipient@domain.com' : `[Broadcast Scope: ${dispatchScope}]`}</strong></p>
+                  <p className="text-theme-text-secondary">Subject: <strong className="text-accent">{subject || 'No Subject Provided'}</strong></p>
+                </div>
+                
+                <div className="p-6 bg-slate-900 text-slate-100 rounded-xl border border-slate-800 space-y-4 text-xs font-sans">
+                  <div className="border-b border-slate-800 pb-3">
+                    <h3 className="text-lg font-bold text-sky-400">{subject || 'Subject Line Preview'}</h3>
+                    <p className="text-[11px] text-slate-400 mt-1">Sender: {settings.fromName}</p>
+                  </div>
+                  <div className="whitespace-pre-wrap leading-relaxed text-slate-200">
+                    {bodyText || 'Your message text will appear here...'}
+                  </div>
+                  <div className="border-t border-slate-800 pt-3 text-[10px] text-slate-500 text-center">
+                    © 2026 {settings.fromName} &middot; MSRUAS Internal Operations Portal
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 4: SMTP SERVER SETTINGS */}
       {activeTab === 'settings' && (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          
-          {/* Main SMTP Config Form */}
           <div className="glass-panel p-6 rounded-3xl xl:col-span-2 space-y-6 border border-theme-card-border">
             <div>
               <h3 className="text-base font-bold text-theme-text-primary flex items-center gap-2">
@@ -479,20 +912,7 @@ export default function EmailManagementPage() {
                       <Rocket className="h-3.5 w-3.5 text-accent" />
                       Built-in Direct Send
                     </span>
-                    <p>The app itself resolves each recipient&apos;s mail server (MX record) and delivers straight to it — no Gmail/Outlook relay, no Postfix, nothing in between. There is no host/port/password to configure.</p>
-                    <p>This requires, on your own domain and VPS: MX/SPF/DKIM/DMARC DNS records, a reverse-DNS (PTR) record on the VPS&apos;s IP matching the HELO hostname below, and outbound TCP port 25 open (many hosts block it by default — check with your provider).</p>
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="block font-medium text-theme-text-secondary">HELO Hostname *</label>
-                    <input
-                      type="text"
-                      required
-                      value={settings.heloHostname || ''}
-                      onChange={e => setSettings(prev => ({ ...prev, heloHostname: e.target.value }))}
-                      placeholder="e.g. mail.leadsnextgencentre.cloud"
-                      className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                    />
-                    <p className="text-[10px] text-theme-text-secondary">Must match the PTR (reverse-DNS) record for the VPS&apos;s public IP, or receiving servers will reject the connection.</p>
+                    <p>The app itself resolves each recipient&apos;s mail server (MX record) and delivers straight to it — no Gmail/Outlook relay, no Postfix, nothing in between.</p>
                   </div>
                 </div>
               ) : (
@@ -584,63 +1004,6 @@ export default function EmailManagementPage() {
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-theme-border/20">
-                <button
-                  type="button"
-                  onClick={() => setShowDkimSection(v => !v)}
-                  className="w-full flex items-center justify-between py-2 cursor-pointer"
-                >
-                  <span className="flex items-center gap-1.5 font-bold text-theme-text-primary">
-                    <ShieldCheck className="h-4 w-4 text-accent" />
-                    DKIM Signing (Advanced)
-                  </span>
-                  {showDkimSection ? <ChevronUp className="h-4 w-4 text-theme-text-secondary" /> : <ChevronDown className="h-4 w-4 text-theme-text-secondary" />}
-                </button>
-
-                {showDkimSection && (
-                  <div className="space-y-3 pt-2">
-                    <p className="text-[11px] text-theme-text-secondary leading-relaxed">
-                      Automated mail relayed through a shared SMTP server (Postfix, a Workspace relay, etc.) often isn&apos;t signed on behalf of your own sending domain, which is one of the biggest reasons a recipient&apos;s server quietly spam-filters it even though the send itself &quot;succeeds.&quot; Signing it here — independent of whatever the relay does — is the single most effective fix. Requires publishing the matching public key as a DNS TXT record at <code className="text-accent">&lt;selector&gt;._domainkey.&lt;domain&gt;</code>.
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <label className="block font-medium text-theme-text-secondary">Signing Domain</label>
-                        <input
-                          type="text"
-                          value={settings.dkimDomain || ''}
-                          onChange={e => setSettings(prev => ({ ...prev, dkimDomain: e.target.value }))}
-                          placeholder="e.g. leadsnextgencentre.online"
-                          className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="block font-medium text-theme-text-secondary">DKIM Selector</label>
-                        <input
-                          type="text"
-                          value={settings.dkimSelector || ''}
-                          onChange={e => setSettings(prev => ({ ...prev, dkimSelector: e.target.value }))}
-                          placeholder="e.g. leads"
-                          className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="block font-medium text-theme-text-secondary">Private Key (PEM format)</label>
-                      <textarea
-                        value={settings.dkimPrivateKey || ''}
-                        onChange={e => setSettings(prev => ({ ...prev, dkimPrivateKey: e.target.value }))}
-                        placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
-                        rows={5}
-                        className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary font-mono text-[11px] focus:outline-none focus:border-accent"
-                      />
-                      <p className="text-[10px] text-theme-text-secondary">
-                        Leave all three fields blank to send unsigned (current behavior) — signing only activates once every field here is filled in.
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
               <div className="flex items-center justify-between pt-4 border-t border-theme-border/20">
                 <span className="text-[11px] text-theme-text-secondary">
                   Last updated: {settings.updatedAt ? new Date(settings.updatedAt).toLocaleString() : 'Not configured'}
@@ -657,7 +1020,6 @@ export default function EmailManagementPage() {
             </form>
           </div>
 
-          {/* Right Column: Connection Diagnostics & Live Test */}
           <div className="glass-panel p-6 rounded-3xl space-y-5 border border-theme-card-border flex flex-col justify-between">
             <div className="space-y-4">
               <h3 className="text-base font-bold text-theme-text-primary flex items-center gap-2">
@@ -689,7 +1051,6 @@ export default function EmailManagementPage() {
                 {isTestingSmtp ? 'Verifying SMTP Server...' : 'Test Connection & Send Email'}
               </button>
 
-              {/* Diagnostic Test Output Card */}
               {testResult && (
                 <div className={`p-4 rounded-2xl border text-xs space-y-2 animate-in fade-in duration-300 ${
                   testResult.success 
@@ -708,311 +1069,7 @@ export default function EmailManagementPage() {
                 </div>
               )}
             </div>
-
-            <div className="p-4 bg-theme-border/10 rounded-2xl border border-theme-border/20 space-y-2 text-[11px] text-theme-text-secondary">
-              <span className="font-bold text-theme-text-primary block">💡 Setup Guide for Gmail / Workspace:</span>
-              <p>1. Enable 2-Step Verification on your Google Account.</p>
-              <p>2. Generate a 16-character <strong>App Password</strong> under Security.</p>
-              <p>3. Paste the App Password into the Auth Secret field above.</p>
-            </div>
           </div>
-        </div>
-      )}
-
-      {/* TAB 2: Interactive Email Client & Custom Dispatcher */}
-      {activeTab === 'client' && (
-        <div className="glass-panel p-6 md:p-8 rounded-3xl space-y-6 border border-theme-card-border">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-theme-border/20 pb-4">
-            <div>
-              <h3 className="text-base font-bold text-theme-text-primary flex items-center gap-2">
-                <Send className="h-4 w-4 text-accent" />
-                Email Dispatcher & Announcement Composer
-              </h3>
-              <p className="text-xs text-theme-text-secondary mt-0.5">
-                Compose custom HTML/text email broadcasts to member divisions or individual recipients directly via your configured mail server.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setPreviewTab('edit')}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${
-                  previewTab === 'edit' ? 'bg-accent text-white' : 'bg-theme-border/20 text-theme-text-secondary'
-                }`}
-              >
-                Edit Content
-              </button>
-              <button
-                type="button"
-                onClick={() => setPreviewTab('preview')}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${
-                  previewTab === 'preview' ? 'bg-accent text-white' : 'bg-theme-border/20 text-theme-text-secondary'
-                }`}
-              >
-                Live Preview
-              </button>
-            </div>
-          </div>
-
-          {previewTab === 'edit' ? (
-            <div className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Target Recipient Scope *</label>
-                  <select
-                    value={dispatchScope}
-                    onChange={e => setDispatchScope(e.target.value as any)}
-                    className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-semibold"
-                  >
-                    <option value="SINGLE">Single Recipient Email</option>
-                    <option value="All Members">All Members (Full Roster Broadcast)</option>
-                    <option value="Core Committee">Core Committee</option>
-                    <option value="Training Associate">Training Associates</option>
-                    <option value="Advisory Board">Advisory Board</option>
-                    <option value="Alumni">Alumni Roster</option>
-                  </select>
-                </div>
-
-                {dispatchScope === 'SINGLE' ? (
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <label className="block font-medium text-theme-text-secondary">Recipient Email Address *</label>
-                    <input
-                      type="email"
-                      required
-                      value={customRecipient}
-                      onChange={e => setCustomRecipient(e.target.value)}
-                      placeholder="student@msruas.ac.in"
-                      className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                    />
-                  </div>
-                ) : (
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <label className="block font-medium text-theme-text-secondary">Category Tag</label>
-                    <select
-                      value={category}
-                      onChange={e => setCategory(e.target.value as any)}
-                      className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                    >
-                      <option value="ANNOUNCEMENT">Announcement Broadcast</option>
-                      <option value="DIRECT_MESSAGE">Direct Notification</option>
-                      <option value="SYSTEM">System Broadcast</option>
-                    </select>
-                  </div>
-                )}
-
-                <div className="space-y-1.5 sm:col-span-2">
-                  <label className="block font-medium text-theme-text-secondary">Header Tag / Badge Style</label>
-                  <select
-                    value={badgeOption}
-                    onChange={e => setBadgeOption(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                  >
-                    <option value="NONE">None (Clean Corporate Email - Recommended)</option>
-                    <option value="INVITATION">🎉 Official Invitation</option>
-                    <option value="ANNOUNCEMENT">📢 Official Announcement</option>
-                    <option value="ACTION_REQUIRED">📌 Action Required</option>
-                    <option value="IMPORTANT">⚠️ Important Notice</option>
-                    <option value="CUSTOM">Custom Tag...</option>
-                  </select>
-                  {badgeOption === 'CUSTOM' && (
-                    <input
-                      type="text"
-                      value={customBadgeText}
-                      onChange={e => setCustomBadgeText(e.target.value)}
-                      placeholder="Enter custom badge text (e.g. 🎓 Orientation 2026)"
-                      className="w-full px-4 py-2 bg-theme-background/40 border border-theme-card-border rounded-xl text-xs text-theme-text-primary mt-2"
-                    />
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block font-medium text-theme-text-secondary">Subject Line *</label>
-                <input
-                  type="text"
-                  required
-                  value={subject}
-                  onChange={e => setSubject(e.target.value)}
-                  placeholder="e.g. [LEADS Announcement] General Body Meeting Schedule & Deliverables"
-                  className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-semibold"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block font-medium text-theme-text-secondary">Email Message Body *</label>
-                <textarea
-                  rows={8}
-                  required
-                  value={bodyText}
-                  onChange={e => setBodyText(e.target.value)}
-                  placeholder="Type message content here..."
-                  className="w-full px-4 py-3 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-mono text-xs leading-relaxed"
-                />
-              </div>
-
-              <div className="flex items-center justify-end pt-3">
-                <button
-                  type="button"
-                  disabled={!subject || !bodyText || (dispatchScope === 'SINGLE' && !customRecipient) || isSendingDispatch}
-                  onClick={() => setShowDispatchConfirm(true)}
-                  className="px-6 py-2.5 bg-accent hover:bg-primary-light text-white font-bold rounded-xl transition-all shadow-md shadow-accent/20 cursor-pointer disabled:opacity-50 flex items-center gap-2"
-                >
-                  <Send className="h-4 w-4" />
-                  {isSendingDispatch ? 'Dispatching...' : 'Broadcast Email Payload'}
-                </button>
-              </div>
-            </div>
-          ) : (
-            /* Live HTML Preview Box */
-            <div className="space-y-4">
-              <div className="p-4 bg-theme-background/60 border border-theme-card-border rounded-2xl space-y-3">
-                <div className="border-b border-theme-border/20 pb-3 text-xs space-y-1">
-                  <p className="text-theme-text-secondary">From: <strong className="text-theme-text-primary">{settings.fromName} &lt;{settings.fromEmail}&gt;</strong></p>
-                  <p className="text-theme-text-secondary">To: <strong className="text-theme-text-primary">{dispatchScope === 'SINGLE' ? customRecipient || 'recipient@domain.com' : `[Broadcast Scope: ${dispatchScope}]`}</strong></p>
-                  <p className="text-theme-text-secondary">Subject: <strong className="text-accent">{subject || 'No Subject Provided'}</strong></p>
-                </div>
-                
-                <div className="p-6 bg-slate-900 text-slate-100 rounded-xl border border-slate-800 space-y-4 text-xs font-sans">
-                  <div className="border-b border-slate-800 pb-3">
-                    <h3 className="text-lg font-bold text-sky-400">{subject || 'Subject Line Preview'}</h3>
-                    <p className="text-[11px] text-slate-400 mt-1">Sender: {settings.fromName}</p>
-                  </div>
-                  <div className="whitespace-pre-wrap leading-relaxed text-slate-200">
-                    {bodyText || 'Your message text will appear here...'}
-                  </div>
-                  <div className="border-t border-slate-800 pt-3 text-[10px] text-slate-500 text-center">
-                    © 2026 {settings.fromName} · MSRUAS Internal Operations Portal
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TAB 3: Sent Outbox & System Logs */}
-      {activeTab === 'outbox' && (
-        <div className="glass-panel p-6 rounded-3xl space-y-5 border border-theme-card-border">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h3 className="text-base font-bold text-theme-text-primary flex items-center gap-2">
-                <FileText className="h-4 w-4 text-accent" />
-                Sent Email Outbox & Diagnostic Logs
-              </h3>
-              <p className="text-xs text-theme-text-secondary">Audit history of every email notification, OTP, announcement, and custom message dispatched.</p>
-            </div>
-
-            <button
-              onClick={fetchLogs}
-              className="px-3 py-1.5 bg-theme-border/20 hover:bg-theme-border/40 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              Refresh Logs
-            </button>
-          </div>
-
-          {/* Outbox Metrics */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="p-4 bg-theme-border/10 rounded-2xl border border-theme-border/20 space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-theme-text-secondary">Total Emails Dispatched</span>
-              <h4 className="text-xl font-bold text-theme-text-primary">{totalLogs}</h4>
-            </div>
-
-            <div className="p-4 bg-success/10 rounded-2xl border border-success/20 space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-success">Successful Deliveries</span>
-              <h4 className="text-xl font-bold text-success">{sentCount}</h4>
-            </div>
-
-            <div className="p-4 bg-danger/10 rounded-2xl border border-danger/20 space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-danger">Delivery Failures</span>
-              <h4 className="text-xl font-bold text-danger">{failedCount}</h4>
-            </div>
-          </div>
-
-          {/* Filters */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-            <div className="relative w-full sm:w-72">
-              <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-theme-text-secondary" />
-              <input
-                type="text"
-                value={logSearchQuery}
-                onChange={e => setLogSearchQuery(e.target.value)}
-                placeholder="Search by recipient or subject..."
-                className="w-full pl-9 pr-3 py-1.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-xs text-theme-text-primary focus:outline-none focus:border-accent"
-              />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="text-theme-text-secondary font-medium">Filter Status:</span>
-              <select
-                value={logStatusFilter}
-                onChange={e => setLogStatusFilter(e.target.value as any)}
-                className="px-3 py-1.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-xs text-theme-text-primary focus:outline-none"
-              >
-                <option value="ALL">All Statuses</option>
-                <option value="SENT">Sent Successfully</option>
-                <option value="FAILED">Delivery Failed</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Logs Table */}
-          {filteredLogs.length === 0 ? (
-            <EmptyState
-              icon={Mail}
-              title="No email logs found"
-              description="Email delivery attempts and system dispatches will appear here."
-            />
-          ) : (
-            <div className="overflow-x-auto rounded-2xl border border-theme-border/20">
-              <table className="w-full text-left text-xs text-theme-text-primary">
-                <thead className="bg-theme-border/15 text-[11px] uppercase tracking-wider text-theme-text-secondary border-b border-theme-border/20">
-                  <tr>
-                    <th className="p-3.5 font-bold">Status</th>
-                    <th className="p-3.5 font-bold">Recipient</th>
-                    <th className="p-3.5 font-bold">Subject</th>
-                    <th className="p-3.5 font-bold">Category</th>
-                    <th className="p-3.5 font-bold">Sent Date</th>
-                    <th className="p-3.5 font-bold text-right">Inspect Payload</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-theme-border/15">
-                  {filteredLogs.map(log => (
-                    <tr key={log.id} className="hover:bg-theme-border/10 transition-colors">
-                      <td className="p-3.5">
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                          log.status === 'SENT' 
-                            ? 'bg-success/15 text-success border border-success/20' 
-                            : 'bg-danger/15 text-danger border border-danger/20'
-                        }`}>
-                          {log.status}
-                        </span>
-                      </td>
-                      <td className="p-3.5 font-semibold text-theme-text-primary">{log.to}</td>
-                      <td className="p-3.5 max-w-xs truncate font-medium">{log.subject}</td>
-                      <td className="p-3.5">
-                        <span className="px-2 py-0.5 bg-accent/10 text-accent rounded-md font-mono text-[10px]">
-                          {log.category}
-                        </span>
-                      </td>
-                      <td className="p-3.5 text-theme-text-secondary text-[11px] whitespace-nowrap">
-                        {new Date(log.sentAt).toLocaleString()}
-                      </td>
-                      <td className="p-3.5 text-right">
-                        <button
-                          onClick={() => setSelectedLog(log)}
-                          className="px-2.5 py-1 bg-accent/15 hover:bg-accent/25 text-accent text-[11px] font-bold rounded-lg border border-accent/20 transition-all cursor-pointer"
-                        >
-                          Inspect
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
       )}
 
@@ -1049,13 +1106,13 @@ export default function EmailManagementPage() {
             <div className="space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-4 bg-theme-border/10 p-3.5 rounded-2xl border border-theme-border/20">
                 <div>
-                  <span className="text-[10px] text-theme-text-secondary block font-medium">To:</span>
+                  <span className="text-[10px] text-theme-text-secondary block font-medium">Recipient Address:</span>
                   <span className="font-bold text-theme-text-primary">{selectedLog.to}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-theme-text-secondary block font-medium">Status:</span>
+                  <span className="text-[10px] text-theme-text-secondary block font-medium">Delivery Status:</span>
                   <span className={`font-bold ${selectedLog.status === 'SENT' ? 'text-success' : 'text-danger'}`}>
-                    {selectedLog.status}
+                    {selectedLog.status === 'SENT' ? 'SENT / DELIVERED' : 'FAILED'}
                   </span>
                 </div>
                 <div>
@@ -1075,13 +1132,9 @@ export default function EmailManagementPage() {
                 </div>
               </div>
 
-              {/* Diagnostics — "SENT" here only means the SMTP server accepted the
-                  message for delivery, not that it actually reached the inbox.
-                  This is the raw server response, so "sent but never arrives"
-                  can be diagnosed without shell access to the mail server. */}
               {selectedLog.errorMessage && (
                 <div>
-                  <span className="font-bold text-danger block mb-1">Error:</span>
+                  <span className="font-bold text-danger block mb-1">Error Traceback:</span>
                   <div className="p-2.5 bg-danger/10 border border-danger/25 rounded-xl text-danger font-mono text-[11px] whitespace-pre-wrap">
                     {selectedLog.errorMessage}
                   </div>
@@ -1089,23 +1142,15 @@ export default function EmailManagementPage() {
               )}
               {selectedLog.smtpResponse && (
                 <div>
-                  <span className="font-bold text-theme-text-primary block mb-1">SMTP Server Response:</span>
+                  <span className="font-bold text-theme-text-primary block mb-1">SMTP Server Handshake Response:</span>
                   <div className="p-2.5 bg-theme-background/50 rounded-xl border border-theme-border/20 font-mono text-[11px] text-theme-text-secondary">
                     {selectedLog.smtpResponse}
                   </div>
                 </div>
               )}
-              {selectedLog.rejectedRecipients && selectedLog.rejectedRecipients.length > 0 && (
-                <div>
-                  <span className="font-bold text-warning block mb-1">Rejected Recipients:</span>
-                  <div className="p-2.5 bg-warning/10 border border-warning/25 rounded-xl text-warning font-mono text-[11px]">
-                    {selectedLog.rejectedRecipients.join(', ')}
-                  </div>
-                </div>
-              )}
 
               <div>
-                <span className="font-bold text-theme-text-primary block mb-1">Raw Body Content:</span>
+                <span className="font-bold text-theme-text-primary block mb-1">Dispatched Body Content:</span>
                 <div className="p-3 bg-slate-900 text-slate-200 rounded-xl border border-slate-800 font-mono text-[11px] max-h-48 overflow-y-auto whitespace-pre-wrap leading-relaxed">
                   {selectedLog.bodyText}
                 </div>

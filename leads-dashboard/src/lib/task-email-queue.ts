@@ -191,3 +191,18 @@ function escapeHtml(str: string): string {
     return map[match] || match;
   });
 }
+
+export function getPendingTaskQueues() {
+  const result: { email: string; assigneeName: string; taskCount: number; tasks: PendingTaskItem[] }[] = [];
+  pendingQueues.forEach((queue, email) => {
+    if (queue.items.length > 0) {
+      result.push({
+        email,
+        assigneeName: queue.items[0]?.assigneeName || 'Member',
+        taskCount: queue.items.length,
+        tasks: queue.items,
+      });
+    }
+  });
+  return result;
+}
