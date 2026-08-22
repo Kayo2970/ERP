@@ -107,13 +107,13 @@ export function isCoreCommitteeTier(user: SessionUser): boolean {
   return !!user && user.tier === getAccessLevelSettings().coreCommitteeTier;
 }
 
-/** Check if user is Centre Head (Super User tier 1, or tier <= 2 / Centre Head designation). */
+/** Check if user is Centre Head (Super User tier 1, or tier <= 2 / Centre Head / Advisor designation). */
 export function isCentreHead(user: SessionUser): boolean {
   if (!user) return false;
   if (user.tier === 1) return true;
   const role = ((user as any)?.role || '').toLowerCase();
   const settings = getAccessLevelSettings();
-  return user.tier <= settings.sectorHeadMaxTier || anyKeywordMatches(role, settings.sectorHeadKeywords);
+  return user.tier <= settings.sectorHeadMaxTier || anyKeywordMatches(role, settings.sectorHeadKeywords) || role.includes('advisor');
 }
 
 /** Check if user holds the designation of Head of Events (or Events Head). */

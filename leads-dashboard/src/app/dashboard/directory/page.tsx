@@ -67,12 +67,141 @@ export default function DirectoryPage() {
   const [sortField, setSortField] = useState<keyof Member>('tier');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
+  const STANDARDIZED_DEPARTMENTS = [
+    'Leadership & Development',
+    'Research & Development',
+    'Design & Social Media',
+    'Sustainability & Innovation',
+    'Finance & Sponsorships',
+    'Marketing & Branding',
+    'Operations & Logistics',
+  ];
+
+  type FacultyPosition = 'Events Head' | 'Industrial Connects' | 'Finance Head' | 'Centre Head' | 'Advisor';
+  type CorePosition = 'President' | 'Vice President' | 'General Secretary' | 'Chief Coordinator' | 'Department Head';
+  type AssociatePosition = 'Associate' | 'Department Associate';
+
+  const deriveMemberRoleAndDepartment = (
+    div: MemberDivision,
+    opts: {
+      facultyPosition?: string;
+      campus?: 'GG Campus' | 'RTC Campus';
+      corePosition?: string;
+      departmentSelect?: string;
+      associatePosition?: string;
+      customRole?: string;
+    }
+  ): { role: string; department: string; tier: number } => {
+    let role = '';
+    let department = opts.departmentSelect || '';
+    let tier = 6;
+
+    if (div === 'Faculty') {
+      const pos = opts.facultyPosition || 'Events Head';
+      if (pos === 'Events Head') {
+        const camp = opts.campus === 'RTC Campus' ? 'RTC Campus' : 'GG Campus';
+        role = `Head of Events (${camp})`;
+        department = 'Events';
+        tier = camp === 'GG Campus' ? 2.5 : 3;
+      } else if (pos === 'Industrial Connects') {
+        role = 'Head of Industrial Connects';
+        department = 'Industrial Connects';
+        tier = 3;
+      } else if (pos === 'Finance Head') {
+        role = 'Head of Finance';
+        department = 'Finance & Sponsorships';
+        tier = 3;
+      } else if (pos === 'Centre Head') {
+        role = 'Centre Head';
+        department = 'Faculty Oversight';
+        tier = 1;
+      } else if (pos === 'Advisor') {
+        role = 'Advisor';
+        department = 'Faculty Advisory';
+        tier = 1;
+      } else {
+        role = 'Faculty Member';
+        department = opts.departmentSelect || 'Faculty';
+        tier = 4;
+      }
+    } else if (div === 'Core Committee') {
+      tier = 5;
+      const pos = opts.corePosition || 'Department Head';
+      if (pos === 'President') {
+        role = 'President';
+        department = 'Executive Council';
+      } else if (pos === 'Vice President') {
+        role = 'Vice President';
+        department = 'Executive Council';
+      } else if (pos === 'General Secretary') {
+        role = 'General Secretary';
+        department = 'Secretariat';
+      } else if (pos === 'Chief Coordinator') {
+        role = 'Chief Coordinator';
+        department = 'Coordination';
+      } else if (pos === 'Department Head') {
+        const dept = opts.departmentSelect || STANDARDIZED_DEPARTMENTS[0];
+        role = `Head of ${dept}`;
+        department = dept;
+      } else {
+        role = pos || 'Core Committee Member';
+      }
+    } else if (div === 'Advisory Board') {
+      tier = 4;
+      const pos = opts.corePosition || 'Department Head';
+      if (pos === 'President') {
+        role = 'Senior President';
+        department = 'Executive Council';
+      } else if (pos === 'Vice President') {
+        role = 'Senior Vice President';
+        department = 'Executive Council';
+      } else if (pos === 'General Secretary') {
+        role = 'Senior General Secretary';
+        department = 'Secretariat';
+      } else if (pos === 'Chief Coordinator') {
+        role = 'Senior Chief Coordinator';
+        department = 'Coordination';
+      } else if (pos === 'Department Head') {
+        const dept = opts.departmentSelect || STANDARDIZED_DEPARTMENTS[0];
+        role = `Senior Head of ${dept}`;
+        department = dept;
+      } else {
+        role = pos.startsWith('Senior') ? pos : `Senior ${pos || 'Advisory Member'}`;
+      }
+    } else if (div === 'Training Associate') {
+      tier = 6;
+      if (opts.associatePosition === 'Department Associate' && opts.departmentSelect) {
+        role = `Associate - ${opts.departmentSelect}`;
+        department = opts.departmentSelect;
+      } else {
+        role = 'Training Associate';
+        department = opts.departmentSelect || 'General';
+      }
+    } else if (div === 'Alumni') {
+      tier = 7;
+      role = 'Alumni Member';
+      department = opts.departmentSelect || 'Alumni Roster';
+    }
+
+    if (opts.customRole && opts.customRole.trim()) {
+      const cr = opts.customRole.trim();
+      if (cr.includes('Head') || cr.includes('President') || cr.includes('Secretary') || cr.includes('Advisor')) {
+        role = cr;
+      }
+    }
+
+    return { role, department, tier };
+  };
+
   // Manual Add Form State
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState('');
-  const [division, setDivision] = useState<MemberDivision>('Training Associate');
-  const [department, setDepartment] = useState('');
+  const [division, setDivision] = useState<MemberDivision>('Faculty');
+  const [facultyPosition, setFacultyPosition] = useState<FacultyPosition>('Events Head');
+  const [campus, setCampus] = useState<'GG Campus' | 'RTC Campus'>('GG Campus');
+  const [corePosition, setCorePosition] = useState<CorePosition>('Department Head');
+  const [departmentSelect, setDepartmentSelect] = useState<string>(STANDARDIZED_DEPARTMENTS[0]);
+  const [associatePosition, setAssociatePosition] = useState<AssociatePosition>('Associate');
   const [program, setProgram] = useState('');
   const [batch, setBatch] = useState('');
   
@@ -98,12 +227,15 @@ export default function DirectoryPage() {
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
-  const [editRole, setEditRole] = useState('');
-  const [editDivision, setEditDivision] = useState<MemberDivision>('Training Associate');
-  const [editDepartment, setEditDepartment] = useState('');
+  const [editDivision, setEditDivision] = useState<MemberDivision>('Faculty');
+  const [editFacultyPosition, setEditFacultyPosition] = useState<FacultyPosition>('Events Head');
+  const [editCampus, setEditCampus] = useState<'GG Campus' | 'RTC Campus'>('GG Campus');
+  const [editCorePosition, setEditCorePosition] = useState<CorePosition>('Department Head');
+  const [editDepartmentSelect, setEditDepartmentSelect] = useState<string>(STANDARDIZED_DEPARTMENTS[0]);
+  const [editAssociatePosition, setEditAssociatePosition] = useState<AssociatePosition>('Associate');
   const [editProgram, setEditProgram] = useState('');
   const [editBatch, setEditBatch] = useState('');
-  const [editTierOverride, setEditTierOverride] = useState<number>(6);
+  const [editTierOverride, setEditTierOverride] = useState<number>(4);
 
   useEffect(() => {
     const refreshData = () => {
@@ -155,47 +287,48 @@ export default function DirectoryPage() {
   };
 
   const TIER_LABELS = [
-    { tier: 1, label: 'Super User' },
+    { tier: 1, label: 'Super User / Centre Head / Advisor' },
     { tier: 2, label: 'Executive Leadership' },
-    { tier: 3, label: 'Senior Leadership / Head of Events' },
-    { tier: 4, label: 'Advisory Board' },
+    { tier: 2.5, label: 'GG Campus Events Head' },
+    { tier: 3, label: 'RTC Events Head / Finance Head / Industrial Connects' },
+    { tier: 4, label: 'Advisory Board / Faculty' },
     { tier: 5, label: 'Core Committee' },
     { tier: 6, label: 'Training Associate' },
     { tier: 7, label: 'Alumni' },
   ];
-
-  const getTierForDivision = (div: MemberDivision, currentTier?: number): number => {
-    if (div === 'Advisory Board') return currentTier && currentTier <= 4 ? currentTier : 4;
-    if (div === 'Faculty') return currentTier && currentTier <= 4 ? currentTier : 4;
-    if (div === 'Core Committee') return 5;
-    if (div === 'Training Associate') return 6;
-    if (div === 'Alumni') return 7;
-    return 6;
-  };
 
   const handleCreateMember = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !email.trim()) return;
 
     try {
-      const calculatedTier = getTierForDivision(division);
+      const derived = deriveMemberRoleAndDepartment(division, {
+        facultyPosition,
+        campus,
+        corePosition,
+        departmentSelect,
+        associatePosition,
+      });
 
       addMember({
         name: name.trim(),
         email: email.toLowerCase().trim(),
-        role: role.trim() || (division === 'Alumni' ? 'Alumni Member' : division),
-        tier: calculatedTier,
+        role: derived.role,
+        tier: derived.tier,
         division,
-        department: department.trim() || undefined,
+        department: derived.department,
         program: program.trim() || undefined,
         batch: division === 'Alumni' ? batch.trim() : undefined
       });
 
       setName('');
       setEmail('');
-      setRole('');
-      setDivision('Training Associate');
-      setDepartment('');
+      setDivision('Faculty');
+      setFacultyPosition('Events Head');
+      setCampus('GG Campus');
+      setCorePosition('Department Head');
+      setDepartmentSelect(STANDARDIZED_DEPARTMENTS[0]);
+      setAssociatePosition('Associate');
       setProgram('');
       setBatch('');
       setIsModalOpen(false);
@@ -211,12 +344,58 @@ export default function DirectoryPage() {
     setEditingMember(member);
     setEditName(member.name);
     setEditEmail(member.email);
-    setEditRole(member.role);
-    setEditDivision(member.division || 'Training Associate');
-    setEditDepartment(member.department || '');
+    const div = member.division || 'Faculty';
+    setEditDivision(div);
     setEditProgram(member.program || '');
     setEditBatch(member.batch || '');
-    setEditTierOverride(member.tier || 6);
+    setEditTierOverride(member.tier || 4);
+
+    const r = member.role || '';
+    const d = member.department || '';
+
+    // Infer faculty position
+    if (r.includes('Events') || r.includes('Event')) {
+      setEditFacultyPosition('Events Head');
+      setEditCampus(r.includes('RTC') ? 'RTC Campus' : 'GG Campus');
+    } else if (r.includes('Industrial Connects')) {
+      setEditFacultyPosition('Industrial Connects');
+    } else if (r.includes('Finance')) {
+      setEditFacultyPosition('Finance Head');
+    } else if (r.includes('Centre Head') || r.includes('Center Head')) {
+      setEditFacultyPosition('Centre Head');
+    } else if (r.includes('Advisor')) {
+      setEditFacultyPosition('Advisor');
+    } else {
+      setEditFacultyPosition('Events Head');
+      setEditCampus('GG Campus');
+    }
+
+    // Infer core / advisory position
+    if (r.includes('President') && !r.includes('Vice')) {
+      setEditCorePosition('President');
+    } else if (r.includes('Vice President')) {
+      setEditCorePosition('Vice President');
+    } else if (r.includes('General Secretary')) {
+      setEditCorePosition('General Secretary');
+    } else if (r.includes('Chief Coordinator')) {
+      setEditCorePosition('Chief Coordinator');
+    } else {
+      setEditCorePosition('Department Head');
+    }
+
+    // Infer department
+    if (STANDARDIZED_DEPARTMENTS.includes(d)) {
+      setEditDepartmentSelect(d);
+    } else {
+      const match = STANDARDIZED_DEPARTMENTS.find(dept => r.includes(dept) || d.includes(dept));
+      setEditDepartmentSelect(match || STANDARDIZED_DEPARTMENTS[0]);
+    }
+
+    if (r.includes('Associate - ')) {
+      setEditAssociatePosition('Department Associate');
+    } else {
+      setEditAssociatePosition('Associate');
+    }
   };
 
   const handleUpdateMember = (e: React.FormEvent) => {
@@ -232,20 +411,25 @@ export default function DirectoryPage() {
       return;
     }
 
-    // Only the Super User can hand-set an exact access tier, independent of
-    // division — everyone else's tier stays auto-derived from division, same
-    // as before this control existed.
     const isSuperUser = user?.tier === 1;
-    const finalTier = isSuperUser ? editTierOverride : getTierForDivision(editDivision, editingMember.tier);
+    const derived = deriveMemberRoleAndDepartment(editDivision, {
+      facultyPosition: editFacultyPosition,
+      campus: editCampus,
+      corePosition: editCorePosition,
+      departmentSelect: editDepartmentSelect,
+      associatePosition: editAssociatePosition,
+    });
+
+    const finalTier = isSuperUser ? editTierOverride : derived.tier;
     const tierChanged = isSuperUser && finalTier !== editingMember.tier;
 
     updateMember(editingMember.id, {
       name: editName.trim(),
       email: editEmail.toLowerCase().trim(),
-      role: editRole.trim() || editDivision,
+      role: derived.role,
       tier: finalTier,
       division: editDivision,
-      department: editDepartment.trim() || undefined,
+      department: derived.department,
       program: editProgram.trim() || undefined,
       batch: editDivision === 'Alumni' ? editBatch.trim() : undefined
     }, user?.name || 'Admin');
@@ -368,7 +552,7 @@ export default function DirectoryPage() {
             mDivision = 'Training Associate';
           }
 
-          const mTier = getTierForDivision(mDivision);
+          const mTier = deriveMemberRoleAndDepartment(mDivision, { customRole: mRole, departmentSelect: mDept }).tier;
 
           try {
             addMember({
@@ -549,7 +733,7 @@ export default function DirectoryPage() {
   const handleBulkMoveDivision = (targetDivision: MemberDivision) => {
     if (selectedMemberIds.length === 0) return;
     try {
-      const calculatedTier = getTierForDivision(targetDivision);
+      const calculatedTier = deriveMemberRoleAndDepartment(targetDivision, {}).tier;
       bulkUpdateMembers(
         selectedMemberIds,
         {
@@ -580,7 +764,7 @@ export default function DirectoryPage() {
       const updates: Partial<Pick<Member, 'division' | 'role' | 'batch' | 'tier'>> = {};
       if (applyDivision && bulkDivision) {
         updates.division = bulkDivision as MemberDivision;
-        updates.tier = getTierForDivision(bulkDivision as MemberDivision);
+        updates.tier = deriveMemberRoleAndDepartment(bulkDivision as MemberDivision, {}).tier;
       }
       if (applyRole && bulkRole.trim()) {
         updates.role = bulkRole.trim();
@@ -1091,252 +1275,453 @@ export default function DirectoryPage() {
       </div>
 
       {/* Add Member Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="glass-panel w-full max-w-lg rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-theme-text-primary">Add Member to Organization</h2>
-              <button 
-                onClick={() => setIsModalOpen(false)}
-                className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+      {isModalOpen && (() => {
+        const preview = deriveMemberRoleAndDepartment(division, {
+          facultyPosition,
+          campus,
+          corePosition,
+          departmentSelect,
+          associatePosition,
+        });
 
-            <form onSubmit={handleCreateMember} className="space-y-4 text-xs">
-              <div className="space-y-1.5">
-                <label className="block font-medium text-theme-text-secondary">Full Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Ananya Sharma"
-                  className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block font-medium text-theme-text-secondary">Email Address *</label>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="ananya.s@msruas.ac.in"
-                  className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Organization Division</label>
-                  <select
-                    value={division}
-                    onChange={(e) => setDivision(e.target.value as MemberDivision)}
-                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                  >
-                    <option value="Advisory Board">Advisory Board</option>
-                    <option value="Faculty">Faculty</option>
-                    <option value="Core Committee">Core Committee</option>
-                    <option value="Training Associate">Training Associate</option>
-                    <option value="Alumni">Alumni</option>
-                  </select>
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="glass-panel w-full max-w-lg rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-bold text-theme-text-primary">Add Member to Organization</h2>
+                  <p className="text-[11px] text-theme-text-secondary">Enrolling a new member into the organization directory</p>
                 </div>
+                <button 
+                  onClick={() => setIsModalOpen(false)}
+                  className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
 
+              <form onSubmit={handleCreateMember} className="space-y-4 text-xs">
                 <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Designation / Role</label>
+                  <label className="block font-medium text-theme-text-secondary">Full Name *</label>
                   <input
                     type="text"
-                    value={role}
-                    onChange={(e) => setRole(e.target.value)}
-                    placeholder="e.g. Operations Lead"
-                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Department</label>
-                  <input
-                    type="text"
-                    value={department}
-                    onChange={(e) => setDepartment(e.target.value)}
-                    placeholder="e.g. Design and Social Media"
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Ananya Sharma"
                     className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Program</label>
+                  <label className="block font-medium text-theme-text-secondary">Email Address *</label>
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="ananya.s@msruas.ac.in"
+                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="block font-medium text-theme-text-secondary">Organization Division</label>
+                    <select
+                      value={division}
+                      onChange={(e) => setDivision(e.target.value as MemberDivision)}
+                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-semibold"
+                    >
+                      <option value="Faculty">Faculty</option>
+                      <option value="Core Committee">Core Committee</option>
+                      <option value="Advisory Board">Advisory Board</option>
+                      <option value="Training Associate">Training Associate</option>
+                      <option value="Alumni">Alumni</option>
+                    </select>
+                  </div>
+
+                  {/* Position Selection based on Division */}
+                  {division === 'Faculty' && (
+                    <div className="space-y-1.5">
+                      <label className="block font-medium text-theme-text-secondary">Faculty Position</label>
+                      <select
+                        value={facultyPosition}
+                        onChange={(e) => setFacultyPosition(e.target.value as FacultyPosition)}
+                        className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                      >
+                        <option value="Events Head">Events Head</option>
+                        <option value="Industrial Connects">Industrial Connects</option>
+                        <option value="Finance Head">Finance Head</option>
+                        <option value="Centre Head">Centre Head</option>
+                        <option value="Advisor">Advisor</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {(division === 'Core Committee' || division === 'Advisory Board') && (
+                    <div className="space-y-1.5">
+                      <label className="block font-medium text-theme-text-secondary">Position / Role</label>
+                      <select
+                        value={corePosition}
+                        onChange={(e) => setCorePosition(e.target.value as CorePosition)}
+                        className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                      >
+                        <option value="Department Head">Department Head</option>
+                        <option value="President">President</option>
+                        <option value="Vice President">Vice President</option>
+                        <option value="General Secretary">General Secretary</option>
+                        <option value="Chief Coordinator">Chief Coordinator</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {division === 'Training Associate' && (
+                    <div className="space-y-1.5">
+                      <label className="block font-medium text-theme-text-secondary">Associate Position</label>
+                      <select
+                        value={associatePosition}
+                        onChange={(e) => setAssociatePosition(e.target.value as AssociatePosition)}
+                        className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                      >
+                        <option value="Associate">General Associate</option>
+                        <option value="Department Associate">Department Associate</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {/* Sub-Selection for Events Head Campus */}
+                {division === 'Faculty' && facultyPosition === 'Events Head' && (
+                  <div className="space-y-1.5 p-3 bg-accent/5 border border-accent/20 rounded-xl">
+                    <label className="block font-medium text-accent">Campus Sub-Selection</label>
+                    <div className="flex items-center gap-4 pt-1">
+                      <label className="flex items-center gap-2 cursor-pointer text-theme-text-primary font-medium">
+                        <input
+                          type="radio"
+                          name="campus"
+                          value="GG Campus"
+                          checked={campus === 'GG Campus'}
+                          onChange={() => setCampus('GG Campus')}
+                          className="accent-accent"
+                        />
+                        GG Campus
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer text-theme-text-primary font-medium">
+                        <input
+                          type="radio"
+                          name="campus"
+                          value="RTC Campus"
+                          checked={campus === 'RTC Campus'}
+                          onChange={() => setCampus('RTC Campus')}
+                          className="accent-accent"
+                        />
+                        RTC Campus
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {/* Department Selection for Department Heads or Department Associates */}
+                {((division === 'Core Committee' || division === 'Advisory Board') && corePosition === 'Department Head') ||
+                 (division === 'Training Associate' && associatePosition === 'Department Associate') ? (
+                  <div className="space-y-1.5">
+                    <label className="block font-medium text-theme-text-secondary">Select Department *</label>
+                    <select
+                      value={departmentSelect}
+                      onChange={(e) => setDepartmentSelect(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                    >
+                      {STANDARDIZED_DEPARTMENTS.map(dept => (
+                        <option key={dept} value={dept}>{dept}</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+
+                {/* Live Derived Designation Preview Banner */}
+                <div className="p-3.5 bg-accent/10 border border-accent/30 rounded-2xl flex flex-col space-y-1">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-accent">Auto-Generated Designation</span>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-theme-text-primary">{preview.role}</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-accent/20 text-accent border border-accent/30">
+                      Tier {preview.tier}
+                    </span>
+                  </div>
+                  {preview.department && (
+                    <span className="text-[11px] text-theme-text-secondary">Department: {preview.department}</span>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">Program (Optional)</label>
                   <input
                     type="text"
                     value={program}
                     onChange={(e) => setProgram(e.target.value)}
-                    placeholder="e.g. B.Tech Computer Science"
+                    placeholder="e.g. B.Tech Computer Science Engineering, MBA"
                     className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   />
                 </div>
-              </div>
 
-              {division === 'Alumni' && (
-                <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Graduating Class / Batch</label>
-                  <input
-                    type="text"
-                    value={batch}
-                    onChange={(e) => setBatch(e.target.value)}
-                    placeholder="e.g. Class of 2024"
-                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                  />
-                </div>
-              )}
+                {division === 'Alumni' && (
+                  <div className="space-y-1.5">
+                    <label className="block font-medium text-theme-text-secondary">Graduating Class / Batch</label>
+                    <input
+                      type="text"
+                      value={batch}
+                      onChange={(e) => setBatch(e.target.value)}
+                      placeholder="e.g. Class of 2024"
+                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                    />
+                  </div>
+                )}
 
-              <button
-                type="submit"
-                className="w-full py-3 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer mt-4"
-              >
-                Add Member to Organization
-              </button>
-            </form>
+                <button
+                  type="submit"
+                  className="w-full py-3 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer mt-4"
+                >
+                  Add Member to Organization
+                </button>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Edit Member Modal */}
-      {editingMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="glass-panel w-full max-w-lg rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-theme-text-primary">Edit Member Details</h2>
-              <button 
-                onClick={() => setEditingMember(null)}
-                className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+      {editingMember && (() => {
+        const preview = deriveMemberRoleAndDepartment(editDivision, {
+          facultyPosition: editFacultyPosition,
+          campus: editCampus,
+          corePosition: editCorePosition,
+          departmentSelect: editDepartmentSelect,
+          associatePosition: editAssociatePosition,
+        });
 
-            <form onSubmit={handleUpdateMember} className="space-y-4 text-xs">
-              <div className="space-y-1.5">
-                <label className="block font-medium text-theme-text-secondary">Full Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block font-medium text-theme-text-secondary">Email Address *</label>
-                <input
-                  type="email"
-                  required
-                  value={editEmail}
-                  onChange={(e) => setEditEmail(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Organization Division</label>
-                  <select
-                     value={editDivision}
-                     onChange={(e) => setEditDivision(e.target.value as MemberDivision)}
-                     className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                  >
-                    <option value="Advisory Board">Advisory Board</option>
-                    <option value="Faculty">Faculty</option>
-                    <option value="Core Committee">Core Committee</option>
-                    <option value="Training Associate">Training Associate</option>
-                    <option value="Alumni">Alumni</option>
-                  </select>
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="glass-panel w-full max-w-lg rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-bold text-theme-text-primary">Edit Member Details</h2>
+                  <p className="text-[11px] text-theme-text-secondary">Updating profile and designation for {editingMember.name}</p>
                 </div>
+                <button 
+                  onClick={() => setEditingMember(null)}
+                  className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
 
+              <form onSubmit={handleUpdateMember} className="space-y-4 text-xs">
                 <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Designation / Role</label>
+                  <label className="block font-medium text-theme-text-secondary">Full Name *</label>
                   <input
                     type="text"
-                    value={editRole}
-                    onChange={(e) => setEditRole(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Department</label>
-                  <input
-                    type="text"
-                    value={editDepartment}
-                    onChange={(e) => setEditDepartment(e.target.value)}
-                    placeholder="e.g. Design and Social Media"
+                    required
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
                     className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Program</label>
+                  <label className="block font-medium text-theme-text-secondary">Email Address *</label>
+                  <input
+                    type="email"
+                    required
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="block font-medium text-theme-text-secondary">Organization Division</label>
+                    <select
+                      value={editDivision}
+                      onChange={(e) => setEditDivision(e.target.value as MemberDivision)}
+                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-semibold"
+                    >
+                      <option value="Faculty">Faculty</option>
+                      <option value="Core Committee">Core Committee</option>
+                      <option value="Advisory Board">Advisory Board</option>
+                      <option value="Training Associate">Training Associate</option>
+                      <option value="Alumni">Alumni</option>
+                    </select>
+                  </div>
+
+                  {/* Position Selection based on Division */}
+                  {editDivision === 'Faculty' && (
+                    <div className="space-y-1.5">
+                      <label className="block font-medium text-theme-text-secondary">Faculty Position</label>
+                      <select
+                        value={editFacultyPosition}
+                        onChange={(e) => setEditFacultyPosition(e.target.value as FacultyPosition)}
+                        className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                      >
+                        <option value="Events Head">Events Head</option>
+                        <option value="Industrial Connects">Industrial Connects</option>
+                        <option value="Finance Head">Finance Head</option>
+                        <option value="Centre Head">Centre Head</option>
+                        <option value="Advisor">Advisor</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {(editDivision === 'Core Committee' || editDivision === 'Advisory Board') && (
+                    <div className="space-y-1.5">
+                      <label className="block font-medium text-theme-text-secondary">Position / Role</label>
+                      <select
+                        value={editCorePosition}
+                        onChange={(e) => setEditCorePosition(e.target.value as CorePosition)}
+                        className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                      >
+                        <option value="Department Head">Department Head</option>
+                        <option value="President">President</option>
+                        <option value="Vice President">Vice President</option>
+                        <option value="General Secretary">General Secretary</option>
+                        <option value="Chief Coordinator">Chief Coordinator</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {editDivision === 'Training Associate' && (
+                    <div className="space-y-1.5">
+                      <label className="block font-medium text-theme-text-secondary">Associate Position</label>
+                      <select
+                        value={editAssociatePosition}
+                        onChange={(e) => setEditAssociatePosition(e.target.value as AssociatePosition)}
+                        className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                      >
+                        <option value="Associate">General Associate</option>
+                        <option value="Department Associate">Department Associate</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {/* Sub-Selection for Events Head Campus */}
+                {editDivision === 'Faculty' && editFacultyPosition === 'Events Head' && (
+                  <div className="space-y-1.5 p-3 bg-accent/5 border border-accent/20 rounded-xl">
+                    <label className="block font-medium text-accent">Campus Sub-Selection</label>
+                    <div className="flex items-center gap-4 pt-1">
+                      <label className="flex items-center gap-2 cursor-pointer text-theme-text-primary font-medium">
+                        <input
+                          type="radio"
+                          name="editCampus"
+                          value="GG Campus"
+                          checked={editCampus === 'GG Campus'}
+                          onChange={() => setEditCampus('GG Campus')}
+                          className="accent-accent"
+                        />
+                        GG Campus
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer text-theme-text-primary font-medium">
+                        <input
+                          type="radio"
+                          name="editCampus"
+                          value="RTC Campus"
+                          checked={editCampus === 'RTC Campus'}
+                          onChange={() => setEditCampus('RTC Campus')}
+                          className="accent-accent"
+                        />
+                        RTC Campus
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {/* Department Selection for Department Heads or Department Associates */}
+                {((editDivision === 'Core Committee' || editDivision === 'Advisory Board') && editCorePosition === 'Department Head') ||
+                 (editDivision === 'Training Associate' && editAssociatePosition === 'Department Associate') ? (
+                  <div className="space-y-1.5">
+                    <label className="block font-medium text-theme-text-secondary">Select Department *</label>
+                    <select
+                      value={editDepartmentSelect}
+                      onChange={(e) => setEditDepartmentSelect(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                    >
+                      {STANDARDIZED_DEPARTMENTS.map(dept => (
+                        <option key={dept} value={dept}>{dept}</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+
+                {/* Live Derived Designation Preview Banner */}
+                <div className="p-3.5 bg-accent/10 border border-accent/30 rounded-2xl flex flex-col space-y-1">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-accent">Auto-Generated Designation</span>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-theme-text-primary">{preview.role}</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-accent/20 text-accent border border-accent/30">
+                      Tier {user?.tier === 1 ? editTierOverride : preview.tier}
+                    </span>
+                  </div>
+                  {preview.department && (
+                    <span className="text-[11px] text-theme-text-secondary">Department: {preview.department}</span>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">Program (Optional)</label>
                   <input
                     type="text"
                     value={editProgram}
                     onChange={(e) => setEditProgram(e.target.value)}
-                    placeholder="e.g. B.Tech Computer Science"
+                    placeholder="e.g. B.Tech Computer Science Engineering, MBA"
                     className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   />
                 </div>
-              </div>
 
-              {user?.tier === 1 && (
-                <div className="space-y-1.5 p-3 bg-warning/5 border border-warning/20 rounded-xl">
-                  <label className="flex items-center gap-1.5 font-medium text-warning">
-                    <ShieldAlert className="h-3.5 w-3.5" />
-                    Access Tier (Super User Override)
-                  </label>
-                  <select
-                    value={editTierOverride}
-                    onChange={(e) => setEditTierOverride(parseInt(e.target.value, 10))}
-                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-warning/30 rounded-xl text-theme-text-primary focus:outline-none focus:border-warning"
-                  >
-                    {TIER_LABELS.map(({ tier, label }) => (
-                      <option key={tier} value={tier}>Tier {tier} — {label}</option>
-                    ))}
-                  </select>
-                  <p className="text-[11px] text-theme-text-secondary">
-                    Overrides the tier this member's division would normally assign. Takes effect immediately across every module — tasks, events, reimbursement approvals, and any Group Policy targeting by tier.
-                  </p>
-                </div>
-              )}
+                {user?.tier === 1 && (
+                  <div className="space-y-1.5 p-3 bg-warning/5 border border-warning/20 rounded-xl">
+                    <label className="flex items-center gap-1.5 font-medium text-warning">
+                      <ShieldAlert className="h-3.5 w-3.5" />
+                      Access Tier (Super User Override)
+                    </label>
+                    <select
+                      value={editTierOverride}
+                      onChange={(e) => setEditTierOverride(parseInt(e.target.value, 10))}
+                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-warning/30 rounded-xl text-theme-text-primary focus:outline-none focus:border-warning"
+                    >
+                      {TIER_LABELS.map(({ tier, label }) => (
+                        <option key={tier} value={tier}>Tier {tier} — {label}</option>
+                      ))}
+                    </select>
+                    <p className="text-[11px] text-theme-text-secondary">
+                      Overrides the tier this member's division would normally assign. Takes effect immediately across every module — tasks, events, reimbursement approvals, and any Group Policy targeting by tier.
+                    </p>
+                  </div>
+                )}
 
-              {editDivision === 'Alumni' && (
-                <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Graduating Class / Batch</label>
-                  <input
-                    type="text"
-                    value={editBatch}
-                    onChange={(e) => setEditBatch(e.target.value)}
-                    placeholder="e.g. Class of 2024"
-                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                  />
-                </div>
-              )}
+                {editDivision === 'Alumni' && (
+                  <div className="space-y-1.5">
+                    <label className="block font-medium text-theme-text-secondary">Graduating Class / Batch</label>
+                    <input
+                      type="text"
+                      value={editBatch}
+                      onChange={(e) => setEditBatch(e.target.value)}
+                      placeholder="e.g. Class of 2024"
+                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                    />
+                  </div>
+                )}
 
-              <button
-                type="submit"
-                className="w-full py-3 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer mt-4"
-              >
-                Save Member Details
-              </button>
-            </form>
+                <button
+                  type="submit"
+                  className="w-full py-3 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer mt-4"
+                >
+                  Save Member Details
+                </button>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Delete Confirmation Modal */}
       <ConfirmModal
