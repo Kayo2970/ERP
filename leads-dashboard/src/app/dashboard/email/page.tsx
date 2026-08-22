@@ -19,7 +19,10 @@ import {
   Search,
   X,
   Check,
-  Zap
+  Zap,
+  ChevronDown,
+  ChevronUp,
+  ShieldCheck
 } from 'lucide-react';
 import { EmailSettings, EmailLog } from '@/lib/email-service';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
@@ -44,6 +47,7 @@ export default function EmailManagementPage() {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [showDkimSection, setShowDkimSection] = useState(false);
 
   // SMTP Test Diagnostics State
   const [testRecipient, setTestRecipient] = useState('');
@@ -526,6 +530,63 @@ export default function EmailManagementPage() {
                     className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   />
                 </div>
+              </div>
+
+              <div className="pt-2 border-t border-theme-border/20">
+                <button
+                  type="button"
+                  onClick={() => setShowDkimSection(v => !v)}
+                  className="w-full flex items-center justify-between py-2 cursor-pointer"
+                >
+                  <span className="flex items-center gap-1.5 font-bold text-theme-text-primary">
+                    <ShieldCheck className="h-4 w-4 text-accent" />
+                    DKIM Signing (Advanced)
+                  </span>
+                  {showDkimSection ? <ChevronUp className="h-4 w-4 text-theme-text-secondary" /> : <ChevronDown className="h-4 w-4 text-theme-text-secondary" />}
+                </button>
+
+                {showDkimSection && (
+                  <div className="space-y-3 pt-2">
+                    <p className="text-[11px] text-theme-text-secondary leading-relaxed">
+                      Automated mail relayed through a shared SMTP server (Postfix, a Workspace relay, etc.) often isn&apos;t signed on behalf of your own sending domain, which is one of the biggest reasons a recipient&apos;s server quietly spam-filters it even though the send itself &quot;succeeds.&quot; Signing it here — independent of whatever the relay does — is the single most effective fix. Requires publishing the matching public key as a DNS TXT record at <code className="text-accent">&lt;selector&gt;._domainkey.&lt;domain&gt;</code>.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="block font-medium text-theme-text-secondary">Signing Domain</label>
+                        <input
+                          type="text"
+                          value={settings.dkimDomain || ''}
+                          onChange={e => setSettings(prev => ({ ...prev, dkimDomain: e.target.value }))}
+                          placeholder="e.g. leadsnextgencentre.online"
+                          className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block font-medium text-theme-text-secondary">DKIM Selector</label>
+                        <input
+                          type="text"
+                          value={settings.dkimSelector || ''}
+                          onChange={e => setSettings(prev => ({ ...prev, dkimSelector: e.target.value }))}
+                          placeholder="e.g. leads"
+                          className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block font-medium text-theme-text-secondary">Private Key (PEM format)</label>
+                      <textarea
+                        value={settings.dkimPrivateKey || ''}
+                        onChange={e => setSettings(prev => ({ ...prev, dkimPrivateKey: e.target.value }))}
+                        placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
+                        rows={5}
+                        className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary font-mono text-[11px] focus:outline-none focus:border-accent"
+                      />
+                      <p className="text-[10px] text-theme-text-secondary">
+                        Leave all three fields blank to send unsigned (current behavior) — signing only activates once every field here is filled in.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-between pt-4 border-t border-theme-border/20">
