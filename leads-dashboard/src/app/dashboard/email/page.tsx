@@ -155,6 +155,27 @@ export default function EmailManagementPage() {
     }
   };
 
+  const [isCancellingQueue, setIsCancellingQueue] = useState<string | null>(null);
+
+  const handleCancelQueue = async (email?: string) => {
+    setIsCancellingQueue(email || 'ALL');
+    try {
+      const url = email ? `/api/email/queue?email=${encodeURIComponent(email)}` : '/api/email/queue?all=true';
+      const res = await fetch(url, { method: 'DELETE' });
+      if (res.ok) {
+        const data = await res.json();
+        triggerToast('success', data.message || 'Queued email buffer cancelled.');
+        fetchQueues();
+      } else {
+        triggerToast('error', 'Failed to cancel queue.');
+      }
+    } catch (err: any) {
+      triggerToast('error', err?.message || 'Error cancelling queue');
+    } finally {
+      setIsCancellingQueue(null);
+    }
+  };
+
   const handleFlushQueue = async (email: string) => {
     setIsFlushingQueue(email);
     try {
@@ -587,13 +608,26 @@ export default function EmailManagementPage() {
               <p className="text-xs text-theme-text-secondary">Inspect task assignment digest queues currently held in the 10-minute quiet buffer before dispatch.</p>
             </div>
 
-            <button
-              onClick={fetchQueues}
-              className="px-3 py-1.5 bg-theme-border/20 hover:bg-theme-border/40 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              Refresh Queues
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              {pendingQueues.length > 0 && (
+                <button
+                  onClick={() => handleCancelQueue()}
+                  disabled={Boolean(isCancellingQueue)}
+                  className="px-3 py-1.5 bg-danger/15 hover:bg-danger/25 text-danger border border-danger/30 text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 disabled:opacity-50"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Cancel All Queues
+                </button>
+              )}
+
+              <button
+                onClick={fetchQueues}
+                className="px-3 py-1.5 bg-theme-border/20 hover:bg-theme-border/40 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Refresh Queues
+              </button>
+            </div>
           </div>
 
           {pendingQueues.length === 0 ? (
@@ -617,14 +651,25 @@ export default function EmailManagementPage() {
                       </span>
                     </div>
 
-                    <button
-                      onClick={() => handleFlushQueue(q.email)}
-                      disabled={isFlushingQueue === q.email}
-                      className="px-4 py-2 bg-accent hover:bg-primary-light text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-accent/20 cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shrink-0"
-                    >
-                      <Play className="h-3.5 w-3.5" />
-                      {isFlushingQueue === q.email ? 'Flushing Email...' : 'Dispatch Digest Now'}
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => handleCancelQueue(q.email)}
+                        disabled={isCancellingQueue === q.email}
+                        className="px-3 py-2 bg-danger/15 hover:bg-danger/25 text-danger border border-danger/30 text-xs font-bold rounded-xl transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1 shrink-0"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        {isCancellingQueue === q.email ? 'Cancelling...' : 'Cancel Queue'}
+                      </button>
+
+                      <button
+                        onClick={() => handleFlushQueue(q.email)}
+                        disabled={isFlushingQueue === q.email}
+                        className="px-4 py-2 bg-accent hover:bg-primary-light text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-accent/20 cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shrink-0"
+                      >
+                        <Play className="h-3.5 w-3.5" />
+                        {isFlushingQueue === q.email ? 'Flushing Email...' : 'Dispatch Digest Now'}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="space-y-2">

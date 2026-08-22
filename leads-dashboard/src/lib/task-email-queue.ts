@@ -206,3 +206,24 @@ export function getPendingTaskQueues() {
   });
   return result;
 }
+
+export function cancelTaskEmailQueue(recipientEmail: string): boolean {
+  const key = recipientEmail.toLowerCase();
+  const queue = pendingQueues.get(key);
+  if (queue) {
+    if (queue.timer) clearTimeout(queue.timer);
+    pendingQueues.delete(key);
+    return true;
+  }
+  return false;
+}
+
+export function cancelAllTaskEmailQueues(): number {
+  let count = 0;
+  pendingQueues.forEach(queue => {
+    if (queue.timer) clearTimeout(queue.timer);
+    count++;
+  });
+  pendingQueues.clear();
+  return count;
+}
