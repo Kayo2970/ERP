@@ -1,6 +1,7 @@
 import nodemailer, { Transporter } from 'nodemailer';
 import path from 'path';
 import { mutateCollection, readCollection } from './server-db';
+import { DirectSendTransport } from './direct-smtp-transport';
 
 // Referenced as cid:leads-logo in wrapInMasterEmailTemplate — attach this
 // to every sendMail() call so the header logo is embedded, not fetched
@@ -41,7 +42,11 @@ export interface SendEmailPayload {
 
 export interface EmailSettings {
   id: string; // 'default'
-  provider: 'gmail' | 'outlook' | 'custom' | 'local_postfix';
+  // 'direct_send' is the built-in outbound engine (src/lib/direct-smtp-transport.ts):
+  // the app itself resolves each recipient's MX records and delivers straight
+  // to their mail server, with no relay/API in between — the other four
+  // options stay available and unaffected for whoever prefers a relay.
+  provider: 'gmail' | 'outlook' | 'custom' | 'local_postfix' | 'direct_send';
   smtpHost: string;
   smtpPort: number;
   secure: boolean;
@@ -50,6 +55,10 @@ export interface EmailSettings {
   fromName: string;
   fromEmail: string;
   replyTo?: string;
+  // HELO/EHLO identity used only by the 'direct_send' provider — must match
+  // the reverse-DNS (PTR) record on the VPS's outbound IP, or most receiving
+  // mail servers will reject the connection outright.
+  heloHostname?: string;
   // Optional DKIM signing (nodemailer signs the message itself, independent
   // of whatever the relay/Postfix does) — the single most effective lever
   // this app can pull for automated mail landing in spam, since a relay
@@ -105,7 +114,29 @@ export async function updateEmailSettings(settings: Partial<EmailSettings>, acto
 
 async function buildTransporter(): Promise<{ transporter: Transporter; settings: EmailSettings; effectiveHost: string; effectivePort: number }> {
   const settings = await getEmailSettings();
-  
+
+  const dkim = settings.dkimDomain && settings.dkimSelector && settings.dkimPrivateKey
+    ? {
+        domainName: settings.dkimDomain.trim(),
+        keySelector: settings.dkimSelector.trim(),
+        privateKey: settings.dkimPrivateKey,
+      }
+    : undefined;
+
+  if (settings.provider === 'direct_send') {
+    // Built-in engine: no host/port/auth to configure — it connects
+    // straight to each recipient's own mail server. DKIM signing (above)
+    // still applies here exactly as it does for every other provider,
+    // since Nodemailer signs the message before handing it to any
+    // transport, not just its own SMTPTransport.
+    const heloHostname = (settings.heloHostname || settings.dkimDomain || 'localhost').trim();
+    const t = nodemailer.createTransport(
+      new DirectSendTransport({ heloHostname }),
+      dkim ? { dkim } : undefined,
+    );
+    return { transporter: t, settings, effectiveHost: `direct-send via ${heloHostname}`, effectivePort: 25 };
+  }
+
   let host = settings.smtpHost;
   let port = settings.smtpPort;
   let secure = settings.secure;
@@ -137,14 +168,6 @@ async function buildTransporter(): Promise<{ transporter: Transporter; settings:
     secure = false;
     auth = undefined;
   }
-
-  const dkim = settings.dkimDomain && settings.dkimSelector && settings.dkimPrivateKey
-    ? {
-        domainName: settings.dkimDomain.trim(),
-        keySelector: settings.dkimSelector.trim(),
-        privateKey: settings.dkimPrivateKey,
-      }
-    : undefined;
 
   const t = nodemailer.createTransport({
     host,
