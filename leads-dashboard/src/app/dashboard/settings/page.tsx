@@ -171,6 +171,7 @@ export default function SettingsPage() {
     const updatedUser = { ...user, email: res.newEmail };
     setUser(updatedUser);
     localStorage.setItem('user', JSON.stringify(updatedUser));
+    window.dispatchEvent(new Event('leads-data-sync'));
     setAuditLogs(getAuditLogs());
 
     resetEmailChangeFlow();
@@ -230,6 +231,7 @@ export default function SettingsPage() {
         const updatedUser = { ...user, avatarUrl: data.avatarUrl };
         setUser(updatedUser);
         localStorage.setItem('user', JSON.stringify(updatedUser));
+        window.dispatchEvent(new Event('leads-data-sync'));
         logAuditEvent('MEMBER_UPDATED', user.name, 'Updated profile photo', user.email);
         triggerSuccess('Profile photo updated successfully.');
       } catch {
@@ -290,6 +292,7 @@ export default function SettingsPage() {
     const updatedUser = { ...user, ...changes };
     setUser(updatedUser);
     localStorage.setItem('user', JSON.stringify(updatedUser));
+    window.dispatchEvent(new Event('leads-data-sync'));
     setAuditLogs(getAuditLogs());
 
     setCurrentPassword('');

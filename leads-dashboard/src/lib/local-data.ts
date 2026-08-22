@@ -707,6 +707,42 @@ export function deleteMember(id: string): void {
   logAuditEvent('MEMBER_DELETED', 'System / Admin', `Removed member ${target.name} (${target.email})`);
 }
 
+export function syncActiveSessionUser(member: Member): void {
+  if (typeof window === 'undefined') return;
+  const saved = localStorage.getItem('user');
+  if (!saved) return;
+  try {
+    const activeUser = JSON.parse(saved);
+    const isTarget =
+      (activeUser.id && activeUser.id === member.id) ||
+      (activeUser.email && activeUser.email.toLowerCase() === member.email.toLowerCase());
+    if (isTarget) {
+      const updatedSessionUser = {
+        ...activeUser,
+        id: member.id,
+        name: member.name,
+        email: member.email,
+        role: member.role,
+        tier: member.tier,
+        division: member.division,
+        department: member.department,
+        program: member.program,
+        batch: member.batch,
+        avatarUrl: member.avatarUrl,
+        dateOfBirth: member.dateOfBirth,
+        bankName: member.bankName,
+        accountNumber: member.accountNumber,
+        ifscCode: member.ifscCode,
+      };
+      delete (updatedSessionUser as any).passwordHash;
+      localStorage.setItem('user', JSON.stringify(updatedSessionUser));
+      window.dispatchEvent(new Event('leads-data-sync'));
+    }
+  } catch (e) {
+    console.error('Failed to sync active session user:', e);
+  }
+}
+
 export function bulkUpdateMembers(
   ids: string[],
   updates: Partial<Pick<Member, 'division' | 'role' | 'batch' | 'tier'>>,
@@ -730,7 +766,10 @@ export function bulkUpdateMembers(
   // non-corrupt row if the server has to upsert it.
   ids.forEach(id => {
     const full = updated.find(m => m.id === id);
-    if (full) serverPatch('/api/members', id, full);
+    if (full) {
+      serverPatch('/api/members', id, full);
+      syncActiveSessionUser(full);
+    }
   });
   const changeSummary = Object.entries(updates)
     .filter(([, v]) => v !== undefined && v !== '')
@@ -763,6 +802,7 @@ export function updateMember(id: string, updates: Partial<Member>, actorName: st
   // Send the full merged member, not just the diff, so a server-side upsert (a
   // client-only sample member that was never POSTed) creates a complete record.
   serverPatch('/api/members', id, current[idx]);
+  syncActiveSessionUser(current[idx]);
   logAuditEvent('MEMBER_UPDATED', actorName, `Updated member details for ${current[idx].name}`);
   return current[idx];
 }

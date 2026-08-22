@@ -137,6 +137,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     role: 'Super User',
     tier: 1,
     division: 'Core Committee',
+    department: 'Design and Social Media' as string | undefined,
     committee: 'All Committees',
     avatarUrl: undefined as string | undefined,
   });
@@ -258,13 +259,56 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       // out on the next poll (within ~7s) rather than staying signed in
       // until their session naturally expires or they navigate somewhere
       // that re-checks status.
-      const liveRecord = getMembers().find(m => m.email.toLowerCase() === currentUser.email.toLowerCase());
-      if (liveRecord?.status === 'Terminated') {
-        logAuditEvent('SESSION_TERMINATED_LOGOUT', currentUser.name || 'User', 'Force-logged out — account was terminated while session was active', currentUser.email);
-        localStorage.removeItem('user');
-        localStorage.setItem('logoutReason', 'terminated');
-        router.replace('/');
-        return;
+      const liveRecord = getMembers().find(m =>
+        ((currentUser as any).id && m.id === (currentUser as any).id) ||
+        (currentUser.email && m.email.toLowerCase() === currentUser.email.toLowerCase())
+      );
+      if (liveRecord) {
+        if (liveRecord.status === 'Terminated') {
+          logAuditEvent('SESSION_TERMINATED_LOGOUT', currentUser.name || 'User', 'Force-logged out — account was terminated while session was active', currentUser.email);
+          localStorage.removeItem('user');
+          localStorage.setItem('logoutReason', 'terminated');
+          router.replace('/');
+          return;
+        }
+
+        const hasProfileChanges =
+          liveRecord.name !== currentUser.name ||
+          liveRecord.email !== currentUser.email ||
+          liveRecord.role !== currentUser.role ||
+          liveRecord.tier !== currentUser.tier ||
+          liveRecord.division !== currentUser.division ||
+          liveRecord.department !== currentUser.department ||
+          (liveRecord as any).program !== (currentUser as any).program ||
+          (liveRecord as any).batch !== (currentUser as any).batch ||
+          liveRecord.avatarUrl !== currentUser.avatarUrl ||
+          liveRecord.dateOfBirth !== (currentUser as any).dateOfBirth ||
+          liveRecord.bankName !== (currentUser as any).bankName ||
+          liveRecord.accountNumber !== (currentUser as any).accountNumber ||
+          liveRecord.ifscCode !== (currentUser as any).ifscCode;
+
+        if (hasProfileChanges) {
+          const updatedSessionUser = {
+            ...currentUser,
+            id: liveRecord.id,
+            name: liveRecord.name,
+            email: liveRecord.email,
+            role: liveRecord.role,
+            tier: liveRecord.tier,
+            division: liveRecord.division,
+            department: liveRecord.department,
+            program: (liveRecord as any).program,
+            batch: (liveRecord as any).batch,
+            avatarUrl: liveRecord.avatarUrl,
+            dateOfBirth: liveRecord.dateOfBirth,
+            bankName: liveRecord.bankName,
+            accountNumber: liveRecord.accountNumber,
+            ifscCode: liveRecord.ifscCode,
+          };
+          delete (updatedSessionUser as any).passwordHash;
+          setUser(updatedSessionUser);
+          localStorage.setItem('user', JSON.stringify(updatedSessionUser));
+        }
       }
 
       setNotifications(prev => {
