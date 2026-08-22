@@ -150,9 +150,15 @@ export function isEventsHeadRtcCampus(user: SessionUser): boolean {
  * Strict evaluation rule enforcement:
  * 1) Centre Head & GG Campus Event Head (Tier 2.5) can evaluate across both campuses.
  * 2) RTC Events Head evaluates RTC events ONLY and is strictly blocked from GG events.
+ * 3) A Design Portal deliverable task (`isDesignDeliverable`) is a separate lane —
+ *    it isn't tied to campus-scoped event committee work, so the Design Head who
+ *    actually approved/finalized the design can also rate it, regardless of the
+ *    campus-based rules above (which otherwise only recognize Centre Head/Head of
+ *    Events, locking every Design Head out of their own team's deliverables).
  */
-export function canEvaluateEventStudent(user: SessionUser, eventCampus?: string): boolean {
+export function canEvaluateEventStudent(user: SessionUser, eventCampus?: string, isDesignDeliverable?: boolean): boolean {
   if (!user || isAlumniRole(user)) return false;
+  if (isDesignDeliverable && isDesignHead(user)) return true;
 
   const centreHead = isCentreHead(user);
   const isGgHead = isEventsHeadGgCampus(user) || user.tier === 2.5;

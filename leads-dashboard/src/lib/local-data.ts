@@ -113,6 +113,11 @@ export interface TaskItem {
   decidedAt?: string;
   ratingScore?: number;
   ratedAt?: string;
+  // Set by syncDesignTask() when this task was auto-created/completed from a
+  // Style-Approved Design Portal submission — lets the Ratings page grant
+  // Design Heads evaluation rights on it (see permissions.ts) without
+  // relying on a fragile title-string match.
+  isDesignDeliverable?: boolean;
 }
 
 export interface RatingItem {
@@ -1055,8 +1060,12 @@ export function getEventSortTime(event: Pick<EventItem, 'startDate' | 'datesTBD'
  * as "planned"/"active" forever. This derives the status that should actually be
  * shown/filtered on: past its end date, treat it as completed, unless someone has
  * deliberately archived it (archiving always wins, it's a manual terminal state) —
- * or unless a task tied to this event is still open, in which case the event stays
- * whatever its stored status is instead of silently completing with loose ends.
+ * or unless a task tied to this event is still open OR has been completed but not
+ * yet rated, in which case the event stays whatever its stored status is instead
+ * of silently completing with loose ends. A task counts as "rated" once it carries
+ * `ratedAt` — for committee/group tasks a single evaluation submission propagates
+ * to every member (see propagateCommitteeRating/propagateGroupRating), so that one
+ * `ratedAt` timestamp already means everyone who worked on it has been reviewed.
  * `tasks` defaults to a fresh getTasks() read when the caller doesn't already have
  * a copy on hand.
  */
@@ -1064,9 +1073,11 @@ export function getEffectiveEventStatus(event: EventItem, tasks?: TaskItem[]): E
   if (event.status === 'archived') return 'archived';
   const today = new Date().toISOString().split('T')[0];
   if (event.endDate && event.endDate < today) {
-    const relevantTasks = tasks ?? getTasks();
-    const hasPendingTask = relevantTasks.some(t => t.eventId === event.id && t.status !== 'Completed');
+    const relevantTasks = (tasks ?? getTasks()).filter(t => t.eventId === event.id);
+    const hasPendingTask = relevantTasks.some(t => t.status !== 'Completed');
     if (hasPendingTask) return event.status;
+    const hasUnratedTask = relevantTasks.some(t => !t.ratedAt);
+    if (hasUnratedTask) return event.status;
     return 'completed';
   }
   return event.status;
@@ -2156,6 +2167,7 @@ function syncDesignTask(item: DesignSubmissionItem, reviewerName: string): Desig
         dueDate: new Date().toISOString().split('T')[0],
         status: 'Completed',
         creatorName: reviewerName,
+        isDesignDeliverable: true,
       });
       return {
         ...item,
