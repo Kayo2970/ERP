@@ -7,7 +7,7 @@ export interface EmailLog {
   subject: string;
   bodyText: string;
   bodyHtml: string;
-  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE';
+  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION';
   status: 'SENT' | 'FAILED';
   sentAt: string;
 }
@@ -19,7 +19,7 @@ export interface SendEmailPayload {
   bodyHtml?: string;
   badgeText?: string;
   badgeColor?: string;
-  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE';
+  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION';
 }
 
 export interface EmailSettings {
@@ -242,6 +242,7 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
     if (payload.category === 'ANNOUNCEMENT') badgeTextToUse = '📢 Official Announcement';
     else if (payload.category === 'TASK_ASSIGNMENT') badgeTextToUse = '📌 Action Required';
     else if (payload.category === 'EVENT_ROSTER') badgeTextToUse = '🎉 Event Roster';
+    else if (payload.category === 'ACCOUNT_ACTIVATION') badgeTextToUse = '👋 Welcome';
     else badgeTextToUse = undefined; // Omit badge completely for direct messages and guest invites
   }
 
@@ -329,6 +330,47 @@ export function generateOtpEmailTemplate(name: string, otp: string): { subject: 
       </div>
 
       <p style="color: #64748b; font-size: 12px; line-height: 1.5; margin-bottom: 0;">If you did not request this, you can safely ignore this message. Your password will remain unchanged.</p>
+    `
+  });
+
+  return { subject, bodyText, bodyHtml };
+}
+
+/**
+ * Template Generator: Welcome / Account Activation.
+ * Sent once, right when a member is first added to the Directory — the
+ * account exists (in the members collection) but has no passwordHash yet,
+ * so this link is the only way in until the recipient sets their own
+ * password. The link carries a long-lived opaque token (see
+ * src/lib/account-activation.ts), not a short OTP, since it's meant to be
+ * clicked from an inbox rather than typed in.
+ */
+export function generateWelcomeActivationEmailTemplate(name: string, activationLink: string): { subject: string; bodyText: string; bodyHtml: string } {
+  const subject = `Welcome to LEADS Next Gen Centre — Set Up Your Account`;
+  const bodyText = `Hello ${name},\n\n` +
+    `Welcome to LEADS Next Gen Centre! An account has been created for you on the LEADS Operations Dashboard.\n\n` +
+    `Set your password and activate your account here:\n${activationLink}\n\n` +
+    `This link is valid for 7 days. Once activated, sign in with this email address and the password you choose.\n\n` +
+    `If you weren't expecting this, you can safely ignore this email.\n\n` +
+    `Regards,\nLEADS Next Gen Centre, MSRUAS`;
+
+  const bodyHtml = wrapInMasterEmailTemplate({
+    headerTitle: `Welcome, ${name}!`,
+    headerSubtitle: `Your LEADS Operations Dashboard account is ready`,
+    badgeText: `👋 Welcome`,
+    badgeColor: `#15803d`,
+    bodyContentHtml: `
+      <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello <strong>${name}</strong>,</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">You've been added to the LEADS Next Gen Centre roster. Set up your password below to access the Operations Dashboard:</p>
+
+      <div style="text-align: center; margin: 28px 0;">
+        <a href="${activationLink}" style="display: inline-block; background: #0284c7; color: #ffffff; font-weight: 700; font-size: 14px; padding: 12px 28px; border-radius: 10px; text-decoration: none;">
+          Set Up My Account
+        </a>
+        <p style="color: #94a3b8; font-size: 11px; margin-top: 12px;">⏱️ This link is valid for 7 days</p>
+      </div>
+
+      <p style="color: #64748b; font-size: 12px; line-height: 1.5; margin-bottom: 0;">If the button doesn't work, copy and paste this link into your browser:<br /><span style="word-break: break-all; color: #0284c7;">${activationLink}</span></p>
     `
   });
 

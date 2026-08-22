@@ -26,7 +26,8 @@ import {
   Layers,
   BookOpen,
   UserX,
-  ShieldOff
+  ShieldOff,
+  Mail
 } from 'lucide-react';
 import {
   getMembers,
@@ -78,6 +79,7 @@ export default function DirectoryPage() {
   // Notification Alert State
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [resendingMemberId, setResendingMemberId] = useState<string | null>(null);
 
   // Bulk Selection & Uniform Actions State
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
@@ -136,6 +138,20 @@ export default function DirectoryPage() {
     setErrorMsg(msg);
     setSuccessMsg('');
     setTimeout(() => setErrorMsg(''), 4000);
+  };
+
+  const handleResendActivation = async (member: Member) => {
+    setResendingMemberId(member.id);
+    try {
+      const res = await fetch(`/api/members/${member.id}/resend-activation`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to resend the welcome email.');
+      triggerSuccess(data.message || `Welcome email resent to ${member.email}.`);
+    } catch (err: any) {
+      triggerError(err.message || 'Failed to resend the welcome email.');
+    } finally {
+      setResendingMemberId(null);
+    }
   };
 
   const TIER_LABELS = [
@@ -942,6 +958,14 @@ export default function DirectoryPage() {
                                 Terminated
                               </span>
                             )}
+                            {member.status !== 'Terminated' && !member.passwordHash && (
+                              <span
+                                className="inline-flex items-center text-[9px] font-semibold px-1.5 py-0.5 rounded-full border bg-warning/15 text-warning border-warning/30"
+                                title="This member hasn't set up their password yet — they were sent a welcome email with an activation link."
+                              >
+                                Activation Pending
+                              </span>
+                            )}
                           </span>
                           {member.batch && (
                             <span className="block text-[10px] text-theme-text-secondary font-normal">{member.batch}</span>
@@ -983,7 +1007,22 @@ export default function DirectoryPage() {
                               >
                                 <Edit2 className="h-3.5 w-3.5" />
                               </button>
-                              
+
+                              {member.status !== 'Terminated' && !member.passwordHash && (
+                                <button
+                                  onClick={() => handleResendActivation(member)}
+                                  disabled={resendingMemberId === member.id}
+                                  className="p-1.5 text-warning hover:bg-warning/10 rounded-lg transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Resend Welcome Email"
+                                >
+                                  {resendingMemberId === member.id ? (
+                                    <span className="block h-3.5 w-3.5 border-2 border-warning border-t-transparent rounded-full animate-spin" />
+                                  ) : (
+                                    <Mail className="h-3.5 w-3.5" />
+                                  )}
+                                </button>
+                              )}
+
                               {member.id !== 'm1' && (
                                 <button
                                   onClick={() => setDeletingMember(member)}
