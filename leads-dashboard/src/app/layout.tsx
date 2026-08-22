@@ -13,17 +13,15 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Favicon/apple-touch-icon are intentionally NOT declared here — src/app/icon.png,
+// favicon.ico, and apple-icon.png already exist and Next.js auto-generates the
+// correct <link rel="icon">/<link rel="apple-touch-icon"> tags (with cache-busted
+// URLs) from those files. Declaring `icons` in metadata as well used to produce
+// four overlapping, conflicting icon <link> tags at once — which browsers can
+// resolve inconsistently, showing a blank/default tab icon.
 export const metadata: Metadata = {
   title: "LEADS All-in-One Dashboard",
   description: "Private internal management system for the LEADS Next Gen Centre at MSRUAS, Bengaluru.",
-  icons: {
-    icon: [
-      { url: "/images/leads-short-logo.png", type: "image/png" },
-      { url: "/favicon.ico" },
-    ],
-    shortcut: "/images/leads-short-logo.png",
-    apple: "/images/leads-short-logo.png",
-  },
 };
 
 export default function RootLayout({
