@@ -1,5 +1,15 @@
 import nodemailer, { Transporter } from 'nodemailer';
+import path from 'path';
 import { mutateCollection, readCollection } from './server-db';
+
+// Referenced as cid:leads-logo in wrapInMasterEmailTemplate — attach this
+// to every sendMail() call so the header logo is embedded, not fetched
+// from a remote URL.
+const EMAIL_LOGO_ATTACHMENT = {
+  filename: 'leads-logo.png',
+  path: path.join(process.cwd(), 'src', 'assets', 'leads-email-logo.png'),
+  cid: 'leads-logo',
+};
 
 export interface EmailLog {
   id: string;
@@ -40,6 +50,16 @@ export interface EmailSettings {
   fromName: string;
   fromEmail: string;
   replyTo?: string;
+  // Optional DKIM signing (nodemailer signs the message itself, independent
+  // of whatever the relay/Postfix does) — the single most effective lever
+  // this app can pull for automated mail landing in spam, since a relay
+  // often doesn't sign on behalf of a domain that isn't its own. Requires
+  // the matching public key published as a DNS TXT record at
+  // `<dkimSelector>._domainkey.<dkimDomain>` — signing is skipped entirely
+  // unless all three fields are set, so this is a no-op until configured.
+  dkimDomain?: string;
+  dkimSelector?: string;
+  dkimPrivateKey?: string;
   updatedAt?: string;
   updatedBy?: string;
 }
@@ -118,11 +138,20 @@ async function buildTransporter(): Promise<{ transporter: Transporter; settings:
     auth = undefined;
   }
 
+  const dkim = settings.dkimDomain && settings.dkimSelector && settings.dkimPrivateKey
+    ? {
+        domainName: settings.dkimDomain.trim(),
+        keySelector: settings.dkimSelector.trim(),
+        privateKey: settings.dkimPrivateKey,
+      }
+    : undefined;
+
   const t = nodemailer.createTransport({
     host,
     port,
     secure,
     auth,
+    dkim,
     pool: true,
     maxConnections: 3,
     connectionTimeout: 8000,
@@ -148,7 +177,11 @@ export function wrapInMasterEmailTemplate(options: {
   badgeColor?: string;
   bodyContentHtml: string;
 }): string {
-  const logoUrl = 'https://leadsnextgencentre.online/images/leads-short-logo.png';
+  // Embedded as a cid: inline attachment (see EMAIL_LOGO_ATTACHMENT below)
+  // rather than fetched from a remote URL — a remote-hosted image is one
+  // more "this is bulk mail" content signal, and it's one small fix that's
+  // literally common to every single automated email this app sends.
+  const logoUrl = 'cid:leads-logo';
 
   const isOmittedBadge = !options.badgeText || ['NONE', 'None', 'NO_BADGE', 'none'].includes(options.badgeText.trim());
 
@@ -230,10 +263,11 @@ export async function testEmailConnection(testRecipient: string): Promise<{ succ
       subject: `[LEADS Test Email] SMTP Client Verification`,
       text: `Hello,\n\nThis is a test notification verifying that your LEADS Dashboard email client and SMTP server (${settings.provider.toUpperCase()} @ ${effectiveHost}) are properly configured and operational.\n\nSent at: ${new Date().toLocaleString()}`,
       html: bodyHtml,
-      headers: {
-        'X-Mailer': 'LEADS-Operations-Portal',
-        'X-Priority': '3',
-      },
+      attachments: [EMAIL_LOGO_ATTACHMENT],
+      // No custom/default X-Mailer — a value like "Nodemailer" or a
+      // custom app name is one of the more recognizable "this is a mail
+      // engine, not a person" signals to spam filters.
+      xMailer: false,
     });
 
     // A resolved sendMail() only means the server ACCEPTED the message for
@@ -288,6 +322,20 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
     const domain = (settings.fromEmail || 'leadsnextgencentre.online').split('@')[1] || 'leadsnextgencentre.online';
     const messageId = `<${Date.now()}.${Math.random().toString(36).substring(2, 9)}@${domain}>`;
 
+    // A List-Unsubscribe header is a real, well-recognized deliverability
+    // signal to Gmail/Yahoo-class spam filters — but only makes sense for
+    // the genuinely bulk/broadcast categories, not a 1:1 OTP or welcome
+    // email, where offering an "unsubscribe" would just be confusing.
+    const isBulkCategory = payload.category === 'ANNOUNCEMENT' || payload.category === 'EVENT_ROSTER' || payload.category === 'GUEST_INVITE';
+    const unsubscribeAddress = settings.replyTo || settings.fromEmail;
+    const headers: Record<string, string> = {
+      'X-Auto-Response-Suppress': 'OOF, AutoReply',
+      'Message-ID': messageId,
+    };
+    if (isBulkCategory && unsubscribeAddress) {
+      headers['List-Unsubscribe'] = `<mailto:${unsubscribeAddress}?subject=Unsubscribe>`;
+    }
+
     const info = await t.sendMail({
       from,
       to: payload.to,
@@ -295,12 +343,11 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
       text: payload.bodyText,
       html: bodyHtml,
       replyTo: settings.replyTo || settings.fromEmail,
-      headers: {
-        'X-Mailer': 'LEADS-Operations-Portal',
-        'X-Priority': '3',
-        'X-Auto-Response-Suppress': 'OOF, AutoReply',
-        'Message-ID': messageId,
-      },
+      attachments: [EMAIL_LOGO_ATTACHMENT],
+      // No custom/default X-Mailer — a recognizable "sent by a mail
+      // engine, not a person" signal that doesn't help deliverability.
+      xMailer: false,
+      headers,
     });
 
     smtpResponse = info.response;
