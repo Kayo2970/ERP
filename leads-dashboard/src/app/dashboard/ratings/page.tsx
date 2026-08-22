@@ -163,6 +163,7 @@ export default function RatingsPage() {
     } else if (selectedTask) {
       const assigneeMember = members.find(m => m.name.toLowerCase() === selectedTask.assignee.toLowerCase());
       const isCommittee = selectedTask.assigneeType === 'committee' || selectedTask.eventCommitteeId;
+      const isGroup = selectedTask.assigneeType === 'group';
 
       addRating({
         taskId: selectedTask.id,
@@ -180,7 +181,11 @@ export default function RatingsPage() {
         notes,
       });
 
-      const committeeNotice = isCommittee ? ' (Evaluation propagated to all student members of this committee)' : '';
+      const committeeNotice = isCommittee
+        ? ' (Evaluation propagated to all student members of this committee)'
+        : isGroup
+          ? ' (Evaluation propagated to all students in this group)'
+          : '';
       triggerSuccess(`Submitted performance score of ${overall}/5.0 for ${selectedTask.assignee} on "${selectedTask.title}"${committeeNotice}`);
     }
 
@@ -314,6 +319,11 @@ export default function RatingsPage() {
                               <Users className="h-2.5 w-2.5" /> Committee Task
                             </span>
                           )}
+                          {task.assigneeType === 'group' && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-warning/15 text-warning rounded border border-warning/20 flex items-center gap-1">
+                              <Users className="h-2.5 w-2.5" /> Group Task
+                            </span>
+                          )}
                         </div>
                       </div>
                       <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
@@ -339,7 +349,7 @@ export default function RatingsPage() {
                           </span>
                         ) : (
                           <span className="text-[10px] text-theme-text-secondary">
-                            {task.assigneeType === 'committee' ? 'Rates entire committee' : 'Pending Evaluation'}
+                            {task.assigneeType === 'committee' ? 'Rates entire committee' : task.assigneeType === 'group' ? 'Rates entire group' : 'Pending Evaluation'}
                           </span>
                         )}
                         <button

@@ -15,15 +15,16 @@ import {
   Clock,
   Search
 } from 'lucide-react';
-import { 
-  getTasks, 
-  getEvents, 
-  getMembers, 
-  getCommittees, 
-  addTask, 
+import {
+  getTasks,
+  getEvents,
+  getMembers,
+  addTask,
   updateTask,
-  updateTaskStatus, 
+  updateTaskStatus,
   deleteTask,
+  addEventCommittee,
+  updateEventCommitteeMembers,
   TaskItem,
   EventItem,
   Member
@@ -37,7 +38,6 @@ export default function TasksPage() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [user, setUser] = useState<any>(null);
-  const [committees, setCommittees] = useState<string[]>([]);
 
   // Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -49,12 +49,24 @@ export default function TasksPage() {
   // Form State
   const [title, setTitle] = useState('');
   const [selectedEventId, setSelectedEventId] = useState('standalone');
-  const [assigneeType, setAssigneeType] = useState<'individual' | 'committee'>('individual');
+  const [assigneeType, setAssigneeType] = useState<'individual' | 'committee' | 'group'>('individual');
   const [selectedAssigneeId, setSelectedAssigneeId] = useState('');
-  const [selectedCommittee, setSelectedCommittee] = useState('Organizing Committee');
+  // Committees only exist scoped to a specific event — the picker below is
+  // always sourced from that event's own `committees` array, never a
+  // generic cross-event name list, so the created task carries a real
+  // eventCommitteeId that rating propagation can actually resolve.
+  const [selectedCommitteeId, setSelectedCommitteeId] = useState('');
+  const [isCreatingCommittee, setIsCreatingCommittee] = useState(false);
+  const [newCommitteeName, setNewCommitteeName] = useState('');
+  const [newCommitteeMemberIds, setNewCommitteeMemberIds] = useState<string[]>([]);
+  // Ad-hoc "group" assignment — a task delegated to several individually
+  // picked students, independent of any formal committee or event.
+  const [selectedGroupMemberIds, setSelectedGroupMemberIds] = useState<string[]>([]);
+  const [groupQuery, setGroupQuery] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [status, setStatus] = useState<TaskItem['status']>('Assigned');
   const [successMsg, setSuccessMsg] = useState('');
+  const [formError, setFormError] = useState('');
 
   // Searchable assignee combobox
   const [assigneeQuery, setAssigneeQuery] = useState('');
@@ -69,7 +81,6 @@ export default function TasksPage() {
     const refreshData = () => {
       setTasks(getTasks());
       setEvents(getEvents());
-      setCommittees(getCommittees());
       const mList = getMembers();
       setMembers(mList);
     };
@@ -134,11 +145,17 @@ export default function TasksPage() {
     setSelectedEventId('standalone');
     setAssigneeType('individual');
     if (members.length > 0) setSelectedAssigneeId(members[0].id);
-    setSelectedCommittee(committees[0] || 'Organizing Committee');
+    setSelectedCommitteeId('');
+    setIsCreatingCommittee(false);
+    setNewCommitteeName('');
+    setNewCommitteeMemberIds([]);
+    setSelectedGroupMemberIds([]);
+    setGroupQuery('');
     setDueDate('');
     setStatus('Assigned');
     setAssigneeQuery('');
     setIsAssigneeDropdownOpen(false);
+    setFormError('');
     setIsCreateModalOpen(true);
   };
 
@@ -147,20 +164,29 @@ export default function TasksPage() {
     setTitle(task.title);
     setSelectedEventId(task.eventId || 'standalone');
     setAssigneeType(task.assigneeType);
+    setIsCreatingCommittee(false);
+    setNewCommitteeName('');
+    setNewCommitteeMemberIds([]);
     if (task.assigneeType === 'individual') {
       const match = members.find(m => m.name === task.assignee || m.email === task.assigneeEmail);
       if (match) setSelectedAssigneeId(match.id);
+      setSelectedGroupMemberIds([]);
+    } else if (task.assigneeType === 'committee') {
+      setSelectedCommitteeId(task.eventCommitteeId || '');
     } else {
-      setSelectedCommittee(task.assignee);
+      setSelectedGroupMemberIds(task.assigneeIds || []);
     }
+    setGroupQuery('');
     setDueDate(task.dueDate);
     setStatus(task.status);
     setAssigneeQuery('');
     setIsAssigneeDropdownOpen(false);
+    setFormError('');
   };
 
   const handleSaveTask = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError('');
     if (!title || !dueDate) return;
 
     let eventTitle = 'Standalone';
@@ -176,15 +202,68 @@ export default function TasksPage() {
 
     let assigneeName = '';
     let assigneeEmailVal = undefined;
+    let assigneeIdVal = undefined;
+    let assigneeIdsVal: string[] | undefined = undefined;
+    let committeeIdVal: string | undefined = undefined;
+    let committeeNameVal: string | undefined = undefined;
 
     if (assigneeType === 'individual') {
       const memberObj = members.find(m => m.id === selectedAssigneeId);
-      if (memberObj) {
-        assigneeName = memberObj.name;
-        assigneeEmailVal = memberObj.email;
+      if (!memberObj) {
+        setFormError('Select a member to assign this task to.');
+        return;
       }
+      assigneeName = memberObj.name;
+      assigneeEmailVal = memberObj.email;
+      assigneeIdVal = memberObj.id;
+    } else if (assigneeType === 'committee') {
+      // Committees only exist scoped to an event — this must resolve to a
+      // real EventCommittee on the selected event, not a free-text name,
+      // or ratings can never be fanned out to its members later.
+      if (!eventIdVal) {
+        setFormError('Select an event first — committees are always tied to a specific event.');
+        return;
+      }
+      const eventObj = events.find(ev => ev.id === eventIdVal);
+      if (!eventObj) {
+        setFormError('Select a valid event.');
+        return;
+      }
+
+      if (isCreatingCommittee) {
+        if (!newCommitteeName.trim()) {
+          setFormError('Enter a name for the new committee.');
+          return;
+        }
+        const updatedEvent = addEventCommittee(eventIdVal, newCommitteeName.trim(), user?.name || 'User');
+        const createdCommittee = updatedEvent?.committees.find(c => c.name === newCommitteeName.trim());
+        if (!createdCommittee) {
+          setFormError('Could not create the committee. Please try again.');
+          return;
+        }
+        if (newCommitteeMemberIds.length > 0) {
+          updateEventCommitteeMembers(eventIdVal, createdCommittee.id, newCommitteeMemberIds, user?.name || 'User');
+        }
+        committeeIdVal = createdCommittee.id;
+        committeeNameVal = createdCommittee.name;
+      } else {
+        const committee = eventObj.committees.find(c => c.id === selectedCommitteeId);
+        if (!committee) {
+          setFormError('Select a committee for this event, or create a new one.');
+          return;
+        }
+        committeeIdVal = committee.id;
+        committeeNameVal = committee.name;
+      }
+      assigneeName = committeeNameVal || '';
     } else {
-      assigneeName = selectedCommittee;
+      if (selectedGroupMemberIds.length === 0) {
+        setFormError('Select at least one student for this group task.');
+        return;
+      }
+      const groupMembers = members.filter(m => selectedGroupMemberIds.includes(m.id));
+      assigneeName = `${groupMembers.length} students: ${groupMembers.map(m => m.name).join(', ')}`;
+      assigneeIdsVal = selectedGroupMemberIds;
     }
 
     if (editingTask) {
@@ -192,8 +271,12 @@ export default function TasksPage() {
         title,
         event: eventTitle,
         eventId: eventIdVal,
+        eventCommitteeId: committeeIdVal,
+        eventCommitteeName: committeeNameVal,
         assignee: assigneeName,
+        assigneeId: assigneeIdVal,
         assigneeEmail: assigneeEmailVal,
+        assigneeIds: assigneeIdsVal,
         assigneeType,
         dueDate,
         status,
@@ -205,8 +288,12 @@ export default function TasksPage() {
         title,
         event: eventTitle,
         eventId: eventIdVal,
+        eventCommitteeId: committeeIdVal,
+        eventCommitteeName: committeeNameVal,
         assignee: assigneeName,
+        assigneeId: assigneeIdVal,
         assigneeEmail: assigneeEmailVal,
+        assigneeIds: assigneeIdsVal,
         assigneeType,
         dueDate,
         status,
@@ -430,7 +517,8 @@ export default function TasksPage() {
                   </p>
                   <p className="text-[11px] text-theme-text-secondary flex items-center gap-1">
                     {task.assigneeType === 'individual' ? <User className="h-3 w-3 text-accent" /> : <Users className="h-3 w-3 text-warning" />}
-                    Assignee: <span className="font-medium text-theme-text-primary">{task.assignee}</span>
+                    {task.assigneeType === 'committee' ? 'Committee' : task.assigneeType === 'group' ? 'Group' : 'Assignee'}:{' '}
+                    <span className="font-medium text-theme-text-primary">{task.assignee}</span>
                   </p>
                   {task.decidedBy && (
                     <p className="text-[10px] text-theme-text-secondary italic pt-1">
@@ -520,6 +608,13 @@ export default function TasksPage() {
               </button>
             </div>
 
+            {formError && (
+              <div className="p-3 bg-danger/10 border border-danger/25 rounded-xl text-danger text-xs flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{formError}</span>
+              </div>
+            )}
+
             <form onSubmit={handleSaveTask} className="space-y-4 text-xs">
               <div className="space-y-1.5">
                 <label className="block font-medium text-theme-text-secondary">Task Title *</label>
@@ -538,7 +633,13 @@ export default function TasksPage() {
                   <label className="block font-medium text-theme-text-secondary">Linked Event</label>
                   <select
                     value={selectedEventId}
-                    onChange={(e) => setSelectedEventId(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedEventId(e.target.value);
+                      // Committees are scoped to one event — a committee picked for a
+                      // different event no longer applies once the event changes.
+                      setSelectedCommitteeId('');
+                      setIsCreatingCommittee(false);
+                    }}
                     className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   >
                     <option value="standalone">Standalone (No Event)</option>
@@ -562,7 +663,7 @@ export default function TasksPage() {
 
               {/* Assignee Selection */}
               <div className="space-y-3 pt-1 border-t border-theme-border/20">
-                <div className="flex gap-4">
+                <div className="flex flex-wrap gap-4">
                   <label className="flex items-center gap-2 cursor-pointer font-medium text-theme-text-primary">
                     <input
                       type="radio"
@@ -577,11 +678,21 @@ export default function TasksPage() {
                     <input
                       type="radio"
                       name="assigneeType"
+                      checked={assigneeType === 'group'}
+                      onChange={() => setAssigneeType('group')}
+                      className="accent-accent"
+                    />
+                    Group of Students
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer font-medium text-theme-text-primary">
+                    <input
+                      type="radio"
+                      name="assigneeType"
                       checked={assigneeType === 'committee'}
                       onChange={() => setAssigneeType('committee')}
                       className="accent-accent"
                     />
-                    Entire Committee
+                    Event Committee
                   </label>
                 </div>
 
@@ -628,18 +739,119 @@ export default function TasksPage() {
                       )}
                     </div>
                   </div>
-                ) : (
+                ) : assigneeType === 'group' ? (
                   <div className="space-y-1.5">
-                    <label className="block font-medium text-theme-text-secondary">Select Committee Unit</label>
-                    <select
-                      value={selectedCommittee}
-                      onChange={(e) => setSelectedCommittee(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                    >
-                      {committees.map(c => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
+                    <label className="block font-medium text-theme-text-secondary">
+                      Select Students ({selectedGroupMemberIds.length} selected)
+                    </label>
+                    <div className="flex items-center gap-2 px-4 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl focus-within:border-accent">
+                      <Search className="h-3.5 w-3.5 text-theme-text-secondary shrink-0" />
+                      <input
+                        type="text"
+                        value={groupQuery}
+                        onChange={(e) => setGroupQuery(e.target.value)}
+                        placeholder="Search members to add..."
+                        className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-theme-text-primary placeholder-theme-text-secondary"
+                      />
+                    </div>
+                    <div className="max-h-48 overflow-y-auto rounded-xl border border-theme-card-border divide-y divide-theme-border/20">
+                      {members
+                        .filter(m => {
+                          const q = groupQuery.toLowerCase();
+                          return !q || m.name.toLowerCase().includes(q) || m.role.toLowerCase().includes(q);
+                        })
+                        .map(m => (
+                          <label
+                            key={m.id}
+                            className="flex items-center justify-between gap-2 px-3 py-2 hover:bg-theme-border/20 cursor-pointer"
+                          >
+                            <span className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={selectedGroupMemberIds.includes(m.id)}
+                                onChange={(e) => {
+                                  setSelectedGroupMemberIds(prev =>
+                                    e.target.checked ? [...prev, m.id] : prev.filter(id => id !== m.id)
+                                  );
+                                }}
+                                className="accent-accent"
+                              />
+                              <span className="font-medium text-theme-text-primary">{m.name}</span>
+                            </span>
+                            <span className="text-theme-text-secondary shrink-0">{m.role}</span>
+                          </label>
+                        ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {selectedEventId === 'standalone' ? (
+                      <p className="p-3 bg-warning/10 border border-warning/25 rounded-xl text-warning">
+                        Committees belong to a specific event — select a Linked Event above first.
+                      </p>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <label className="block font-medium text-theme-text-secondary">Select Committee</label>
+                          <button
+                            type="button"
+                            onClick={() => setIsCreatingCommittee(v => !v)}
+                            className="text-[11px] font-semibold text-accent hover:underline cursor-pointer"
+                          >
+                            {isCreatingCommittee ? 'Choose Existing Committee' : '+ Create New Committee'}
+                          </button>
+                        </div>
+
+                        {isCreatingCommittee ? (
+                          <div className="space-y-2 p-3 bg-theme-background/30 border border-theme-card-border rounded-xl">
+                            <input
+                              type="text"
+                              value={newCommitteeName}
+                              onChange={(e) => setNewCommitteeName(e.target.value)}
+                              placeholder="New committee name, e.g. Stage & Decor"
+                              className="w-full px-3 py-2 bg-background border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent"
+                            />
+                            <p className="font-medium text-theme-text-secondary">
+                              Add Students ({newCommitteeMemberIds.length} selected)
+                            </p>
+                            <div className="max-h-36 overflow-y-auto rounded-lg border border-theme-card-border divide-y divide-theme-border/20">
+                              {members.map(m => (
+                                <label
+                                  key={m.id}
+                                  className="flex items-center justify-between gap-2 px-3 py-1.5 hover:bg-theme-border/20 cursor-pointer"
+                                >
+                                  <span className="flex items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={newCommitteeMemberIds.includes(m.id)}
+                                      onChange={(e) => {
+                                        setNewCommitteeMemberIds(prev =>
+                                          e.target.checked ? [...prev, m.id] : prev.filter(id => id !== m.id)
+                                        );
+                                      }}
+                                      className="accent-accent"
+                                    />
+                                    <span className="font-medium text-theme-text-primary">{m.name}</span>
+                                  </span>
+                                  <span className="text-theme-text-secondary shrink-0">{m.role}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <select
+                            value={selectedCommitteeId}
+                            onChange={(e) => setSelectedCommitteeId(e.target.value)}
+                            className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                          >
+                            <option value="">-- Select Committee --</option>
+                            {(events.find(ev => ev.id === selectedEventId)?.committees || []).map(c => (
+                              <option key={c.id} value={c.id}>{c.name} ({c.memberIds.length} members)</option>
+                            ))}
+                          </select>
+                        )}
+                      </>
+                    )}
                   </div>
                 )}
               </div>
