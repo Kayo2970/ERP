@@ -22,7 +22,8 @@ import {
   Zap,
   ChevronDown,
   ChevronUp,
-  ShieldCheck
+  ShieldCheck,
+  Rocket
 } from 'lucide-react';
 import { EmailSettings, EmailLog } from '@/lib/email-service';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
@@ -142,6 +143,11 @@ export default function EmailManagementPage() {
         smtpHost: 'localhost',
         smtpPort: 25,
         secure: false,
+      }));
+    } else if (provider === 'direct_send') {
+      setSettings(prev => ({
+        ...prev,
+        provider: 'direct_send',
       }));
     } else {
       setSettings(prev => ({
@@ -368,7 +374,7 @@ export default function EmailManagementPage() {
             </div>
 
             {/* Provider Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               <button
                 type="button"
                 onClick={() => handleSelectProvider('gmail')}
@@ -444,67 +450,113 @@ export default function EmailManagementPage() {
                   <span className="text-[10px] opacity-75">localhost:25</span>
                 </div>
               </button>
+
+              <button
+                type="button"
+                onClick={() => handleSelectProvider('direct_send')}
+                className={`p-3.5 rounded-2xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
+                  settings.provider === 'direct_send'
+                    ? 'bg-accent/15 border-accent text-accent shadow-md shadow-accent/10'
+                    : 'bg-theme-border/10 border-theme-border/30 hover:border-theme-border/60 text-theme-text-primary'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <Rocket className="h-4 w-4" />
+                  {settings.provider === 'direct_send' && <Check className="h-4 w-4" />}
+                </div>
+                <div>
+                  <span className="font-bold text-xs block mt-2">Direct Send (Built-in)</span>
+                  <span className="text-[10px] opacity-75">No relay — MX direct</span>
+                </div>
+              </button>
             </div>
 
             <form onSubmit={handleSaveSettings} className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-1.5 sm:col-span-2">
-                  <label className="block font-medium text-theme-text-secondary">SMTP Host *</label>
-                  <input
-                    type="text"
-                    required
-                    value={settings.smtpHost}
-                    onChange={e => setSettings(prev => ({ ...prev, smtpHost: e.target.value }))}
-                    placeholder="e.g. smtp.gmail.com"
-                    className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">SMTP Port *</label>
-                  <input
-                    type="number"
-                    required
-                    value={settings.smtpPort}
-                    onChange={e => setSettings(prev => ({ ...prev, smtpPort: Number(e.target.value) }))}
-                    placeholder="587"
-                    className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Auth Username / Email</label>
-                  <input
-                    type="text"
-                    value={settings.authUser}
-                    onChange={e => setSettings(prev => ({ ...prev, authUser: e.target.value }))}
-                    placeholder="leads@msruas.ac.in"
-                    className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                  />
-                </div>
-
-                <div className="space-y-1.5 relative">
-                  <label className="block font-medium text-theme-text-secondary">App Password / Auth Secret</label>
-                  <div className="relative">
+              {settings.provider === 'direct_send' ? (
+                <div className="space-y-3">
+                  <div className="p-4 bg-accent/10 rounded-2xl border border-accent/20 space-y-2 text-[11px] text-theme-text-secondary leading-relaxed">
+                    <span className="font-bold text-theme-text-primary flex items-center gap-1.5">
+                      <Rocket className="h-3.5 w-3.5 text-accent" />
+                      Built-in Direct Send
+                    </span>
+                    <p>The app itself resolves each recipient&apos;s mail server (MX record) and delivers straight to it — no Gmail/Outlook relay, no Postfix, nothing in between. There is no host/port/password to configure.</p>
+                    <p>This requires, on your own domain and VPS: MX/SPF/DKIM/DMARC DNS records, a reverse-DNS (PTR) record on the VPS&apos;s IP matching the HELO hostname below, and outbound TCP port 25 open (many hosts block it by default — check with your provider).</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block font-medium text-theme-text-secondary">HELO Hostname *</label>
                     <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={settings.authPass}
-                      onChange={e => setSettings(prev => ({ ...prev, authPass: e.target.value }))}
-                      placeholder="••••••••••••••••"
-                      className="w-full pl-4 pr-10 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                      type="text"
+                      required
+                      value={settings.heloHostname || ''}
+                      onChange={e => setSettings(prev => ({ ...prev, heloHostname: e.target.value }))}
+                      placeholder="e.g. mail.leadsnextgencentre.cloud"
+                      className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-3 text-theme-text-secondary hover:text-theme-text-primary"
-                    >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
+                    <p className="text-[10px] text-theme-text-secondary">Must match the PTR (reverse-DNS) record for the VPS&apos;s public IP, or receiving servers will reject the connection.</p>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <label className="block font-medium text-theme-text-secondary">SMTP Host *</label>
+                      <input
+                        type="text"
+                        required
+                        value={settings.smtpHost}
+                        onChange={e => setSettings(prev => ({ ...prev, smtpHost: e.target.value }))}
+                        placeholder="e.g. smtp.gmail.com"
+                        className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block font-medium text-theme-text-secondary">SMTP Port *</label>
+                      <input
+                        type="number"
+                        required
+                        value={settings.smtpPort}
+                        onChange={e => setSettings(prev => ({ ...prev, smtpPort: Number(e.target.value) }))}
+                        placeholder="587"
+                        className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="block font-medium text-theme-text-secondary">Auth Username / Email</label>
+                      <input
+                        type="text"
+                        value={settings.authUser}
+                        onChange={e => setSettings(prev => ({ ...prev, authUser: e.target.value }))}
+                        placeholder="leads@msruas.ac.in"
+                        className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5 relative">
+                      <label className="block font-medium text-theme-text-secondary">App Password / Auth Secret</label>
+                      <div className="relative">
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          value={settings.authPass}
+                          onChange={e => setSettings(prev => ({ ...prev, authPass: e.target.value }))}
+                          placeholder="••••••••••••••••"
+                          className="w-full pl-4 pr-10 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-3 text-theme-text-secondary hover:text-theme-text-primary"
+                        >
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
