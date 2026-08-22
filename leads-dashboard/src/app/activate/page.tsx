@@ -3,7 +3,7 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ShieldAlert, CheckCircle2, Lock, Eye, EyeOff, LogIn, Sparkles } from 'lucide-react';
+import { ShieldAlert, CheckCircle2, Lock, Eye, EyeOff, LogIn, Sparkles, Cake } from 'lucide-react';
 
 function ActivateAccountForm() {
   const searchParams = useSearchParams();
@@ -17,6 +17,7 @@ function ActivateAccountForm() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [dateOfBirth, setDateOfBirth] = useState('');
   const [submitError, setSubmitError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -62,7 +63,7 @@ function ActivateAccountForm() {
       const res = await fetch('/api/auth/activate-account', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, newPassword }),
+        body: JSON.stringify({ token, newPassword, dateOfBirth: dateOfBirth || undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to activate your account.');
@@ -180,6 +181,23 @@ function ActivateAccountForm() {
                   className="w-full pl-10 pr-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary placeholder-theme-text-secondary focus:outline-none focus:border-accent text-xs transition-all"
                 />
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block font-semibold text-theme-text-secondary uppercase tracking-wider">
+                Date of Birth <span className="normal-case font-medium text-theme-text-secondary/70">(optional)</span>
+              </label>
+              <div className="relative">
+                <Cake className="absolute left-3.5 top-3 h-4 w-4 text-theme-text-secondary" />
+                <input
+                  type="date"
+                  value={dateOfBirth}
+                  onChange={(e) => setDateOfBirth(e.target.value)}
+                  max={new Date().toISOString().split('T')[0]}
+                  className="w-full pl-10 pr-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary placeholder-theme-text-secondary focus:outline-none focus:border-accent text-xs transition-all"
+                />
+              </div>
+              <p className="text-[11px] text-theme-text-secondary/70">We&apos;ll send you a birthday surprise from the Centre — you can also add this later from Settings.</p>
             </div>
 
             <button

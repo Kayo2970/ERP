@@ -65,6 +65,11 @@ export interface DbSchema {
   emailSettings: any[];
   guests: any[];
   budgets: any[];
+  // One row per (memberId, date) a birthday email was actually sent for —
+  // see src/lib/birthday-scheduler.ts. Purely an idempotency guard so a
+  // PM2 restart near midnight (or two scheduler ticks landing on the same
+  // day) can never double-send the same member's birthday email.
+  birthdayEmailLog: any[];
   lastUpdated?: string;
 }
 
@@ -90,6 +95,7 @@ const EMPTY_DB: DbSchema = {
   emailSettings: [],
   guests: [],
   budgets: [],
+  birthdayEmailLog: [],
 };
 
 const SEED_DB: DbSchema = {
@@ -128,6 +134,7 @@ const SEED_DB: DbSchema = {
   ],
   guests: initialGuests,
   budgets: initialBudgets,
+  birthdayEmailLog: [],
 };
 
 const COLLECTION_KEYS = Object.keys(EMPTY_DB) as (keyof DbSchema)[];

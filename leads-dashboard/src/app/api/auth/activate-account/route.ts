@@ -34,13 +34,16 @@ export async function GET(request: Request) {
 /** Consumes an activation token — sets the member's first real password and deletes the token. */
 export async function POST(request: Request) {
   try {
-    const { token, newPassword } = await request.json();
+    const { token, newPassword, dateOfBirth } = await request.json();
 
     if (!token || !newPassword) {
       return NextResponse.json({ error: 'Activation token and a new password are required.' }, { status: 400 });
     }
     if (newPassword.length < 4) {
       return NextResponse.json({ error: 'Password must be at least 4 characters.' }, { status: 400 });
+    }
+    if (dateOfBirth && !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
+      return NextResponse.json({ error: 'Date of birth is not in a valid format.' }, { status: 400 });
     }
 
     const activations = await readCollection('accountActivations');
@@ -59,7 +62,11 @@ export async function POST(request: Request) {
         if (m.id === matched.memberId) {
           memberFound = true;
           memberName = m.name;
-          return { ...m, passwordHash: hashPassword(newPassword) };
+          return {
+            ...m,
+            passwordHash: hashPassword(newPassword),
+            ...(dateOfBirth ? { dateOfBirth } : {}),
+          };
         }
         return m;
       })
