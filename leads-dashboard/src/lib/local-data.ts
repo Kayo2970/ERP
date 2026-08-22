@@ -273,6 +273,25 @@ export interface DesignSubmissionItem {
   // same task instead of creating a duplicate each time.
   linkedTaskId?: string;
   isSample?: boolean;
+  // Optional automated OCR + spell-check pass run client-side at upload time
+  // (see /api/designs/ocr-scan). Purely advisory — never validated or
+  // enforced server-side, just carried along for the Proofreading Desk to
+  // show what the automated pass already flagged.
+  ocrScan?: OcrScanResult;
+}
+
+export interface OcrScanIssue {
+  word: string;
+  suggestions: string[];
+}
+
+export interface OcrScanResult {
+  extractedText: string;
+  pageCount: number;
+  totalPages: number;
+  partial: boolean; // true if a PDF had more pages than were scanned
+  issues: OcrScanIssue[];
+  scannedAt: string;
 }
 
 export interface AuditLogItem {
@@ -2098,7 +2117,8 @@ export async function updateDesignFile(
   fileName: string,
   fileSize: number,
   fileType: string,
-  actorName: string
+  actorName: string,
+  ocrScan?: OcrScanResult
 ): Promise<DesignSubmissionItem | null> {
   if (fileSize > 25 * 1024 * 1024) {
     throw new Error('File size exceeds the 25 MB limit.');
@@ -2115,6 +2135,9 @@ export async function updateDesignFile(
     fileName,
     fileSize,
     fileType,
+    // The replaced file's own scan (if the designer ran one), or cleared —
+    // the previous ocrScan described the file being replaced, not this one.
+    ocrScan,
     review: item.review ? { ...item.review, status: 'Pending Proofread', comments: undefined, reviewedAt: undefined } : item.review,
     styleStatus: item.styleStatus ? 'Pending' : item.styleStatus,
     styleFeedback: undefined,

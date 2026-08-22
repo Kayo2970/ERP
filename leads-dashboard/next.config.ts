@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // These packages do native/WASM work (OCR, PDF rendering) and should run
+  // as plain require()s at runtime rather than being bundled by webpack.
+  serverExternalPackages: ['tesseract.js', '@napi-rs/canvas', 'pdfjs-dist'],
   allowedDevOrigins: [
     'localhost:3000',
     '127.0.0.1:3000',

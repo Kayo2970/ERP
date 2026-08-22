@@ -30,7 +30,7 @@ function sanitizeFileName(name: string): string {
  * with nothing before the semicolon, which used to fail this parse outright
  * and silently drop the whole upload.
  */
-function parseDataUrl(dataUrl: string): { mime: string; buffer: Buffer } {
+export function parseDataUrl(dataUrl: string): { mime: string; buffer: Buffer } {
   const match = /^data:([^;]*);base64,([\s\S]*)$/.exec(dataUrl);
   if (!match) throw new Error('Expected a base64 data URL.');
   return { mime: match[1], buffer: Buffer.from(match[2], 'base64') };

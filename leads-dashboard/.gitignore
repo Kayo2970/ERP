@@ -53,6 +53,10 @@ data/*.json.migrated
 # reference are always restored as a matching pair.
 data/uploads/
 
+# cached OCR language data (tesseract.js), fetched once and reused —
+# not source, safe to delete and re-fetch at any time.
+data/ocr-cache/
+
 # retired live data, automatically renamed (never deleted) before a database
 # restore overwrites data/ — a safety net for undoing a bad restore by hand.
 data.pre-restore-*/
