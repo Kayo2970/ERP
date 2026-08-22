@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Deploying LEADS Dashboard on a New VPS — From Scratch</title>
+<title>Deploying LEADS Dashboard on a Fresh VPS</title>
 <style>
   :root {
     --bg: #0f172a;
@@ -34,25 +34,17 @@
   h1 { font-size: 1.8rem; margin: 0 0 6px; letter-spacing: -0.01em; }
   .subtitle { color: var(--text-dim); font-size: 0.95rem; margin-bottom: 20px; }
   .toc {
-    background: var(--panel);
-    border: 1px solid var(--panel-border);
-    border-radius: 14px;
-    padding: 16px 20px;
-    margin-bottom: 28px;
-    font-size: 0.85rem;
+    background: var(--panel); border: 1px solid var(--panel-border); border-radius: 14px;
+    padding: 16px 20px; margin-bottom: 28px; font-size: 0.85rem;
   }
   .toc h3 { margin: 0 0 10px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); }
-  .toc ol { margin: 0; padding-left: 20px; columns: 2; column-gap: 24px; }
-  .toc li { margin-bottom: 6px; break-inside: avoid; }
+  .toc ol { margin: 0; padding-left: 20px; }
+  .toc li { margin-bottom: 6px; }
   .toc a { color: var(--accent); text-decoration: none; }
   .toc a:hover { text-decoration: underline; }
   .step {
-    background: var(--panel);
-    border: 1px solid var(--panel-border);
-    border-radius: 16px;
-    padding: 22px 24px;
-    margin-bottom: 20px;
-    scroll-margin-top: 16px;
+    background: var(--panel); border: 1px solid var(--panel-border); border-radius: 16px;
+    padding: 22px 24px; margin-bottom: 20px; scroll-margin-top: 16px;
   }
   .step-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
   .step-num {
@@ -98,279 +90,295 @@
     background: var(--accent-soft); color: var(--accent); margin-left: 6px;
   }
   .badge.warn { background: var(--warn-soft); color: var(--warn); }
-  .placeholder { color: #fca5a5; }
+  details { margin: 10px 0; }
+  summary {
+    cursor: pointer; color: var(--accent); font-size: 0.85rem; font-weight: 600;
+    padding: 4px 0;
+  }
+  details pre { margin-top: 10px; max-height: 480px; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Deploying LEADS Dashboard on a New VPS</h1>
-  <div class="subtitle">A complete from-scratch runbook: server setup, Node/PM2, Nginx + HTTPS, environment config, and going live.</div>
+  <h1>Deploying LEADS Dashboard on a Fresh VPS</h1>
+  <div class="subtitle">leadsnextgencentre.online &middot; reformatted VPS, root install, everything lives at <code>/ERP</code></div>
 
   <div class="toc">
     <h3>Steps</h3>
     <ol>
-      <li><a href="#step1">What you'll need first</a></li>
-      <li><a href="#step2">Point your domain at the VPS</a></li>
-      <li><a href="#step3">First login &amp; basic server lockdown</a></li>
-      <li><a href="#step4">Install Node.js 22 LTS</a></li>
-      <li><a href="#step5">Install PM2 &amp; Nginx</a></li>
-      <li><a href="#step6">Clone the repository</a></li>
-      <li><a href="#step7">Install dependencies</a></li>
-      <li><a href="#step8">Configure environment variables</a></li>
-      <li><a href="#step9">Build the app</a></li>
-      <li><a href="#step10">Start it with PM2</a></li>
-      <li><a href="#step11">Configure Nginx as a reverse proxy</a></li>
-      <li><a href="#step12">Enable free HTTPS (Let's Encrypt)</a></li>
-      <li><a href="#step13">Lock the firewall down</a></li>
-      <li><a href="#step14">First login &amp; email setup</a></li>
-      <li><a href="#step15">Redeploying updates later</a></li>
-      <li><a href="#step16">Backups</a></li>
-      <li><a href="#step17">Troubleshooting cheat-sheet</a></li>
+      <li><a href="#step1">What's already in place</a></li>
+      <li><a href="#step2">SSH in as root and run the setup script</a></li>
+      <li><a href="#step3">Confirm it's live</a></li>
+      <li><a href="#step4">Enable HTTPS (if you didn't set an email in the script)</a></li>
+      <li><a href="#step5">First login &amp; re-configuring email</a></li>
+      <li><a href="#step6">Redeploying updates later</a></li>
+      <li><a href="#step7">Backups</a></li>
+      <li><a href="#step8">Troubleshooting cheat-sheet</a></li>
     </ol>
   </div>
 
   <div class="step" id="step1">
-    <div class="step-header"><div class="step-num">1</div><h2>What you'll need first</h2></div>
+    <div class="step-header"><div class="step-num">1</div><h2>What's already in place</h2></div>
+    <p>Since this is the same VPS being reformatted (not a new box), most of the usual first-VPS setup doesn't apply here:</p>
     <ul>
-      <li>A fresh VPS running <strong>Ubuntu 22.04 or 24.04 LTS</strong> (these commands are for Ubuntu/Debian — <code>apt</code>-based). 2 vCPU / 4 GB RAM is comfortable for this app.</li>
-      <li>Root or sudo SSH access to it, and its public IP address.</li>
-      <li>A domain name you control, with access to its DNS (e.g. Hostinger hPanel, as used for the mail-authentication setup).</li>
-      <li>Access to the GitHub repository — <code>https://github.com/Kayo2970/ERP</code> — either as a public clone or with a Personal Access Token if it's private.</li>
-      <li>A terminal with SSH (Terminal on Mac/Linux, or PuTTY/Windows Terminal on Windows).</li>
+      <li><strong>DNS is already correct.</strong> The <code>leadsnextgencentre.online</code> records are still sitting at Hostinger pointing at this VPS's IP — nothing to touch there unless the reformat also changed the IP.</li>
+      <li><strong>No separate deploy user.</strong> Everything runs as <code>root</code> — simpler, and fine for a single-admin box like this.</li>
+      <li><strong>Fixed install path.</strong> The app always lives at <code>/ERP</code> (with the Next.js app itself in <code>/ERP/leads-dashboard</code>).</li>
     </ul>
+    <div class="callout">One thing genuinely does <em>not</em> survive the reformat: the SMTP/DKIM configuration you set up in the dashboard's Email Management screen. That lived in the app's own database on the old disk, not in DNS — Step 5 below covers exactly what to redo and why.</div>
   </div>
 
   <div class="step" id="step2">
-    <div class="step-header"><div class="step-num">2</div><h2>Point your domain at the VPS</h2></div>
-    <p>In your DNS provider's zone editor, add (or update) an <strong>A record</strong> pointing your domain at the VPS's IP address:</p>
+    <div class="step-header"><div class="step-num">2</div><h2>SSH in as root and run the setup script</h2></div>
+    <p>This one script does everything: installs Node.js 22, PM2, Nginx, and Certbot; clones the app to <code>/ERP</code>; installs dependencies; generates a fresh <code>DATA_ENCRYPTION_KEY</code>; builds the app; starts it under PM2 (auto-restarts on reboot); configures Nginx as a reverse proxy for <code>leadsnextgencentre.online</code>; and opens the firewall.</p>
+    <pre><code id="s2a">ssh root@YOUR_VPS_IP</code><button class="copy-btn" onclick="copyBlock('s2a', this)">Copy</button></pre>
+    <p>Download the script and open it to fill in one optional value before running:</p>
+    <pre><code id="s2b">curl -fsSL https://raw.githubusercontent.com/Kayo2970/ERP/main/docs/vps-setup.sh -o vps-setup.sh
+nano vps-setup.sh</code><button class="copy-btn" onclick="copyBlock('s2b', this)">Copy</button></pre>
+    <p>Near the top of the file:</p>
     <table>
-      <tr><th>Type</th><th>Name</th><th>Value</th></tr>
-      <tr><td>A</td><td><code>@</code></td><td><span class="placeholder">YOUR_VPS_IP</span></td></tr>
-      <tr><td>A</td><td><code>www</code></td><td><span class="placeholder">YOUR_VPS_IP</span></td></tr>
+      <tr><th>Variable</th><th>What to do</th></tr>
+      <tr><td><code>DOMAIN</code></td><td>Already set to <code>leadsnextgencentre.online</code> — leave as-is.</td></tr>
+      <tr><td><code>CERTBOT_EMAIL</code></td><td>Optional. Set it to an email address (e.g. <code>"you@example.com"</code>) to have the script request your HTTPS certificate automatically at the end. Leave blank to skip and run Certbot yourself in Step 4.</td></tr>
     </table>
-    <p>DNS can take anywhere from a few minutes to a few hours to propagate. You can start the server setup below while you wait — you'll just need propagation to finish before the HTTPS step (Step 12).</p>
-    <div class="callout">If you'll also be sending mail from this box (Direct Send SMTP, DKIM, SPF, DMARC, BIMI), that's a separate set of DNS records covered in full in <code>docs/direct-send-setup-guide.html</code> in this same repo — do this domain-pointing step first, then follow that guide for mail once the app is live.</div>
-  </div>
+    <p>Save and exit (<code>Ctrl+O</code>, <code>Enter</code>, <code>Ctrl+X</code> in nano), then run it:</p>
+    <pre><code id="s2c">bash vps-setup.sh</code><button class="copy-btn" onclick="copyBlock('s2c', this)">Copy</button></pre>
+    <p>This takes a few minutes — it's doing a full system update, package installs, and a production build. It prints progress as it goes, and ends by printing your new <code>DATA_ENCRYPTION_KEY</code>.</p>
+    <div class="callout danger"><strong>Copy that <code>DATA_ENCRYPTION_KEY</code> value somewhere other than this server the moment it's printed</strong> (a password manager is fine). It encrypts every record the app stores — losing it means losing the data with it, backups included. The script never overwrites it on a re-run, so this is the only time you'll see it.</div>
+    <details>
+      <summary>Show the full script contents (also committed at <code>docs/vps-setup.sh</code> in the repo)</summary>
+      <pre><code id="s2d">#!/usr/bin/env bash
+#
+# vps-setup.sh — one-shot bootstrap for the LEADS Dashboard on a fresh
+# Ubuntu VPS, run as root, installed to /ERP.
+#
+# What it does: installs Node.js 22, PM2, Nginx, Certbot and git; clones (or
+# updates) the app into /ERP; installs dependencies; generates a fresh
+# DATA_ENCRYPTION_KEY the first time it's ever run; builds the app; starts
+# it under PM2 with auto-restart on reboot; writes an Nginx reverse-proxy
+# config for DOMAIN; opens the firewall for SSH + HTTP/HTTPS; and requests
+# a Let's Encrypt certificate if CERTBOT_EMAIL is set.
+#
+# Safe to re-run: it skips anything already installed/present rather than
+# re-doing it, and it never overwrites an existing .env (so it can never
+# regenerate — and thereby invalidate — a DATA_ENCRYPTION_KEY that's
+# already protecting real data).
+#
+# Usage:
+#   1. Edit DOMAIN (and CERTBOT_EMAIL, optional) below.
+#   2. As root: bash vps-setup.sh
+#
+set -euo pipefail
 
-  <div class="step" id="step3">
-    <div class="step-header"><div class="step-num">3</div><h2>First login &amp; basic server lockdown</h2></div>
-    <p>SSH in as root the first time, update the system, then create a dedicated non-root user to run everything as:</p>
-    <pre><code id="s3a">ssh root@YOUR_VPS_IP
+# ── Configure these two before running ──────────────────────────────────
+DOMAIN="leadsnextgencentre.online"
+CERTBOT_EMAIL=""   # e.g. "you@example.com" — leave blank to skip HTTPS setup
+                    # and run it manually later (see the bottom of this file)
+# ──────────────────────────────────────────────────────────────────────────
 
-apt update && apt upgrade -y
+REPO_URL="https://github.com/Kayo2970/ERP.git"
+INSTALL_DIR="/ERP"
+APP_DIR="$INSTALL_DIR/leads-dashboard"
 
-adduser deploy
-usermod -aG sudo deploy</code><button class="copy-btn" onclick="copyBlock('s3a', this)">Copy</button></pre>
-    <p>Log out, then log back in as <code>deploy</code> for everything from here on — running the app as root is unnecessary risk.</p>
-    <pre><code id="s3b">ssh deploy@YOUR_VPS_IP</code><button class="copy-btn" onclick="copyBlock('s3b', this)">Copy</button></pre>
-    <p>Install a basic firewall and only allow SSH for now (you'll open HTTP/HTTPS in Step 13, once Nginx is actually running):</p>
-    <pre><code id="s3c">sudo apt install -y ufw
-sudo ufw allow OpenSSH
-sudo ufw enable</code><button class="copy-btn" onclick="copyBlock('s3c', this)">Copy</button></pre>
-    <div class="callout">Confirm <code>ufw status</code> shows <strong>OpenSSH: ALLOW</strong> before you close your current SSH session — locking yourself out of a fresh VPS is a real (and annoying) way to lose an afternoon.</div>
-  </div>
+if [ "$(id -u)" -ne 0 ]; then
+  echo "This script must be run as root (e.g. 'sudo bash vps-setup.sh' or already logged in as root)." &gt;&amp;2
+  exit 1
+fi
 
-  <div class="step" id="step4">
-    <div class="step-header"><div class="step-num">4</div><h2>Install Node.js 22 LTS</h2></div>
-    <p>This app is built on Next.js 16 + React 19, which needs a current Node — 22 LTS is the safe choice. Install it via NodeSource:</p>
-    <pre><code id="s4">curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt install -y nodejs
+log() { echo -e "\n\033[1;36m==&gt; $1\033[0m"; }
 
-node -v
-npm -v</code><button class="copy-btn" onclick="copyBlock('s4', this)">Copy</button></pre>
-    <p><code>node -v</code> should print something like <code>v22.x.x</code>.</p>
-  </div>
+log "Updating system packages"
+apt update -y &amp;&amp; apt upgrade -y
 
-  <div class="step" id="step5">
-    <div class="step-header"><div class="step-num">5</div><h2>Install PM2 &amp; Nginx</h2></div>
-    <p><strong>PM2</strong> keeps the Next.js server running in the background, restarts it if it crashes, and brings it back up automatically after a reboot. <strong>Nginx</strong> sits in front of it as the public-facing web server, handling HTTPS and proxying real traffic through to the app on its internal port.</p>
-    <pre><code id="s5">sudo npm install -g pm2
-sudo apt install -y nginx
+log "Installing Node.js 22 LTS"
+if ! command -v node &gt;/dev/null 2&gt;&amp;1 || [ "$(node -v | cut -d. -f1 | tr -d v)" -lt 22 ]; then
+  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+  apt install -y nodejs
+else
+  echo "Node.js already installed: $(node -v)"
+fi
 
-pm2 -v
-nginx -v</code><button class="copy-btn" onclick="copyBlock('s5', this)">Copy</button></pre>
-  </div>
+log "Installing PM2, Nginx, Certbot, git"
+command -v pm2 &gt;/dev/null 2&gt;&amp;1 || npm install -g pm2
+apt install -y nginx git certbot python3-certbot-nginx ufw
 
-  <div class="step" id="step6">
-    <div class="step-header"><div class="step-num">6</div><h2>Clone the repository</h2></div>
-    <p>Install Git and clone the repo into <code>/var/www</code>:</p>
-    <pre><code id="s6a">sudo apt install -y git
-sudo mkdir -p /var/www
-sudo chown deploy:deploy /var/www
+log "Cloning or updating the repository at $INSTALL_DIR"
+if [ -d "$INSTALL_DIR/.git" ]; then
+  echo "$INSTALL_DIR already exists — pulling latest instead of cloning."
+  git -C "$INSTALL_DIR" pull
+else
+  git clone "$REPO_URL" "$INSTALL_DIR"
+fi
 
-cd /var/www
-git clone https://github.com/Kayo2970/ERP.git leads-erp
-cd leads-erp/leads-dashboard</code><button class="copy-btn" onclick="copyBlock('s6a', this)">Copy</button></pre>
-    <p>The Next.js app itself lives in the <code>leads-dashboard</code> subfolder of the repo — <strong>every command from here on runs from inside that folder</strong>.</p>
-    <div class="callout">If the repository is private, cloning over plain HTTPS will prompt for credentials that don't work with a GitHub password anymore. Either clone with a <a href="https://github.com/settings/tokens" style="color:#7dd3fc;">Personal Access Token</a> in place of the password, or set up an SSH deploy key and use <code>git clone git@github.com:Kayo2970/ERP.git leads-erp</code> instead.</div>
-  </div>
+cd "$APP_DIR"
 
-  <div class="step" id="step7">
-    <div class="step-header"><div class="step-num">7</div><h2>Install dependencies</h2></div>
-    <p>From inside <code>leads-dashboard</code>:</p>
-    <pre><code id="s7">npm install</code><button class="copy-btn" onclick="copyBlock('s7', this)">Copy</button></pre>
-    <p>This pulls in everything the app needs, including the built-in OCR engine (Tesseract), PDF rendering, and the direct-send mail engine — no extra system packages required for any of those.</p>
-  </div>
+log "Installing app dependencies (npm install)"
+npm install
 
-  <div class="step" id="step8">
-    <div class="step-header"><div class="step-num">8</div><h2>Configure environment variables</h2></div>
-    <p>Copy the example file and fill it in:</p>
-    <pre><code id="s8a">cp .env.example .env
-nano .env</code><button class="copy-btn" onclick="copyBlock('s8a', this)">Copy</button></pre>
-    <table>
-      <tr><th>Variable</th><th>What it's for</th></tr>
-      <tr><td><code>DATA_ENCRYPTION_KEY</code></td><td>Encrypts every server data file at rest (members, events, tasks, everything under <code>data/</code>). <strong>Not required to boot</strong> — falls back to a built-in default — but that default is baked into the public source, so treat this as required for any real deployment.</td></tr>
-      <tr><td><code>SMTP_HOST</code> / <code>SMTP_PORT</code></td><td>Fallback mail relay target (defaults to <code>localhost:25</code>, i.e. a local Postfix relay). Only matters if you pick the "Local Postfix" provider in the dashboard's Email settings later — the built-in Direct Send engine doesn't use these.</td></tr>
-      <tr><td><code>ANNOUNCEMENT_FROM_EMAIL</code></td><td>Default "from" address used until you configure real SMTP credentials in the dashboard.</td></tr>
-      <tr><td><code>ANNOUNCEMENT_FROM_NAME</code></td><td>Default sender display name — normally fine left as <code>LEADS Next Gen Centre</code>.</td></tr>
-    </table>
-    <p>Generate a strong, random encryption key rather than typing one by hand:</p>
-    <pre><code id="s8b">openssl rand -hex 32</code><button class="copy-btn" onclick="copyBlock('s8b', this)">Copy</button></pre>
-    <p>Paste the output as <code>DATA_ENCRYPTION_KEY=</code> in <code>.env</code>. Your file should end up looking roughly like:</p>
-    <pre><code id="s8c">DATA_ENCRYPTION_KEY=<span class="placeholder">paste the openssl output here</span>
-SMTP_HOST=localhost
-SMTP_PORT=25
-ANNOUNCEMENT_FROM_EMAIL=leads@yourdomain.com
-ANNOUNCEMENT_FROM_NAME=LEADS Next Gen Centre</code><button class="copy-btn" onclick="copyBlock('s8c', this)">Copy</button></pre>
-    <div class="callout danger"><strong>Back up <code>DATA_ENCRYPTION_KEY</code> somewhere other than the server itself</strong> (a password manager is fine) the moment you generate it. Every record the app stores is encrypted with it — if the server disk is lost and this key wasn't saved elsewhere, the data is gone with it, backups included.</div>
-  </div>
+log "Configuring environment (.env)"
+if [ -f .env ]; then
+  echo ".env already exists — leaving it untouched (this is what keeps your DATA_ENCRYPTION_KEY stable across re-runs)."
+else
+  cp .env.example .env
+  GENERATED_KEY="$(openssl rand -hex 32)"
+  # .env.example ships without DATA_ENCRYPTION_KEY — add it fresh.
+  echo "" &gt;&gt; .env
+  echo "DATA_ENCRYPTION_KEY=$GENERATED_KEY" &gt;&gt; .env
+  echo "Generated a new DATA_ENCRYPTION_KEY and wrote it to .env."
+fi
 
-  <div class="step" id="step9">
-    <div class="step-header"><div class="step-num">9</div><h2>Build the app</h2></div>
-    <pre><code id="s9">npm run build</code><button class="copy-btn" onclick="copyBlock('s9', this)">Copy</button></pre>
-    <p>This compiles the production build into <code>.next/</code>. It's normal for this to take a minute or two on a small VPS. On success you'll see a route summary printed at the end with no red error text.</p>
-  </div>
+log "Building the app for production"
+npm run build
 
-  <div class="step" id="step10">
-    <div class="step-header"><div class="step-num">10</div><h2>Start it with PM2</h2></div>
-    <p>Create a small PM2 config file so the app always starts the same way, on the right port, from the right folder:</p>
-    <pre><code id="s10a">nano ecosystem.config.js</code><button class="copy-btn" onclick="copyBlock('s10a', this)">Copy</button></pre>
-    <pre><code id="s10b">module.exports = {
+log "Starting the app under PM2"
+cat &gt; "$APP_DIR/ecosystem.config.js" &lt;&lt;EOF
+module.exports = {
   apps: [
     {
       name: 'leads-dashboard',
-      cwd: '/var/www/leads-erp/leads-dashboard',
+      cwd: '$APP_DIR',
       script: 'npm',
       args: 'start -- -p 3000',
-      env: {
-        NODE_ENV: 'production',
-      },
+      env: { NODE_ENV: 'production' },
     },
   ],
-};</code><button class="copy-btn" onclick="copyBlock('s10b', this)">Copy</button></pre>
-    <p>Start it, then tell PM2 to persist across reboots:</p>
-    <pre><code id="s10c">pm2 start ecosystem.config.js
+};
+EOF
+
+if pm2 describe leads-dashboard &gt;/dev/null 2&gt;&amp;1; then
+  pm2 reload leads-dashboard
+else
+  pm2 start ecosystem.config.js
+fi
 pm2 save
+pm2 startup systemd -u root --hp /root &gt;/tmp/pm2-startup-output.txt 2&gt;&amp;1 || true
+# pm2 startup prints a command it wants run once; running as root, it's
+# usually applied automatically, but check /tmp/pm2-startup-output.txt if
+# the app doesn't come back after a reboot.
 
-pm2 startup
-# ^ this prints one command starting with "sudo env PATH=..." — copy that
-#   exact line it gives you and run it once. That's what wires PM2 into
-#   systemd so the app comes back up automatically after a server reboot.</code><button class="copy-btn" onclick="copyBlock('s10c', this)">Copy</button></pre>
-    <p>Verify it's actually up before moving on:</p>
-    <pre><code id="s10d">pm2 status
-curl -I http://localhost:3000</code><button class="copy-btn" onclick="copyBlock('s10d', this)">Copy</button></pre>
-    <p>The <code>curl</code> should return <code>HTTP/1.1 200 OK</code> (or a redirect). If it doesn't, check <code>pm2 logs leads-dashboard</code> before continuing — see the troubleshooting step at the end.</p>
-  </div>
-
-  <div class="step" id="step11">
-    <div class="step-header"><div class="step-num">11</div><h2>Configure Nginx as a reverse proxy</h2></div>
-    <p>Create a site config that forwards public traffic on port 80 through to the app on <code>localhost:3000</code>:</p>
-    <pre><code id="s11a">sudo nano /etc/nginx/sites-available/leads-dashboard</code><button class="copy-btn" onclick="copyBlock('s11a', this)">Copy</button></pre>
-    <pre><code id="s11b">server {
+log "Writing Nginx config for $DOMAIN"
+cat &gt; "/etc/nginx/sites-available/leads-dashboard" &lt;&lt;EOF
+server {
     listen 80;
-    server_name yourdomain.com www.yourdomain.com;
+    server_name $DOMAIN www.$DOMAIN;
 
-    # Design Portal uploads (25 MB files, base64-encoded in the request) and
-    # encrypted backup restores need real headroom here — the app's own
-    # per-field limits are smaller, this is just the outer ceiling.
     client_max_body_size 100M;
 
     location / {
         proxy_pass http://localhost:3000;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
     }
-}</code><button class="copy-btn" onclick="copyBlock('s11b', this)">Copy</button></pre>
-    <p>Replace <code>yourdomain.com</code> with your real domain, then enable the site and reload Nginx:</p>
-    <pre><code id="s11c">sudo ln -s /etc/nginx/sites-available/leads-dashboard /etc/nginx/sites-enabled/
-sudo rm -f /etc/nginx/sites-enabled/default
-sudo nginx -t
-sudo systemctl reload nginx
-sudo systemctl enable nginx</code><button class="copy-btn" onclick="copyBlock('s11c', this)">Copy</button></pre>
-    <p><code>nginx -t</code> tests the config before it's live — if it reports an error, fix that before reloading.</p>
+}
+EOF
+ln -sf /etc/nginx/sites-available/leads-dashboard /etc/nginx/sites-enabled/leads-dashboard
+rm -f /etc/nginx/sites-enabled/default
+nginx -t
+systemctl reload nginx
+systemctl enable nginx
+
+log "Configuring the firewall"
+ufw allow OpenSSH
+ufw allow 'Nginx Full'
+ufw --force enable
+
+if [ -n "$CERTBOT_EMAIL" ]; then
+  log "Requesting a Let's Encrypt certificate for $DOMAIN"
+  certbot --nginx -d "$DOMAIN" -d "www.$DOMAIN" -m "$CERTBOT_EMAIL" --agree-tos --non-interactive --redirect
+else
+  echo -e "\nCERTBOT_EMAIL not set — skipping HTTPS setup. Run this manually once DNS is confirmed pointing here:"
+  echo "  certbot --nginx -d $DOMAIN -d www.$DOMAIN"
+fi
+
+echo -e "\n\033[1;32m==================================================================\033[0m"
+echo -e "\033[1;32mDone. The app is running under PM2 and Nginx is proxying to it.\033[0m"
+echo "  App directory:   $APP_DIR"
+echo "  Check status:    pm2 status"
+echo "  View logs:       pm2 logs leads-dashboard"
+if [ -f .env ] &amp;&amp; grep -q "^DATA_ENCRYPTION_KEY=" .env; then
+  echo ""
+  echo -e "\033[1;33mSAVE THIS SOMEWHERE OTHER THAN THIS SERVER — it's the only way to decrypt your data if this disk is ever lost:\033[0m"
+  grep "^DATA_ENCRYPTION_KEY=" .env
+fi
+echo -e "\033[1;32m==================================================================\033[0m"
+</code><button class="copy-btn" onclick="copyBlock('s2d', this)">Copy</button></pre>
+    </details>
   </div>
 
-  <div class="step" id="step12">
-    <div class="step-header"><div class="step-num">12</div><h2>Enable free HTTPS (Let's Encrypt)</h2></div>
-    <p>Only run this once DNS from Step 2 has actually propagated — check with <code>ping yourdomain.com</code> and confirm it resolves to the VPS IP first.</p>
-    <pre><code id="s12">sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com</code><button class="copy-btn" onclick="copyBlock('s12', this)">Copy</button></pre>
-    <p>Certbot will ask for an email (for renewal/expiry notices) and offer to redirect all HTTP traffic to HTTPS automatically — accept that. It also installs its own renewal timer, so certificates renew themselves; no cron job needed.</p>
-    <div class="callout good">Confirm auto-renewal works with a dry run: <code>sudo certbot renew --dry-run</code></div>
+  <div class="step" id="step3">
+    <div class="step-header"><div class="step-num">3</div><h2>Confirm it's live</h2></div>
+    <pre><code id="s3">pm2 status
+curl -I http://localhost:3000</code><button class="copy-btn" onclick="copyBlock('s3', this)">Copy</button></pre>
+    <p><code>pm2 status</code> should show <code>leads-dashboard</code> as <code>online</code>, and the <code>curl</code> should return <code>HTTP/1.1 200 OK</code> (or a redirect). Then visit <code>http://leadsnextgencentre.online</code> in a browser — you should land on the sign-in screen.</p>
   </div>
 
-  <div class="step" id="step13">
-    <div class="step-header"><div class="step-num">13</div><h2>Lock the firewall down</h2></div>
-    <p>Now that Nginx is handling public traffic, open HTTP/HTTPS and make sure nothing external can hit the app's internal port directly:</p>
-    <pre><code id="s13">sudo ufw allow 'Nginx Full'
-sudo ufw status</code><button class="copy-btn" onclick="copyBlock('s13', this)">Copy</button></pre>
-    <p>Port <code>3000</code> is never opened in the firewall at all — it's only reachable from <code>localhost</code>, which is exactly what the Nginx <code>proxy_pass</code> config needs and nothing more.</p>
+  <div class="step" id="step4">
+    <div class="step-header"><div class="step-num">4</div><h2>Enable HTTPS <span class="badge">skip if you set CERTBOT_EMAIL in Step 2</span></h2></div>
+    <p>If you left <code>CERTBOT_EMAIL</code> blank, run this once DNS is confirmed pointing at this VPS (<code>ping leadsnextgencentre.online</code> should resolve to this box's IP):</p>
+    <pre><code id="s4">certbot --nginx -d leadsnextgencentre.online -d www.leadsnextgencentre.online</code><button class="copy-btn" onclick="copyBlock('s4', this)">Copy</button></pre>
+    <p>Certbot asks for an email (for renewal/expiry notices) and offers to redirect all HTTP traffic to HTTPS automatically — accept that. It installs its own renewal timer, so the certificate renews itself with no cron job needed.</p>
   </div>
 
-  <div class="step" id="step14">
-    <div class="step-header"><div class="step-num">14</div><h2>First login &amp; email setup</h2></div>
-    <p>Visit <code>https://yourdomain.com</code> — you should land on the sign-in screen. The app seeds a default Super User account on first boot; sign in with that, then immediately go to <strong>Settings</strong> and change the password.</p>
-    <ul>
-      <li>Go to <strong>Dashboard &rarr; Email Management</strong> to configure a real mail provider (Gmail/Outlook relay, a custom SMTP relay, or the built-in Direct Send engine).</li>
-      <li>If you're using Direct Send (no external relay, the app delivers mail itself), follow <code>docs/direct-send-setup-guide.html</code> in this repo for the DNS side — SPF, DKIM, DMARC, PTR, and optionally the BIMI sender logo.</li>
-      <li>Go to <strong>Dashboard &rarr; Directory</strong> to start adding real members — each gets an activation email to set their own password (and optionally their date of birth, for the automated birthday email).</li>
-    </ul>
+  <div class="step" id="step5">
+    <div class="step-header"><div class="step-num">5</div><h2>First login &amp; re-configuring email</h2></div>
+    <p>Sign in with the Super User account, then immediately go to <strong>Settings</strong> and change the password — a fresh install re-seeds the default credentials.</p>
+    <p>Go to <strong>Dashboard &rarr; Email Management</strong> and redo the SMTP setup — this is the one thing genuinely lost by the reformat, since it lived in the app's own (now-wiped) database, not in DNS. You have two options:</p>
+    <table>
+      <tr><th>If you still have the old DKIM private key</th><th>If you don't</th></tr>
+      <tr>
+        <td>Paste the exact same key back into the DKIM Signing fields (Domain <code>leadsnextgencentre.online</code>, Selector <code>leads</code>). The existing <code>leads._domainkey</code> DNS TXT record at Hostinger already matches it — nothing to change in DNS.</td>
+        <td>Generate a brand-new keypair (commands below), then <strong>update the <code>leads._domainkey</code> TXT record</strong> at Hostinger to match the new public key — the old DNS record won't validate a new private key.</td>
+      </tr>
+    </table>
+    <pre><code id="s5">openssl genrsa -out dkim-private.pem 2048
+openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt -in dkim-private.pem -out dkim-private-pkcs8.pem
+openssl rsa -in dkim-private.pem -pubout -outform PEM -out dkim-public.pem</code><button class="copy-btn" onclick="copyBlock('s5', this)">Copy</button></pre>
+    <p>The full field-by-field walkthrough (HELO Hostname, Sender Email, DKIM Domain/Selector/Private Key, where each one goes in the dashboard UI, and how to test it) is already written up in <code>docs/direct-send-setup-guide.html</code> in this repo — Steps 4–7 there are exactly what to redo now.</p>
+    <div class="callout good">Test with <strong>Test Connection &amp; Send Email</strong> in the dashboard before considering this done — send to a Gmail address you personally control first.</div>
   </div>
 
-  <div class="step" id="step15">
-    <div class="step-header"><div class="step-num">15</div><h2>Redeploying updates later</h2></div>
-    <p>Whenever there's new code to ship, from inside <code>leads-erp/leads-dashboard</code>:</p>
-    <pre><code id="s15">cd /var/www/leads-erp/leads-dashboard
+  <div class="step" id="step6">
+    <div class="step-header"><div class="step-num">6</div><h2>Redeploying updates later</h2></div>
+    <pre><code id="s6">cd /ERP/leads-dashboard
 git pull origin main
 npm install
 npm run build
-pm2 restart leads-dashboard</code><button class="copy-btn" onclick="copyBlock('s15', this)">Copy</button></pre>
-    <p><code>pm2 restart</code> is a brief interruption (a few seconds), not a full outage — the process is killed and a fresh one started against the new build. Nginx and your SSL certificate are untouched by any of this.</p>
+pm2 restart leads-dashboard</code><button class="copy-btn" onclick="copyBlock('s6', this)">Copy</button></pre>
+    <p><code>pm2 restart</code> is a brief interruption (a few seconds), not a full outage. Nginx and your SSL certificate are untouched by any of this.</p>
   </div>
 
-  <div class="step" id="step16">
-    <div class="step-header"><div class="step-num">16</div><h2>Backups</h2></div>
-    <p>The app has a built-in encrypted backup/restore tool at <strong>Dashboard &rarr; Backup</strong> — use it to download a full encrypted snapshot on a regular basis and store copies somewhere off the VPS (your own machine, cloud storage, wherever).</p>
-    <p>At the filesystem level, everything that matters lives in one place:</p>
-    <pre><code id="s16">/var/www/leads-erp/leads-dashboard/data/</code><button class="copy-btn" onclick="copyBlock('s16', this)">Copy</button></pre>
-    <p>This holds every collection (members, events, tasks, ratings, …) as encrypted per-collection JSON files, plus <code>data/uploads/</code> — the real design files, receipts, and visiting cards those records point to. Back the two up together; the JSON records are meaningless without the files they reference, and vice versa.</p>
-    <div class="callout danger">None of it is recoverable without <code>DATA_ENCRYPTION_KEY</code> from Step 8. A filesystem backup of <code>data/</code> without that key saved somewhere is just an encrypted blob forever.</div>
+  <div class="step" id="step7">
+    <div class="step-header"><div class="step-num">7</div><h2>Backups</h2></div>
+    <p>Use <strong>Dashboard &rarr; Backup</strong> to download a full encrypted snapshot regularly and store copies off this VPS. At the filesystem level, everything that matters lives at:</p>
+    <pre><code id="s7">/ERP/leads-dashboard/data/</code><button class="copy-btn" onclick="copyBlock('s7', this)">Copy</button></pre>
+    <p>This holds every collection as encrypted per-collection JSON files, plus <code>data/uploads/</code> — the real design files, receipts, and visiting cards those records point to. Back the two up together.</p>
+    <div class="callout danger">None of it is recoverable without the <code>DATA_ENCRYPTION_KEY</code> from Step 2. A filesystem backup of <code>data/</code> without that key saved somewhere else is just an encrypted blob forever.</div>
   </div>
 
-  <div class="step" id="step17">
-    <div class="step-header"><div class="step-num">17</div><h2>Troubleshooting cheat-sheet</h2></div>
+  <div class="step" id="step8">
+    <div class="step-header"><div class="step-num">8</div><h2>Troubleshooting cheat-sheet</h2></div>
     <table>
       <tr><th>Symptom</th><th>Check</th></tr>
-      <tr><td>Site doesn't load at all</td><td><code>sudo systemctl status nginx</code> &middot; <code>sudo nginx -t</code> &middot; <code>sudo ufw status</code></td></tr>
+      <tr><td>Site doesn't load at all</td><td><code>systemctl status nginx</code> &middot; <code>nginx -t</code> &middot; <code>ufw status</code></td></tr>
       <tr><td>Nginx loads but shows an error page</td><td><code>pm2 status</code> — is <code>leads-dashboard</code> actually <code>online</code>? &middot; <code>curl -I http://localhost:3000</code> from the VPS itself</td></tr>
       <tr><td>App crashed or won't start</td><td><code>pm2 logs leads-dashboard --lines 100</code> — this shows the real Node.js error</td></tr>
-      <tr><td>Changes not showing after a deploy</td><td>Confirm <code>npm run build</code> actually finished with no errors before <code>pm2 restart</code>, and that you're editing/pulling inside <code>leads-dashboard</code>, not the repo root</td></tr>
-      <tr><td>HTTPS certificate errors</td><td><code>sudo certbot certificates</code> to check expiry &middot; <code>sudo certbot renew --dry-run</code> to test renewal</td></tr>
+      <tr><td>Changes not showing after a deploy</td><td>Confirm <code>npm run build</code> finished with no errors before <code>pm2 restart</code>, and that you're in <code>/ERP/leads-dashboard</code>, not <code>/ERP</code></td></tr>
+      <tr><td>HTTPS certificate errors</td><td><code>certbot certificates</code> to check expiry &middot; <code>certbot renew --dry-run</code> to test renewal</td></tr>
       <tr><td>Outbound mail not sending (Direct Send)</td><td>Outbound TCP port 25 is blocked by many hosting providers by default — see <code>docs/direct-send-setup-guide.html</code>, Step 1</td></tr>
-      <tr><td>Server rebooted and app didn't come back</td><td>Confirm <code>pm2 startup</code>'s printed command was actually run once, and that <code>pm2 save</code> was run after starting the app</td></tr>
+      <tr><td>Server rebooted and app didn't come back</td><td>Run <code>pm2 startup systemd -u root --hp /root</code> and execute the command it prints, then <code>pm2 save</code> again</td></tr>
     </table>
     <p>Useful commands to keep handy:</p>
-    <pre><code id="s17">pm2 status
+    <pre><code id="s8">pm2 status
 pm2 logs leads-dashboard
 pm2 restart leads-dashboard
-sudo systemctl status nginx
-sudo tail -f /var/log/nginx/error.log</code><button class="copy-btn" onclick="copyBlock('s17', this)">Copy</button></pre>
+systemctl status nginx
+tail -f /var/log/nginx/error.log</code><button class="copy-btn" onclick="copyBlock('s8', this)">Copy</button></pre>
   </div>
 </div>
 
