@@ -40,6 +40,15 @@ export async function POST(request: Request) {
       );
     }
 
+    if (matchedUser.mustSetupPassword) {
+      return NextResponse.json({
+        requiresPasswordReset: true,
+        email: matchedUser.email,
+        name: matchedUser.name,
+        message: 'Super User has requested you to set up a new password for your account. Please enter your new password below.',
+      });
+    }
+
     if (!matchedUser.passwordHash) {
       return NextResponse.json(
         { error: "This account hasn't been activated yet. Check your email for the \"Set Up My Account\" link, or ask an admin to resend it." },

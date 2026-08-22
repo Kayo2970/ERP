@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ShieldAlert, LogIn, Mail, Lock, Eye, EyeOff, KeyRound, CheckCircle2, Clock, ArrowLeft, Send, Quote } from 'lucide-react';
-import { logAuditEvent, requestPasswordReset, submitPasswordReset } from '@/lib/local-data';
+import { logAuditEvent, requestPasswordReset, submitPasswordReset, submitAdminOverridePasswordReset } from '@/lib/local-data';
 import { TermsModal } from '@/components/terms-modal';
 import { LoadingScreen } from '@/components/loading-screen';
 
@@ -145,6 +145,16 @@ export default function LoginPage() {
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
   const [timeLeftStr, setTimeLeftStr] = useState('05:00');
 
+  // Super User Admin Override Modal state
+  const [showAdminOverrideModal, setShowAdminOverrideModal] = useState(false);
+  const [overrideEmail, setOverrideEmail] = useState('');
+  const [overrideName, setOverrideName] = useState('');
+  const [overrideNewPassword, setOverrideNewPassword] = useState('');
+  const [overrideConfirmPassword, setOverrideConfirmPassword] = useState('');
+  const [overrideError, setOverrideError] = useState('');
+  const [overrideSuccess, setOverrideSuccess] = useState('');
+  const [isOverrideLoading, setIsOverrideLoading] = useState(false);
+
   // Auto-rotate quotes every ~3.5 seconds
   useEffect(() => {
     const timer = setInterval(() => {
@@ -225,6 +235,18 @@ export default function LoginPage() {
       });
       const data = await res.json();
 
+      if (data.requiresPasswordReset) {
+        setIsLoading(false);
+        setOverrideEmail(data.email || email);
+        setOverrideName(data.name || 'Member');
+        setOverrideError('');
+        setOverrideSuccess('');
+        setOverrideNewPassword('');
+        setOverrideConfirmPassword('');
+        setShowAdminOverrideModal(true);
+        return;
+      }
+
       if (!res.ok) {
         setError(data.error || 'Login failed. Please try again.');
         setIsLoading(false);
@@ -257,6 +279,18 @@ export default function LoginPage() {
 
     const res = await requestPasswordReset(forgotEmail.trim());
     setIsForgotLoading(false);
+
+    if (res.adminOverride) {
+      setShowForgotModal(false);
+      setOverrideEmail(forgotEmail.trim());
+      setOverrideName(res.name || 'Member');
+      setOverrideError('');
+      setOverrideSuccess('');
+      setOverrideNewPassword('');
+      setOverrideConfirmPassword('');
+      setShowAdminOverrideModal(true);
+      return;
+    }
 
     if (!res.success) {
       setForgotError(res.error || 'Account not found or error requesting OTP.');
@@ -313,6 +347,49 @@ export default function LoginPage() {
       setForgotError('');
       setForgotSuccess('');
     }, 1500);
+  };
+
+  const handleOverrideSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setOverrideError('');
+    setOverrideSuccess('');
+    setIsOverrideLoading(true);
+
+    if (!overrideNewPassword || overrideNewPassword.length < 4) {
+      setOverrideError('New password must be at least 4 characters long.');
+      setIsOverrideLoading(false);
+      return;
+    }
+
+    if (overrideNewPassword !== overrideConfirmPassword) {
+      setOverrideError('New password and confirmation do not match.');
+      setIsOverrideLoading(false);
+      return;
+    }
+
+    const res = await submitAdminOverridePasswordReset(overrideEmail, overrideNewPassword);
+    setIsOverrideLoading(false);
+
+    if (!res.success) {
+      setOverrideError(res.error || 'Failed to set new password.');
+      return;
+    }
+
+    setOverrideSuccess('Password set successfully! Signing you in...');
+    if (res.user) {
+      localStorage.setItem('user', JSON.stringify(res.user));
+      logAuditEvent('USER_LOGIN', res.user.name, `Logged in after admin override password setup with role ${res.user.role}`);
+      setTimeout(() => {
+        setShowAdminOverrideModal(false);
+        setShowLoginSplash(true);
+      }, 1200);
+    } else {
+      setTimeout(() => {
+        setEmail(overrideEmail);
+        setPassword(overrideNewPassword);
+        setShowAdminOverrideModal(false);
+      }, 1200);
+    }
   };
 
   if (!themeLoaded) return null;
@@ -644,6 +721,122 @@ export default function LoginPage() {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Super User Admin Override Modal (No OTP Required) */}
+      {showAdminOverrideModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="glass-panel w-full max-w-md rounded-3xl p-7 flex flex-col space-y-5 border border-amber-500/30 shadow-2xl relative">
+            <div className="flex items-center justify-between border-b border-theme-card-border/60 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-amber-500/20 rounded-xl text-amber-400 border border-amber-500/30">
+                  <KeyRound className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-theme-text-primary">
+                    Admin Override — Set Up New Password
+                  </h3>
+                  <p className="text-[11px] text-theme-text-secondary">
+                    Super User requested password setup for {overrideName || overrideEmail}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAdminOverrideModal(false)}
+                className="text-theme-text-secondary hover:text-theme-text-primary text-sm p-1 rounded-lg hover:bg-white/10 transition-all cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-3 bg-amber-500/10 border border-amber-500/25 rounded-xl text-[11px] text-amber-300 leading-relaxed">
+              Super User has enabled an admin override for your account. You can set up your new password directly below without an OTP code.
+            </div>
+
+            {overrideError && (
+              <div className="flex gap-2.5 p-3 bg-danger/15 border border-danger/30 rounded-xl text-danger text-xs leading-relaxed animate-in fade-in duration-150">
+                <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>{overrideError}</span>
+              </div>
+            )}
+
+            {overrideSuccess && (
+              <div className="flex gap-2.5 p-3 bg-emerald-500/15 border border-emerald-500/30 rounded-xl text-emerald-400 text-xs leading-relaxed animate-in fade-in duration-150">
+                <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>{overrideSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleOverrideSubmit} className="space-y-4 text-xs">
+              <div className="space-y-1.5">
+                <label className="block font-semibold text-theme-text-secondary uppercase tracking-wider">
+                  Account Email
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-3 h-4 w-4 text-theme-text-secondary" />
+                  <input
+                    type="email"
+                    disabled
+                    value={overrideEmail}
+                    className="w-full pl-10 pr-4 py-2.5 bg-theme-background/60 border border-theme-card-border rounded-xl text-theme-text-primary opacity-80 text-xs font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block font-semibold text-theme-text-secondary uppercase tracking-wider">
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={overrideNewPassword}
+                  onChange={(e) => setOverrideNewPassword(e.target.value)}
+                  placeholder="Enter new password (min 4 chars)"
+                  className="w-full px-3.5 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-amber-400 text-xs"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block font-semibold text-theme-text-secondary uppercase tracking-wider">
+                  Confirm New Password
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={overrideConfirmPassword}
+                  onChange={(e) => setOverrideConfirmPassword(e.target.value)}
+                  placeholder="Confirm new password"
+                  className="w-full px-3.5 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-amber-400 text-xs"
+                />
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAdminOverrideModal(false)}
+                  className="w-1/3 py-2.5 bg-white/5 hover:bg-white/10 text-theme-text-secondary font-medium rounded-xl transition-all text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isOverrideLoading}
+                  className="w-2/3 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 text-xs cursor-pointer disabled:opacity-50"
+                >
+                  {isOverrideLoading ? (
+                    <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Set Password & Sign In
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

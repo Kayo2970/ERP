@@ -27,7 +27,8 @@ import {
   BookOpen,
   UserX,
   ShieldOff,
-  Mail
+  Mail,
+  KeyRound
 } from 'lucide-react';
 import {
   getMembers,
@@ -39,6 +40,7 @@ import {
   logAuditEvent,
   terminateMember,
   reactivateMember,
+  requestMemberPasswordReset,
   Member,
   MemberDivision
 } from '@/lib/local-data';
@@ -58,6 +60,8 @@ export default function DirectoryPage() {
   const [terminationReason, setTerminationReason] = useState('');
   const [terminationError, setTerminationError] = useState('');
   const [reactivatingMember, setReactivatingMember] = useState<Member | null>(null);
+  const [passwordResetModalMember, setPasswordResetModalMember] = useState<Member | null>(null);
+  const [isTogglingPasswordReset, setIsTogglingPasswordReset] = useState(false);
   const [selectedStudentForProfile, setSelectedStudentForProfile] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -648,6 +652,21 @@ export default function DirectoryPage() {
     }
   };
 
+  const handleConfirmPasswordResetToggle = async () => {
+    if (!passwordResetModalMember) return;
+    setIsTogglingPasswordReset(true);
+    const nextState = !passwordResetModalMember.mustSetupPassword;
+    const res = await requestMemberPasswordReset(passwordResetModalMember.id, nextState);
+    setIsTogglingPasswordReset(false);
+    if (res.success) {
+      triggerSuccess(res.message || `Password setup request updated for ${passwordResetModalMember.name}.`);
+      setMembers(getMembers());
+    } else {
+      triggerError(res.error || 'Failed to update password setup request.');
+    }
+    setPasswordResetModalMember(null);
+  };
+
   const toggleSort = (field: keyof Member) => {
     if (sortField === field) {
       setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
@@ -1146,6 +1165,15 @@ export default function DirectoryPage() {
                                 Activation Pending
                               </span>
                             )}
+                            {member.status !== 'Terminated' && member.mustSetupPassword && (
+                              <span
+                                className="inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border bg-amber-500/15 text-amber-400 border-amber-500/30"
+                                title="Super User requested this member to set up a new password on their next login attempt without requiring an OTP."
+                              >
+                                <KeyRound className="h-2.5 w-2.5" />
+                                Reset Pending
+                              </span>
+                            )}
                           </span>
                           {member.batch && (
                             <span className="block text-[10px] text-theme-text-secondary font-normal">{member.batch}</span>
@@ -1187,6 +1215,20 @@ export default function DirectoryPage() {
                               >
                                 <Edit2 className="h-3.5 w-3.5" />
                               </button>
+
+                              {member.status !== 'Terminated' && (
+                                <button
+                                  onClick={() => setPasswordResetModalMember(member)}
+                                  className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                                    member.mustSetupPassword
+                                      ? 'text-amber-400 bg-amber-500/15 border border-amber-500/30 hover:bg-amber-500/25'
+                                      : 'text-theme-text-secondary hover:text-amber-400 hover:bg-amber-500/10'
+                                  }`}
+                                  title={member.mustSetupPassword ? "Cancel Password Reset Request" : "Ask Member to Set Up Password (Admin Override - No OTP on Login)"}
+                                >
+                                  <KeyRound className="h-3.5 w-3.5" />
+                                </button>
+                              )}
 
                               {member.status !== 'Terminated' && !member.passwordHash && (
                                 <button
@@ -2033,6 +2075,23 @@ export default function DirectoryPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Password Reset Request (Admin Override) Confirmation Modal */}
+      {passwordResetModalMember && (
+        <ConfirmModal
+          isOpen={!!passwordResetModalMember}
+          title={passwordResetModalMember.mustSetupPassword ? "Cancel Password Reset Request" : "Request Member Password Setup (Admin Override)"}
+          message={
+            passwordResetModalMember.mustSetupPassword
+              ? `Are you sure you want to cancel the password reset request for ${passwordResetModalMember.name}? They will resume normal login.`
+              : `Are you sure you want to require ${passwordResetModalMember.name} (${passwordResetModalMember.email}) to set up a new password? On their next login attempt, an admin override will prompt them to set a new password directly without an OTP code.`
+          }
+          confirmLabel={passwordResetModalMember.mustSetupPassword ? "Cancel Request" : "Enable Password Setup Override"}
+          variant={passwordResetModalMember.mustSetupPassword ? "warning" : "primary"}
+          onConfirm={handleConfirmPasswordResetToggle}
+          onCancel={() => setPasswordResetModalMember(null)}
+        />
       )}
 
     </div>

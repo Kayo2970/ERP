@@ -21,6 +21,15 @@ export async function POST(request: Request) {
       );
     }
 
+    if (member.mustSetupPassword) {
+      return NextResponse.json({
+        adminOverride: true,
+        email: member.email,
+        name: member.name,
+        message: 'Super User has requested a password reset for your account. You can set a new password directly without an OTP code.',
+      });
+    }
+
     // Generate 6-digit OTP code (cryptographically strong, not Math.random())
     const otp = randomInt(100000, 1000000).toString();
     

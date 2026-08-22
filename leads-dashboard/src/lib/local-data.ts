@@ -30,6 +30,7 @@ export interface Member {
   avatarFileName?: string;   // transient: original filename, paired with avatarData
   avatarUrl?: string;        // servable path under /api/files, backed by a real file on disk
   avatarStorageKey?: string; // path relative to data/uploads
+  mustSetupPassword?: boolean; // Super User admin override: user must set password without OTP on next login
 }
 
 // A person encountered outside the org (event guest, sponsor contact, vendor,
@@ -448,42 +449,16 @@ export interface GroupPolicy {
 // password.ts's hashPassword('Kayo29') rather than computed at import time.
 const DEFAULT_PASSWORD_HASH = '039e521fbfd304a0a97bf0ad345fa30c:fabe61e51b9670355e96fa18763974f718215fdff2533c42e3da9fb81bd21f62780271331c4c3fa2f1a10cf452a180b13b45d2aa41604ed02620cb7bf8af2135';
 
-// Real organization roster matching the leadership website and division structure
+// Real organization roster matching production faculty leadership and super user
 const initialMembersRaw: Member[] = [
   { id: 'm1', name: 'Kayomarz Pavri', email: 'kayo2970@gmail.com', role: 'Super User', tier: 1, division: 'Core Committee', department: 'Design and Social Media' },
-  { id: 'm2', name: 'Dr. Subhadeep Mukherjee', email: 'subhadeepmukherjee.ms.mc@msruas.ac.in', role: 'Centre Head', tier: 2, division: 'Advisory Board', department: 'Faculty Oversight' },
-  { id: 'm3', name: 'Dr. Kiran Kumar B M', email: 'kiran.kumar@msruas.ac.in', role: 'Head of Events', tier: 3, division: 'Advisory Board', department: 'Faculty Oversight' },
-  { id: 'm4', name: 'Dr. K. M. Sharath Kumar', email: 'sharath.kumar@msruas.ac.in', role: 'Advisory Board Member', tier: 3, division: 'Advisory Board', department: 'Faculty Advisory' },
-  { id: 'm5', name: 'Gurutejas C', email: 'gurutejas.c@msruas.ac.in', role: 'Past President & Executive Lead', tier: 5, division: 'Core Committee', department: 'Executive Council' },
-  { id: 'm6', name: 'Kunal Bhadauria', email: 'kunal.bhadauria@msruas.ac.in', role: 'Vice President', tier: 5, division: 'Core Committee', department: 'Executive Council' },
-  { id: 'm7', name: 'Dr. Hari Krishna S', email: 'hari.krishna@msruas.ac.in', role: 'Faculty Advisor', tier: 3, division: 'Advisory Board', department: 'Faculty Advisory' },
-  { id: 'm8', name: 'Keerthan J', email: 'keerthan.j@msruas.ac.in', role: 'Junior Coordinator', tier: 6, division: 'Training Associate', department: 'Operations and Logistics' },
-  { id: 'm10', name: 'Dr. Pallabi Mund', email: 'pallabimund.ms.mc@msruas.ac.in', role: 'Head of Events GG Campus', tier: 2.5, division: 'Advisory Board', department: 'Events' },
-  { id: 'm11', name: 'Dr. Ajay R', email: 'ajay.ca.mc@msruas.ac.in', role: 'Faculty Advisor', tier: 3, division: 'Advisory Board', department: 'Faculty Advisory' },
-  { id: 'm12', name: 'Ms. Sujata Bijwe', email: 'sujata.bijwe@msruas.ac.in', role: 'Faculty Advisor', tier: 3, division: 'Advisory Board', department: 'Faculty Advisory' },
-  { id: 'm13', name: 'Abhijit Arya', email: 'abhijit.arya@msruas.ac.in', role: 'General Secretary', tier: 5, division: 'Core Committee', department: 'Secretariat' },
-  { id: 'm14', name: 'Laksh Soorya Singh', email: 'laksh.singh@msruas.ac.in', role: 'Operations Lead', tier: 5, division: 'Core Committee', department: 'Operations and Logistics' },
-  { id: 'm15', name: 'Bhawen Maroo', email: 'bhawen.maroo@msruas.ac.in', role: 'Logistics Head', tier: 5, division: 'Core Committee', department: 'Operations and Logistics' },
-  { id: 'm16', name: 'Bharvi A Padia', email: 'bharvi.padia@msruas.ac.in', role: 'Finance Head', tier: 5, division: 'Core Committee', department: 'Finance and Sponsorship' },
-  { id: 'm17', name: 'Arvind Rakshith', email: 'arvind.rakshith@msruas.ac.in', role: 'Design & Media Lead', tier: 5, division: 'Core Committee', department: 'Design and Social Media' },
-  { id: 'm18', name: 'Shreesha S N', email: 'shreesha.sn@msruas.ac.in', role: 'Technical Head', tier: 5, division: 'Core Committee', department: 'Research & Development' },
-  { id: 'm19', name: 'Nuthan H', email: 'nuthan.h@msruas.ac.in', role: 'President', tier: 5, division: 'Core Committee', department: 'Executive Council' },
-  { id: 'm20', name: 'S Bhavya Shree', email: 'bhavya.shree@msruas.ac.in', role: 'General Secretary', tier: 5, division: 'Core Committee', department: 'Secretariat' },
-  { id: 'm21', name: 'Shriram SG', email: 'shriram.sg@msruas.ac.in', role: 'General Secretary', tier: 5, division: 'Core Committee', department: 'Secretariat' },
-  { id: 'm22', name: 'Manoj Petakamsetty', email: 'manoj.petakamsetty@msruas.ac.in', role: 'General Secretary', tier: 5, division: 'Core Committee', department: 'Secretariat' },
-  { id: 'm23', name: 'Sudev Mitra', email: 'sudev.mitra@msruas.ac.in', role: 'Chief Coordinator', tier: 5, division: 'Core Committee', department: 'Coordination' },
-  { id: 'm24', name: 'Jyotsna Karn', email: 'jyotsna.karn@msruas.ac.in', role: 'Chief Coordinator', tier: 5, division: 'Core Committee', department: 'Coordination' },
-  { id: 'm25', name: 'Shravya T', email: 'shravya.t@msruas.ac.in', role: 'Chief Coordinator', tier: 5, division: 'Core Committee', department: 'Coordination' },
-  { id: 'm26', name: 'P Koushik Reddy', email: 'koushik.reddy@msruas.ac.in', role: 'Chief Coordinator', tier: 5, division: 'Core Committee', department: 'Coordination' },
-  { id: 'm27', name: 'Sadiya Sawood', email: 'sadiya.sawood@msruas.ac.in', role: 'Head Leadership and Development', tier: 5, division: 'Core Committee', department: 'Leadership and Development' },
-  { id: 'm28', name: 'Syed Furqaan Ahmed', email: 'furqaan.ahmed@msruas.ac.in', role: 'Head Research & Development', tier: 5, division: 'Core Committee', department: 'Research & Development' },
-  { id: 'm29', name: 'Kayomarz M Pavri', email: 'kayo2970@gmail.com', role: 'Head Design and Social Media', tier: 5, division: 'Core Committee', department: 'Design and Social Media' },
-  { id: 'm30', name: 'Nimisha K M', email: 'nimisha.km@msruas.ac.in', role: 'Head Sustainability and Innovation', tier: 5, division: 'Core Committee', department: 'Sustainability and Innovation' },
-  { id: 'm31', name: 'Aravind Manashetti', email: 'aravind.manashetti@msruas.ac.in', role: 'Head Finance and Sponsorship', tier: 5, division: 'Core Committee', department: 'Finance and Sponsorship' },
-  { id: 'm32', name: 'Shwetha S', email: 'shwetha.s@msruas.ac.in', role: 'Head Design and Social Media', tier: 5, division: 'Core Committee', department: 'Design and Social Media' },
-  { id: 'm33', name: 'Kishan KP', email: 'kishan.kp@msruas.ac.in', role: 'Head Marketing and Branding', tier: 5, division: 'Core Committee', department: 'Marketing and Branding' },
-  { id: 'm34', name: 'Yash Chandak', email: 'yash.chandak@msruas.ac.in', role: 'Head Operations and Logistics', tier: 5, division: 'Core Committee', department: 'Operations and Logistics' },
-  { id: 'm35', name: 'Niyati Chawra', email: 'niyati.chawra@msruas.ac.in', role: 'Head Leadership and Development', tier: 5, division: 'Core Committee', department: 'Leadership and Development' },
+  { id: 'm2', name: 'Dr. Subhadeep Mukherjee', email: 'subhadeepmukherjee.ms.mc@msruas.ac.in', role: 'Centre Head', tier: 2, division: 'Faculty', department: 'Faculty Oversight' },
+  { id: 'm3', name: 'Dr. Kiran Kumar B M', email: 'kiran.kumar@msruas.ac.in', role: 'Head of Events', tier: 3, division: 'Faculty', department: 'Faculty Oversight' },
+  { id: 'm4', name: 'Dr. K. M. Sharath Kumar', email: 'sharath.kumar@msruas.ac.in', role: 'Advisory Board Member', tier: 3, division: 'Faculty', department: 'Faculty Advisory' },
+  { id: 'm7', name: 'Dr. Hari Krishna S', email: 'hari.krishna@msruas.ac.in', role: 'Faculty Advisor', tier: 3, division: 'Faculty', department: 'Faculty Advisory' },
+  { id: 'm10', name: 'Dr. Pallabi Mund', email: 'pallabimund.ms.mc@msruas.ac.in', role: 'Head of Events GG Campus', tier: 2.5, division: 'Faculty', department: 'Events' },
+  { id: 'm11', name: 'Dr. Ajay R', email: 'ajay.ca.mc@msruas.ac.in', role: 'Faculty Advisor', tier: 3, division: 'Faculty', department: 'Faculty Advisory' },
+  { id: 'm12', name: 'Ms. Sujata Bijwe', email: 'sujata.bijwe@msruas.ac.in', role: 'Faculty Advisor', tier: 3, division: 'Faculty', department: 'Faculty Advisory' },
 ];
 
 export const initialMembers: Member[] = initialMembersRaw.map(m => ({
@@ -2472,7 +2447,7 @@ export function updateSystemSettings(updates: Partial<SystemSettings>, actorName
 /**
  * Client Helper: Request a 5-minute password reset OTP
  */
-export async function requestPasswordReset(email: string): Promise<{ success: boolean; message?: string; error?: string; expiresAt?: number }> {
+export async function requestPasswordReset(email: string): Promise<{ success: boolean; message?: string; error?: string; expiresAt?: number; adminOverride?: boolean; name?: string }> {
   try {
     const res = await fetch('/api/auth/forgot-password', {
       method: 'POST',
@@ -2480,6 +2455,9 @@ export async function requestPasswordReset(email: string): Promise<{ success: bo
       body: JSON.stringify({ email }),
     });
     const data = await res.json();
+    if (data.adminOverride) {
+      return { success: true, adminOverride: true, message: data.message, name: data.name };
+    }
     if (!res.ok) {
       return { success: false, error: data.error || 'Failed to send reset code.' };
     }
@@ -2573,6 +2551,49 @@ export async function getEmailLogs(): Promise<any[]> {
     return [];
   }
 }
+
+/**
+ * Client Helper: Super User / Admin request member password setup (admin override)
+ */
+export async function requestMemberPasswordReset(memberId: string, mustReset: boolean = true): Promise<{ success: boolean; message?: string; error?: string }> {
+  try {
+    const res = await fetch(`/api/members/${memberId}/require-password-reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mustReset }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Failed to update password reset request.' };
+    }
+    await syncWithServer();
+    return { success: true, message: data.message };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Network error setting password reset request.' };
+  }
+}
+
+/**
+ * Client Helper: Submit new password via Super User Admin Override (no OTP required)
+ */
+export async function submitAdminOverridePasswordReset(email: string, newPassword: string): Promise<{ success: boolean; message?: string; user?: any; error?: string }> {
+  try {
+    const res = await fetch('/api/auth/override-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, newPassword }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Failed to update password via admin override.' };
+    }
+    await syncWithServer();
+    return { success: true, message: data.message, user: data.user };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Network error submitting admin override password reset.' };
+  }
+}
+
 
 
 
