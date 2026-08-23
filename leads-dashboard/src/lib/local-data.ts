@@ -687,6 +687,7 @@ export function addMember(member: Omit<Member, 'id'>): Member {
 
   const newMember: Member = {
     ...member,
+    mustSetupPassword: true,
     id: 'm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
   };
   current.push(newMember);

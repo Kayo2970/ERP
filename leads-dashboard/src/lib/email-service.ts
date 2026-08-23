@@ -496,6 +496,65 @@ export function generateWelcomeActivationEmailTemplate(name: string, activationL
 }
 
 /**
+ * Template Generator: Welcome Email when added to Directory
+ */
+export function generateNewMemberWelcomeTemplate(member: {
+  name: string;
+  email: string;
+  role: string;
+  division?: string;
+  department?: string;
+}): { subject: string; bodyText: string; bodyHtml: string } {
+  const roleStr = member.role || 'Member';
+  const divisionStr = member.division || 'Core Committee';
+  const departmentStr = member.department ? ` (${member.department})` : '';
+
+  const subject = `Welcome to LEADS Next Gen Centre — ${roleStr} Account Registration`;
+  const bodyText = `Hello ${member.name},\n\n` +
+    `Welcome to LEADS Next Gen Centre! You have officially been registered as a member on the LEADS Operations Dashboard.\n\n` +
+    `Account Details:\n` +
+    `• Designation / Role: ${roleStr}\n` +
+    `• Division: ${divisionStr}${departmentStr}\n` +
+    `• Login Email: ${member.email}\n\n` +
+    `Password Setup Required:\n` +
+    `When you log in for the first time at https://leadsnextgencentre.online, enter your email address (${member.email}). An admin override will prompt you directly to set up your new account password.\n\n` +
+    `Log in here: https://leadsnextgencentre.online\n\n` +
+    `Regards,\nLEADS Next Gen Centre, MSRUAS`;
+
+  const bodyHtml = wrapInMasterEmailTemplate({
+    headerTitle: `Welcome, ${member.name}!`,
+    headerSubtitle: `Official Member Account Registration`,
+    badgeText: `👋 Account Created`,
+    badgeColor: `#0284c7`,
+    bodyContentHtml: `
+      <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello <strong>${member.name}</strong>,</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">You have officially been added to <strong>LEADS Next Gen Centre</strong>. Here are your onboarding registration details:</p>
+
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #0284c7; padding: 18px 22px; border-radius: 10px; margin: 20px 0; font-size: 13px;">
+        <p style="margin: 0 0 8px 0; color: #64748b;"><strong>Designation / Role:</strong> <span style="color: #0f172a; font-weight: 700; font-size: 14px;">${roleStr}</span></p>
+        <p style="margin: 0 0 8px 0; color: #64748b;"><strong>Division:</strong> <span style="color: #0f172a; font-weight: 600;">${divisionStr}${departmentStr}</span></p>
+        <p style="margin: 0; color: #64748b;"><strong>Registered Email:</strong> <span style="color: #0284c7; font-family: monospace; font-weight: 600;">${member.email}</span></p>
+      </div>
+
+      <div style="background: #fffbe6; border: 1px solid #ffe58f; padding: 16px 20px; border-radius: 10px; margin: 20px 0;">
+        <h4 style="margin: 0 0 6px 0; color: #d48806; font-size: 14px; font-weight: 700;">🔑 Set Up Your Password</h4>
+        <p style="margin: 0; color: #595959; font-size: 13px; line-height: 1.5;">When you log in for the first time, simply enter your registered email address (<strong>${member.email}</strong>). You will be prompted directly to set your new password.</p>
+      </div>
+
+      <div style="text-align: center; margin: 28px 0;">
+        <a href="https://leadsnextgencentre.online" style="display: inline-block; background: #0284c7; color: #ffffff; font-weight: 700; font-size: 14px; padding: 12px 28px; border-radius: 10px; text-decoration: none; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);">
+          Set Up Password & Log In &rarr;
+        </a>
+      </div>
+
+      <p style="color: #64748b; font-size: 12px; line-height: 1.5; margin-bottom: 0;">If you have any questions or require assistance, please reach out to your Centre Head or System Administrator.</p>
+    `
+  });
+
+  return { subject, bodyText, bodyHtml };
+}
+
+/**
  * Template Generator: Email Change Confirmation OTP.
  * Sent to the OLD address as a security check, never the new one — the
  * recipient must already control the account's current inbox to approve
