@@ -125,6 +125,7 @@ export default function EmailManagementPage() {
       if (res.ok) {
         const data = await res.json();
         setSettings(data);
+        if (data.dkimPrivateKey) setShowDkimSection(true);
       }
     } catch (e) {
       console.error(e);
@@ -963,6 +964,18 @@ export default function EmailManagementPage() {
                     </span>
                     <p>The app itself resolves each recipient&apos;s mail server (MX record) and delivers straight to it — no Gmail/Outlook relay, no Postfix, nothing in between.</p>
                   </div>
+                  <div className="space-y-1.5">
+                    <label className="block font-medium text-theme-text-secondary">HELO Hostname *</label>
+                    <input
+                      type="text"
+                      required
+                      value={settings.heloHostname || ''}
+                      onChange={e => setSettings(prev => ({ ...prev, heloHostname: e.target.value }))}
+                      placeholder="e.g. mail.leadsnextgencentre.online"
+                      className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                    />
+                    <p className="text-[11px] text-theme-text-secondary">Must match the PTR (reverse-DNS) record on this VPS&apos;s outbound IP, or most receiving mail servers will reject the connection outright.</p>
+                  </div>
                 </div>
               ) : (
                 <>
@@ -1051,6 +1064,58 @@ export default function EmailManagementPage() {
                     className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   />
                 </div>
+              </div>
+
+              <div className="border-t border-theme-border/20 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowDkimSection(!showDkimSection)}
+                  className="flex items-center gap-2 text-theme-text-secondary hover:text-theme-text-primary font-bold cursor-pointer"
+                >
+                  <Key className="h-3.5 w-3.5" />
+                  DKIM Signing (Advanced)
+                  {showDkimSection ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                </button>
+
+                {showDkimSection && (
+                  <div className="mt-3 space-y-4">
+                    <p className="text-[11px] text-theme-text-secondary leading-relaxed">
+                      Optional — Nodemailer signs the message itself before handing it off, independent of the provider above. Requires the matching public key published as a DNS TXT record at <code className="bg-theme-background/40 px-1 py-0.5 rounded">&lt;dkimSelector&gt;._domainkey.&lt;dkimDomain&gt;</code>. Signing is skipped entirely unless all three fields below are filled in.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="block font-medium text-theme-text-secondary">DKIM Domain</label>
+                        <input
+                          type="text"
+                          value={settings.dkimDomain || ''}
+                          onChange={e => setSettings(prev => ({ ...prev, dkimDomain: e.target.value }))}
+                          placeholder="leadsnextgencentre.online"
+                          className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block font-medium text-theme-text-secondary">DKIM Selector</label>
+                        <input
+                          type="text"
+                          value={settings.dkimSelector || ''}
+                          onChange={e => setSettings(prev => ({ ...prev, dkimSelector: e.target.value }))}
+                          placeholder="leads"
+                          className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block font-medium text-theme-text-secondary">DKIM Private Key</label>
+                      <textarea
+                        value={settings.dkimPrivateKey || ''}
+                        onChange={e => setSettings(prev => ({ ...prev, dkimPrivateKey: e.target.value }))}
+                        placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
+                        rows={6}
+                        className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-mono text-[11px] leading-relaxed"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-between pt-4 border-t border-theme-border/20">
