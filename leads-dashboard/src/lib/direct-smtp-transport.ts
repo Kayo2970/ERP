@@ -70,6 +70,7 @@ function deliverToHost(
       port: 25,
       name: options.heloHostname,
       secure: false,
+      family: 4, // Force IPv4 for direct SMTP connections to avoid Microsoft/Gmail IPv6 rejection
       // Encrypt whenever the receiving server offers STARTTLS, but don't
       // hard-fail delivery when it doesn't — matches how real MTAs behave
       // for MTA-to-MTA hops.
@@ -79,7 +80,7 @@ function deliverToHost(
       greetingTimeout: options.greetingTimeout ?? 15000,
       socketTimeout: options.socketTimeout ?? 30000,
       logger: false,
-    });
+    } as any);
 
     let settled = false;
     const finish = (err: Error | null, response?: string) => {

@@ -180,7 +180,8 @@ async function buildTransporter(): Promise<{ transporter: Transporter; settings:
     connectionTimeout: 8000,
     greetingTimeout: 8000,
     socketTimeout: 10000,
-  });
+    family: 4, // Force IPv4 to prevent Microsoft/Gmail IPv6 SPF/DKIM block (Error 450 4.7.26)
+  } as any);
 
   return { transporter: t, settings, effectiveHost: host, effectivePort: port };
 }
