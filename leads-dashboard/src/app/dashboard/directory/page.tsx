@@ -28,7 +28,9 @@ import {
   UserX,
   ShieldOff,
   Mail,
-  KeyRound
+  KeyRound,
+  Lock,
+  EyeOff
 } from 'lucide-react';
 import {
   getMembers,
@@ -41,12 +43,13 @@ import {
   terminateMember,
   reactivateMember,
   requestMemberPasswordReset,
+  adminSetMemberPassword,
   Member,
   MemberDivision
 } from '@/lib/local-data';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { StudentProfileModal } from '@/components/student-profile-modal';
-import { canViewFullDirectory, canEditDirectory, isCentreHead, canViewHiddenAccounts } from '@/lib/permissions';
+import { canViewFullDirectory, canEditDirectory, isCentreHead, canViewHiddenAccounts, canSetMemberPassword } from '@/lib/permissions';
 
 export default function DirectoryPage() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -62,6 +65,11 @@ export default function DirectoryPage() {
   const [reactivatingMember, setReactivatingMember] = useState<Member | null>(null);
   const [passwordResetModalMember, setPasswordResetModalMember] = useState<Member | null>(null);
   const [isTogglingPasswordReset, setIsTogglingPasswordReset] = useState(false);
+  const [setPasswordModalMember, setSetPasswordModalMember] = useState<Member | null>(null);
+  const [newPasswordValue, setNewPasswordValue] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [isSettingPassword, setIsSettingPassword] = useState(false);
+  const [setPasswordError, setSetPasswordError] = useState('');
   const [selectedStudentForProfile, setSelectedStudentForProfile] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -667,6 +675,27 @@ export default function DirectoryPage() {
     setPasswordResetModalMember(null);
   };
 
+  const handleConfirmSetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!setPasswordModalMember) return;
+    if (newPasswordValue.length < 4) {
+      setSetPasswordError('Password must be at least 4 characters long.');
+      return;
+    }
+    setIsSettingPassword(true);
+    setSetPasswordError('');
+    const res = await adminSetMemberPassword(setPasswordModalMember.id, newPasswordValue, user?.name || 'Super User');
+    setIsSettingPassword(false);
+    if (res.success) {
+      triggerSuccess(res.message || `Password updated for ${setPasswordModalMember.name}.`);
+      setMembers(getMembers());
+      setSetPasswordModalMember(null);
+      setNewPasswordValue('');
+    } else {
+      setSetPasswordError(res.error || 'Failed to set password.');
+    }
+  };
+
   const toggleSort = (field: keyof Member) => {
     if (sortField === field) {
       setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
@@ -1238,6 +1267,21 @@ export default function DirectoryPage() {
                                   title={member.mustSetupPassword ? "Cancel Password Reset Request" : "Ask Member to Set Up Password (Admin Override - No OTP on Login)"}
                                 >
                                   <KeyRound className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+
+                              {canSetMemberPassword(user) && member.status !== 'Terminated' && (
+                                <button
+                                  onClick={() => {
+                                    setSetPasswordModalMember(member);
+                                    setNewPasswordValue('');
+                                    setSetPasswordError('');
+                                    setShowNewPassword(false);
+                                  }}
+                                  className="p-1.5 text-theme-text-secondary hover:text-danger hover:bg-danger/10 rounded-lg transition-all cursor-pointer"
+                                  title="Set Password Directly (Super User Only)"
+                                >
+                                  <Lock className="h-3.5 w-3.5" />
                                 </button>
                               )}
 
@@ -2103,6 +2147,82 @@ export default function DirectoryPage() {
           onConfirm={handleConfirmPasswordResetToggle}
           onCancel={() => setPasswordResetModalMember(null)}
         />
+      )}
+
+      {/* Set Password Directly (Super User Only) Modal */}
+      {setPasswordModalMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="glass-panel w-full max-w-md rounded-2xl p-6 border border-theme-card-border shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-theme-border/30 pb-4">
+              <div>
+                <h3 className="text-base font-bold text-theme-text-primary flex items-center gap-2">
+                  <Lock className="h-5 w-5 text-danger" />
+                  Set Password Directly
+                </h3>
+                <p className="text-xs text-theme-text-secondary mt-0.5">
+                  Super User override — takes effect immediately for {setPasswordModalMember.name} ({setPasswordModalMember.email}), no OTP or self-setup required.
+                </p>
+              </div>
+              <button
+                onClick={() => setSetPasswordModalMember(null)}
+                className="p-1.5 text-theme-text-secondary hover:text-theme-text-primary rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmSetPassword} className="space-y-4 text-xs">
+              <div className="flex items-start gap-2 p-3 bg-danger/5 border border-danger/25 rounded-xl text-[11px] text-theme-text-secondary">
+                <ShieldAlert className="h-3.5 w-3.5 text-danger shrink-0 mt-0.5" />
+                <span>This immediately replaces {setPasswordModalMember.name}&apos;s password. Share the new password with them through a secure channel.</span>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block font-medium text-theme-text-secondary">New Password</label>
+                <div className="relative">
+                  <input
+                    type={showNewPassword ? 'text' : 'password'}
+                    required
+                    minLength={4}
+                    autoFocus
+                    value={newPasswordValue}
+                    onChange={(e) => setNewPasswordValue(e.target.value)}
+                    placeholder="Minimum 4 characters"
+                    className="w-full pl-4 pr-10 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-3 top-3 text-theme-text-secondary hover:text-theme-text-primary"
+                  >
+                    {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {setPasswordError && (
+                <p className="text-[11px] text-danger">{setPasswordError}</p>
+              )}
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-theme-border/30">
+                <button
+                  type="button"
+                  onClick={() => setSetPasswordModalMember(null)}
+                  className="px-4 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary font-semibold rounded-xl text-xs cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSettingPassword}
+                  className="px-5 py-2 bg-danger hover:bg-red-600 text-white font-semibold rounded-xl text-xs shadow-md shadow-danger/15 cursor-pointer disabled:opacity-50"
+                >
+                  {isSettingPassword ? 'Setting Password...' : 'Set Password'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
     </div>

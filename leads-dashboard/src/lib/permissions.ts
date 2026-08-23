@@ -587,6 +587,17 @@ export function canTerminateMember(user: SessionUser): boolean {
   return isCentreHead(user) || user?.tier === 1;
 }
 
+/**
+ * Directly set another member's password, taking effect immediately with no OTP
+ * or self-setup step for them to complete. Deliberately Super User (tier 1) ONLY —
+ * unlike most admin actions in this file, isCentreHead() is NOT accepted here.
+ * Centre Head can still ask a member to set up their own password on next login
+ * (see requestMemberPasswordReset), just not assign one directly.
+ */
+export function canSetMemberPassword(user: SessionUser): boolean {
+  return user?.tier === 1;
+}
+
 /** Check if user is in the Faculty division. */
 export function isFaculty(user: SessionUser): boolean {
   return !!user && user.division === 'Faculty';
