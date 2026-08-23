@@ -200,35 +200,29 @@ export function wrapInMasterEmailTemplate(options: {
   badgeColor?: string;
   bodyContentHtml: string;
 }): string {
-  // Embedded as a cid: inline attachment (see EMAIL_LOGO_ATTACHMENT below)
-  // rather than fetched from a remote URL — a remote-hosted image is one
-  // more "this is bulk mail" content signal, and it's one small fix that's
-  // literally common to every single automated email this app sends.
-  const logoUrl = 'cid:leads-logo';
-
   const isOmittedBadge = !options.badgeText || ['NONE', 'None', 'NO_BADGE', 'none'].includes(options.badgeText.trim());
 
   const badgeHtml = isOmittedBadge
     ? ''
-    : `<span style="font-size: 11px; font-weight: 700; color: ${options.badgeColor || '#0369a1'}; background: #e0f2fe; border: 1px solid #bae6fd; padding: 4px 10px; border-radius: 6px; display: inline-block; margin-bottom: 16px;">${options.badgeText}</span>`;
+    : `<span style="font-size: 11px; font-weight: 700; color: ${options.badgeColor || '#0284c7'}; background: #f0f9ff; border: 1px solid #bae6fd; padding: 4px 10px; border-radius: 6px; display: inline-block; margin-bottom: 16px;">${options.badgeText}</span>`;
 
   return `
     <!DOCTYPE html>
-    <html>
+    <html lang="en">
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>LEADS Next Gen Centre Notification</title>
     </head>
-    <body style="background-color: #f4f4f7; margin: 0; padding: 28px 12px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; width: 100%; box-sizing: border-box;">
-      <div style="max-width: 580px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);">
+    <body style="background-color: #f8fafc; margin: 0; padding: 24px 12px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; width: 100%; box-sizing: border-box;">
+      <div style="max-width: 580px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);">
         
-        <!-- Header Banner with Logo -->
-        <div style="background-color: #ffffff; padding: 24px 32px; border-bottom: 1px solid #f1f5f9; text-align: center;">
-          <div style="display: inline-block; width: 48px; height: 48px; margin-bottom: 8px; vertical-align: middle;">
-            <img src="${logoUrl}" alt="LEADS Logo" style="width: 100%; height: 100%; object-fit: contain;" />
+        <!-- Header Banner with Clean Typography Branding -->
+        <div style="background-color: #0f172a; padding: 24px 32px; text-align: center;">
+          <div style="display: inline-block; padding: 5px 12px; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 6px; margin-bottom: 8px;">
+            <span style="color: #38bdf8; font-size: 11px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase;">LEADS NEXT GEN CENTRE</span>
           </div>
-          <h2 style="color: #0f172a; margin: 0; font-size: 19px; font-weight: 800; letter-spacing: -0.01em;">LEADS Next Gen Centre</h2>
-          <p style="color: #64748b; font-size: 12px; margin: 3px 0 0 0; font-weight: 500;">Ramaiah University of Applied Sciences &middot; Operations Portal</p>
+          <p style="color: #94a3b8; font-size: 12px; margin: 4px 0 0 0; font-weight: 500;">Ramaiah University of Applied Sciences &middot; Operations Portal</p>
         </div>
 
         <!-- Main Content Area -->
@@ -245,7 +239,7 @@ export function wrapInMasterEmailTemplate(options: {
         <!-- Standardized Institutional Footer -->
         <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 28px; text-align: center; font-size: 11px; color: #64748b; line-height: 1.6;">
           <p style="margin: 0 0 6px 0; color: #475569; font-weight: 600;">© 2026 LEADS Next Gen Centre &middot; MSRUAS Internal Operations Portal</p>
-          <p style="margin: 0 0 6px 0; color: #94a3b8;">This is an operational notification. Authorised recipient access only.</p>
+          <p style="margin: 0 0 6px 0; color: #94a3b8;">This is an automated operational notice. Authorised recipient access only.</p>
           <div style="border-top: 1px solid #e2e8f0; padding-top: 8px; margin-top: 8px; color: #64748b; font-size: 10px;">
             All Intellectual Property, Copyrights & Licensing belong exclusively to <strong style="color: #0284c7;">Kayomarz Pavri</strong>.
           </div>
@@ -267,7 +261,7 @@ export async function testEmailConnection(testRecipient: string): Promise<{ succ
     const bodyHtml = wrapInMasterEmailTemplate({
       headerTitle: `SMTP Connection Verified`,
       headerSubtitle: `Diagnostic Health Check Successful`,
-      badgeText: `✅ SMTP Operational`,
+      badgeText: `SMTP Operational`,
       badgeColor: `#15803d`,
       bodyContentHtml: `
         <p style="margin-top: 0; color: #0f172a; font-weight: 600;">Your LEADS Dashboard email client and SMTP server settings are operational.</p>
@@ -286,18 +280,9 @@ export async function testEmailConnection(testRecipient: string): Promise<{ succ
       subject: `[LEADS Test Email] SMTP Client Verification`,
       text: `Hello,\n\nThis is a test notification verifying that your LEADS Dashboard email client and SMTP server (${settings.provider.toUpperCase()} @ ${effectiveHost}) are properly configured and operational.\n\nSent at: ${new Date().toLocaleString()}`,
       html: bodyHtml,
-      attachments: [EMAIL_LOGO_ATTACHMENT],
-      // No custom/default X-Mailer — a value like "Nodemailer" or a
-      // custom app name is one of the more recognizable "this is a mail
-      // engine, not a person" signals to spam filters.
       xMailer: false,
     });
 
-    // A resolved sendMail() only means the server ACCEPTED the message for
-    // delivery, not that it will actually reach the inbox — surface the raw
-    // SMTP response (and any outright-rejected recipients) rather than a
-    // blind "success," since that gap is exactly what makes "sent but never
-    // received" so hard to diagnose without shell access to the mail server.
     if (info.rejected && info.rejected.length > 0) {
       return {
         success: false,
@@ -307,7 +292,7 @@ export async function testEmailConnection(testRecipient: string): Promise<{ succ
 
     return {
       success: true,
-      message: `SMTP accepted the message for ${testRecipient} (server said: "${info.response || 'OK'}"). This confirms the SMTP handoff worked — if it still doesn't arrive, check spam/junk, and check that "${settings.fromEmail}" is allowed to send as this domain (SPF/DKIM) rather than the app's connection to the mail server, since that part is already confirmed working.`,
+      message: `SMTP accepted the message for ${testRecipient} (server said: "${info.response || 'OK'}"). This confirms the SMTP handoff worked.`,
     };
   } catch (err: any) {
     console.error('[email-service] SMTP Connection Test Failed:', err);
@@ -318,12 +303,12 @@ export async function testEmailConnection(testRecipient: string): Promise<{ succ
 export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog> {
   let badgeTextToUse: string | undefined = payload.badgeText;
   if (!badgeTextToUse) {
-    if (payload.category === 'ANNOUNCEMENT') badgeTextToUse = '📢 Official Announcement';
-    else if (payload.category === 'TASK_ASSIGNMENT') badgeTextToUse = '📌 Action Required';
-    else if (payload.category === 'EVENT_ROSTER') badgeTextToUse = '🎉 Event Roster';
-    else if (payload.category === 'ACCOUNT_ACTIVATION') badgeTextToUse = '👋 Welcome';
-    else if (payload.category === 'BIRTHDAY') badgeTextToUse = '🎂 Happy Birthday';
-    else badgeTextToUse = undefined; // Omit badge completely for direct messages and guest invites
+    if (payload.category === 'ANNOUNCEMENT') badgeTextToUse = 'Official Announcement';
+    else if (payload.category === 'TASK_ASSIGNMENT') badgeTextToUse = 'Task Assignment';
+    else if (payload.category === 'EVENT_ROSTER') badgeTextToUse = 'Event Roster';
+    else if (payload.category === 'ACCOUNT_ACTIVATION') badgeTextToUse = 'Account Notice';
+    else if (payload.category === 'BIRTHDAY') badgeTextToUse = 'Greetings';
+    else badgeTextToUse = undefined;
   }
 
   const defaultFormattedHtml = wrapInMasterEmailTemplate({
@@ -346,18 +331,19 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
     const domain = (settings.fromEmail || 'leadsnextgencentre.online').split('@')[1] || 'leadsnextgencentre.online';
     const messageId = `<${Date.now()}.${Math.random().toString(36).substring(2, 9)}@${domain}>`;
 
-    // A List-Unsubscribe header is a real, well-recognized deliverability
-    // signal to Gmail/Yahoo-class spam filters — but only makes sense for
-    // the genuinely bulk/broadcast categories, not a 1:1 OTP or welcome
-    // email, where offering an "unsubscribe" would just be confusing.
     const isBulkCategory = payload.category === 'ANNOUNCEMENT' || payload.category === 'EVENT_ROSTER' || payload.category === 'GUEST_INVITE';
     const unsubscribeAddress = settings.replyTo || settings.fromEmail;
     const headers: Record<string, string> = {
-      'X-Auto-Response-Suppress': 'OOF, AutoReply',
+      'Auto-Submitted': 'auto-generated',
+      'X-Auto-Response-Suppress': 'OOF, AutoReply, Async, All',
       'Message-ID': messageId,
+      'X-Entity-Ref-ID': messageId,
+      'X-Priority': '3',
+      'Importance': 'normal',
     };
     if (isBulkCategory && unsubscribeAddress) {
       headers['List-Unsubscribe'] = `<mailto:${unsubscribeAddress}?subject=Unsubscribe>`;
+      headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
     }
 
     const info = await t.sendMail({
@@ -367,19 +353,11 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
       text: payload.bodyText,
       html: bodyHtml,
       replyTo: settings.replyTo || settings.fromEmail,
-      attachments: [EMAIL_LOGO_ATTACHMENT],
-      // No custom/default X-Mailer — a recognizable "sent by a mail
-      // engine, not a person" signal that doesn't help deliverability.
       xMailer: false,
       headers,
     });
 
     smtpResponse = info.response;
-    // sendMail() resolving only means the SMTP server ACCEPTED the message
-    // for delivery — not that every recipient will actually get it. A
-    // server that rejects some/all recipients outright (bad address,
-    // relay-denied, etc.) reports that in `rejected` without necessarily
-    // throwing, so treat a fully-rejected send as FAILED rather than SENT.
     if (info.rejected && info.rejected.length > 0) {
       const rejectedList = info.rejected.map(String);
       rejectedRecipients = rejectedList;
@@ -420,34 +398,31 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
   return newEmail;
 }
 
-/**
- * Template Generator: Password Reset OTP
- */
 export function generateOtpEmailTemplate(name: string, otp: string): { subject: string; bodyText: string; bodyHtml: string } {
-  const subject = `Your LEADS Dashboard Password Reset Code: ${otp}`;
+  const subject = `LEADS Portal Security Code: ${otp}`;
   const bodyText = `Hello ${name},\n\n` +
-    `You recently requested a password reset for your LEADS Next Gen Dashboard account.\n\n` +
-    `Your One-Time Password (OTP) code is: ${otp}\n\n` +
-    `This code is strictly valid for 5 minutes. If you did not request a password reset, please ignore this email or notify your system administrator immediately.\n\n` +
+    `You requested a password reset for your LEADS Next Gen Dashboard account.\n\n` +
+    `Verification Code: ${otp}\n\n` +
+    `This code is valid for 5 minutes. If you did not request this code, please ignore this email.\n\n` +
     `Regards,\nLEADS Next Gen Centre, MSRUAS`;
 
   const bodyHtml = wrapInMasterEmailTemplate({
-    headerTitle: `Password Reset Authorization`,
+    headerTitle: `Password Reset Request`,
     headerSubtitle: `Security Verification Code`,
-    badgeText: `🔒 5-Minute OTP Code`,
-    badgeColor: `#be123c`,
+    badgeText: `Security Verification`,
+    badgeColor: `#0284c7`,
     bodyContentHtml: `
       <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello <strong>${name}</strong>,</p>
-      <p style="color: #334155; font-size: 14px; line-height: 1.6;">You requested a password reset for your LEADS account. Use the 6-digit verification code below to authorize your password update:</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">You requested a password reset for your LEADS account. Use the verification code below to complete your password update:</p>
 
       <div style="text-align: center; margin: 28px 0;">
-        <span style="font-family: monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #0284c7; background: #f0f9ff; border: 1px dashed #7dd3fc; padding: 14px 28px; border-radius: 12px; display: inline-block;">
+        <span style="font-family: monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #0f172a; background: #f8fafc; border: 1px solid #cbd5e1; padding: 14px 28px; border-radius: 10px; display: inline-block;">
           ${otp}
         </span>
-        <p style="color: #e11d48; font-size: 12px; margin-top: 12px; font-weight: 700;">⏱️ Valid for 5 minutes only</p>
+        <p style="color: #64748b; font-size: 12px; margin-top: 10px;">Valid for 5 minutes</p>
       </div>
 
-      <p style="color: #64748b; font-size: 12px; line-height: 1.5; margin-bottom: 0;">If you did not request this, you can safely ignore this message. Your password will remain unchanged.</p>
+      <p style="color: #64748b; font-size: 12px; line-height: 1.5; margin-bottom: 0;">If you did not request this code, you can safely ignore this message.</p>
     `
   });
 
@@ -464,31 +439,28 @@ export function generateOtpEmailTemplate(name: string, otp: string): { subject: 
  * clicked from an inbox rather than typed in.
  */
 export function generateWelcomeActivationEmailTemplate(name: string, activationLink: string): { subject: string; bodyText: string; bodyHtml: string } {
-  const subject = `Welcome to LEADS Next Gen Centre — Set Up Your Account`;
+  const subject = `LEADS Portal Account Activation: ${name}`;
   const bodyText = `Hello ${name},\n\n` +
-    `Welcome to LEADS Next Gen Centre! An account has been created for you on the LEADS Operations Dashboard.\n\n` +
-    `Set your password and activate your account here:\n${activationLink}\n\n` +
-    `This link is valid for 7 days. Once activated, sign in with this email address and the password you choose.\n\n` +
-    `If you weren't expecting this, you can safely ignore this email.\n\n` +
+    `An account has been created for you on the LEADS Next Gen Centre Operations Dashboard.\n\n` +
+    `Set your password and activate your account:\n${activationLink}\n\n` +
     `Regards,\nLEADS Next Gen Centre, MSRUAS`;
 
   const bodyHtml = wrapInMasterEmailTemplate({
-    headerTitle: `Welcome, ${name}!`,
-    headerSubtitle: `Your LEADS Operations Dashboard account is ready`,
-    badgeText: `👋 Welcome`,
-    badgeColor: `#15803d`,
+    headerTitle: `Account Activation`,
+    headerSubtitle: `LEADS Operations Portal`,
+    badgeText: `Account Setup`,
+    badgeColor: `#0284c7`,
     bodyContentHtml: `
       <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello <strong>${name}</strong>,</p>
-      <p style="color: #334155; font-size: 14px; line-height: 1.6;">You've been added to the LEADS Next Gen Centre roster. Set up your password below to access the Operations Dashboard:</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">You have been added to the LEADS Next Gen Centre roster. Select the link below to set your account password:</p>
 
       <div style="text-align: center; margin: 28px 0;">
         <a href="${activationLink}" style="display: inline-block; background: #0284c7; color: #ffffff; font-weight: 700; font-size: 14px; padding: 12px 28px; border-radius: 10px; text-decoration: none;">
           Set Up My Account
         </a>
-        <p style="color: #94a3b8; font-size: 11px; margin-top: 12px;">⏱️ This link is valid for 7 days</p>
       </div>
 
-      <p style="color: #64748b; font-size: 12px; line-height: 1.5; margin-bottom: 0;">If the button doesn't work, copy and paste this link into your browser:<br /><span style="word-break: break-all; color: #0284c7;">${activationLink}</span></p>
+      <p style="color: #64748b; font-size: 12px; line-height: 1.5; margin-bottom: 0;">If the button does not open, copy and paste this link into your browser:<br /><span style="word-break: break-all; color: #0284c7;">${activationLink}</span></p>
     `
   });
 
@@ -509,26 +481,25 @@ export function generateNewMemberWelcomeTemplate(member: {
   const divisionStr = member.division || 'Core Committee';
   const departmentStr = member.department ? ` (${member.department})` : '';
 
-  const subject = `Welcome to LEADS Next Gen Centre — ${roleStr} Account Registration`;
+  const subject = `LEADS Portal Account Created: ${member.name}`;
   const bodyText = `Hello ${member.name},\n\n` +
-    `Welcome to LEADS Next Gen Centre! You have officially been registered as a member on the LEADS Operations Dashboard.\n\n` +
-    `Account Details:\n` +
+    `Welcome to LEADS Next Gen Centre. You have officially been registered as a member on the LEADS Operations Dashboard.\n\n` +
+    `Account Summary:\n` +
     `• Designation / Role: ${roleStr}\n` +
     `• Division: ${divisionStr}${departmentStr}\n` +
-    `• Login Email: ${member.email}\n\n` +
-    `Password Setup Required:\n` +
-    `When you log in for the first time at https://leadsnextgencentre.online, enter your email address (${member.email}). An admin override will prompt you directly to set up your new account password.\n\n` +
-    `Log in here: https://leadsnextgencentre.online\n\n` +
+    `• Registered Email: ${member.email}\n\n` +
+    `Password Setup:\n` +
+    `When you log in for the first time at https://leadsnextgencentre.online using your email (${member.email}), you will be prompted directly to set your password.\n\n` +
     `Regards,\nLEADS Next Gen Centre, MSRUAS`;
 
   const bodyHtml = wrapInMasterEmailTemplate({
-    headerTitle: `Welcome, ${member.name}!`,
-    headerSubtitle: `Official Member Account Registration`,
-    badgeText: `👋 Account Created`,
+    headerTitle: `Welcome to LEADS Next Gen Centre`,
+    headerSubtitle: `Member Registration Notice`,
+    badgeText: `Official Notice`,
     badgeColor: `#0284c7`,
     bodyContentHtml: `
       <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello <strong>${member.name}</strong>,</p>
-      <p style="color: #334155; font-size: 14px; line-height: 1.6;">You have officially been added to <strong>LEADS Next Gen Centre</strong>. Here are your onboarding registration details:</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">You have officially been registered as a member of <strong>LEADS Next Gen Centre</strong>. Here are your onboarding details:</p>
 
       <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #0284c7; padding: 18px 22px; border-radius: 10px; margin: 20px 0; font-size: 13px;">
         <p style="margin: 0 0 8px 0; color: #64748b;"><strong>Designation / Role:</strong> <span style="color: #0f172a; font-weight: 700; font-size: 14px;">${roleStr}</span></p>
@@ -536,14 +507,14 @@ export function generateNewMemberWelcomeTemplate(member: {
         <p style="margin: 0; color: #64748b;"><strong>Registered Email:</strong> <span style="color: #0284c7; font-family: monospace; font-weight: 600;">${member.email}</span></p>
       </div>
 
-      <div style="background: #fffbe6; border: 1px solid #ffe58f; padding: 16px 20px; border-radius: 10px; margin: 20px 0;">
-        <h4 style="margin: 0 0 6px 0; color: #d48806; font-size: 14px; font-weight: 700;">🔑 Set Up Your Password</h4>
-        <p style="margin: 0; color: #595959; font-size: 13px; line-height: 1.5;">When you log in for the first time, simply enter your registered email address (<strong>${member.email}</strong>). You will be prompted directly to set your new password.</p>
+      <div style="background: #f0f9ff; border: 1px solid #bae6fd; padding: 16px 20px; border-radius: 10px; margin: 20px 0;">
+        <h4 style="margin: 0 0 6px 0; color: #0369a1; font-size: 14px; font-weight: 700;">Password Setup Instructions</h4>
+        <p style="margin: 0; color: #334155; font-size: 13px; line-height: 1.5;">When you log in for the first time, simply enter your registered email address (<strong>${member.email}</strong>). You will be prompted directly to set up your password.</p>
       </div>
 
       <div style="text-align: center; margin: 28px 0;">
-        <a href="https://leadsnextgencentre.online" style="display: inline-block; background: #0284c7; color: #ffffff; font-weight: 700; font-size: 14px; padding: 12px 28px; border-radius: 10px; text-decoration: none; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);">
-          Set Up Password & Log In &rarr;
+        <a href="https://leadsnextgencentre.online" style="display: inline-block; background: #0284c7; color: #ffffff; font-weight: 700; font-size: 14px; padding: 12px 28px; border-radius: 10px; text-decoration: none;">
+          Log In & Set Up Password &rarr;
         </a>
       </div>
 
@@ -556,35 +527,32 @@ export function generateNewMemberWelcomeTemplate(member: {
 
 /**
  * Template Generator: Email Change Confirmation OTP.
- * Sent to the OLD address as a security check, never the new one — the
- * recipient must already control the account's current inbox to approve
- * a change away from it.
  */
 export function generateEmailChangeOtpTemplate(name: string, otp: string, newEmail: string): { subject: string; bodyText: string; bodyHtml: string } {
-  const subject = `Your LEADS Dashboard Email Change Code: ${otp}`;
+  const subject = `LEADS Portal Email Verification Code: ${otp}`;
   const bodyText = `Hello ${name},\n\n` +
-    `Someone requested to change the login email on your LEADS Next Gen Dashboard account from this address to: ${newEmail}\n\n` +
-    `Your One-Time Password (OTP) code is: ${otp}\n\n` +
-    `This code is strictly valid for 5 minutes. If you did not request this change, do NOT share this code — ignore this email or notify your system administrator immediately, and your login email will remain unchanged.\n\n` +
+    `A request was made to update your login email to: ${newEmail}\n\n` +
+    `Verification Code: ${otp}\n\n` +
+    `Valid for 5 minutes. If you did not request this, please ignore this email.\n\n` +
     `Regards,\nLEADS Next Gen Centre, MSRUAS`;
 
   const bodyHtml = wrapInMasterEmailTemplate({
-    headerTitle: `Email Change Authorization`,
+    headerTitle: `Email Address Update`,
     headerSubtitle: `Security Verification Code`,
-    badgeText: `🔒 5-Minute OTP Code`,
-    badgeColor: `#be123c`,
+    badgeText: `Security Verification`,
+    badgeColor: `#0284c7`,
     bodyContentHtml: `
       <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello <strong>${name}</strong>,</p>
-      <p style="color: #334155; font-size: 14px; line-height: 1.6;">A request was made to change the login email on your LEADS account to <strong style="color: #0f172a;">${newEmail}</strong>. Use the 6-digit verification code below to authorize this change:</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">A request was made to update your login email to <strong style="color: #0f172a;">${newEmail}</strong>. Use the verification code below to authorize this change:</p>
 
       <div style="text-align: center; margin: 28px 0;">
-        <span style="font-family: monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #0284c7; background: #f0f9ff; border: 1px dashed #7dd3fc; padding: 14px 28px; border-radius: 12px; display: inline-block;">
+        <span style="font-family: monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #0f172a; background: #f8fafc; border: 1px solid #cbd5e1; padding: 14px 28px; border-radius: 10px; display: inline-block;">
           ${otp}
         </span>
-        <p style="color: #e11d48; font-size: 12px; margin-top: 12px; font-weight: 700;">⏱️ Valid for 5 minutes only</p>
+        <p style="color: #64748b; font-size: 12px; margin-top: 10px;">Valid for 5 minutes</p>
       </div>
 
-      <p style="color: #64748b; font-size: 12px; line-height: 1.5; margin-bottom: 0;">If you did not request this, do not share this code with anyone — ignore this message and your login email will remain unchanged.</p>
+      <p style="color: #64748b; font-size: 12px; line-height: 1.5; margin-bottom: 0;">If you did not request this change, you can safely ignore this message.</p>
     `
   });
 
@@ -595,17 +563,16 @@ export function generateEmailChangeOtpTemplate(name: string, otp: string, newEma
  * Template Generator: Announcement Alert
  */
 export function generateAnnouncementEmailTemplate(memberName: string, title: string, content: string, author: string): { subject: string; bodyText: string; bodyHtml: string } {
-  const subject = `[LEADS Announcement] ${title}`;
+  const subject = `LEADS Notice: ${title}`;
   const bodyText = `Hello ${memberName},\n\nA new announcement has been published on the LEADS Dashboard by ${author}:\n\n` +
     `Title: ${title}\n\n` +
     `Details: ${content}\n\n` +
-    `Log in to the dashboard to view full details.\n\n` +
     `Regards,\nLEADS Next Gen Centre`;
 
   const bodyHtml = wrapInMasterEmailTemplate({
     headerTitle: title,
     headerSubtitle: `Published by ${author}`,
-    badgeText: `📢 Official Announcement`,
+    badgeText: `Official Announcement`,
     badgeColor: `#0369a1`,
     bodyContentHtml: `
       <p style="margin-top: 0; color: #334155;">Hello <strong>${memberName}</strong>,</p>
@@ -623,22 +590,22 @@ export function generateAnnouncementEmailTemplate(memberName: string, title: str
  * Template Generator: Task Assignment Alert
  */
 export function generateTaskEmailTemplate(memberName: string, taskTitle: string, eventName: string, dueDate: string, creatorName: string): { subject: string; bodyText: string; bodyHtml: string } {
-  const subject = `[LEADS Task Assignment] New Task: ${taskTitle}`;
+  const subject = `LEADS Task Assignment: ${taskTitle}`;
   const bodyText = `Hello ${memberName},\n\nYou have been assigned a new task on LEADS Dashboard.\n\n` +
     `Task: ${taskTitle}\n` +
-    `Event/Context: ${eventName || 'LEADS Operations'}\n` +
+    `Context: ${eventName || 'LEADS Operations'}\n` +
     `Due Date: ${dueDate}\n` +
     `Assigned By: ${creatorName || 'Committee Admin'}\n\n` +
-    `Please log in to your dashboard to view details and mark progress.`;
+    `Please log in to your dashboard to view details and update progress.`;
 
   const bodyHtml = wrapInMasterEmailTemplate({
     headerTitle: taskTitle,
     headerSubtitle: `Assigned by ${creatorName || 'Committee Admin'}`,
-    badgeText: `📌 Action Required: New Task`,
-    badgeColor: `#854d0e`,
+    badgeText: `Task Assignment`,
+    badgeColor: `#0284c7`,
     bodyContentHtml: `
       <p style="margin-top: 0; color: #334155;">Hello <strong>${memberName}</strong>,</p>
-      <p style="color: #334155; font-size: 14px;">You have been assigned a new deliverable on the LEADS Dashboard:</p>
+      <p style="color: #334155; font-size: 14px;">You have been assigned a deliverable on the LEADS Dashboard:</p>
       
       <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #334155; margin: 16px 0;">
         <tr>
@@ -647,7 +614,7 @@ export function generateTaskEmailTemplate(memberName: string, taskTitle: string,
         </tr>
         <tr>
           <td style="padding: 8px 0; color: #64748b;">Due Date:</td>
-          <td style="padding: 8px 0; font-weight: 700; color: #dc2626;">${dueDate}</td>
+          <td style="padding: 8px 0; font-weight: 700; color: #0f172a;">${dueDate}</td>
         </tr>
       </table>
 
@@ -664,22 +631,22 @@ export function generateTaskEmailTemplate(memberName: string, taskTitle: string,
  * Template Generator: Event Committee Roster Assignment
  */
 export function generateEventRosterEmailTemplate(memberName: string, eventTitle: string, committeeName: string, startDate: string): { subject: string; bodyText: string; bodyHtml: string } {
-  const subject = `[LEADS Event Update] You've been assigned to ${eventTitle}`;
+  const subject = `LEADS Event Assignment: ${eventTitle}`;
   const bodyText = `Hello ${memberName},\n\nYou have been added to the "${committeeName}" committee for the upcoming event "${eventTitle}".\n\n` +
     `Event Start Date: ${startDate}\n\n` +
-    `Check the LEADS Dashboard for your team roster and responsibilities.`;
+    `Check the LEADS Dashboard for details.`;
 
   const bodyHtml = wrapInMasterEmailTemplate({
     headerTitle: eventTitle,
     headerSubtitle: `Committee Assignment`,
-    badgeText: `🎉 Event Committee Roster`,
-    badgeColor: `#6b21a8`,
+    badgeText: `Event Assignment`,
+    badgeColor: `#0284c7`,
     bodyContentHtml: `
       <p style="margin-top: 0; color: #334155;">Hello <strong>${memberName}</strong>,</p>
-      <p style="color: #334155; font-size: 14px; line-height: 1.6;">You have been officially added to the <strong>${committeeName}</strong> committee for <strong>${eventTitle}</strong>.</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">You have been assigned to the <strong>${committeeName}</strong> committee for <strong>${eventTitle}</strong>.</p>
       
-      <div style="background: #f0f9ff; border-left: 4px solid #0284c7; padding: 14px 18px; margin: 18px 0; border-radius: 6px;">
-        <p style="margin: 0; font-size: 13px; color: #0f172a;">📅 <strong>Event Start Date:</strong> ${startDate}</p>
+      <div style="background: #f8fafc; border-left: 4px solid #0284c7; padding: 14px 18px; margin: 18px 0; border-radius: 6px;">
+        <p style="margin: 0; font-size: 13px; color: #0f172a;"><strong>Event Start Date:</strong> ${startDate}</p>
       </div>
 
       <div style="margin-top: 20px; text-align: center;">
@@ -693,26 +660,22 @@ export function generateEventRosterEmailTemplate(memberName: string, eventTitle:
 
 /**
  * Template Generator: Happy Birthday
- * Sent by the daily birthday scheduler (src/lib/birthday-scheduler.ts) to
- * every member whose stored date of birth matches today.
  */
 export function generateBirthdayEmailTemplate(memberName: string): { subject: string; bodyText: string; bodyHtml: string } {
   const firstName = memberName.split(' ')[0] || memberName;
-  const subject = `🎂 Happy Birthday, ${firstName}!`;
+  const subject = `Happy Birthday, ${firstName}!`;
   const bodyText = `Hello ${memberName},\n\n` +
     `Wishing you a very Happy Birthday from all of us at LEADS Next Gen Centre!\n\n` +
-    `Thank you for being part of the team — we hope your day is filled with celebration.\n\n` +
     `Warm regards,\nLEADS Next Gen Centre, MSRUAS`;
 
   const bodyHtml = wrapInMasterEmailTemplate({
-    headerTitle: `Happy Birthday, ${firstName}! 🎉`,
+    headerTitle: `Happy Birthday, ${firstName}!`,
     headerSubtitle: `From everyone at LEADS Next Gen Centre`,
-    badgeText: `🎂 Happy Birthday`,
-    badgeColor: `#be185d`,
+    badgeText: `Greetings`,
+    badgeColor: `#0284c7`,
     bodyContentHtml: `
       <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Dear <strong>${memberName}</strong>,</p>
-      <p style="color: #334155; font-size: 14px; line-height: 1.6;">On behalf of the entire LEADS Next Gen Centre family, we wish you a wonderful birthday! Thank you for the energy and dedication you bring to the team — we hope your special day is filled with joy and celebration.</p>
-      <p style="text-align: center; font-size: 40px; margin: 24px 0;">🎂🎉🎈</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">On behalf of the entire LEADS Next Gen Centre family, we wish you a wonderful birthday! Thank you for your energy and dedication.</p>
       <p style="color: #64748b; font-size: 13px; line-height: 1.6; margin-bottom: 0;">Have a fantastic year ahead!</p>
     `
   });
