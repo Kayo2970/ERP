@@ -252,7 +252,8 @@ export default function EmailManagementPage() {
         setSettings(updated);
         triggerToast('success', 'Email server credentials and SMTP settings updated successfully.');
       } else {
-        triggerToast('error', 'Failed to save email settings.');
+        const data = await res.json().catch(() => null);
+        triggerToast('error', data?.error || 'Failed to save email settings.');
       }
     } catch (err: any) {
       triggerToast('error', err?.message || 'Error saving settings.');

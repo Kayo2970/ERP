@@ -1,5 +1,6 @@
 import nodemailer, { Transporter } from 'nodemailer';
 import path from 'path';
+import crypto from 'crypto';
 import { mutateCollection, readCollection } from './server-db';
 import { DirectSendTransport } from './direct-smtp-transport';
 
@@ -99,6 +100,33 @@ export async function getEmailSettings(): Promise<EmailSettings> {
   return DEFAULT_EMAIL_SETTINGS;
 }
 
+/**
+ * Nodemailer's DKIM signer (nodemailer/lib/dkim/sign.js) silently drops the
+ * signature — no error, no log — if crypto.createSign().sign() throws on a
+ * malformed key, e.g. a paste artifact where real line breaks became
+ * literal "\n" text. The message still sends successfully with no
+ * DKIM-Signature header at all, which the receiving server (correctly)
+ * treats as a failed authentication check — a "config looks right, save
+ * succeeded, send succeeded, but signing silently never happened" failure
+ * mode that's nearly impossible to diagnose from the outside. Validating
+ * here turns that into an immediate, specific error at save time instead.
+ */
+function normalizeAndValidateDkimKey(rawKey: string): string {
+  let key = rawKey.trim();
+  if (!key.includes('\n') && key.includes('\\n')) {
+    key = key.replace(/\\n/g, '\n');
+  }
+  try {
+    crypto.createPrivateKey(key);
+  } catch {
+    throw new Error(
+      'DKIM Private Key is not a valid PEM private key. Make sure you pasted the whole block, ' +
+      'including the -----BEGIN PRIVATE KEY----- and -----END PRIVATE KEY----- lines, with real line breaks.'
+    );
+  }
+  return key;
+}
+
 export async function updateEmailSettings(settings: Partial<EmailSettings>, actorName: string): Promise<EmailSettings> {
   const current = await getEmailSettings();
   const updated: EmailSettings = {
@@ -107,6 +135,10 @@ export async function updateEmailSettings(settings: Partial<EmailSettings>, acto
     updatedAt: new Date().toISOString(),
     updatedBy: actorName,
   };
+
+  if (updated.dkimPrivateKey) {
+    updated.dkimPrivateKey = normalizeAndValidateDkimKey(updated.dkimPrivateKey);
+  }
 
   await mutateCollection<EmailSettings>('emailSettings', () => [updated]);
   return updated;
