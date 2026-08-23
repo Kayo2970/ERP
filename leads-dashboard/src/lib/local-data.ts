@@ -2661,6 +2661,28 @@ export async function requestMemberPasswordReset(memberId: string, mustReset: bo
 }
 
 /**
+ * Client Helper: Super User Only — directly set a member's password. Takes effect
+ * immediately (no OTP, no "set up on next login" step for the member to complete).
+ */
+export async function adminSetMemberPassword(memberId: string, newPassword: string, actorName: string): Promise<{ success: boolean; message?: string; error?: string }> {
+  try {
+    const res = await fetch(`/api/members/${memberId}/set-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newPassword, actorName }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Failed to set password.' };
+    }
+    await syncWithServer();
+    return { success: true, message: data.message };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Network error setting password.' };
+  }
+}
+
+/**
  * Client Helper: Submit new password via Super User Admin Override (no OTP required)
  */
 export async function submitAdminOverridePasswordReset(email: string, newPassword: string): Promise<{ success: boolean; message?: string; user?: any; error?: string }> {
