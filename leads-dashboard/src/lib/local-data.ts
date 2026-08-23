@@ -538,7 +538,11 @@ function hydrateIfStale(key: string, serverArray: unknown, requestStartedAt: num
   if (!Array.isArray(serverArray)) return;
   const writtenAt = lastLocalWriteAt[key];
   if (writtenAt !== undefined && requestStartedAt - writtenAt < STALE_HYDRATE_SUPPRESSION_MS) return;
-  localStorage.setItem(key, JSON.stringify(serverArray));
+  try {
+    localStorage.setItem(key, JSON.stringify(serverArray));
+  } catch (e) {
+    console.warn(`[hydrateIfStale] Failed to write ${key} to localStorage:`, e);
+  }
 }
 
 /**
@@ -2151,8 +2155,18 @@ export function getDesigns(): DesignSubmissionItem[] {
 
 export function saveDesigns(designs: DesignSubmissionItem[]): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem('leads_designs', JSON.stringify(designs));
-  markLocalWrite('leads_designs');
+  try {
+    // Strip heavy inline base64 fileData when persisting to localStorage.
+    // Real file assets are stored on disk and served via fileUrl (/api/files).
+    const cleaned = designs.map(d => {
+      const { fileData, ...rest } = d;
+      return rest;
+    });
+    localStorage.setItem('leads_designs', JSON.stringify(cleaned));
+    markLocalWrite('leads_designs');
+  } catch (e) {
+    console.warn('[saveDesigns] Local storage quota exceeded or unavailable:', e);
+  }
 }
 
 /**
@@ -2190,19 +2204,25 @@ export async function addDesign(design: Omit<DesignSubmissionItem, 'id' | 'submi
     } : undefined
   };
 
-  current.unshift(newDesign);
-  saveDesigns(current);
-
+  // POST to server first so the file is written to disk and fileUrl/storageKey is generated without polluting localStorage with base64 data
   const serverResult = await serverPost('/api/designs', newDesign);
   if (!serverResult) {
-    saveDesigns(getDesigns().filter(d => d.id !== newDesign.id));
     throw new Error('The design failed to upload to the server. Please check your connection and try again.');
   }
+
+  const createdDesign: DesignSubmissionItem = {
+    ...newDesign,
+    ...serverResult,
+  };
+  delete createdDesign.fileData;
+
+  current.unshift(createdDesign);
+  saveDesigns(current);
 
   const proofreadMsg = design.proofreadRequested ? ` (Requested proofread from ${design.assignedProofreaderName})` : '';
   logAuditEvent('DESIGN_SUBMITTED', design.designerName, `Submitted design "${design.title}" (${(design.fileSize / (1024 * 1024)).toFixed(2)} MB)${proofreadMsg}`, design.designerEmail);
 
-  return newDesign;
+  return createdDesign;
 }
 
 /**
@@ -2399,23 +2419,24 @@ export async function updateDesignFile(
 
   updated = syncDesignTask(updated, actorName);
 
-  current[idx] = updated;
-  saveDesigns(current);
-
+  // PATCH to server first so fileData base64 is saved on disk and fileUrl is updated
   const serverResult = await serverPatch('/api/designs', id, updated);
   if (!serverResult) {
-    const rolledBack = getDesigns();
-    const rbIdx = rolledBack.findIndex(d => d.id === id);
-    if (rbIdx !== -1) {
-      rolledBack[rbIdx] = item;
-      saveDesigns(rolledBack);
-    }
     throw new Error('The replacement file failed to upload to the server. Please check your connection and try again.');
   }
 
+  const finalUpdated: DesignSubmissionItem = {
+    ...updated,
+    ...serverResult,
+  };
+  delete finalUpdated.fileData;
+
+  current[idx] = finalUpdated;
+  saveDesigns(current);
+
   logAuditEvent('DESIGN_FILE_REPLACED', actorName, `Replaced the uploaded file for design "${item.title}"`);
 
-  return updated;
+  return finalUpdated;
 }
 
 export function deleteDesign(id: string, actorName: string): boolean {
