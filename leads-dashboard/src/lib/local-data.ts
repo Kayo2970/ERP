@@ -673,6 +673,21 @@ export function getMembers(): Member[] {
 
 export function saveMembers(members: Member[]): void {
   if (typeof window === 'undefined') return;
+  // Security Fail-Safe: Ensure at least one Super User account exists in the roster at all times
+  const hasSuperUser = members.some(m => m.id === 'm1' || m.tier === 1 || m.role === 'Super User');
+  if (!hasSuperUser) {
+    const defaultSuperUser: Member = initialMembers[0] || {
+      id: 'm1',
+      name: 'Kayomarz Pavri',
+      email: 'kayo2970@gmail.com',
+      role: 'Super User',
+      tier: 1,
+      division: 'Core Committee',
+      department: 'Design and Social Media',
+      status: 'Active',
+    };
+    members.unshift(defaultSuperUser);
+  }
   localStorage.setItem('leads_members', JSON.stringify(members));
   markLocalWrite('leads_members');
   // Note: Mutations call targeted per-member endpoints (/api/members, /api/members/[id])
@@ -701,6 +716,9 @@ export function deleteMember(id: string): void {
   const current = getMembers();
   const target = current.find(m => m.id === id);
   if (!target) return;
+  if (id === 'm1' || target.tier === 1 || target.role === 'Super User') {
+    throw new Error('The Super User account is protected and cannot be deleted.');
+  }
 
   const updated = current.filter(m => m.id !== id);
   saveMembers(updated);
@@ -756,7 +774,14 @@ export function bulkUpdateMembers(
   const updated = current.map(m => {
     if (targetIdSet.has(m.id)) {
       updatedCount++;
-      return { ...m, ...updates };
+      const next = { ...m, ...updates };
+      // Security Fail-Safe: Protect Super User status and tier
+      if (m.id === 'm1' || m.tier === 1 || m.role === 'Super User') {
+        next.tier = 1;
+        next.role = 'Super User';
+        next.status = 'Active';
+      }
+      return next;
     }
     return m;
   });
@@ -783,8 +808,9 @@ export function bulkUpdateMembers(
 export function bulkDeleteMembers(ids: string[], actorName: string): Member[] {
   const current = getMembers();
   const targetIdSet = new Set(ids);
-  // Protect super user m1
+  // Protect super user m1 and any Super User
   targetIdSet.delete('m1');
+  current.filter(m => m.tier === 1 || m.role === 'Super User').forEach(m => targetIdSet.delete(m.id));
 
   const updated = current.filter(m => !targetIdSet.has(m.id));
   saveMembers(updated);
@@ -798,7 +824,16 @@ export function updateMember(id: string, updates: Partial<Member>, actorName: st
   const idx = current.findIndex(m => m.id === id);
   if (idx === -1) return null;
 
-  current[idx] = { ...current[idx], ...updates };
+  const isSuperUser = id === 'm1' || current[idx].tier === 1 || current[idx].role === 'Super User';
+  const finalUpdates = { ...updates };
+  // Security Fail-Safe: Super User ALWAYS remains Super User (tier 1, Active)
+  if (isSuperUser) {
+    finalUpdates.role = 'Super User';
+    finalUpdates.tier = 1;
+    finalUpdates.status = 'Active';
+  }
+
+  current[idx] = { ...current[idx], ...finalUpdates };
   saveMembers(current);
   // Send the full merged member, not just the diff, so a server-side upsert (a
   // client-only sample member that was never POSTed) creates a complete record.
@@ -818,7 +853,9 @@ export function terminateMember(id: string, actorName: string): Member | null {
   const current = getMembers();
   const idx = current.findIndex(m => m.id === id);
   if (idx === -1) return null;
-  if (id === 'm1') throw new Error('The Super User account cannot be terminated.');
+  if (id === 'm1' || current[idx].tier === 1 || current[idx].role === 'Super User') {
+    throw new Error('The Super User account is protected and cannot be terminated.');
+  }
 
   current[idx] = {
     ...current[idx],

@@ -679,8 +679,16 @@ export default function DirectoryPage() {
   const isAdmin = canEditDirectory(user);
   const canViewRoster = canViewFullDirectory(user);
 
+  const isCurrentSuperUser = user?.tier === 1 || user?.role === 'Super User' || user?.id === 'm1' || user?.email?.toLowerCase() === 'kayo2970@gmail.com';
+
+  // Security & Privacy: Super User profile is hidden from directory for all non-Super User accounts
+  const visibleMembers = members.filter(m => {
+    if (isCurrentSuperUser) return true;
+    return m.id !== 'm1' && m.tier !== 1 && m.role !== 'Super User' && m.email?.toLowerCase() !== 'kayo2970@gmail.com';
+  });
+
   // Filter members list based on division tab and search query
-  const filteredMembers = members
+  const filteredMembers = visibleMembers
     .filter(m => {
       if (selectedDivision === 'TERMINATED') {
         if (m.status !== 'Terminated') return false;
@@ -705,12 +713,12 @@ export default function DirectoryPage() {
     });
 
   // Division counts
-  const advisoryCount = members.filter(m => m.division === 'Advisory Board').length;
-  const coreCount = members.filter(m => m.division === 'Core Committee').length;
-  const trainingCount = members.filter(m => m.division === 'Training Associate').length;
-  const alumniCount = members.filter(m => m.division === 'Alumni').length;
-  const facultyCount = members.filter(m => m.division === 'Faculty').length;
-  const terminatedCount = members.filter(m => m.status === 'Terminated').length;
+  const advisoryCount = visibleMembers.filter(m => m.division === 'Advisory Board').length;
+  const coreCount = visibleMembers.filter(m => m.division === 'Core Committee').length;
+  const trainingCount = visibleMembers.filter(m => m.division === 'Training Associate').length;
+  const alumniCount = visibleMembers.filter(m => m.division === 'Alumni').length;
+  const facultyCount = visibleMembers.filter(m => m.division === 'Faculty').length;
+  const terminatedCount = visibleMembers.filter(m => m.status === 'Terminated').length;
 
   const totalPages = Math.ceil(filteredMembers.length / pageSize) || 1;
   const paginatedMembers = filteredMembers.slice((currentPage - 1) * pageSize, currentPage * pageSize);

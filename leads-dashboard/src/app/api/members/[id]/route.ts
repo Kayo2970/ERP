@@ -33,12 +33,27 @@ export async function PATCH(
     // dropping the edit.
     const updated = await mutateCollection('members', (current) => {
       const idx = current.findIndex((m: any) => m.id === id);
-      if (idx === -1) return [...current, { id, ...updates }];
+      if (idx === -1) {
+        const isSuper = id === 'm1' || updates.tier === 1 || updates.role === 'Super User';
+        if (isSuper) {
+          updates.role = 'Super User';
+          updates.tier = 1;
+          updates.status = 'Active';
+        }
+        return [...current, { id, ...updates }];
+      }
       const next = [...current];
+      const isSuper = id === 'm1' || next[idx].tier === 1 || next[idx].role === 'Super User';
       if (updates.avatarStorageKey && next[idx].avatarStorageKey && next[idx].avatarStorageKey !== updates.avatarStorageKey) {
         previousStorageKey = next[idx].avatarStorageKey;
       }
       next[idx] = { ...next[idx], ...updates };
+      // Security Fail-Safe: Super User ALWAYS retains Super User role, tier 1, and Active status
+      if (isSuper) {
+        next[idx].role = 'Super User';
+        next[idx].tier = 1;
+        next[idx].status = 'Active';
+      }
       return next;
     });
 
@@ -58,13 +73,20 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+    if (id === 'm1') {
+      return NextResponse.json({ error: 'The Super User account is protected and cannot be deleted.' }, { status: 403 });
+    }
     let found = false;
     await mutateCollection('members', (current) => {
+      const target = current.find((m: any) => m.id === id);
+      if (target && (target.tier === 1 || target.role === 'Super User')) {
+        return current;
+      }
       const filtered = current.filter((m: any) => m.id !== id);
       found = filtered.length < current.length;
       return filtered;
     });
-    if (!found) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (!found) return NextResponse.json({ error: 'Not found or protected' }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
