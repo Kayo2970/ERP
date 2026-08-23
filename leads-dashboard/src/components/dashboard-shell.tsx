@@ -77,7 +77,7 @@ const navSections: NavSection[] = [
       { name: 'Public Forms', href: '/dashboard/forms', icon: FileText },
       { name: 'Reports', href: '/dashboard/reports', icon: BarChart3 },
       { name: 'Announcements', href: '/dashboard/announcements', icon: Megaphone },
-      { name: 'Directory', href: '/dashboard/directory', icon: FolderGit2 },
+      { name: 'Members Directory', href: '/dashboard/directory', icon: FolderGit2 },
       { name: 'Guest Directory', href: '/dashboard/guest-directory', icon: Contact, guestDirectoryOnly: true },
       { name: 'Guest Invites', href: '/dashboard/guest-invites', icon: Send, centreHeadOnly: true },
       { name: 'Group Policies', href: '/dashboard/policies', icon: ShieldCheck, superUserOnly: true },
