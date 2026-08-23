@@ -27,6 +27,9 @@
 }
 
 @theme {
+  --font-sans: var(--font-geist-sans), 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
   --color-primary: #0F2A47;
   --color-primary-light: #1E4D7B;
   --color-accent: #2E75B6;
@@ -57,22 +60,72 @@ body {
   background-attachment: fixed;
   background-size: cover;
   color: var(--foreground);
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  font-family: var(--font-sans);
   min-height: 100vh;
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* Glassmorphism panel styling */
+/* Base-layer defaults: every rule here is meant to be the fallback, not the
+   final word — anything with an explicit Tailwind utility for the same
+   property (tracking-wider on the app's many uppercase section labels,
+   e.g.) wins over these automatically because @layer base sits below
+   @layer utilities in Tailwind's cascade. */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Typography polish: display headings get a touch of negative tracking and
+     balanced line-wrapping so multi-word headers never leave an orphaned word
+     on the last line; body copy gets the softer "pretty" wrapping instead. */
+  h1, h2, h3, h4, h5, h6 {
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  ::selection {
+    background-color: color-mix(in srgb, var(--color-accent) 35%, transparent);
+    color: var(--text-primary);
+  }
+
+  /* Physical press feedback on every button in the app — a subtle scale-down
+     on click, the same trick iOS/modern web UIs use to make an interface feel
+     responsive to touch. Purely visual (transform doesn't affect layout flow
+     or any other element), and disabled buttons are excluded so a disabled
+     state never looks clickable. */
+  button:not(:disabled) {
+    transition: transform 150ms ease;
+  }
+
+  button:not(:disabled):active {
+    transform: scale(0.98);
+  }
+}
+
+/* Glassmorphism panel styling — outer shadow tinted toward the page's own
+   foreground hue (not flat black) plus a hairline inner highlight along the
+   top/left edge to suggest light catching a glass edge, instead of a plain
+   backdrop-blur box. */
 .glass-panel {
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   background-color: var(--card-bg);
   border: 1px solid var(--card-border);
-  box-shadow: 0 8px 32px 0 rgba(15, 23, 42, 0.06);
+  box-shadow:
+    0 8px 32px 0 rgba(15, 23, 42, 0.06),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.15),
+    inset 1px 0 0 0 rgba(255, 255, 255, 0.05);
 }
 
 .dark .glass-panel {
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25);
+  box-shadow:
+    0 8px 32px 0 rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.06),
+    inset 1px 0 0 0 rgba(255, 255, 255, 0.03);
 }
 
 /* Background Theme Layout — side-to-side gradient, themed via --page-gradient
