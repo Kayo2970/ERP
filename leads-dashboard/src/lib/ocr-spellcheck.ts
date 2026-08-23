@@ -13,6 +13,7 @@
  * at, plus a page preview image, so the UI can draw a highlight box right
  * over the mistake instead of just listing it in prose.
  */
+import fs from 'fs/promises';
 import path from 'path';
 import { createWorker, type Worker } from 'tesseract.js';
 import nspell from 'nspell';
@@ -20,6 +21,20 @@ import type { OcrScanResult, OcrScanIssue, OcrScanPageImage } from './local-data
 
 const OCR_CACHE_DIR = path.join(process.cwd(), 'data', 'ocr-cache');
 const MAX_PDF_PAGES = 5;
+// tesseract.js only downloads the English traineddata (~4MB, from a public
+// CDN) the very first time a worker needs it, then writes it to `cachePath`
+// for every request after that — but its Node cache writer is a plain
+// fs.writeFile with no mkdir, so it silently fails (logged, not thrown) if
+// this directory doesn't already exist, and the "cache" never actually
+// persists: every single scan re-downloads the traineddata from scratch.
+// Creating the directory up front (see getWorker below) is what makes the
+// cache real.
+// A worker stuck on a slow/unreachable CDN fetch would otherwise hang until
+// the reverse proxy in front of the app times out and returns its own HTML
+// error page — which breaks res.json() on the client with an opaque
+// "Unexpected token '<'" instead of a real error. Fail fast with a clear,
+// actionable message instead.
+const WORKER_INIT_TIMEOUT_MS = 45_000;
 // Preview images are capped on their longest side purely to keep the JSON
 // response small — bbox percentages are computed against the ORIGINAL
 // (pre-downscale) pixel dimensions, so highlight boxes stay accurate
@@ -44,9 +59,21 @@ const INDIAN_ENGLISH_WHITELIST = [
 let workerPromise: Promise<Worker> | null = null;
 async function getWorker(): Promise<Worker> {
   if (!workerPromise) {
-    workerPromise = createWorker('eng', undefined, {
-      cachePath: OCR_CACHE_DIR,
-    }).catch((err) => {
+    workerPromise = Promise.race([
+      fs.mkdir(OCR_CACHE_DIR, { recursive: true }).then(() =>
+        createWorker('eng', undefined, { cachePath: OCR_CACHE_DIR })
+      ),
+      new Promise<Worker>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(
+            'OCR engine setup timed out. This normally only happens on the first ' +
+            'scan after a deploy, while it fetches its English language data — try again ' +
+            'in a moment. If it keeps timing out, the server may not have outbound network access.'
+          )),
+          WORKER_INIT_TIMEOUT_MS
+        )
+      ),
+    ]).catch((err) => {
       workerPromise = null;
       throw err;
     });
