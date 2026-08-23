@@ -19,7 +19,7 @@ import {
   FileText,
   Camera
 } from 'lucide-react';
-import { getAuditLogs, getMembers, saveMembers, updateMember, logAuditEvent, AuditLogItem, getEmailLogs, requestEmailChange, confirmEmailChange } from '@/lib/local-data';
+import { getAuditLogs, getMembers, saveMembers, updateMember, logAuditEvent, AuditLogItem, getEmailLogs, requestEmailChange, confirmEmailChange, confirmNewEmailChange } from '@/lib/local-data';
 
 const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
 
@@ -49,9 +49,9 @@ export default function SettingsPage() {
   const [avatarError, setAvatarError] = useState('');
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
-  // Change Email state (self-service, OTP sent to the OLD email)
+  // Change Email state (self-service, dual OTP: old email first, then new email)
   const [isChangingEmail, setIsChangingEmail] = useState(false);
-  const [emailStep, setEmailStep] = useState<'REQUEST' | 'VERIFY'>('REQUEST');
+  const [emailStep, setEmailStep] = useState<'REQUEST' | 'VERIFY_OLD' | 'VERIFY_NEW'>('REQUEST');
   const [newEmailInput, setNewEmailInput] = useState('');
   const [emailOtp, setEmailOtp] = useState('');
   const [emailExpiresAt, setEmailExpiresAt] = useState<number | null>(null);
@@ -98,9 +98,10 @@ export default function SettingsPage() {
     setEmailLogs(logs);
   };
 
-  // 5-minute countdown timer for the email-change OTP
+  // 5-minute countdown timer for the email-change OTP (runs for both the
+  // old-email and new-email verification steps)
   useEffect(() => {
-    if (!emailExpiresAt || emailStep !== 'VERIFY') return;
+    if (!emailExpiresAt || emailStep === 'REQUEST') return;
 
     const interval = setInterval(() => {
       const remainingMs = emailExpiresAt - Date.now();
@@ -149,10 +150,13 @@ export default function SettingsPage() {
 
     setEmailChangeMsg(res.message || `Verification code sent to ${user.email}.`);
     if (res.expiresAt) setEmailExpiresAt(res.expiresAt);
-    setEmailStep('VERIFY');
+    setEmailStep('VERIFY_OLD');
   };
 
-  const handleConfirmEmailChange = async () => {
+  // Step 2 of 3: verify the code sent to the OLD email. This does NOT apply
+  // the change — success here just unlocks step 3, a second code sent to
+  // the NEW email, so the member has to prove they control both inboxes.
+  const handleConfirmOldEmailOtp = async () => {
     setEmailChangeErr('');
     if (!emailOtp.trim()) {
       setEmailChangeErr('Enter the 6-digit verification code.');
@@ -161,6 +165,30 @@ export default function SettingsPage() {
 
     setIsConfirmingEmailOtp(true);
     const res = await confirmEmailChange(user.id, emailOtp.trim());
+    setIsConfirmingEmailOtp(false);
+
+    if (!res.success) {
+      setEmailChangeErr(res.error || 'Failed to confirm email change.');
+      return;
+    }
+
+    setEmailOtp('');
+    setEmailChangeMsg(res.message || `Current email verified. A second code was sent to ${res.newEmail}.`);
+    if (res.expiresAt) setEmailExpiresAt(res.expiresAt);
+    setEmailStep('VERIFY_NEW');
+  };
+
+  // Step 3 of 3: verify the code sent to the NEW email. Only this step
+  // actually applies the change.
+  const handleConfirmNewEmailOtp = async () => {
+    setEmailChangeErr('');
+    if (!emailOtp.trim()) {
+      setEmailChangeErr('Enter the 6-digit verification code.');
+      return;
+    }
+
+    setIsConfirmingEmailOtp(true);
+    const res = await confirmNewEmailChange(user.id, emailOtp.trim());
     setIsConfirmingEmailOtp(false);
 
     if (!res.success) {
@@ -528,7 +556,7 @@ export default function SettingsPage() {
                     Change Login Email
                   </h4>
                   <p className="text-[11px] text-theme-text-secondary leading-relaxed">
-                    A verification code will be sent to your <strong>current</strong> email ({user?.email}) to confirm this change — not the new address. This proves you still control the account you're changing.
+                    Two verification codes are required — one sent to your <strong>current</strong> email ({user?.email}), then a second sent to the <strong>new</strong> address — so this change only goes through once you've proven you control both inboxes.
                   </p>
 
                   {emailChangeErr && (
@@ -538,7 +566,7 @@ export default function SettingsPage() {
                     <p className="text-[11px] text-success bg-success/10 border border-success/20 rounded-lg px-3 py-2">{emailChangeMsg}</p>
                   )}
 
-                  {emailStep === 'REQUEST' ? (
+                  {emailStep === 'REQUEST' && (
                     <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end">
                       <div className="flex-1 space-y-1.5">
                         <label className="block font-medium text-theme-text-secondary">New Email Address</label>
@@ -569,10 +597,14 @@ export default function SettingsPage() {
                         </button>
                       </div>
                     </div>
-                  ) : (
+                  )}
+
+                  {emailStep === 'VERIFY_OLD' && (
                     <div className="space-y-3">
                       <div className="flex items-center justify-between text-[11px] text-theme-text-secondary">
-                        <span>Enter the code sent to <strong className="text-theme-text-primary">{user?.email}</strong></span>
+                        <span>
+                          <strong className="text-accent">Step 1 of 2</strong> — Enter the code sent to your current email <strong className="text-theme-text-primary">{user?.email}</strong>
+                        </span>
                         <span className="font-mono font-bold text-accent">{emailTimeLeftStr}</span>
                       </div>
                       <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end">
@@ -582,6 +614,7 @@ export default function SettingsPage() {
                             type="text"
                             inputMode="numeric"
                             maxLength={6}
+                            autoFocus
                             value={emailOtp}
                             onChange={(e) => setEmailOtp(e.target.value.replace(/\D/g, ''))}
                             placeholder="6-digit code"
@@ -592,11 +625,55 @@ export default function SettingsPage() {
                           <button
                             type="button"
                             disabled={isConfirmingEmailOtp}
-                            onClick={handleConfirmEmailChange}
+                            onClick={handleConfirmOldEmailOtp}
                             className="px-4 py-2.5 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1.5 whitespace-nowrap"
                           >
                             <CheckCircle2 className="h-3.5 w-3.5" />
-                            {isConfirmingEmailOtp ? 'Confirming...' : 'Confirm'}
+                            {isConfirmingEmailOtp ? 'Confirming...' : 'Continue'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={resetEmailChangeFlow}
+                            className="px-3 py-2.5 bg-theme-background/40 hover:bg-theme-border/30 text-theme-text-secondary font-semibold rounded-xl transition-all cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {emailStep === 'VERIFY_NEW' && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between text-[11px] text-theme-text-secondary">
+                        <span>
+                          <strong className="text-accent">Step 2 of 2</strong> — Enter the code sent to your new email <strong className="text-theme-text-primary">{newEmailInput}</strong>
+                        </span>
+                        <span className="font-mono font-bold text-accent">{emailTimeLeftStr}</span>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end">
+                        <div className="flex-1 space-y-1.5">
+                          <label className="block font-medium text-theme-text-secondary">Verification Code</label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={6}
+                            autoFocus
+                            value={emailOtp}
+                            onChange={(e) => setEmailOtp(e.target.value.replace(/\D/g, ''))}
+                            placeholder="6-digit code"
+                            className="w-full px-4 py-2.5 bg-theme-background/50 border border-theme-card-border rounded-xl text-theme-text-primary text-center font-mono text-base tracking-[0.3em] focus:outline-none focus:border-accent"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            disabled={isConfirmingEmailOtp}
+                            onClick={handleConfirmNewEmailOtp}
+                            className="px-4 py-2.5 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1.5 whitespace-nowrap"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            {isConfirmingEmailOtp ? 'Confirming...' : 'Confirm Change'}
                           </button>
                           <button
                             type="button"

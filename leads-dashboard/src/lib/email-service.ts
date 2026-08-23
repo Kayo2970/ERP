@@ -593,6 +593,44 @@ export function generateEmailChangeOtpTemplate(name: string, otp: string, newEma
 }
 
 /**
+ * Template Generator: Email Change OTP — step 2 of 2, sent to the NEW
+ * address the member is trying to move to, after they've already proven
+ * ownership of the old one. Confirms the OLD address in the copy so the
+ * recipient has context even if this lands in an inbox they haven't used
+ * with this account before.
+ */
+export function generateNewEmailConfirmationOtpTemplate(name: string, otp: string, oldEmail: string): { subject: string; bodyText: string; bodyHtml: string } {
+  const subject = `LEADS Portal — Confirm This Is Your New Email: ${otp}`;
+  const bodyText = `Hello ${name},\n\n` +
+    `This is the second and final step of moving your LEADS Portal login email away from ${oldEmail} to this address.\n\n` +
+    `Verification Code: ${otp}\n\n` +
+    `Valid for 5 minutes. If you did not request this, please ignore this email — no change will be made without this code.\n\n` +
+    `Regards,\nLEADS Next Gen Centre, MSRUAS`;
+
+  const bodyHtml = wrapInMasterEmailTemplate({
+    headerTitle: `Confirm Your New Email`,
+    headerSubtitle: `Final Step — Security Verification Code`,
+    badgeText: `Security Verification`,
+    badgeColor: `#0284c7`,
+    bodyContentHtml: `
+      <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello <strong>${name}</strong>,</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">This is the second and final step of moving your LEADS Portal login email away from <strong style="color: #0f172a;">${oldEmail}</strong> to this address. Use the code below to confirm you can receive mail here:</p>
+
+      <div style="text-align: center; margin: 28px 0;">
+        <span style="font-family: monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #0f172a; background: #f8fafc; border: 1px solid #cbd5e1; padding: 14px 28px; border-radius: 10px; display: inline-block;">
+          ${otp}
+        </span>
+        <p style="color: #64748b; font-size: 12px; margin-top: 10px;">Valid for 5 minutes</p>
+      </div>
+
+      <p style="color: #64748b; font-size: 12px; line-height: 1.5; margin-bottom: 0;">If you did not request this change, you can safely ignore this message — no change will be made without this code.</p>
+    `
+  });
+
+  return { subject, bodyText, bodyHtml };
+}
+
+/**
  * Template Generator: Announcement Alert
  */
 export function generateAnnouncementEmailTemplate(memberName: string, title: string, content: string, author: string): { subject: string; bodyText: string; bodyHtml: string } {

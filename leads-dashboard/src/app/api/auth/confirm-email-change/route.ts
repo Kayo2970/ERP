@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
+import { randomInt } from 'crypto';
 import { readCollection, mutateCollection } from '@/lib/server-db';
+import { dispatchEmail, generateNewEmailConfirmationOtpTemplate } from '@/lib/email-service';
 
 /**
- * Self-service email change, step 2 of 2. Verifies the OTP that was sent to
- * the OLD email address, then applies the new email directly against the
- * members collection server-side — never through the generic member PATCH
- * route, so the email field can never be set to an unverified value.
+ * Self-service email change, step 2 of 3. Verifies the OTP that was sent to
+ * the OLD email address. This does NOT apply the new email yet — it proves
+ * the member controls the account they're changing, then sends a SECOND OTP
+ * to the NEW address so step 3 (see confirm-new-email) can prove they also
+ * control the inbox they're moving to before anything actually changes.
  */
 export async function POST(request: Request) {
   try {
@@ -15,7 +18,7 @@ export async function POST(request: Request) {
     }
 
     const changes = await readCollection<any>('emailChanges');
-    const matchedChange = changes.find((r: any) => r.memberId === memberId && r.otp === String(otp).trim());
+    const matchedChange = changes.find((r: any) => r.memberId === memberId && !r.oldVerified && r.otp === String(otp).trim());
     if (!matchedChange) {
       return NextResponse.json({ error: 'Invalid verification code. Please check your email and try again.' }, { status: 400 });
     }
@@ -24,42 +27,40 @@ export async function POST(request: Request) {
     }
 
     const members = await readCollection<any>('members');
+    const member = members.find((m: any) => m.id === memberId);
+    if (!member) {
+      return NextResponse.json({ error: 'Account not found in registered members database.' }, { status: 404 });
+    }
     if (members.some((m: any) => m.id !== memberId && m.email.toLowerCase() === matchedChange.newEmail)) {
       return NextResponse.json({ error: 'That email address was claimed by another account in the meantime.' }, { status: 409 });
     }
 
-    let memberUpdated = false;
-    let memberName = 'User';
-    await mutateCollection('members', (current) =>
-      (current || []).map((m: any) => {
-        if (m.id === memberId) {
-          memberUpdated = true;
-          memberName = m.name;
-          return { ...m, email: matchedChange.newEmail };
-        }
-        return m;
-      })
+    const newOtp = randomInt(100000, 1000000).toString();
+    const newExpiresAt = Date.now() + 5 * 60 * 1000;
+
+    await mutateCollection('emailChanges', (current) =>
+      (current || []).map((r: any) =>
+        r.id === matchedChange.id
+          ? { ...r, otp: newOtp, expiresAt: newExpiresAt, oldVerified: true }
+          : r
+      )
     );
 
-    if (!memberUpdated) {
-      return NextResponse.json({ error: 'Account not found in registered members database.' }, { status: 404 });
-    }
-
-    await mutateCollection('emailChanges', (current) => (current || []).filter((r: any) => r.id !== matchedChange.id));
-
-    const auditLog = {
-      id: `audit-${Date.now()}`,
-      action: 'EMAIL_CHANGED',
-      user: memberName,
-      details: `Login email changed from ${matchedChange.oldEmail} to ${matchedChange.newEmail} via 5-minute OTP confirmation`,
-      timestamp: new Date().toISOString(),
-    };
-    await mutateCollection('auditLogs', (current) => [auditLog, ...(current || [])]);
+    const template = generateNewEmailConfirmationOtpTemplate(member.name, newOtp, matchedChange.oldEmail);
+    await dispatchEmail({
+      to: matchedChange.newEmail,
+      subject: template.subject,
+      bodyText: template.bodyText,
+      bodyHtml: template.bodyHtml,
+      category: 'AUTH_OTP',
+    });
 
     return NextResponse.json({
       success: true,
-      message: 'Email address updated successfully! Use your new email to log in from now on.',
+      stage: 'NEW_EMAIL_SENT',
+      message: `Current email verified. A second code was sent to your new email (${matchedChange.newEmail}). Valid for 5 minutes.`,
       newEmail: matchedChange.newEmail,
+      expiresAt: newExpiresAt,
     });
   } catch (err: any) {
     console.error('[confirm-email-change-api] Error:', err);

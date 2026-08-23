@@ -4,11 +4,14 @@ import { readCollection, mutateCollection } from '@/lib/server-db';
 import { dispatchEmail, generateEmailChangeOtpTemplate } from '@/lib/email-service';
 
 /**
- * Self-service email change, step 1 of 2. Anyone who knows the account's
+ * Self-service email change, step 1 of 3. Anyone who knows the account's
  * current email can request a change to any new email — there is no extra
- * check here — but the OTP that actually authorizes the change is sent to
- * the OLD address, so completing the change still requires access to the
- * inbox being replaced.
+ * check here — but the OTP that actually advances the flow is sent to the
+ * OLD address, so continuing still requires access to the inbox being
+ * replaced. Step 2 (see confirm-email-change) verifies that OTP and then
+ * sends a second OTP to the NEW address; step 3 (see confirm-new-email)
+ * verifies that one and only then applies the change — so the member has
+ * to prove they control BOTH inboxes before anything actually changes.
  */
 export async function POST(request: Request) {
   try {
@@ -46,6 +49,7 @@ export async function POST(request: Request) {
       newEmail: trimmedNew,
       otp,
       expiresAt,
+      oldVerified: false,
       createdAt: new Date().toISOString(),
     };
 

@@ -2662,11 +2662,34 @@ export async function requestEmailChange(memberId: string, currentEmail: string,
 }
 
 /**
- * Client Helper: Submit the OTP sent to the old email and apply the new one.
+ * Client Helper: Step 2 of 3 — submit the OTP sent to the OLD email. This
+ * does NOT apply the new email yet; on success the server sends a second
+ * OTP to the NEW address, which confirmNewEmailChange() below then verifies.
  */
-export async function confirmEmailChange(memberId: string, otp: string): Promise<{ success: boolean; message?: string; error?: string; newEmail?: string }> {
+export async function confirmEmailChange(memberId: string, otp: string): Promise<{ success: boolean; message?: string; error?: string; newEmail?: string; expiresAt?: number }> {
   try {
     const res = await fetch('/api/auth/confirm-email-change', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ memberId, otp }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Failed to confirm email change.' };
+    }
+    return { success: true, message: data.message, newEmail: data.newEmail, expiresAt: data.expiresAt };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Network error confirming email change.' };
+  }
+}
+
+/**
+ * Client Helper: Step 3 of 3 — submit the OTP sent to the NEW email. Only
+ * this final step actually applies the email change.
+ */
+export async function confirmNewEmailChange(memberId: string, otp: string): Promise<{ success: boolean; message?: string; error?: string; newEmail?: string }> {
+  try {
+    const res = await fetch('/api/auth/confirm-new-email', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ memberId, otp }),
