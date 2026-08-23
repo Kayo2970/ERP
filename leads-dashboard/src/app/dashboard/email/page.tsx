@@ -955,7 +955,17 @@ export default function EmailManagementPage() {
               </button>
             </div>
 
-            <form onSubmit={handleSaveSettings} className="space-y-4 text-xs">
+            <form
+              onSubmit={handleSaveSettings}
+              onInvalidCapture={(e) => {
+                const target = e.target as HTMLInputElement;
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                const labelEl = target.closest('.space-y-1\\.5')?.querySelector('label');
+                const label = labelEl?.textContent?.replace(/\s*\*\s*$/, '') || 'A required field';
+                triggerToast('error', `${label} is empty or invalid — scroll up to fix it before saving.`);
+              }}
+              className="space-y-4 text-xs"
+            >
               {settings.provider === 'direct_send' ? (
                 <div className="space-y-3">
                   <div className="p-4 bg-accent/10 rounded-2xl border border-accent/20 space-y-2 text-[11px] text-theme-text-secondary leading-relaxed">
