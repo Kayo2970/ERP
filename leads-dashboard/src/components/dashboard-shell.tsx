@@ -82,7 +82,7 @@ const navSections: NavSection[] = [
       { name: 'Guest Invites', href: '/dashboard/guest-invites', icon: Send, centreHeadOnly: true },
       { name: 'Group Policies', href: '/dashboard/policies', icon: ShieldCheck, superUserOnly: true },
       { name: 'Backup & Restore', href: '/dashboard/backup', icon: DatabaseBackup, superUserOnly: true },
-      { name: 'Email Management', href: '/dashboard/email', icon: Mail, superUserOnly: true },
+      { name: 'Email Management', href: '/dashboard/email', icon: Mail, centreHeadOnly: true },
       { name: 'Settings', href: '/dashboard/settings', icon: Settings },
     ],
   },

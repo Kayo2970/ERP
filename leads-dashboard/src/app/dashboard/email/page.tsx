@@ -346,6 +346,8 @@ export default function EmailManagementPage() {
   const sentCount = outboxLogs.filter(l => l.status === 'SENT').length;
   const failedCount = outboxLogs.filter(l => l.status === 'FAILED').length;
 
+  const isSuperUser = user && (user.tier === 1 || user.role === 'Super User' || user.id === 'm1' || user.email?.toLowerCase() === 'kayo2970@gmail.com');
+
   // Strict Access Guard — Centre Head / Super User Only
   const isAuthorized = user && (user.tier === 1 || isCentreHead(user));
 
@@ -390,7 +392,7 @@ export default function EmailManagementPage() {
             <h1 className="text-xl font-bold text-theme-text-primary">Centre Head Operational Mailbox & Audit Desk</h1>
           </div>
           <p className="text-xs text-theme-text-secondary">
-            View outbox dispatch histories, inspect pending email queues, compose broadcasts, and manage SMTP mail servers.
+            View outbox dispatch histories, inspect pending email queues, compose broadcasts, and monitor operational delivery.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -445,17 +447,19 @@ export default function EmailManagementPage() {
           Compose Broadcast
         </button>
 
-        <button
-          onClick={() => setActiveTab('settings')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all cursor-pointer ${
-            activeTab === 'settings' 
-              ? 'bg-accent text-white shadow-md shadow-accent/20' 
-              : 'text-theme-text-secondary hover:bg-theme-border/20'
-          }`}
-        >
-          <Server className="h-4 w-4" />
-          SMTP Server Credentials
-        </button>
+        {isSuperUser && (
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all cursor-pointer ${
+              activeTab === 'settings' 
+                ? 'bg-accent text-white shadow-md shadow-accent/20' 
+                : 'text-theme-text-secondary hover:bg-theme-border/20'
+            }`}
+          >
+            <Server className="h-4 w-4" />
+            SMTP Configuration
+          </button>
+        )}
       </div>
 
       {/* TAB 1: SENT OUTBOX & DELIVERY AUDIT LOGS */}
@@ -1202,10 +1206,27 @@ export default function EmailManagementPage() {
               </div>
             </div>
 
-            <div className="flex justify-end pt-2 border-t border-theme-border/20">
+            <div className="flex items-center justify-between pt-2 border-t border-theme-border/20">
+              <button
+                type="button"
+                onClick={() => {
+                  setDispatchScope('SINGLE');
+                  setCustomRecipient(selectedLog.to);
+                  setSubject(selectedLog.subject);
+                  setBodyText(selectedLog.bodyText);
+                  setSelectedLog(null);
+                  setActiveTab('composer');
+                  triggerToast('success', `Pre-filled composer with message payload for ${selectedLog.to}`);
+                }}
+                className="px-4 py-2 bg-accent/15 hover:bg-accent/25 text-accent border border-accent/30 text-xs font-bold rounded-xl cursor-pointer flex items-center gap-1.5 transition-all"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Reuse Payload in Composer
+              </button>
+
               <button
                 onClick={() => setSelectedLog(null)}
-                className="px-4 py-2 bg-accent text-white text-xs font-bold rounded-xl cursor-pointer"
+                className="px-4 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-bold rounded-xl cursor-pointer transition-all"
               >
                 Close Inspector
               </button>
