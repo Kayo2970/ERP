@@ -22,7 +22,8 @@ import {
   Download,
   Sparkles,
   CheckSquare,
-  Star
+  Star,
+  Plus
 } from 'lucide-react';
 import {
   getDesigns,
@@ -33,6 +34,7 @@ import {
   deleteDesign,
   getMembers,
   getEvents,
+  addEvent,
   getTasks,
   DesignSubmissionItem,
   Member,
@@ -186,6 +188,59 @@ export default function DesignPortalPage() {
   const [showUploadModal, setShowUploadModal] = useState<boolean>(false);
   const [selectedDesign, setSelectedDesign] = useState<DesignSubmissionItem | null>(null);
   const [showInspectorModal, setShowInspectorModal] = useState<boolean>(false);
+
+  // Quick Event Creation Modal state
+  const [showQuickEventModal, setShowQuickEventModal] = useState<boolean>(false);
+  const [newEventTitle, setNewEventTitle] = useState('');
+  const [newEventDesc, setNewEventDesc] = useState('');
+  const [newEventCampus, setNewEventCampus] = useState<'GG Campus' | 'RTC Campus' | 'Both Campuses'>('GG Campus');
+  const [newEventStartDate, setNewEventStartDate] = useState('');
+  const [newEventEndDate, setNewEventEndDate] = useState('');
+  const [newEventDatesTBD, setNewEventDatesTBD] = useState(false);
+  const [newEventLocation, setNewEventLocation] = useState('');
+  const [isCreatingEvent, setIsCreatingEvent] = useState(false);
+  const [quickEventError, setQuickEventError] = useState('');
+
+  const handleQuickEventSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newEventTitle.trim()) {
+      setQuickEventError('Event title is required.');
+      return;
+    }
+    setIsCreatingEvent(true);
+    try {
+      const created = addEvent({
+        title: newEventTitle.trim(),
+        description: newEventDesc.trim(),
+        campus: newEventCampus,
+        startDate: newEventDatesTBD ? '' : newEventStartDate,
+        endDate: newEventDatesTBD ? '' : newEventEndDate,
+        datesTBD: newEventDatesTBD,
+        location: newEventLocation.trim() || undefined,
+        status: 'planned',
+        createdBy: user?.name || 'User',
+      });
+
+      // Refresh local events & automatically select the new event
+      const updatedEvents = getEvents();
+      setEvents(updatedEvents);
+      setEventId(created.id);
+
+      // Reset and close quick event modal
+      setNewEventTitle('');
+      setNewEventDesc('');
+      setNewEventStartDate('');
+      setNewEventEndDate('');
+      setNewEventDatesTBD(false);
+      setNewEventLocation('');
+      setQuickEventError('');
+      setShowQuickEventModal(false);
+    } catch (err: any) {
+      setQuickEventError(err?.message || 'Failed to create event.');
+    } finally {
+      setIsCreatingEvent(false);
+    }
+  };
 
   // Form state
   const [title, setTitle] = useState('');
@@ -983,7 +1038,20 @@ export default function DesignPortalPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="font-medium text-foreground">Tag Event (Optional)</label>
+                  <div className="flex items-center justify-between">
+                    <label className="font-medium text-foreground">Tag Event (Optional)</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQuickEventError('');
+                        setShowQuickEventModal(true);
+                      }}
+                      className="text-[11px] text-accent hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="h-3 w-3" />
+                      Create Event on Spot
+                    </button>
+                  </div>
                   <select
                     value={eventId}
                     onChange={e => setEventId(e.target.value)}
@@ -1154,6 +1222,135 @@ export default function DesignPortalPage() {
                   className="px-4 py-2 rounded-lg bg-accent text-accent-foreground font-medium hover:opacity-90 disabled:opacity-50"
                 >
                   {isSubmitting ? 'Uploading...' : isReadingFile ? 'Preparing file...' : submitError ? 'Retry Submit' : 'Submit Design'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Event Creation Modal */}
+      {showQuickEventModal && (
+        <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
+          <div className="glass-panel bg-slate-900/95 dark:bg-[#0B1B2E]/95 bg-white/95 backdrop-blur-2xl border border-white/20 dark:border-white/15 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative text-foreground">
+            <button
+              onClick={() => setShowQuickEventModal(false)}
+              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div className="space-y-1">
+              <h3 className="text-base font-bold flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-accent" />
+                Create Event on the Spot
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Create a new event immediately to tag your design asset.
+              </p>
+            </div>
+
+            <form onSubmit={handleQuickEventSubmit} className="space-y-3 text-xs">
+              <div className="space-y-1">
+                <label className="font-medium text-foreground">Event Title *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Annual Tech Symposium 2026"
+                  value={newEventTitle}
+                  onChange={e => setNewEventTitle(e.target.value)}
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-medium text-foreground">Campus</label>
+                <select
+                  value={newEventCampus}
+                  onChange={e => setNewEventCampus(e.target.value as any)}
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent"
+                >
+                  <option value="GG Campus">GG Campus</option>
+                  <option value="RTC Campus">RTC Campus</option>
+                  <option value="Both Campuses">Both Campuses</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="font-medium text-foreground">Dates</label>
+                  <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={newEventDatesTBD}
+                      onChange={e => setNewEventDatesTBD(e.target.checked)}
+                      className="rounded border-border text-accent focus:ring-accent"
+                    />
+                    Dates TBD
+                  </label>
+                </div>
+                {!newEventDatesTBD && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="date"
+                      value={newEventStartDate}
+                      onChange={e => setNewEventStartDate(e.target.value)}
+                      className="w-full bg-background border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-accent text-xs"
+                    />
+                    <input
+                      type="date"
+                      value={newEventEndDate}
+                      onChange={e => setNewEventEndDate(e.target.value)}
+                      className="w-full bg-background border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-accent text-xs"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-medium text-foreground">Location / Venue</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Main Auditorium"
+                  value={newEventLocation}
+                  onChange={e => setNewEventLocation(e.target.value)}
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-medium text-foreground">Description</label>
+                <textarea
+                  rows={2}
+                  placeholder="Event notes or objectives..."
+                  value={newEventDesc}
+                  onChange={e => setNewEventDesc(e.target.value)}
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent"
+                />
+              </div>
+
+              {quickEventError && (
+                <p className="text-rose-500 font-medium text-[11px] flex items-center gap-1">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  {quickEventError}
+                </p>
+              )}
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowQuickEventModal(false)}
+                  className="px-3 py-1.5 rounded-lg border border-border text-foreground hover:bg-muted font-medium text-xs cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingEvent}
+                  className="px-4 py-1.5 rounded-lg bg-accent text-accent-foreground font-semibold hover:opacity-90 text-xs flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  {isCreatingEvent ? 'Creating...' : 'Create & Tag Event'}
                 </button>
               </div>
             </form>
@@ -1332,6 +1529,72 @@ export default function DesignPortalPage() {
                   This finalized design deliverable is active as a task assigned to <strong className="text-foreground">{selectedDesign.designerName}</strong>
                   {selectedDesign.eventName ? ` for event "${selectedDesign.eventName}"` : ' (Standalone Deliverable)'}. Evaluators can score performance under the <strong>Ratings</strong> tab.
                 </p>
+              </div>
+            )}
+
+            {/* Social Media Posting Follow-Up Chain Status Card */}
+            {(selectedDesign.linkedInstagramTaskId || selectedDesign.linkedLinkedinTaskId) && (
+              <div className="bg-slate-900/60 dark:bg-slate-900/80 bg-slate-50 border border-border p-4 rounded-xl space-y-3 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-foreground flex items-center gap-1.5 text-sm">
+                    <Send className="h-4 w-4 text-accent" />
+                    Social Media Posting Follow-Up Chain
+                  </span>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/20">
+                    Automated Tasks Assigned
+                  </span>
+                </div>
+                <p className="text-muted-foreground text-[11px]">
+                  Upon design approval, follow-up social media posting tasks were automatically created and assigned to <strong className="text-foreground">{selectedDesign.designerName}</strong>.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  {/* Instagram Task Status */}
+                  {selectedDesign.linkedInstagramTaskId && (() => {
+                    const instaTask = tasks.find(t => t.id === selectedDesign.linkedInstagramTaskId);
+                    const isDone = instaTask?.status === 'Completed';
+                    return (
+                      <div className={`p-3 rounded-lg border flex items-center justify-between ${
+                        isDone ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-amber-500/10 border-amber-500/30'
+                      }`}>
+                        <div className="space-y-0.5">
+                          <span className="font-bold text-foreground text-xs block">📸 Instagram Posting</span>
+                          <span className="text-[10px] text-muted-foreground block">
+                            {isDone ? 'Posted & Marked Completed' : 'Pending Posting by Designer'}
+                          </span>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          isDone ? 'bg-emerald-500 text-white' : 'bg-amber-500 text-black'
+                        }`}>
+                          {instaTask?.status || 'In Progress'}
+                        </span>
+                      </div>
+                    );
+                  })()}
+
+                  {/* LinkedIn Task Status */}
+                  {selectedDesign.linkedLinkedinTaskId && (() => {
+                    const linkedinTask = tasks.find(t => t.id === selectedDesign.linkedLinkedinTaskId);
+                    const isDone = linkedinTask?.status === 'Completed';
+                    return (
+                      <div className={`p-3 rounded-lg border flex items-center justify-between ${
+                        isDone ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-amber-500/10 border-amber-500/30'
+                      }`}>
+                        <div className="space-y-0.5">
+                          <span className="font-bold text-foreground text-xs block">💼 LinkedIn Posting</span>
+                          <span className="text-[10px] text-muted-foreground block">
+                            {isDone ? 'Posted & Marked Completed' : 'Pending Posting by Designer'}
+                          </span>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          isDone ? 'bg-emerald-500 text-white' : 'bg-amber-500 text-black'
+                        }`}>
+                          {linkedinTask?.status || 'In Progress'}
+                        </span>
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
             )}
 

@@ -304,6 +304,8 @@ export interface DesignSubmissionItem {
   // approvals (e.g. approved -> changes requested -> re-approved) reuse the
   // same task instead of creating a duplicate each time.
   linkedTaskId?: string;
+  linkedInstagramTaskId?: string;
+  linkedLinkedinTaskId?: string;
   isSample?: boolean;
   // Optional automated OCR + spell-check pass run client-side at upload time
   // (see /api/designs/ocr-scan). Purely advisory — never validated or
@@ -2218,39 +2220,77 @@ function syncDesignTask(item: DesignSubmissionItem, reviewerName: string): Desig
   const isProofreadApproved = !item.proofreadRequested || item.review?.status === 'Proofread Approved';
   const isFullyFinalized = isStyleApproved && isProofreadApproved;
 
+  let updatedItem = { ...item };
+
   if (isFullyFinalized) {
-    if (item.linkedTaskId) {
-      updateTask(item.linkedTaskId, { status: 'Completed' }, reviewerName);
-      return item;
+    if (updatedItem.linkedTaskId) {
+      updateTask(updatedItem.linkedTaskId, { status: 'Completed' }, reviewerName);
     } else {
       const task = addTask({
-        title: `Design Approved: ${item.title}`,
-        event: item.eventName || undefined,
-        eventId: item.eventId || undefined,
-        assignee: item.designerName,
-        assigneeId: item.designerId,
-        assigneeEmail: item.designerEmail,
+        title: `Design Approved: ${updatedItem.title}`,
+        event: updatedItem.eventName || undefined,
+        eventId: updatedItem.eventId || undefined,
+        assignee: updatedItem.designerName,
+        assigneeId: updatedItem.designerId,
+        assigneeEmail: updatedItem.designerEmail,
         assigneeType: 'individual',
         dueDate: new Date().toISOString().split('T')[0],
         status: 'Completed',
         creatorName: reviewerName,
         isDesignDeliverable: true,
       });
-      return {
-        ...item,
-        linkedTaskId: task.id,
-      };
+      updatedItem.linkedTaskId = task.id;
     }
-  } else if (item.linkedTaskId) {
+
+    // Auto-create Instagram and LinkedIn posting follow-up tasks if not already created
+    if (!updatedItem.linkedInstagramTaskId || !updatedItem.linkedLinkedinTaskId) {
+      const dueDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+      if (!updatedItem.linkedInstagramTaskId) {
+        const instaTask = addTask({
+          title: `Instagram Posting: ${updatedItem.title}`,
+          event: updatedItem.eventName || undefined,
+          eventId: updatedItem.eventId || undefined,
+          assignee: updatedItem.designerName,
+          assigneeId: updatedItem.designerId,
+          assigneeEmail: updatedItem.designerEmail,
+          assigneeType: 'individual',
+          dueDate,
+          status: 'In Progress',
+          creatorName: reviewerName,
+          isDesignDeliverable: true,
+        });
+        updatedItem.linkedInstagramTaskId = instaTask.id;
+      }
+
+      if (!updatedItem.linkedLinkedinTaskId) {
+        const linkedinTask = addTask({
+          title: `LinkedIn Posting: ${updatedItem.title}`,
+          event: updatedItem.eventName || undefined,
+          eventId: updatedItem.eventId || undefined,
+          assignee: updatedItem.designerName,
+          assigneeId: updatedItem.designerId,
+          assigneeEmail: updatedItem.designerEmail,
+          assigneeType: 'individual',
+          dueDate,
+          status: 'In Progress',
+          creatorName: reviewerName,
+          isDesignDeliverable: true,
+        });
+        updatedItem.linkedLinkedinTaskId = linkedinTask.id;
+      }
+    }
+    return updatedItem;
+  } else if (updatedItem.linkedTaskId) {
     // If a previously approved design is no longer fully finalized (e.g. proofreader requested changes or style rejected),
     // revert its task to 'In Progress' if not already rated.
-    const linkedTask = getTasks().find(t => t.id === item.linkedTaskId);
+    const linkedTask = getTasks().find(t => t.id === updatedItem.linkedTaskId);
     if (linkedTask && !linkedTask.ratingScore) {
-      updateTask(item.linkedTaskId, { status: 'In Progress' }, reviewerName);
+      updateTask(updatedItem.linkedTaskId, { status: 'In Progress' }, reviewerName);
     }
   }
 
-  return item;
+  return updatedItem;
 }
 
 export function updateDesignReview(
