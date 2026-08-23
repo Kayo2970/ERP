@@ -46,7 +46,7 @@ import {
 } from '@/lib/local-data';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { StudentProfileModal } from '@/components/student-profile-modal';
-import { canViewFullDirectory, canEditDirectory, isCentreHead } from '@/lib/permissions';
+import { canViewFullDirectory, canEditDirectory, isCentreHead, canViewHiddenAccounts } from '@/lib/permissions';
 
 export default function DirectoryPage() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -679,9 +679,12 @@ export default function DirectoryPage() {
   const isAdmin = canEditDirectory(user);
   const canViewRoster = canViewFullDirectory(user);
 
-  const isCurrentSuperUser = user?.tier === 1 || user?.role === 'Super User' || user?.id === 'm1' || user?.email?.toLowerCase() === 'kayo2970@gmail.com';
+  const isCurrentSuperUser = canViewHiddenAccounts(user);
 
-  // Security & Privacy: Super User profile is hidden from directory for all non-Super User accounts
+  // Security & Privacy: Super User profiles are hidden from the directory for everyone
+  // except other Super Users and Kayomarz Pavri (see canViewHiddenAccounts) — this
+  // stays true even as more hidden Super User accounts get added, since he sees every
+  // hidden account by identity, not just the ones his own current tier would unlock.
   const visibleMembers = members.filter(m => {
     if (isCurrentSuperUser) return true;
     return m.id !== 'm1' && m.tier !== 1 && m.role !== 'Super User' && m.email?.toLowerCase() !== 'kayo2970@gmail.com';

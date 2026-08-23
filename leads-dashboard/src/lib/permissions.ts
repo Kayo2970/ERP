@@ -512,6 +512,34 @@ export function isDrSubhadeep(user: SessionUser): boolean {
 }
 
 /**
+ * Check if user is Kayomarz Pavri — the founding Super User (seeded as member
+ * 'm1'). Identity-based (matches by id, name, or either of his known login
+ * emails) rather than tier/role alone, so it keeps working even if his tier,
+ * role string, or login email ever changes, and even as additional Super User
+ * accounts are added that would otherwise be just as hidden from him as they
+ * are from everyone else.
+ */
+export function isKayomarzPavri(user: SessionUser): boolean {
+  if (!user) return false;
+  const name = (user.name || '').toLowerCase();
+  const email = (user.email || '').toLowerCase();
+  return user.id === 'm1' || name.includes('kayomarz') || email === 'kayo2970@gmail.com' || email === 'kayo2970@outlook.com';
+}
+
+/**
+ * Full, unrestricted account visibility — sees every member record, including
+ * other Super User accounts that are otherwise hidden from the general
+ * directory (see the Security & Privacy filter in the Directory page). Any
+ * Super User already sees every other hidden account; Kayomarz Pavri gets
+ * this by identity as well, so the override survives regardless of which
+ * account/tier he's currently logged in under.
+ */
+export function canViewHiddenAccounts(user: SessionUser): boolean {
+  if (!user) return false;
+  return user.tier === 1 || user.role === 'Super User' || isKayomarzPavri(user);
+}
+
+/**
  * Rating & Report visibility: leadership, Centre Head, and Dr. Subhadeep Mukherjee see everything;
  * a Head sees ratings for members of their own department (their "team"); everyone else sees only ratings given to them.
  */
