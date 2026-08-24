@@ -41,7 +41,8 @@ export interface Guest {
   name: string;
   organization?: string;
   designation?: string;
-  phone?: string;
+  phone?: string;       // Mobile number
+  telephone?: string;   // Landline / Telephone number
   email?: string;
   website?: string; // company website
   address?: string;

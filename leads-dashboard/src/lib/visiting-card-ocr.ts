@@ -20,7 +20,8 @@ export interface ExtractedCardDetails {
   name: string;
   organization: string;
   designation: string;
-  phone: string;
+  phone: string;       // Primary Mobile Number
+  telephone?: string;   // Secondary / Telephone / Landline Number
   email: string;
   website: string;
   address: string;
@@ -56,17 +57,53 @@ const ADDRESS_KEYWORDS = [
   'kolkata', 'pune', 'ahmedabad', 'gurgaon', 'noida', 'karnataka', 'maharashtra'
 ];
 
+/** Strip OCR symbols and noise characters from boundaries of string */
+function cleanOcrLine(line: string): string {
+  return line.replace(/^[;>=+|~*^<>:_#\-\s\.]+|[;>=+|~*^<>:_#\-\s\.]+$/g, '').trim();
+}
+
+/** Returns true if a text line is OCR noise, background artifact, or gibberish */
+function isGibberishLine(line: string): boolean {
+  const cleaned = cleanOcrLine(line);
+  if (cleaned.length < 3) return true;
+
+  // Alphanumeric ratio check (at least 50% must be valid letters/numbers)
+  const alphaNumCount = (cleaned.match(/[a-zA-Z0-9]/g) || []).length;
+  if (alphaNumCount / cleaned.length < 0.5) return true;
+
+  // Excessive symbol density check
+  const symbolCount = (cleaned.match(/[;>=+|~*^<>:_]/g) || []).length;
+  if (symbolCount > 2 || symbolCount / cleaned.length > 0.2) return true;
+
+  // Short nonsensical token ratio check (e.g. "a A Ee Be ee ST")
+  const tokens = cleaned.split(/\s+/);
+  const shortNonsense = tokens.filter(
+    (t) => t.length <= 2 && !/^(rd|st|nd|th|in|no|of|to|co|dr|mr|ms|vp|ph|m:|t:)$/i.test(t)
+  );
+  if (tokens.length >= 3 && shortNonsense.length / tokens.length >= 0.5) return true;
+
+  // Generic OCR noise patterns
+  if (/^[a-z0-9]{1,3}\s+[a-z0-9]{1,3}\s+[a-z0-9]{1,3}$/i.test(cleaned)) return true;
+  if (/^(sre|gion|sis see|eed byes|nzpindia|strrettess|etl)$/i.test(cleaned)) return true;
+
+  return false;
+}
+
 /** Parse raw text extracted from visiting card images into structured fields */
 export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
-  const lines = rawText
+  const rawLines = rawText
     .split('\n')
-    .map((l) => l.trim())
+    .map((l) => cleanOcrLine(l))
     .filter((l) => l.length > 0);
+
+  // Filter out gibberish noise lines
+  const lines = rawLines.filter((l) => !isGibberishLine(l));
 
   let email = '';
   let website = '';
   let linkedin = '';
   let phone = '';
+  let telephone = '';
   let designation = '';
   let organization = '';
   let name = '';
@@ -102,14 +139,34 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
     }
   }
 
-  // 4. Extract Phone (Supports Indian +91, landline 080-, 10-digit mobile numbers)
-  const phoneRegex = /(?:\+?91[\s.-]?)?\(?\d{2,5}\)?[\s.-]?\d{3,5}[\s.-]?\d{3,5}|\b[6789]\d{9}\b/g;
-  const phoneMatches = rawText.match(phoneRegex) || [];
+  // 4. Extract Phone & Telephone numbers (Supports Mobile +91 / 10-digit mobile AND Landline / Area codes 080-)
+  const phoneRegex = /(?:\+?91[\s.-]?)?\(?\d{2,5}\)?[\s.-]?\d{3,5}[\s.-]?\d{3,5}|\b[6789]\d{9}\b|\b0\d{2,4}[\s.-]?\d{6,8}\b/g;
+  const phoneMatches = Array.from(new Set(rawText.match(phoneRegex) || []));
+
+  const validNumbers: string[] = [];
   for (const p of phoneMatches) {
     const digits = p.replace(/\D/g, '');
     if (digits.length >= 8 && digits.length <= 13) {
-      phone = p.trim();
-      break;
+      validNumbers.push(p.trim());
+    }
+  }
+
+  // Categorize numbers into Mobile (phone) vs Landline/Telephone (telephone)
+  for (const num of validNumbers) {
+    const digits = num.replace(/\D/g, '');
+    const cleanDigits = digits.startsWith('91') && digits.length === 12 ? digits.slice(2) : digits;
+
+    const isLandline = cleanDigits.startsWith('0') || /^(080|022|011|044|033|040|079|0124|0120)/.test(num) || /tel|landline|ph|t:/i.test(num);
+    const isMobile = /^[6789]/.test(cleanDigits) || /mob|cell|m:/i.test(num);
+
+    if (isMobile && !phone) {
+      phone = num;
+    } else if (isLandline && !telephone) {
+      telephone = num;
+    } else if (!phone) {
+      phone = num;
+    } else if (!telephone && num !== phone) {
+      telephone = num;
     }
   }
 
@@ -136,7 +193,7 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
 
     // Check Organization
     if (!organization && ORG_MARKERS.some((marker) => new RegExp(`\\b${marker}\\b`, 'i').test(lower))) {
-      organization = line;
+      organization = cleanOcrLine(line.replace(/^(gion|co\.|company)\s+/i, ''));
       continue;
     }
 
@@ -144,7 +201,7 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
     const hasPinCode = /\b\d{5,6}\b/.test(line);
     const hasAddressKw = ADDRESS_KEYWORDS.some((kw) => lower.includes(kw));
     if (hasPinCode || hasAddressKw) {
-      addressLines.push(line);
+      addressLines.push(cleanOcrLine(line));
       continue;
     }
 
@@ -161,26 +218,32 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
       }
     }
 
-    unusedLines.push(line);
+    if (!isGibberishLine(line)) {
+      unusedLines.push(cleanOcrLine(line));
+    }
   }
 
   // Fallback for organization if top line is uppercase/title
   if (!organization && unusedLines.length > 0) {
     const candidate = unusedLines[0];
-    if (candidate !== name && candidate.length > 2 && candidate.length < 60) {
+    if (candidate !== name && candidate.length > 2 && candidate.length < 60 && !isGibberishLine(candidate)) {
       organization = candidate;
       unusedLines.shift();
     }
   }
 
+  // Filter out any remaining noise lines from unusedLines
+  const cleanUnused = unusedLines.filter((l) => !isGibberishLine(l) && l !== name && l !== organization && l !== designation);
+
   const address = addressLines.join(', ');
-  const notes = unusedLines.length > 0 ? `OCR Extracted Context:\n${unusedLines.join('\n')}` : '';
+  const notes = cleanUnused.length > 0 ? cleanUnused.join('\n') : '';
 
   return {
     name: name.trim(),
     organization: organization.trim(),
     designation: designation.trim(),
     phone: phone.trim(),
+    telephone: telephone.trim() || undefined,
     email: email.trim(),
     website: website.trim(),
     address: address.trim(),
@@ -300,12 +363,13 @@ Analyze the visiting card image(s) provided and extract contact details into JSO
 - "name": Full name
 - "organization": Company, University, or Institution name
 - "designation": Job title / role
-- "phone": Primary contact phone number
+- "phone": Primary mobile phone number
+- "telephone": Landline or secondary telephone number (if present)
 - "email": Primary email address
 - "website": Website URL
 - "address": Address or location
 - "linkedin": LinkedIn link
-- "notes": Any other text on the card
+- "notes": Any other clear text on the card (DO NOT include OCR noise or symbols)
 
 Respond strictly with valid JSON inside a \`\`\`json block.`
       },
@@ -345,6 +409,7 @@ Respond strictly with valid JSON inside a \`\`\`json block.`
       organization: (parsed.organization || '').trim(),
       designation: (parsed.designation || '').trim(),
       phone: (parsed.phone || '').trim(),
+      telephone: (parsed.telephone || '').trim() || undefined,
       email: (parsed.email || '').trim(),
       website: (parsed.website || '').trim(),
       address: (parsed.address || '').trim(),

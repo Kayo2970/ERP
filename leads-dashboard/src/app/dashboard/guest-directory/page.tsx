@@ -39,6 +39,7 @@ const emptyForm = {
   organization: '',
   designation: '',
   phone: '',
+  telephone: '',
   email: '',
   website: '',
   address: '',
@@ -160,6 +161,7 @@ export default function GuestDirectoryPage() {
       organization: guest.organization || '',
       designation: guest.designation || '',
       phone: guest.phone || '',
+      telephone: guest.telephone || '',
       email: guest.email || '',
       website: guest.website || '',
       address: guest.address || '',
@@ -297,6 +299,7 @@ export default function GuestDirectoryPage() {
         organization: data.organization || prev.organization,
         designation: data.designation || prev.designation,
         phone: data.phone || prev.phone,
+        telephone: data.telephone || prev.telephone,
         email: data.email || prev.email,
         website: data.website || prev.website,
         address: data.address || prev.address,
@@ -769,14 +772,24 @@ export default function GuestDirectoryPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Phone</label>
+                  <label className="block font-medium text-theme-text-secondary">Phone (Mobile)</label>
                   <input
                     type="text"
                     value={form.phone}
                     onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
                     placeholder="+91 98765 43210"
+                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">Telephone (Landline)</label>
+                  <input
+                    type="text"
+                    value={form.telephone}
+                    onChange={e => setForm(f => ({ ...f, telephone: e.target.value }))}
+                    placeholder="080-23608000"
                     className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   />
                 </div>
