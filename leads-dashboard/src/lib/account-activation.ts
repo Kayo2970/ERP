@@ -36,7 +36,10 @@ export interface ActivationToken {
  * be wrapping this in its own try/catch so a mail hiccup never blocks the
  * member record itself from being created.
  */
-export async function createActivationTokenAndSendEmail(member: { id: string; name: string; email: string }): Promise<void> {
+export async function createActivationTokenAndSendEmail(
+  member: { id: string; name: string; email: string },
+  originUrl?: string
+): Promise<{ token: string; activationLink: string }> {
   const token = randomBytes(32).toString('hex');
   const expiresAt = Date.now() + ACTIVATION_WINDOW_MS;
 
@@ -54,7 +57,8 @@ export async function createActivationTokenAndSendEmail(member: { id: string; na
     return [activationToken, ...filtered];
   });
 
-  const activationLink = `${APP_BASE_URL}/activate?token=${token}`;
+  const baseUrl = originUrl || process.env.NEXT_PUBLIC_APP_URL || 'https://leads.pavris.in';
+  const activationLink = `${baseUrl.replace(/\/+$/, '')}/activate?token=${token}`;
   const template = generateWelcomeActivationEmailTemplate(member.name, activationLink);
 
   await dispatchEmail({
@@ -64,4 +68,6 @@ export async function createActivationTokenAndSendEmail(member: { id: string; na
     bodyHtml: template.bodyHtml,
     category: 'ACCOUNT_ACTIVATION',
   });
+
+  return { token, activationLink };
 }

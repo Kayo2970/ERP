@@ -725,7 +725,7 @@ export function saveMembers(members: Member[]): void {
   // Note: Mutations call targeted per-member endpoints (/api/members, /api/members/[id])
 }
 
-export function addMember(member: Omit<Member, 'id'>): Member {
+export async function addMember(member: Omit<Member, 'id'>): Promise<Member & { activationLink?: string }> {
   const current = getMembers();
   const existing = current.find(m => m.email.toLowerCase() === member.email.toLowerCase());
   if (existing) {
@@ -737,11 +737,17 @@ export function addMember(member: Omit<Member, 'id'>): Member {
     mustSetupPassword: true,
     id: 'm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
   };
-  current.push(newMember);
+
+  const serverResult = await serverPost('/api/members', newMember);
+  const createdMember: Member & { activationLink?: string } = {
+    ...newMember,
+    ...(serverResult || {}),
+  };
+
+  current.push(createdMember);
   saveMembers(current);
-  serverPost('/api/members', newMember);
-  logAuditEvent('MEMBER_ADDED', 'System / Admin', `Added member ${newMember.name} to ${newMember.division}`);
-  return newMember;
+  logAuditEvent('MEMBER_ADDED', 'System / Admin', `Added member ${createdMember.name} to ${createdMember.division}`);
+  return createdMember;
 }
 
 export function deleteMember(id: string): void {

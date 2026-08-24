@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
-import { dispatchEmail, generateNewMemberWelcomeTemplate } from '@/lib/email-service';
+import { createActivationTokenAndSendEmail } from '@/lib/account-activation';
 
 export async function GET() {
   const members = await readCollection('members');
@@ -15,31 +15,28 @@ export async function POST(request: Request) {
       mustSetupPassword: true,
     };
     const updated = await mutateCollection('members', (current) => {
-      // Check for duplicate email
-      if (current.some((m: any) => m.email?.toLowerCase() === member.email?.toLowerCase())) {
+      if ((current || []).some((m: any) => m.email?.toLowerCase() === member.email?.toLowerCase())) {
         throw new Error(`Member with email ${member.email} already exists`);
       }
-      return [...current, newMemberPayload];
+      return [...(current || []), newMemberPayload];
     });
     const created = updated.find((m: any) => m.id === member.id);
 
-    // Send official welcome email with designation, division, department, and password setup prompt
+    let activationLink = '';
     if (created && created.email) {
       try {
-        const tmpl = generateNewMemberWelcomeTemplate(created);
-        await dispatchEmail({
-          to: created.email,
-          subject: tmpl.subject,
-          bodyText: tmpl.bodyText,
-          bodyHtml: tmpl.bodyHtml,
-          category: 'ACCOUNT_ACTIVATION',
-        });
+        const host = request.headers.get('host');
+        const proto = request.headers.get('x-forwarded-proto') || (host?.includes('localhost') ? 'http' : 'https');
+        const origin = request.headers.get('origin') || (host ? `${proto}://${host}` : undefined);
+
+        const result = await createActivationTokenAndSendEmail({ id: created.id, name: created.name, email: created.email }, origin);
+        activationLink = result.activationLink;
       } catch (emailErr) {
         console.error('[members-api] Welcome email dispatch failed:', emailErr);
       }
     }
 
-    return NextResponse.json(created, { status: 201 });
+    return NextResponse.json({ ...created, activationLink }, { status: 201 });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 });
   }
