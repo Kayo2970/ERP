@@ -68,16 +68,26 @@ import { EmptyState } from '@/components/ui/empty-state';
 
 const CHART_COLORS = ['#3b82f6', '#6366f1', '#8b5cf6', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4'];
 
-const CHARTABLE_TYPES: FormField['type'][] = ['scale', 'number', 'select', 'checkbox'];
+const CHARTABLE_TYPES: FormField['type'][] = ['scale', 'number', 'select', 'checkbox', 'multiselect'];
 
-/** Value -> count for one field across a form's submissions, keyed by the raw answer. */
+/**
+ * Value -> count for one field across a form's submissions, keyed by the
+ * raw answer. A multiselect answer is an array — each option the
+ * respondent picked counts toward its own bucket ("select all that
+ * apply" tallying), rather than the whole array being treated as one
+ * combined key.
+ */
 function buildFieldCounts(field: FormField, subs: FormSubmissionItem[]): Record<string, number> {
   const counts: Record<string, number> = {};
   subs.forEach(s => {
     const raw = s.data[field.id] ?? s.data[field.label];
     if (raw === undefined || raw === null || raw === '') return;
-    const key = String(raw);
-    counts[key] = (counts[key] || 0) + 1;
+    const values = Array.isArray(raw) ? raw : [raw];
+    values.forEach(v => {
+      if (v === undefined || v === null || v === '') return;
+      const key = String(v);
+      counts[key] = (counts[key] || 0) + 1;
+    });
   });
   return counts;
 }
@@ -116,7 +126,7 @@ function buildSubmissionsByDay(subs: FormSubmissionItem[]) {
 }
 
 function escapeCsvValue(value: unknown): string {
-  const str = String(value ?? '').replace(/"/g, '""');
+  const str = (Array.isArray(value) ? value.join('; ') : String(value ?? '')).replace(/"/g, '""');
   return `"${str}"`;
 }
 
@@ -374,6 +384,7 @@ export default function FormsBuilderPage() {
     setDeletingFormId(null);
     const updated = getForms();
     setForms(updated);
+    setSubmissions(getSubmissions());
     if (selectedFormId === deletingFormId && updated.length > 0) {
       setSelectedFormId(updated[0].id);
     }
@@ -384,6 +395,7 @@ export default function FormsBuilderPage() {
     const wasDelete = forms.find(f => f.id === id)?.approvalStatus === 'pending_delete';
     approveForm(id, user?.name || 'User');
     setForms(getForms());
+    if (wasDelete) setSubmissions(getSubmissions());
     triggerNotification(wasDelete ? 'Approved. The form has been deleted.' : 'Approved. The form is now live.');
   };
 
@@ -804,11 +816,15 @@ export default function FormsBuilderPage() {
                                   {sub.submittedAt}
                                 </span>
                               </td>
-                              {selectedForm.fields.map(f => (
-                                <td key={f.id} className="py-3 pr-3 text-theme-text-primary max-w-xs truncate">
-                                  {String(sub.data[f.id] || sub.data[f.label] || '—')}
-                                </td>
-                              ))}
+                              {selectedForm.fields.map(f => {
+                                const val = sub.data[f.id] ?? sub.data[f.label];
+                                const display = Array.isArray(val) ? (val.length > 0 ? val.join(', ') : '—') : String(val || '—');
+                                return (
+                                  <td key={f.id} className="py-3 pr-3 text-theme-text-primary max-w-xs truncate">
+                                    {display}
+                                  </td>
+                                );
+                              })}
                               {selectedForm.sourceTemplateId === FEEDBACK_FORM_TEMPLATE_ID && (
                                 <td className="py-3 pr-3">
                                   <button
@@ -1103,51 +1119,70 @@ export default function FormsBuilderPage() {
 
                 <div className="space-y-2.5">
                   {fields.map((field, idx) => (
-                    <div key={field.id} className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl flex items-center gap-3">
-                      <div className="flex-1 space-y-1">
-                        <input
-                          type="text"
-                          required
-                          value={field.label}
-                          onChange={(e) => updateField(idx, 'label', e.target.value)}
-                          placeholder="Question Label"
-                          className="w-full px-3 py-1.5 bg-theme-background/40 border border-theme-border/30 rounded-lg text-theme-text-primary text-xs"
-                        />
-                      </div>
-                      
-                      <div className="w-32">
-                        <select
-                          value={field.type}
-                          onChange={(e) => updateField(idx, 'type', e.target.value)}
-                          className="w-full px-2 py-1.5 bg-theme-background/40 border border-theme-border/30 rounded-lg text-theme-text-primary text-xs"
+                    <div key={field.id} className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2">
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 space-y-1">
+                          <input
+                            type="text"
+                            required
+                            value={field.label}
+                            onChange={(e) => updateField(idx, 'label', e.target.value)}
+                            placeholder="Question Label"
+                            className="w-full px-3 py-1.5 bg-theme-background/40 border border-theme-border/30 rounded-lg text-theme-text-primary text-xs"
+                          />
+                        </div>
+
+                        <div className="w-36">
+                          <select
+                            value={field.type}
+                            onChange={(e) => updateField(idx, 'type', e.target.value)}
+                            className="w-full px-2 py-1.5 bg-theme-background/40 border border-theme-border/30 rounded-lg text-theme-text-primary text-xs"
+                          >
+                            <option value="text">Short Text</option>
+                            <option value="email">Email</option>
+                            <option value="number">Number</option>
+                            <option value="textarea">Paragraph</option>
+                            <option value="scale">Scale (1-5)</option>
+                            <option value="select">Single Choice</option>
+                            <option value="multiselect">Multiple Choice</option>
+                          </select>
+                        </div>
+
+                        <label className="flex items-center gap-1 text-[11px] text-theme-text-secondary cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={field.required}
+                            onChange={(e) => updateField(idx, 'required', e.target.checked)}
+                            className="accent-accent"
+                          />
+                          Required
+                        </label>
+
+                        <button
+                          type="button"
+                          onClick={() => removeField(idx)}
+                          disabled={fields.length <= 1}
+                          className="p-1.5 hover:bg-danger/10 rounded-lg text-danger transition-all cursor-pointer disabled:opacity-30"
+                          title="Remove Question"
                         >
-                          <option value="text">Short Text</option>
-                          <option value="email">Email</option>
-                          <option value="number">Number</option>
-                          <option value="textarea">Paragraph</option>
-                          <option value="scale">Scale (1-5)</option>
-                        </select>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       </div>
 
-                      <label className="flex items-center gap-1 text-[11px] text-theme-text-secondary cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={field.required}
-                          onChange={(e) => updateField(idx, 'required', e.target.checked)}
-                          className="accent-accent"
-                        />
-                        Required
-                      </label>
-
-                      <button
-                        type="button"
-                        onClick={() => removeField(idx)}
-                        disabled={fields.length <= 1}
-                        className="p-1.5 hover:bg-danger/10 rounded-lg text-danger transition-all cursor-pointer disabled:opacity-30"
-                        title="Remove Question"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      {(field.type === 'select' || field.type === 'multiselect') && (
+                        <div className="pl-0.5 space-y-1">
+                          <label className="block text-[10px] font-medium text-theme-text-secondary">
+                            {field.type === 'multiselect' ? 'Choices (respondent can pick one or more)' : 'Choices (respondent picks exactly one)'}
+                          </label>
+                          <input
+                            type="text"
+                            value={(field.options || []).join(', ')}
+                            onChange={(e) => updateField(idx, 'options', e.target.value.split(',').map(o => o.trim()).filter(Boolean))}
+                            placeholder="e.g. Workshop, Guest Lecture, Seminar/Conference"
+                            className="w-full px-3 py-1.5 bg-theme-background/40 border border-theme-border/30 rounded-lg text-theme-text-primary text-xs"
+                          />
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

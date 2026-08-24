@@ -31,12 +31,25 @@ export async function DELETE(
   try {
     const { id } = await params;
     let found = false;
+    let deletedSlug: string | undefined;
     await mutateCollection('forms', (current) => {
+      const target = current.find((f: any) => f.id === id);
+      deletedSlug = target?.slug;
       const filtered = current.filter((f: any) => f.id !== id);
       found = filtered.length < current.length;
       return filtered;
     });
     if (!found) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+    // A deleted form used to leave its submissions behind forever — they'd
+    // even resurface under a brand-new form later created on the same slug
+    // (submissions are matched by slug as a fallback for records predating
+    // a reliable formId). Cascade the cleanup here so it applies regardless
+    // of which client triggered the delete.
+    await mutateCollection('submissions', (current) =>
+      current.filter((s: any) => s.formId !== id && s.slug !== deletedSlug)
+    );
+
     return NextResponse.json({ success: true });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

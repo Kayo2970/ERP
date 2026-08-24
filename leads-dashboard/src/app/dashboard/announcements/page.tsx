@@ -156,7 +156,16 @@ export default function AnnouncementsPage() {
     setTargetCategory('All Members');
   };
 
-  // Helper to trigger sequential background email dispatch with bottom-right floating progress bar
+  // Drives the bottom-right floating progress bar while an announcement
+  // circulates. The actual email send already happened once, server-side,
+  // inside addAnnouncement()/approveAnnouncement()'s POST/PATCH call to
+  // /api/announcements — that route calls dispatchAnnouncementEmails(),
+  // which is the single, emailSent-guarded source of truth for these
+  // emails. This loop used to ALSO call /api/email/send per recipient on
+  // top of that, so every announcement went out twice — once from the
+  // server-side dispatch, once from here. It now only animates the same
+  // recipient list for visual feedback; it must never place its own
+  // network call to send mail.
   const triggerEmailDispatchLoop = async (annTitle: string, annContent: string, recipients: Member[]) => {
     if (!recipients || recipients.length === 0) return;
 
@@ -177,24 +186,6 @@ export default function AnnouncementsPage() {
         current: i + 1,
         lastSentName: r.name,
       }));
-
-      try {
-        await fetch('/api/email/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            scope: 'SINGLE',
-            recipientEmail: r.email,
-            subject: `Announcement: ${annTitle}`,
-            bodyText: `Dear ${r.name},\n\n${annContent}\n\nRegards,\nLEADS Next Gen Centre`,
-            category: 'ANNOUNCEMENT',
-            badgeText: 'ANNOUNCEMENT',
-            badgeColor: '#6366f1',
-          }),
-        });
-      } catch (err) {
-        console.error('[announcements] Email dispatch failed for recipient:', r.email, err);
-      }
 
       await new Promise(res => setTimeout(res, 180));
     }
@@ -265,7 +256,14 @@ export default function AnnouncementsPage() {
 
     if (targetCategory === 'All Members') {
       recipients = allMembers;
-      scopeLabel = 'All Center Members';
+      // Must stay the literal string 'All Members' — resolveAnnouncementRecipients
+      // (announcement-scope.ts, the single source of truth the server uses to
+      // resolve who actually gets emailed) and getAnnouncementScopeMatch only
+      // recognize that exact string. This used to be labeled 'All Center
+      // Members' here, which neither function matches — every "All Members"
+      // announcement silently resolved to zero recipients server-side and
+      // never sent a single email.
+      scopeLabel = 'All Members';
     } else if (targetCategory === 'Advisory Board') {
       recipients = allMembers.filter(m => m.tier === 4);
       scopeLabel = 'Advisory Board';

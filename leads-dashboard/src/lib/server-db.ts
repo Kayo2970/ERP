@@ -408,8 +408,23 @@ function ensureFeedbackFormTemplateSeeded(): Promise<void> {
           }
         }
         if (!Array.isArray(jsonContent)) return;
-        if (jsonContent.some((t: any) => t?.id === FEEDBACK_FORM_TEMPLATE_ID)) return;
-        await writeCollectionFile('formTemplates', [builtIn, ...jsonContent]);
+        const existingIdx = jsonContent.findIndex((t: any) => t?.id === FEEDBACK_FORM_TEMPLATE_ID);
+        if (existingIdx === -1) {
+          await writeCollectionFile('formTemplates', [builtIn, ...jsonContent]);
+          return;
+        }
+        // Already present, but this is a built-in/managed template (not
+        // something an admin hand-edits) — a database seeded before a
+        // field-definition change shipped (e.g. "Type of Event" becoming a
+        // multiselect) would otherwise keep serving its stale copy forever,
+        // since the ENOENT first-boot seed path only ever runs once. Keep
+        // it in sync with the current code-defined version whenever the
+        // fields differ.
+        if (JSON.stringify(jsonContent[existingIdx]?.fields) !== JSON.stringify(builtIn.fields)) {
+          const updated = [...jsonContent];
+          updated[existingIdx] = { ...updated[existingIdx], fields: builtIn.fields };
+          await writeCollectionFile('formTemplates', updated);
+        }
       } catch (err: any) {
         if (err?.code !== 'ENOENT') {
           console.error('[server-db] Feedback Form Template seed check failed:', err);

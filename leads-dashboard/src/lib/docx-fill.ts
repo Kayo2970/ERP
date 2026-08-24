@@ -116,6 +116,7 @@ export async function fillFeedbackFormDocx(form: PublicFormItem, submission: For
     if (!mapping) continue;
     const raw = submission.data[field.id];
     if (raw === undefined || raw === null || raw === '') continue;
+    if (Array.isArray(raw) && raw.length === 0) continue;
 
     switch (mapping.kind) {
       case 'text':
@@ -141,8 +142,15 @@ export async function fillFeedbackFormDocx(form: PublicFormItem, submission: For
         break;
       }
       case 'eventtype': {
-        const t = mapping.tokenMap[String(raw)];
-        if (t) tokens[t] = '☒';
+        // "Type of Event" is a multiselect on the form (the original Word
+        // document gives each type its own tick-box, so more than one can
+        // legitimately apply — e.g. a Workshop that's also a Guest
+        // Lecture) — tick every box the respondent selected, not just one.
+        const selectedTypes = Array.isArray(raw) ? raw : [raw];
+        for (const val of selectedTypes) {
+          const t = mapping.tokenMap[String(val)];
+          if (t) tokens[t] = '☒';
+        }
         break;
       }
     }

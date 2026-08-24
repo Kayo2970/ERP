@@ -24,7 +24,10 @@ export function resolveAnnouncementRecipients(
   members: Member[],
   events: EventItem[] = []
 ): Member[] {
-  if (!scope || scope === 'All Members') return members;
+  // 'All Center Members' was a stale mislabel the announcements page used to
+  // store for this scope — kept as an alias so announcements already saved
+  // with it (from before that was fixed) still resolve recipients correctly.
+  if (!scope || scope === 'All Members' || scope === 'All Center Members') return members;
 
   if (DIVISION_SCOPES.includes(scope)) {
     return members.filter(m => m.division === scope);
@@ -56,7 +59,7 @@ export function getAnnouncementScopeMatch(
   user: { tier: number; division?: string; committee?: string; department?: string } | null | undefined
 ): boolean {
   if (!user) return false;
-  if (!scope || scope === 'All Members') return true;
+  if (!scope || scope === 'All Members' || scope === 'All Center Members') return true;
   if (user.tier <= 3) return true; // mirrors permissions.isBaseLeadership
   if (DIVISION_SCOPES.includes(scope)) return scope === user.division;
   return scope === user.department || scope === user.committee;

@@ -288,7 +288,11 @@ export interface AnnouncementItem {
 export interface FormField {
   id: string;
   label: string;
-  type: 'text' | 'email' | 'textarea' | 'select' | 'checkbox' | 'number' | 'scale';
+  // 'multiselect' is a multiple-choice question where the respondent can
+  // tick one OR several of the listed options (stored as string[] in the
+  // submission), as distinct from 'select' (exactly one option, a string)
+  // and 'checkbox' (a single yes/no toggle).
+  type: 'text' | 'email' | 'textarea' | 'select' | 'checkbox' | 'multiselect' | 'number' | 'scale';
   options?: string[];
   required: boolean;
 }
@@ -594,7 +598,12 @@ export const initialFormTemplates: FormTemplateItem[] = [
     createdAt: new Date().toISOString().split('T')[0],
     fields: [
       { id: 'f_event_name', label: 'Name of Event', type: 'text', required: true },
-      { id: 'f_event_type', label: 'Type of Event', type: 'select', options: ['MDP', 'FDP', 'Workshop', 'Guest Lecture', 'Seminar/Conference', 'Other'], required: true },
+      // The original Word form gives this question its own tick-box per
+      // option (☐ MDP ☐ FDP ☐ Workshop ...), not a single-choice dropdown —
+      // an event can legitimately be tagged as more than one type at once
+      // (e.g. a Workshop that's also a Guest Lecture), so this is a
+      // multiselect (choose one or more), matching the source document.
+      { id: 'f_event_type', label: 'Type of Event', type: 'multiselect', options: ['MDP', 'FDP', 'Workshop', 'Guest Lecture', 'Seminar/Conference', 'Other'], required: true },
       { id: 'f_date', label: 'Date', type: 'text', required: true },
       { id: 'f_duration', label: 'Duration', type: 'text', required: false },
       { id: 'f_resource_persons', label: 'Resource Person(s)', type: 'text', required: false },
@@ -2397,6 +2406,18 @@ export function deleteForm(id: string, actorName: string): boolean {
   const updated = current.filter(f => f.id !== id);
   saveForms(updated);
   serverDelete('/api/forms', id);
+
+  // A deleted form used to leave its submissions behind forever — orphaned
+  // "ghost" responses that would even resurface under a brand-new form
+  // later created on the same slug (submissions are matched by slug as a
+  // fallback for records predating a reliable formId). Purge them from
+  // this client's cache immediately; the server-side DELETE above cascades
+  // the same cleanup so every other client picks it up on its next sync.
+  const remainingSubmissions = getSubmissions().filter(
+    s => s.formId !== id && s.slug !== target.slug
+  );
+  saveSubmissions(remainingSubmissions);
+
   logAuditEvent('FORM_DELETED', actorName, `Deleted public form "${target.title}"`);
   return true;
 }
@@ -2563,6 +2584,12 @@ export function getSubmissions(): FormSubmissionItem[] {
   }
   // Do NOT seed localStorage here — return sample data without writing
   return initialSubmissions;
+}
+
+export function saveSubmissions(submissions: FormSubmissionItem[]): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem('leads_form_submissions', JSON.stringify(submissions));
+  markLocalWrite('leads_form_submissions');
 }
 
 export function addSubmission(sub: Omit<FormSubmissionItem, 'id' | 'submittedAt'>): FormSubmissionItem {

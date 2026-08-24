@@ -34,7 +34,7 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
       setForm(matchedForm);
       const initialData: Record<string, any> = {};
       matchedForm.fields.forEach(f => {
-        initialData[f.id] = '';
+        initialData[f.id] = f.type === 'multiselect' ? [] : '';
       });
       setFormData(initialData);
       setLoading(false);
@@ -63,6 +63,16 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
 
   const handleInputChange = (fieldId: string, value: any) => {
     setFormData(prev => ({ ...prev, [fieldId]: value }));
+  };
+
+  const handleMultiselectToggle = (fieldId: string, option: string) => {
+    setFormData(prev => {
+      const current: string[] = Array.isArray(prev[fieldId]) ? prev[fieldId] : [];
+      const next = current.includes(option)
+        ? current.filter(o => o !== option)
+        : [...current, option];
+      return { ...prev, [fieldId]: next };
+    });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -246,6 +256,31 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
                     />
                     <span className="text-[11px]">Yes</span>
                   </label>
+                ) : field.type === 'multiselect' && field.options ? (
+                  <div className="grid grid-cols-2 gap-2" role="group" aria-label={field.label}>
+                    {field.options.map(opt => {
+                      const selected: string[] = Array.isArray(formData[field.id]) ? formData[field.id] : [];
+                      const checked = selected.includes(opt);
+                      return (
+                        <label
+                          key={opt}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer text-[11px] transition-all ${
+                            checked
+                              ? 'bg-blue-600/20 border-blue-500 text-blue-100'
+                              : 'bg-slate-900/60 border-slate-700 text-slate-300 hover:border-blue-500/60'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => handleMultiselectToggle(field.id, opt)}
+                            className="h-3.5 w-3.5 rounded border-slate-600 bg-slate-900/60 text-blue-600 focus:ring-blue-500"
+                          />
+                          {opt}
+                        </label>
+                      );
+                    })}
+                  </div>
                 ) : (
                   <input
                     type={field.type === 'email' ? 'email' : field.type === 'number' ? 'number' : 'text'}
