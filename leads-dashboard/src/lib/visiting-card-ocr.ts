@@ -31,13 +31,14 @@ export interface ExtractedCardDetails {
 }
 
 const DESIGNATION_KEYWORDS = [
-  'director', 'manager', 'executive', 'officer', 'founder', 'co-founder',
-  'ceo', 'cto', 'cfo', 'coo', 'cio', 'president', 'vice president', 'vp',
-  'consultant', 'engineer', 'developer', 'specialist', 'lead', 'head',
+  'director', 'managing director', 'md', 'exec director', 'executive director',
+  'ceo', 'cto', 'cfo', 'coo', 'cio', 'cmo', 'cro', 'cpo', 'president', 'vice president', 'vp', 'avp',
+  'manager', 'general manager', 'gm', 'dgm', 'agm', 'senior manager', 'sr manager', 'branch manager', 'area manager', 'regional manager', 'project manager', 'operations manager', 'sales manager', 'marketing manager',
+  'consultant', 'engineer', 'developer', 'specialist', 'lead', 'team lead', 'head', 'head of', 'chief', 'chief executive',
   'architect', 'designer', 'analyst', 'professor', 'prof', 'dean', 'principal',
-  'trustee', 'chairman', 'chairperson', 'secretary', 'advisor', 'partner',
-  'associate', 'coordinator', 'head of', 'chief', 'registrar', 'chancellor',
-  'superintendent', 'administrator', 'hod'
+  'trustee', 'chairman', 'chairperson', 'secretary', 'advisor', 'partner', 'associate partner',
+  'associate', 'coordinator', 'registrar', 'chancellor', 'superintendent', 'administrator', 'hod',
+  'proprietor', 'owner', 'founder', 'co-founder'
 ];
 
 const ORG_MARKERS = [
@@ -65,11 +66,11 @@ function cleanOcrLine(line: string): string {
 /** Returns true if a text line is OCR noise, background artifact, or gibberish */
 function isGibberishLine(line: string): boolean {
   const cleaned = cleanOcrLine(line);
-  if (cleaned.length < 3) return true;
+  if (cleaned.length < 2) return true;
 
-  // Alphanumeric ratio check (at least 50% must be valid letters/numbers)
+  // Alphanumeric ratio check (at least 45% must be valid letters/numbers)
   const alphaNumCount = (cleaned.match(/[a-zA-Z0-9]/g) || []).length;
-  if (alphaNumCount / cleaned.length < 0.5) return true;
+  if (alphaNumCount / cleaned.length < 0.45) return true;
 
   // Excessive symbol density check
   const symbolCount = (cleaned.match(/[;>=+|~*^<>:_]/g) || []).length;
@@ -87,6 +88,21 @@ function isGibberishLine(line: string): boolean {
   if (/^(sre|gion|sis see|eed byes|nzpindia|strrettess|etl)$/i.test(cleaned)) return true;
 
   return false;
+}
+
+/** Normalize string by keeping only lowercase alphanumeric characters for fuzzy duplicate checking */
+function normalizeForComparison(str: string): string {
+  return str.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/** Checks if candidate line is a duplicate or part of an extracted main field */
+function isDuplicateOfField(line: string, field: string): boolean {
+  if (!line || !field) return false;
+  const normLine = normalizeForComparison(line);
+  const normField = normalizeForComparison(field);
+  if (!normLine || !normField) return false;
+
+  return normLine === normField || normLine.includes(normField) || normField.includes(normLine);
 }
 
 /** Parse raw text extracted from visiting card images into structured fields */
@@ -108,6 +124,7 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
   let organization = '';
   let name = '';
   const addressLines: string[] = [];
+  const candidateNameLines: string[] = [];
   const unusedLines: string[] = [];
 
   // 1. Extract Email
@@ -139,7 +156,7 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
     }
   }
 
-  // 4. Extract Phone & Telephone numbers (Supports Mobile +91 / 10-digit mobile AND Landline / Area codes 080-)
+  // 4. Extract Phone & Telephone numbers
   const phoneRegex = /(?:\+?91[\s.-]?)?\(?\d{2,5}\)?[\s.-]?\d{3,5}[\s.-]?\d{3,5}|\b[6789]\d{9}\b|\b0\d{2,4}[\s.-]?\d{6,8}\b/g;
   const phoneMatches = Array.from(new Set(rawText.match(phoneRegex) || []));
 
@@ -151,7 +168,6 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
     }
   }
 
-  // Categorize numbers into Mobile (phone) vs Landline/Telephone (telephone)
   for (const num of validNumbers) {
     const digits = num.replace(/\D/g, '');
     const cleanDigits = digits.startsWith('91') && digits.length === 12 ? digits.slice(2) : digits;
@@ -171,7 +187,7 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
   }
 
   // Process line by line for Name, Designation, Organization, and Address
-  for (const line of lines) {
+  for (let line of lines) {
     const lower = line.toLowerCase();
 
     // Skip lines that are purely contacts/links already extracted
@@ -183,6 +199,22 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
         addressLines.push(line.replace(/^(address|location|add):/i, '').trim());
       }
       continue;
+    }
+
+    // Check if line combines Name and Designation with separator (e.g. "Rajesh Sharma | Managing Director")
+    if (/[|\-,\/]/.test(line)) {
+      const parts = line.split(/[|\-,\/]/).map((p) => cleanOcrLine(p)).filter((p) => p.length > 0);
+      let foundDesigInPart = false;
+      for (const part of parts) {
+        const pLower = part.toLowerCase();
+        if (!designation && DESIGNATION_KEYWORDS.some((kw) => pLower.includes(kw))) {
+          designation = part;
+          foundDesigInPart = true;
+        } else if (!name && /^[A-Za-z.'\s-]+$/.test(part) && part.split(/\s+/).length <= 4) {
+          name = part;
+        }
+      }
+      if (foundDesigInPart) continue;
     }
 
     // Check Designation
@@ -205,15 +237,22 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
       continue;
     }
 
-    // Check Name candidate
-    if (!name) {
-      if (/visiting card|business card|identity card|card/i.test(lower)) continue;
+    // Evaluate Name candidate
+    if (/visiting card|business card|identity card|card|front of card|back of card/i.test(lower)) continue;
 
-      // Clean honorifics
-      const cleaned = line.replace(/^(dr\.|mr\.|mrs\.|ms\.|prof\.|eng\.|er\.|adv\.|shri|smt\.|ca|cs)\s+/i, '').trim();
-      const words = cleaned.split(/\s+/);
-      if (words.length >= 1 && words.length <= 4 && words.every((w) => /^[A-Za-z.'-]+$/.test(w))) {
+    // Honorific cleaning
+    const cleaned = line.replace(/^(dr\.|mr\.|mrs\.|ms\.|prof\.|eng\.|er\.|adv\.|shri|smt\.|ca|cs)\s+/i, '').trim();
+    const words = cleaned.split(/\s+/);
+    const hasNoDigits = !/\d/.test(cleaned);
+    const validWordCount = words.length >= 1 && words.length <= 5;
+    const looksLikeName = words.every((w) => /^[A-Za-z.'-]+$/.test(w) || /^[A-Z]\.$/.test(w));
+
+    if (hasNoDigits && validWordCount && looksLikeName) {
+      if (!name) {
         name = line;
+        continue;
+      } else {
+        candidateNameLines.push(line);
         continue;
       }
     }
@@ -223,19 +262,33 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
     }
   }
 
-  // Fallback for organization if top line is uppercase/title
+  // Fallback for organization if top line is title/company
   if (!organization && unusedLines.length > 0) {
     const candidate = unusedLines[0];
-    if (candidate !== name && candidate.length > 2 && candidate.length < 60 && !isGibberishLine(candidate)) {
+    if (!isDuplicateOfField(candidate, name) && !isDuplicateOfField(candidate, designation) && candidate.length > 2 && candidate.length < 60 && !isGibberishLine(candidate)) {
       organization = candidate;
       unusedLines.shift();
     }
   }
 
-  // Filter out any remaining noise lines from unusedLines
-  const cleanUnused = unusedLines.filter((l) => !isGibberishLine(l) && l !== name && l !== organization && l !== designation);
-
   const address = addressLines.join(', ');
+
+  // Strict Anti-Pollution Filter for `notes`:
+  // Never include name, designation, organization, address, phone, email, website, linkedin, or duplicate versions of them in notes!
+  const cleanUnused = unusedLines.filter((l) => {
+    if (isGibberishLine(l)) return false;
+    if (isDuplicateOfField(l, name)) return false;
+    if (isDuplicateOfField(l, designation)) return false;
+    if (isDuplicateOfField(l, organization)) return false;
+    if (isDuplicateOfField(l, address)) return false;
+    if (isDuplicateOfField(l, email)) return false;
+    if (isDuplicateOfField(l, website)) return false;
+    if (isDuplicateOfField(l, phone)) return false;
+    if (isDuplicateOfField(l, telephone || '')) return false;
+    if (/visiting card|business card|identity card|card|front|back/i.test(l)) return false;
+    return true;
+  });
+
   const notes = cleanUnused.length > 0 ? cleanUnused.join('\n') : '';
 
   return {
@@ -369,7 +422,7 @@ Analyze the visiting card image(s) provided and extract contact details into JSO
 - "website": Website URL
 - "address": Address or location
 - "linkedin": LinkedIn link
-- "notes": Any other clear text on the card (DO NOT include OCR noise or symbols)
+- "notes": Any other clear text on the card (DO NOT include OCR noise, symbols, or duplicate fields)
 
 Respond strictly with valid JSON inside a \`\`\`json block.`
       },

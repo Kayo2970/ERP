@@ -592,9 +592,9 @@ export default function GuestDirectoryPage() {
           {filteredGuests.map(guest => (
             <div key={guest.id} className="glass-panel rounded-2xl p-4 space-y-3">
               <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-theme-text-primary truncate">{guest.name}</h3>
-                  {guest.designation && <p className="text-[11px] text-theme-text-secondary truncate">{guest.designation}</p>}
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm font-bold text-theme-text-primary leading-snug break-words">{guest.name}</h3>
+                  {guest.designation && <p className="text-[11px] font-medium text-theme-text-secondary leading-normal break-words mt-0.5">{guest.designation}</p>}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <button
