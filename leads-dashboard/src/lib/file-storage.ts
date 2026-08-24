@@ -36,16 +36,20 @@ function sanitizeFileName(name: string): string {
  * and additional parameters.
  */
 export function parseDataUrl(dataUrl: string): { mime: string; buffer: Buffer } {
+  if (!dataUrl || typeof dataUrl !== 'string') {
+    return { mime: 'application/octet-stream', buffer: Buffer.alloc(0) };
+  }
   const match = /^data:([^;]*)(?:;[^;]*)*;base64,([\s\S]*)$/.exec(dataUrl);
   if (!match) {
-    const parts = (dataUrl || '').split(';base64,');
+    const parts = dataUrl.split(';base64,');
     if (parts.length === 2) {
       const mimePart = parts[0].replace(/^data:/, '').split(';')[0];
-      return { mime: mimePart || 'application/octet-stream', buffer: Buffer.from(parts[1], 'base64') };
+      return { mime: mimePart || 'application/octet-stream', buffer: Buffer.from(parts[1].trim(), 'base64') };
     }
-    throw new Error('Expected a base64 data URL.');
+    const cleanBase64 = dataUrl.replace(/^data:[^,]+,/, '').trim();
+    return { mime: 'application/octet-stream', buffer: Buffer.from(cleanBase64, 'base64') };
   }
-  return { mime: match[1] || 'application/octet-stream', buffer: Buffer.from(match[2], 'base64') };
+  return { mime: match[1] || 'application/octet-stream', buffer: Buffer.from(match[2].trim(), 'base64') };
 }
 
 export interface StoredFile {

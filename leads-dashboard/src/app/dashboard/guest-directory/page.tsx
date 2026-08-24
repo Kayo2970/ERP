@@ -177,7 +177,54 @@ export default function GuestDirectoryPage() {
     setIsModalOpen(true);
   };
 
-  const handleFrontCardChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const compressCardImageFile = (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+        return;
+      }
+
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const maxDim = 1600;
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.85));
+        } else {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      };
+      img.src = url;
+    });
+  };
+
+  const handleFrontCardChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
     setFrontCardError('');
     setOcrStatus(null);
@@ -186,25 +233,17 @@ export default function GuestDirectoryPage() {
       setFrontCardData('');
       return;
     }
-    if (selected.size > MAX_CARD_SIZE) {
-      setFrontCardError(`Front image size (${(selected.size / (1024 * 1024)).toFixed(2)} MB) exceeds 10 MB limit.`);
-      setFrontCardFile(null);
-      setFrontCardData('');
-      return;
-    }
     setFrontCardFile(selected);
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        const base64 = reader.result;
-        setFrontCardData(base64);
-        runOcrScan(base64, backCardData);
-      }
-    };
-    reader.readAsDataURL(selected);
+    try {
+      const compressedBase64 = await compressCardImageFile(selected);
+      setFrontCardData(compressedBase64);
+      runOcrScan(compressedBase64, backCardData);
+    } catch {
+      setFrontCardError('Failed to read file.');
+    }
   };
 
-  const handleBackCardChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBackCardChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
     setBackCardError('');
     setOcrStatus(null);
@@ -213,24 +252,16 @@ export default function GuestDirectoryPage() {
       setBackCardData('');
       return;
     }
-    if (selected.size > MAX_CARD_SIZE) {
-      setBackCardError(`Back image size (${(selected.size / (1024 * 1024)).toFixed(2)} MB) exceeds 10 MB limit.`);
-      setBackCardFile(null);
-      setBackCardData('');
-      return;
-    }
     setBackCardFile(selected);
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        const base64 = reader.result;
-        setBackCardData(base64);
-        if (frontCardData) {
-          runOcrScan(frontCardData, base64);
-        }
+    try {
+      const compressedBase64 = await compressCardImageFile(selected);
+      setBackCardData(compressedBase64);
+      if (frontCardData) {
+        runOcrScan(frontCardData, compressedBase64);
       }
-    };
-    reader.readAsDataURL(selected);
+    } catch {
+      setBackCardError('Failed to read file.');
+    }
   };
 
   const runOcrScan = async (fData: string, bData?: string) => {
@@ -246,7 +277,19 @@ export default function GuestDirectoryPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ frontData: fData, backData: bData || undefined }),
       });
-      const data = await res.json();
+
+      const responseText = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        throw new Error(
+          res.status === 413
+            ? 'Card image file is too large for the server proxy. Please try a smaller photo or PDF.'
+            : 'Server returned an invalid response (connection timed out or server proxy error).'
+        );
+      }
+
       if (!res.ok) throw new Error(data.error || 'Failed to scan card');
 
       setForm((prev) => ({
