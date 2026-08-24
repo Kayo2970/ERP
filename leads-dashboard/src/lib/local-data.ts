@@ -258,6 +258,7 @@ export interface AnnouncementItem {
   status?: 'Pending Approval' | 'Approved' | 'Rejected';
   approvedBy?: string;
   approvedAt?: string;
+  emailSent?: boolean;
 }
 
 export interface FormField {
