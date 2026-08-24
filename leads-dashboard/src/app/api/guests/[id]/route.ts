@@ -12,32 +12,58 @@ export async function PATCH(
     const { id } = await params;
     const body = await request.json();
 
-    let previousStorageKey: string | undefined;
-    if (typeof body.visitingCardData === 'string' && body.visitingCardData.startsWith('data:')) {
-      const approxSize = Math.ceil((body.visitingCardData.length * 3) / 4);
+    let previousFrontStorageKey: string | undefined;
+    let previousBackStorageKey: string | undefined;
+
+    const frontData = body.visitingCardFrontData || body.visitingCardData;
+    const frontFileName = body.visitingCardFrontFileName || body.visitingCardFileName || 'card_front.jpg';
+    if (typeof frontData === 'string' && frontData.startsWith('data:')) {
+      const approxSize = Math.ceil((frontData.length * 3) / 4);
       if (approxSize > MAX_FILE_SIZE_BYTES) {
-        return NextResponse.json({ error: 'Visiting card image exceeds the 10 MB maximum limit.' }, { status: 400 });
+        return NextResponse.json({ error: 'Front visiting card image exceeds the 10 MB maximum limit.' }, { status: 400 });
       }
-      const stored = await saveBase64File('guests', id, 0, body.visitingCardFileName || 'card.jpg', body.visitingCardData);
+      const stored = await saveBase64File('guests', id, 0, frontFileName, frontData);
+      body.visitingCardFrontUrl = stored.url;
+      body.visitingCardFrontStorageKey = stored.storageKey;
       body.visitingCardUrl = stored.url;
       body.visitingCardStorageKey = stored.storageKey;
     }
     delete body.visitingCardData;
     delete body.visitingCardFileName;
+    delete body.visitingCardFrontData;
+    delete body.visitingCardFrontFileName;
+
+    if (typeof body.visitingCardBackData === 'string' && body.visitingCardBackData.startsWith('data:')) {
+      const approxSize = Math.ceil((body.visitingCardBackData.length * 3) / 4);
+      if (approxSize > MAX_FILE_SIZE_BYTES) {
+        return NextResponse.json({ error: 'Back visiting card image exceeds the 10 MB maximum limit.' }, { status: 400 });
+      }
+      const stored = await saveBase64File('guests', id, 1, body.visitingCardBackFileName || 'card_back.jpg', body.visitingCardBackData);
+      body.visitingCardBackUrl = stored.url;
+      body.visitingCardBackStorageKey = stored.storageKey;
+    }
+    delete body.visitingCardBackData;
+    delete body.visitingCardBackFileName;
 
     const updated = await mutateCollection('guests', (current) => {
       const idx = current.findIndex((g: any) => g.id === id);
       if (idx === -1) return [...current, { id, ...body }];
       const next = [...current];
-      if (body.visitingCardStorageKey && next[idx].visitingCardStorageKey && next[idx].visitingCardStorageKey !== body.visitingCardStorageKey) {
-        previousStorageKey = next[idx].visitingCardStorageKey;
+      if (body.visitingCardFrontStorageKey && next[idx].visitingCardFrontStorageKey && next[idx].visitingCardFrontStorageKey !== body.visitingCardFrontStorageKey) {
+        previousFrontStorageKey = next[idx].visitingCardFrontStorageKey;
+      }
+      if (body.visitingCardBackStorageKey && next[idx].visitingCardBackStorageKey && next[idx].visitingCardBackStorageKey !== body.visitingCardBackStorageKey) {
+        previousBackStorageKey = next[idx].visitingCardBackStorageKey;
       }
       next[idx] = { ...next[idx], ...body };
       return next;
     });
 
-    if (previousStorageKey) {
-      await deleteStoredFile(previousStorageKey);
+    if (previousFrontStorageKey) {
+      await deleteStoredFile(previousFrontStorageKey);
+    }
+    if (previousBackStorageKey) {
+      await deleteStoredFile(previousBackStorageKey);
     }
 
     const target = updated.find((g: any) => g.id === id);

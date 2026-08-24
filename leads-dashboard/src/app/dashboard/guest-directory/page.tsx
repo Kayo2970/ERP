@@ -21,6 +21,10 @@ import {
   ExternalLink,
   Download,
   Upload,
+  Sparkles,
+  Loader2,
+  CheckCircle2,
+  Scan,
 } from 'lucide-react';
 import { getGuests, addGuest, updateGuest, deleteGuest, Guest } from '@/lib/local-data';
 import { canAccessGuestDirectory } from '@/lib/permissions';
@@ -83,13 +87,22 @@ export default function GuestDirectoryPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingGuest, setEditingGuest] = useState<Guest | null>(null);
   const [form, setForm] = useState(emptyForm);
-  const [cardFile, setCardFile] = useState<File | null>(null);
-  const [cardData, setCardData] = useState('');
-  const [cardError, setCardError] = useState('');
+
+  const [frontCardFile, setFrontCardFile] = useState<File | null>(null);
+  const [frontCardData, setFrontCardData] = useState('');
+  const [frontCardError, setFrontCardError] = useState('');
+
+  const [backCardFile, setBackCardFile] = useState<File | null>(null);
+  const [backCardData, setBackCardData] = useState('');
+  const [backCardError, setBackCardError] = useState('');
+
+  const [isOcrScanning, setIsOcrScanning] = useState(false);
+  const [ocrStatus, setOcrStatus] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   const [deletingGuest, setDeletingGuest] = useState<Guest | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const frontInputRef = useRef<HTMLInputElement>(null);
+  const backInputRef = useRef<HTMLInputElement>(null);
   const csvFileInputRef = useRef<HTMLInputElement>(null);
 
   const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -123,9 +136,14 @@ export default function GuestDirectoryPage() {
 
   const resetForm = () => {
     setForm(emptyForm);
-    setCardFile(null);
-    setCardData('');
-    setCardError('');
+    setFrontCardFile(null);
+    setFrontCardData('');
+    setFrontCardError('');
+    setBackCardFile(null);
+    setBackCardData('');
+    setBackCardError('');
+    setIsOcrScanning(false);
+    setOcrStatus(null);
     setEditingGuest(null);
   };
 
@@ -147,37 +165,123 @@ export default function GuestDirectoryPage() {
       linkedin: guest.linkedin || '',
       notes: guest.notes || '',
     });
-    setCardFile(null);
-    setCardData('');
-    setCardError('');
+    setFrontCardFile(null);
+    setFrontCardData('');
+    setFrontCardError('');
+    setBackCardFile(null);
+    setBackCardData('');
+    setBackCardError('');
+    setIsOcrScanning(false);
+    setOcrStatus(null);
     setIsModalOpen(true);
   };
 
-  const handleCardChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFrontCardChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
-    setCardError('');
+    setFrontCardError('');
+    setOcrStatus(null);
     if (!selected) {
-      setCardFile(null);
-      setCardData('');
+      setFrontCardFile(null);
+      setFrontCardData('');
       return;
     }
     if (selected.size > MAX_CARD_SIZE) {
-      setCardError(`Image size (${(selected.size / (1024 * 1024)).toFixed(2)} MB) exceeds the 10 MB maximum limit.`);
-      setCardFile(null);
-      setCardData('');
+      setFrontCardError(`Front image size (${(selected.size / (1024 * 1024)).toFixed(2)} MB) exceeds 10 MB limit.`);
+      setFrontCardFile(null);
+      setFrontCardData('');
       return;
     }
-    setCardFile(selected);
+    setFrontCardFile(selected);
     const reader = new FileReader();
     reader.onload = () => {
-      if (typeof reader.result === 'string') setCardData(reader.result);
+      if (typeof reader.result === 'string') {
+        const base64 = reader.result;
+        setFrontCardData(base64);
+        runOcrScan(base64, backCardData);
+      }
     };
     reader.readAsDataURL(selected);
+  };
+
+  const handleBackCardChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files?.[0];
+    setBackCardError('');
+    setOcrStatus(null);
+    if (!selected) {
+      setBackCardFile(null);
+      setBackCardData('');
+      return;
+    }
+    if (selected.size > MAX_CARD_SIZE) {
+      setBackCardError(`Back image size (${(selected.size / (1024 * 1024)).toFixed(2)} MB) exceeds 10 MB limit.`);
+      setBackCardFile(null);
+      setBackCardData('');
+      return;
+    }
+    setBackCardFile(selected);
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        const base64 = reader.result;
+        setBackCardData(base64);
+        if (frontCardData) {
+          runOcrScan(frontCardData, base64);
+        }
+      }
+    };
+    reader.readAsDataURL(selected);
+  };
+
+  const runOcrScan = async (fData: string, bData?: string) => {
+    if (!fData) {
+      setFrontCardError('Front of card photograph is compulsory to run OCR scan.');
+      return;
+    }
+    setIsOcrScanning(true);
+    setOcrStatus('Scanning visiting card with OCR...');
+    try {
+      const res = await fetch('/api/guests/ocr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ frontData: fData, backData: bData || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to scan card');
+
+      setForm((prev) => ({
+        name: data.name || prev.name,
+        organization: data.organization || prev.organization,
+        designation: data.designation || prev.designation,
+        phone: data.phone || prev.phone,
+        email: data.email || prev.email,
+        website: data.website || prev.website,
+        address: data.address || prev.address,
+        linkedin: data.linkedin || prev.linkedin,
+        notes: data.notes
+          ? prev.notes
+            ? `${prev.notes}\n\n${data.notes}`
+            : data.notes
+          : prev.notes,
+      }));
+
+      setOcrStatus('✨ Card scanned successfully! Details auto-filled into form below (you can edit or override any field).');
+    } catch (err: any) {
+      setOcrStatus(`⚠️ OCR Notice: ${err.message || 'Could not parse card automatically. Please fill in details manually.'}`);
+    } finally {
+      setIsOcrScanning(false);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) return;
+
+    // Front card is compulsory if back card is uploaded without existing front card
+    if (backCardData && !frontCardData && !editingGuest?.visitingCardFrontUrl && !editingGuest?.visitingCardUrl) {
+      setFrontCardError('Front of the card photograph is compulsory when uploading card photos.');
+      return;
+    }
+
     setIsSaving(true);
 
     const payload: any = {
@@ -193,9 +297,16 @@ export default function GuestDirectoryPage() {
       metBy: editingGuest?.metBy || user?.name || 'Unknown',
     };
 
-    if (cardData) {
-      payload.visitingCardData = cardData;
-      payload.visitingCardFileName = cardFile?.name || 'card.jpg';
+    if (frontCardData) {
+      payload.visitingCardFrontData = frontCardData;
+      payload.visitingCardFrontFileName = frontCardFile?.name || 'card_front.jpg';
+      payload.visitingCardData = frontCardData;
+      payload.visitingCardFileName = frontCardFile?.name || 'card_front.jpg';
+    }
+
+    if (backCardData) {
+      payload.visitingCardBackData = backCardData;
+      payload.visitingCardBackFileName = backCardFile?.name || 'card_back.jpg';
     }
 
     try {
@@ -523,22 +634,33 @@ export default function GuestDirectoryPage() {
                 )}
               </div>
 
-              <div className="pt-2 border-t border-theme-border/20">
-                {guest.visitingCardUrl ? (
+              <div className="pt-2 border-t border-theme-border/20 flex flex-wrap items-center gap-3">
+                {(guest.visitingCardFrontUrl || guest.visitingCardUrl) ? (
                   <a
-                    href={guest.visitingCardUrl}
+                    href={guest.visitingCardFrontUrl || guest.visitingCardUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1.5 text-[11px] font-semibold text-accent hover:underline"
                   >
                     <ExternalLink className="h-3 w-3" />
-                    View Visiting Card
+                    Front Card
                   </a>
                 ) : (
                   <span className="flex items-center gap-1.5 text-[11px] text-theme-text-secondary/70">
                     <ImageOff className="h-3 w-3" />
-                    No visiting card on file
+                    No card photo on file
                   </span>
+                )}
+                {guest.visitingCardBackUrl && (
+                  <a
+                    href={guest.visitingCardBackUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-[11px] font-semibold text-accent hover:underline"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Back Card
+                  </a>
                 )}
               </div>
             </div>
@@ -664,21 +786,81 @@ export default function GuestDirectoryPage() {
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <label className="block font-medium text-theme-text-secondary flex items-center gap-1.5">
-                  <ImagePlus className="h-3.5 w-3.5" />
-                  Visiting Card {editingGuest?.visitingCardUrl ? '(replace)' : ''}
-                </label>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleCardChange}
-                  className="w-full text-xs file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-accent file:text-white file:text-xs file:font-medium file:cursor-pointer cursor-pointer"
-                />
-                {cardError && <p className="text-danger text-[11px]">{cardError}</p>}
-                {editingGuest?.visitingCardUrl && !cardData && (
-                  <p className="text-[11px] text-theme-text-secondary">A visiting card is already on file. Choose a new image to replace it.</p>
+              {/* Visiting Card Photographs & OCR Auto-Fill Option */}
+              <div className="p-4 bg-theme-border/15 rounded-2xl border border-theme-border/30 space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-theme-text-primary flex items-center gap-1.5 text-xs">
+                    <ImagePlus className="h-4 w-4 text-accent" />
+                    Visiting Card Photographs & OCR Auto-Fill
+                  </span>
+                  <span className="text-[10px] text-accent font-medium px-2 py-0.5 bg-accent/10 rounded-full flex items-center gap-1">
+                    <Sparkles className="h-3 w-3" />
+                    Auto-Fill Enabled
+                  </span>
+                </div>
+                <p className="text-[11px] text-theme-text-secondary leading-snug">
+                  Uploading card photographs automatically runs OCR to extract and fill in all guest details below. Front of card is compulsory when uploading photos, while back of card is optional. All fields remain subject to manual override.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Front of Card — COMPULSORY */}
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-medium text-theme-text-secondary">
+                      Front of Card <span className="text-danger font-bold">* (Compulsory)</span>
+                    </label>
+                    <input
+                      ref={frontInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFrontCardChange}
+                      className="w-full text-[11px] file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:bg-accent file:text-white file:text-[11px] file:font-medium file:cursor-pointer cursor-pointer"
+                    />
+                    {frontCardError && <p className="text-danger text-[11px] font-medium">{frontCardError}</p>}
+                    {(editingGuest?.visitingCardFrontUrl || editingGuest?.visitingCardUrl) && !frontCardData && (
+                      <p className="text-[10px] text-theme-text-secondary">Front card on file. Choose new image to replace.</p>
+                    )}
+                  </div>
+
+                  {/* Back of Card — OPTIONAL */}
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-medium text-theme-text-secondary">
+                      Back of Card <span className="text-theme-text-secondary/70 font-normal">(Optional)</span>
+                    </label>
+                    <input
+                      ref={backInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleBackCardChange}
+                      className="w-full text-[11px] file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:bg-theme-border/40 file:text-theme-text-primary file:text-[11px] file:font-medium file:cursor-pointer cursor-pointer"
+                    />
+                    {backCardError && <p className="text-danger text-[11px] font-medium">{backCardError}</p>}
+                    {editingGuest?.visitingCardBackUrl && !backCardData && (
+                      <p className="text-[10px] text-theme-text-secondary">Back card on file. Choose new image to replace.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* OCR Scan Status Indicator */}
+                {isOcrScanning && (
+                  <div className="flex items-center gap-2 text-[11px] text-accent font-medium p-2.5 bg-accent/10 rounded-xl animate-pulse">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Scanning card with OCR & extracting guest details...</span>
+                  </div>
+                )}
+
+                {ocrStatus && !isOcrScanning && (
+                  <div className={`flex items-start gap-2 text-[11px] p-2.5 rounded-xl border ${
+                    ocrStatus.includes('✨') || ocrStatus.includes('successfully')
+                      ? 'bg-success/10 border-success/20 text-success'
+                      : 'bg-warning/10 border-warning/20 text-theme-text-primary'
+                  }`}>
+                    {ocrStatus.includes('✨') ? (
+                      <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
+                    ) : (
+                      <Scan className="h-4 w-4 shrink-0 mt-0.5" />
+                    )}
+                    <span className="leading-snug">{ocrStatus}</span>
+                  </div>
                 )}
               </div>
 

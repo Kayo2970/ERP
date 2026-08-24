@@ -49,8 +49,17 @@ export interface Guest {
   notes?: string;
   metBy?: string; // name of the member who met them
   visitingCardData?: string; // transient: base64 data URL sent on upload, converted server-side
-  visitingCardUrl?: string;  // servable path under /api/files, backed by a real file on disk
+  visitingCardFrontData?: string; // transient base64 for front card photo (compulsory in card mode)
+  visitingCardBackData?: string;  // transient base64 for back card photo (optional)
+  visitingCardFileName?: string;
+  visitingCardFrontFileName?: string;
+  visitingCardBackFileName?: string;
+  visitingCardUrl?: string;  // servable path under /api/files, backed by a real file on disk (defaults to front card)
+  visitingCardFrontUrl?: string;
+  visitingCardBackUrl?: string;
   visitingCardStorageKey?: string;
+  visitingCardFrontStorageKey?: string;
+  visitingCardBackStorageKey?: string;
   createdAt: string;
 }
 

@@ -17,20 +17,37 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Guest name and id are required.' }, { status: 400 });
     }
 
-    // Persist the visiting card as a real file on disk under data/uploads/,
-    // same as designs and reimbursement receipts — never keep the raw
-    // base64 payload inline in guests.json.
-    if (typeof guest.visitingCardData === 'string' && guest.visitingCardData.startsWith('data:')) {
-      const approxSize = Math.ceil((guest.visitingCardData.length * 3) / 4);
+    // Handle legacy visitingCardData or new visitingCardFrontData (front of card)
+    const frontData = guest.visitingCardFrontData || guest.visitingCardData;
+    const frontFileName = guest.visitingCardFrontFileName || guest.visitingCardFileName || 'card_front.jpg';
+    if (typeof frontData === 'string' && frontData.startsWith('data:')) {
+      const approxSize = Math.ceil((frontData.length * 3) / 4);
       if (approxSize > MAX_FILE_SIZE_BYTES) {
-        return NextResponse.json({ error: 'Visiting card image exceeds the 10 MB maximum limit.' }, { status: 400 });
+        return NextResponse.json({ error: 'Front visiting card image exceeds the 10 MB maximum limit.' }, { status: 400 });
       }
-      const stored = await saveBase64File('guests', guest.id, 0, guest.visitingCardFileName || 'card.jpg', guest.visitingCardData);
+      const stored = await saveBase64File('guests', guest.id, 0, frontFileName, frontData);
+      guest.visitingCardFrontUrl = stored.url;
+      guest.visitingCardFrontStorageKey = stored.storageKey;
       guest.visitingCardUrl = stored.url;
       guest.visitingCardStorageKey = stored.storageKey;
     }
     delete guest.visitingCardData;
     delete guest.visitingCardFileName;
+    delete guest.visitingCardFrontData;
+    delete guest.visitingCardFrontFileName;
+
+    // Handle back of card image (optional)
+    if (typeof guest.visitingCardBackData === 'string' && guest.visitingCardBackData.startsWith('data:')) {
+      const approxSize = Math.ceil((guest.visitingCardBackData.length * 3) / 4);
+      if (approxSize > MAX_FILE_SIZE_BYTES) {
+        return NextResponse.json({ error: 'Back visiting card image exceeds the 10 MB maximum limit.' }, { status: 400 });
+      }
+      const stored = await saveBase64File('guests', guest.id, 1, guest.visitingCardBackFileName || 'card_back.jpg', guest.visitingCardBackData);
+      guest.visitingCardBackUrl = stored.url;
+      guest.visitingCardBackStorageKey = stored.storageKey;
+    }
+    delete guest.visitingCardBackData;
+    delete guest.visitingCardBackFileName;
 
     const updated = await mutateCollection('guests', (current) => {
       const idx = current.findIndex((g: any) => g.id === guest.id);
