@@ -56,6 +56,23 @@ const ORG_MARKERS = [
   'clinic', 'school', 'academy', 'trust', 'society', 'council', 'federation'
 ];
 
+const INDUSTRY_KEYWORDS = [
+  'pump', 'oil', 'gas', 'petroleum', 'steel', 'auto', 'automotive', 'motors',
+  'electronics', 'electricals', 'pharma', 'pharmaceuticals', 'logistics', 'textiles',
+  'exports', 'imports', 'chemicals', 'trading', 'traders', 'engineering', 'engineers',
+  'infra', 'infrastructure', 'construction', 'builders', 'developers', 'media',
+  'foods', 'beverages', 'retail', 'retails', 'store', 'shop', 'hotel', 'resort',
+  'hospital', 'healthcare', 'bank', 'finance', 'financial', 'investments', 'capital',
+  'holdings', 'security', 'energy', 'power', 'realty', 'real estate', 'consultancy',
+  'solutions', 'technologies', 'software', 'networks', 'communications', 'digital'
+];
+
+const HONORIFICS = [
+  'dr.', 'dr', 'mr.', 'mr', 'mrs.', 'mrs', 'ms.', 'ms', 'prof.', 'prof',
+  'eng.', 'engr.', 'er.', 'er', 'adv.', 'adv', 'shri', 'smt.', 'smt', 'ca', 'cs',
+  'capt.', 'col.', 'maj.', 'sir'
+];
+
 const ADDRESS_KEYWORDS = [
   'road', 'rd', 'street', 'st', 'avenue', 'ave', 'block', 'sector',
   'floor', 'suite', 'building', 'complex', 'area', 'nagar', 'layout',
@@ -158,6 +175,87 @@ async function tryNativeTesseractOcr(imageBuffer: Buffer): Promise<string | null
   }
 }
 
+/** Computes a score evaluating how likely a line is to be the Person's Name */
+function scoreNameCandidate(line: string, lineIndex: number, lines: string[], designationIndices: number[]): number {
+  const lower = line.toLowerCase();
+  const cleaned = line.replace(/^(dr\.|mr\.|mrs\.|ms\.|prof\.|eng\.|er\.|adv\.|shri|smt\.|ca|cs)\s+/i, '').trim();
+
+  // Hard Rejections
+  if (/@|www|\.com|\.in|http/i.test(line)) return -500;
+  if (/\d/.test(line)) return -500;
+  if (/visiting card|business card|identity card|card|front of card|back of card/i.test(lower)) return -500;
+
+  // Org markers or industry words penalize Name score heavily
+  if (ORG_MARKERS.some((m) => new RegExp(`\\b${m}\\b`, 'i').test(lower))) return -500;
+  if (ADDRESS_KEYWORDS.some((kw) => lower.includes(kw))) return -500;
+  if (INDUSTRY_KEYWORDS.some((kw) => new RegExp(`\\b${kw}\\b`, 'i').test(lower))) return -150;
+
+  let score = 0;
+  const words = cleaned.split(/\s+/).filter((w) => w.length > 0);
+
+  // Word count scoring
+  if (words.length >= 2 && words.length <= 3) {
+    score += 50;
+  } else if (words.length === 1 || words.length === 4) {
+    score += 25;
+  } else {
+    return -200;
+  }
+
+  // Honorific Bonus
+  if (HONORIFICS.some((h) => lower.startsWith(h))) {
+    score += 100;
+  }
+
+  // Letters-only check
+  if (words.every((w) => /^[A-Za-z.'-]+$/.test(w) || /^[A-Z]\.$/.test(w))) {
+    score += 30;
+  }
+
+  // Proximity to Designation bonus (Name is usually right above or right below Designation)
+  for (const desigIdx of designationIndices) {
+    if (Math.abs(lineIndex - desigIdx) === 1) {
+      score += 60;
+    } else if (Math.abs(lineIndex - desigIdx) === 2) {
+      score += 30;
+    }
+  }
+
+  // Early placement bonus (Top 5 lines)
+  if (lineIndex <= 4) {
+    score += 20;
+  }
+
+  return score;
+}
+
+/** Computes a score evaluating how likely a line is to be the Organization / Company Name */
+function scoreOrgCandidate(line: string, lineIndex: number): number {
+  const lower = line.toLowerCase();
+  if (/@|www|\.com|\.in|http/i.test(line)) return -500;
+  if (/visiting card|business card|identity card|card/i.test(lower)) return -500;
+
+  let score = 0;
+
+  if (ORG_MARKERS.some((marker) => new RegExp(`\\b${marker}\\b`, 'i').test(lower))) {
+    score += 150;
+  }
+
+  if (INDUSTRY_KEYWORDS.some((kw) => new RegExp(`\\b${kw}\\b`, 'i').test(lower))) {
+    score += 90;
+  }
+
+  if (ADDRESS_KEYWORDS.some((kw) => lower.includes(kw))) {
+    score -= 100;
+  }
+
+  if (lineIndex <= 3) {
+    score += 20;
+  }
+
+  return score;
+}
+
 /** Format-agnostic semantic parser for arbitrary visiting card layouts */
 export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
   const rawLines = rawText
@@ -237,21 +335,23 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
   let designation = '';
   let organization = '';
   const addressLines: string[] = [];
-  const unusedLines: string[] = [];
+  const designationIndices: number[] = [];
 
-  // Multi-heuristic line processing:
-  for (let line of lines) {
+  // Pass A: Extract Address & Designation Lines, inline splits
+  const nonAddressLines: { line: string; originalIndex: number }[] = [];
+
+  lines.forEach((line, index) => {
     const lower = line.toLowerCase();
 
-    // Skip extracted contacts
-    if (email && lower.includes(email)) continue;
-    if (website && lower.includes(website.toLowerCase())) continue;
-    if (linkedin && lower.includes(linkedin.toLowerCase())) continue;
+    // Skip contact lines
+    if (email && lower.includes(email)) return;
+    if (website && lower.includes(website.toLowerCase())) return;
+    if (linkedin && lower.includes(linkedin.toLowerCase())) return;
     if (/^(tel|phone|mob|mobile|cell|fax|mail|email|web|website|site|address|location|add):/i.test(line)) {
       if (/^(address|location|add):/i.test(line)) {
         addressLines.push(line.replace(/^(address|location|add):/i, '').trim());
       }
-      continue;
+      return;
     }
 
     // Split inline Name | Designation or Name - Designation
@@ -262,73 +362,72 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
         const pLower = part.toLowerCase();
         if (!designation && DESIGNATION_KEYWORDS.some((kw) => pLower.includes(kw))) {
           designation = part;
+          designationIndices.push(index);
           splitHandled = true;
         } else if (!name && /^[A-Za-z.'\s-]+$/.test(part) && part.split(/\s+/).length <= 4) {
           name = part;
           splitHandled = true;
         }
       }
-      if (splitHandled) continue;
+      if (splitHandled) return;
     }
 
-    // Designation check
+    // Designation Check
     if (!designation && DESIGNATION_KEYWORDS.some((kw) => lower.includes(kw))) {
       designation = line;
-      continue;
+      designationIndices.push(index);
+      return;
     }
 
-    // Organization check
-    if (!organization && ORG_MARKERS.some((marker) => new RegExp(`\\b${marker}\\b`, 'i').test(lower))) {
-      organization = cleanOcrLine(line.replace(/^(gion|co\.|company)\s+/i, ''));
-      continue;
-    }
-
-    // Address check
+    // Address Check
     const hasPinCode = /\b\d{5,6}\b/.test(line);
     const hasAddressKw = ADDRESS_KEYWORDS.some((kw) => lower.includes(kw));
     if (hasPinCode || hasAddressKw) {
       addressLines.push(cleanOcrLine(line));
-      continue;
+      return;
     }
 
-    // Name Candidate check (Format-agnostic line scoring)
-    if (/visiting card|business card|identity card|card|front of card|back of card/i.test(lower)) continue;
+    nonAddressLines.push({ line, originalIndex: index });
+  });
 
-    const cleaned = line.replace(/^(dr\.|mr\.|mrs\.|ms\.|prof\.|eng\.|er\.|adv\.|shri|smt\.|ca|cs)\s+/i, '').trim();
-    const words = cleaned.split(/\s+/);
-    const hasNoDigits = !/\d/.test(cleaned);
-    const validWordCount = words.length >= 1 && words.length <= 5;
-    const wordLettersOnly = words.every((w) => /^[A-Za-z.'-]+$/.test(w) || /^[A-Z]\.$/.test(w));
+  // Pass B: Score Name and Organization Candidates across remaining lines
+  let bestNameCandidate = name;
+  let bestNameScore = name ? 100 : 0;
 
-    if (!name && hasNoDigits && validWordCount && wordLettersOnly) {
-      name = line;
-      continue;
+  let bestOrgCandidate = organization;
+  let bestOrgScore = organization ? 100 : 0;
+
+  for (const { line, originalIndex } of nonAddressLines) {
+    const nScore = scoreNameCandidate(line, originalIndex, lines, designationIndices);
+    if (nScore > bestNameScore) {
+      bestNameScore = nScore;
+      bestNameCandidate = line;
     }
 
-    if (!isGibberishLine(line)) {
-      unusedLines.push(cleanOcrLine(line));
+    const oScore = scoreOrgCandidate(line, originalIndex);
+    if (oScore > bestOrgScore) {
+      bestOrgScore = oScore;
+      bestOrgCandidate = line;
     }
   }
 
-  // Smart fallback for Organization if missing
-  if (!organization && unusedLines.length > 0) {
-    const candidate = unusedLines[0];
-    if (
-      !isDuplicateOfField(candidate, name) &&
-      !isDuplicateOfField(candidate, designation) &&
-      candidate.length > 2 &&
-      candidate.length < 60 &&
-      !isGibberishLine(candidate)
-    ) {
-      organization = candidate;
-      unusedLines.shift();
+  name = bestNameCandidate;
+  organization = bestOrgCandidate;
+
+  // Fallback: If organization is missing, pick the top remaining unassigned line
+  if (!organization && nonAddressLines.length > 0) {
+    for (const { line } of nonAddressLines) {
+      if (line !== name && line !== designation && line.length > 2 && line.length < 60 && !isGibberishLine(line)) {
+        organization = line;
+        break;
+      }
     }
   }
 
   const address = addressLines.join(', ');
 
   // Format-Agnostic Anti-Pollution Notes Filter
-  const cleanUnused = unusedLines.filter((l) => {
+  const cleanUnused = lines.filter((l) => {
     if (isGibberishLine(l)) return false;
     if (isDuplicateOfField(l, name)) return false;
     if (isDuplicateOfField(l, designation)) return false;
