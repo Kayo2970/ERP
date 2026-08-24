@@ -17,9 +17,10 @@ import {
   Upload,
   Clock,
   Check,
-  Ban
+  Ban,
+  Handshake
 } from 'lucide-react';
-import { getEvents, addEvent, updateEvent, deleteEvent, approveEvent, rejectEvent, submitEventEdit, getEffectiveEventStatus, formatEventDateRange, getEventSortTime, EventItem } from '@/lib/local-data';
+import { getEvents, addEvent, updateEvent, deleteEvent, approveEvent, rejectEvent, submitEventEdit, getEffectiveEventStatus, formatEventDateRange, getEventSortTime, getEventSponsorTotal, EventItem, EventSponsor } from '@/lib/local-data';
 import { canCreateEvent, canEditEvent, canDeleteEvent, canManageEvents, canViewEvent, canApprovePendingEvent, getEventApprovalRequirement } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -47,6 +48,7 @@ export default function EventsPage() {
   const [location, setLocation] = useState('');
   const [campus, setCampus] = useState<'GG Campus' | 'RTC Campus' | 'Both Campuses'>('GG Campus');
   const [status, setStatus] = useState<EventItem['status']>('planned');
+  const [sponsors, setSponsors] = useState<EventSponsor[]>([]);
   const [formError, setFormError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -202,6 +204,7 @@ export default function EventsPage() {
     setLocation('');
     setCampus('GG Campus');
     setStatus('planned');
+    setSponsors([]);
     setFormError('');
     setIsCreateModalOpen(true);
   };
@@ -216,7 +219,20 @@ export default function EventsPage() {
     setLocation(event.location || '');
     setCampus(event.campus || 'GG Campus');
     setStatus(event.status);
+    setSponsors(event.sponsors || []);
     setFormError('');
+  };
+
+  const addSponsorRow = () => {
+    setSponsors((rows) => [...rows, { id: 'sp_' + Date.now(), name: '', amount: undefined }]);
+  };
+
+  const updateSponsorRow = (id: string, patch: Partial<EventSponsor>) => {
+    setSponsors((rows) => rows.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+  };
+
+  const removeSponsorRow = (id: string) => {
+    setSponsors((rows) => rows.filter((s) => s.id !== id));
   };
 
   const handleSaveEvent = (e: React.FormEvent) => {
@@ -233,6 +249,10 @@ export default function EventsPage() {
       return;
     }
 
+    const cleanedSponsors = sponsors
+      .filter((s) => s.name.trim())
+      .map((s) => ({ ...s, name: s.name.trim(), amount: Number(s.amount) || undefined }));
+
     if (editingEvent) {
       const changes = {
         title: title.trim(),
@@ -243,6 +263,7 @@ export default function EventsPage() {
         location: location.trim(),
         campus,
         status,
+        sponsors: cleanedSponsors,
       };
       const approval = getEventApprovalRequirement(user, 'EDIT');
       if (approval.requiresApproval) {
@@ -268,6 +289,7 @@ export default function EventsPage() {
         location: location.trim(),
         campus,
         status,
+        sponsors: cleanedSponsors,
         createdBy: user?.name || 'User',
         committees: [
           { id: 'c_' + Date.now() + '_1', name: 'Logistics & Venue Committee', memberIds: [] },
@@ -566,6 +588,15 @@ export default function EventsPage() {
                         <span className="truncate">{event.location}</span>
                       </div>
                     )}
+                    {event.sponsors && event.sponsors.length > 0 && (
+                      <div className="flex items-center gap-1.5 text-[11px]">
+                        <Handshake className="h-3.5 w-3.5 text-emerald-400" />
+                        <span className="truncate">
+                          {event.sponsors.map((s) => s.name).join(', ')}
+                          {getEventSponsorTotal(event) > 0 && ` — ₹${getEventSponsorTotal(event).toLocaleString()}`}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -719,6 +750,51 @@ export default function EventsPage() {
                   <option value="completed">Completed</option>
                   <option value="archived">Archived</option>
                 </select>
+              </div>
+
+              <div className="space-y-2 border-t border-theme-border/30 pt-3">
+                <div className="flex items-center justify-between">
+                  <label className="font-medium text-theme-text-secondary flex items-center gap-1.5">
+                    <Handshake className="h-3.5 w-3.5" /> Sponsors (optional)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addSponsorRow}
+                    className="text-accent font-semibold flex items-center gap-1 hover:underline cursor-pointer text-[11px]"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add Sponsor
+                  </button>
+                </div>
+                <p className="text-[11px] text-theme-text-secondary">
+                  In the Budget module, a sponsor's contribution is used up first — the Centre's budget only covers what's left.
+                  Amount can be added now or later, once confirmed.
+                </p>
+                {sponsors.map((s) => (
+                  <div key={s.id} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={s.name}
+                      onChange={(e) => updateSponsorRow(s.id, { name: e.target.value })}
+                      placeholder="Sponsor name"
+                      className="flex-1 px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary text-xs focus:outline-none focus:border-accent"
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      value={s.amount ?? ''}
+                      onChange={(e) => updateSponsorRow(s.id, { amount: e.target.value ? Number(e.target.value) : undefined })}
+                      placeholder="Amount (₹) — TBD"
+                      className="w-40 px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary text-xs font-mono focus:outline-none focus:border-accent"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeSponsorRow(s.id)}
+                      className="p-1.5 text-danger hover:bg-danger/10 rounded-lg cursor-pointer shrink-0"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
               </div>
 
               <div className="space-y-1.5">

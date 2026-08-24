@@ -11,6 +11,7 @@ import {
   TrendingUp,
   PiggyBank,
   ShieldAlert,
+  ShieldCheck,
   Landmark,
   ArrowRight,
   Edit2,
@@ -30,18 +31,20 @@ import {
   addBudget,
   updateBudget,
   decideBudget,
+  verifyBudgetByCentreHead,
   getEvents,
   addEvent,
   getReimbursements,
   getTasks,
   getCurrentFinancialYear,
+  getEventSponsorTotal,
   BudgetItem,
   BudgetLineItem,
   EventItem,
   ReimbursementItem,
   TaskItem,
 } from '@/lib/local-data';
-import { isCentreHead, isFinanceHead, getEventApprovalRequirement } from '@/lib/permissions';
+import { isCentreHead, isFinanceHead, canVerifyBudgetCentreHead, canDecideBudget, getEventApprovalRequirement } from '@/lib/permissions';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
   BarChart,
@@ -158,7 +161,6 @@ export default function BudgetPage() {
   };
 
   const canSubmit = isCentreHead(user);
-  const canDecide = isFinanceHead(user);
 
   // Annual Financial Year Budget Calculation
   const annualBudgetItem = budgets.find(
@@ -181,16 +183,32 @@ export default function BudgetPage() {
     return `${year}-${String(monthNum).padStart(2, '0')}`;
   };
 
-  // Single source of truth for a line item's actual spend: the sum of
-  // Approved reimbursements filed against its linked event. Used for the
-  // per-line-item table AND every monthly/annual rollup below, so a month's
-  // "actual" total always matches what its own line items show.
-  const getLineItemActual = (li: BudgetLineItem) =>
+  // Total real-world spend on a line item's event: the sum of Approved
+  // reimbursements filed against it, before any sponsor offset.
+  const getLineItemTotalSpend = (li: BudgetLineItem) =>
     li.eventId
       ? reimbursements
           .filter((r) => r.eventId === li.eventId && r.status === 'Approved')
           .reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
       : 0;
+
+  // How much of that spend an event's sponsor(s) cover — sponsor money is
+  // used up first, so this is capped at the total spend itself.
+  const getLineItemSponsorCovered = (li: BudgetLineItem) => {
+    if (!li.eventId) return 0;
+    const event = events.find((e) => e.id === li.eventId);
+    if (!event) return 0;
+    return Math.min(getLineItemTotalSpend(li), getEventSponsorTotal(event));
+  };
+
+  // Single source of truth for how much of a line item's spend counts
+  // against the CENTRE's budget: total spend minus whatever the event's
+  // sponsor(s) already covered. Used for the per-line-item table AND every
+  // monthly/annual rollup below, so a month's "actual" total always matches
+  // what its own line items show, and sponsor-funded events don't eat into
+  // the Centre's remaining budget until sponsor money runs out.
+  const getLineItemActual = (li: BudgetLineItem) =>
+    getLineItemTotalSpend(li) - getLineItemSponsorCovered(li);
 
   // Compute monthly calculations for all 12 months
   const monthlyCalculations = MONTH_NAMES.map((mName, mIdx) => {
@@ -597,8 +615,25 @@ export default function BudgetPage() {
             </div>
           </div>
 
-          {/* Finance Head Approval Action */}
-          {canDecide && annualBudgetItem && annualBudgetItem.status === 'Pending' && (
+          {/* Stage 1: Centre Head Verification Action */}
+          {annualBudgetItem && annualBudgetItem.status === 'Pending' && !annualBudgetItem.centreHeadVerified && canVerifyBudgetCentreHead(user) && (
+            <div className="flex items-center gap-2 shrink-0 bg-accent/10 border border-accent/30 p-2 rounded-xl">
+              <span className="text-xs text-accent font-semibold">Centre Head Verification:</span>
+              <button
+                onClick={() => {
+                  verifyBudgetByCentreHead(annualBudgetItem.id, user?.name || 'Centre Head');
+                  triggerToast('Annual budget verified and sent to Finance Head.');
+                  setBudgets(getBudgets());
+                }}
+                className="px-3 py-1.5 bg-accent hover:bg-primary-light text-white font-bold rounded-lg text-xs flex items-center gap-1 shadow-md cursor-pointer"
+              >
+                <ShieldCheck className="h-3.5 w-3.5" /> Verify & Send to Finance Head
+              </button>
+            </div>
+          )}
+
+          {/* Stage 2: Finance Head Approval Action */}
+          {annualBudgetItem && annualBudgetItem.status === 'Pending' && annualBudgetItem.centreHeadVerified && canDecideBudget(user, annualBudgetItem) && (
             <div className="flex items-center gap-2 shrink-0 bg-warning/10 border border-warning/30 p-2 rounded-xl">
               <span className="text-xs text-warning font-semibold">Annual Budget Action:</span>
               <button
@@ -614,6 +649,13 @@ export default function BudgetPage() {
                 <XCircle className="h-3.5 w-3.5" /> Reject
               </button>
             </div>
+          )}
+
+          {/* Awaiting-verification indicator for Finance Head when Centre Head hasn't signed off yet */}
+          {annualBudgetItem && annualBudgetItem.status === 'Pending' && !annualBudgetItem.centreHeadVerified && !canVerifyBudgetCentreHead(user) && isFinanceHead(user) && (
+            <span className="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-theme-border/30 text-theme-text-secondary border border-theme-border/40 shrink-0">
+              Awaiting Centre Head Verification
+            </span>
           )}
         </div>
 
@@ -974,7 +1016,19 @@ export default function BudgetPage() {
                             <Edit2 className="h-3.5 w-3.5" />
                           </button>
                         )}
-                        {canDecide && b.status === 'Pending' && (
+                        {b.status === 'Pending' && !b.centreHeadVerified && canVerifyBudgetCentreHead(user) && (
+                          <button
+                            onClick={() => {
+                              verifyBudgetByCentreHead(b.id, user?.name || 'Centre Head');
+                              triggerToast('Budget breakdown verified and sent to Finance Head.');
+                              setBudgets(getBudgets());
+                            }}
+                            className="px-2 py-1 bg-accent text-white font-bold rounded text-[11px] flex items-center gap-1 cursor-pointer"
+                          >
+                            <ShieldCheck className="h-3 w-3" /> Verify & Send to Finance
+                          </button>
+                        )}
+                        {b.status === 'Pending' && b.centreHeadVerified && canDecideBudget(user, b) && (
                           <div className="flex items-center gap-1">
                             <button
                               onClick={() => {
@@ -993,6 +1047,11 @@ export default function BudgetPage() {
                               Reject
                             </button>
                           </div>
+                        )}
+                        {b.status === 'Pending' && !b.centreHeadVerified && !canVerifyBudgetCentreHead(user) && isFinanceHead(user) && (
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-theme-border/30 text-theme-text-secondary border border-theme-border/40">
+                            Awaiting Centre Head Verification
+                          </span>
                         )}
                       </div>
                     </div>
@@ -1013,6 +1072,7 @@ export default function BudgetPage() {
                           <tbody className="divide-y divide-theme-border/20">
                             {b.lineItems.map((li, liIdx) => {
                               const liActual = getLineItemActual(li);
+                              const liSponsorCovered = getLineItemSponsorCovered(li);
                               const liVariance = (li.amount || li.proposedAmount || 0) - liActual;
                               const liClaims = li.eventId
                                 ? reimbursements.filter((r) => r.eventId === li.eventId)
@@ -1041,6 +1101,11 @@ export default function BudgetPage() {
                                     </td>
                                     <td className="py-2 text-right font-bold text-emerald-400">
                                       ₹{liActual.toLocaleString()}
+                                      {liSponsorCovered > 0 && (
+                                        <div className="text-[9px] font-semibold text-theme-text-secondary">
+                                          (+₹{liSponsorCovered.toLocaleString()} sponsor-covered)
+                                        </div>
+                                      )}
                                     </td>
                                     <td
                                       className={`py-2 text-right font-bold ${
@@ -1054,6 +1119,14 @@ export default function BudgetPage() {
                                     <td className="py-2 text-right">
                                       {li.eventId && (
                                         <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                                          {liSponsorCovered > 0 && (
+                                            <span
+                                              className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-semibold whitespace-nowrap"
+                                              title="Amount covered by the event's sponsor(s) before the Centre budget"
+                                            >
+                                              🤝 ₹{liSponsorCovered.toLocaleString()} sponsored
+                                            </span>
+                                          )}
                                           {liTasks.length > 0 && (
                                             <a
                                               href="/dashboard/tasks"

@@ -72,6 +72,15 @@ export interface EventCommittee {
   memberIds: string[]; // Students participating in this event committee
 }
 
+export interface EventSponsor {
+  id: string;
+  name: string;
+  // Optional: a sponsor can be added before the amount is finalized, then
+  // edited later once the contribution is confirmed.
+  amount?: number;
+  notes?: string;
+}
+
 export interface EventItem {
   id: string;
   title: string;
@@ -87,6 +96,11 @@ export interface EventItem {
   location?: string;
   campus?: 'GG Campus' | 'RTC Campus' | 'Both Campuses';
   committees: EventCommittee[];
+  // External sponsor contributions. In the Budget module, sponsor money is
+  // drawn down against an event's actual spend before the Centre's own
+  // budget is counted as used — see getEventSponsorTotal() and the Budget
+  // page's getLineItemActual().
+  sponsors?: EventSponsor[];
   createdBy?: string;
   // Group Policy approval workflow — set only when the creator/editor's grant came
   // from a policy tag marked "requires approval." Absent/'approved' means normal,
@@ -230,6 +244,12 @@ export interface BudgetItem {
   submittedByEmail?: string;
   submittedAt: string;
   status: 'Pending' | 'Approved' | 'Rejected';
+  // Stage-1 checkpoint: the Centre Head must verify a Pending budget before
+  // the Finance Head can give the stage-2 final decision, mirroring the
+  // Reimbursement module's Centre-Head-verify -> Finance-Head-approve flow.
+  centreHeadVerified?: boolean;
+  centreHeadVerifiedBy?: string;
+  centreHeadVerifiedAt?: string;
   decidedBy?: string;
   decidedAt?: string;
   decisionNotes?: string;
@@ -1162,6 +1182,11 @@ export function rejectEvent(id: string, actorName: string, reason?: string): Eve
   return result;
 }
 
+/** Total confirmed sponsor contribution for an event (unset amounts count as 0). */
+export function getEventSponsorTotal(event: Pick<EventItem, 'sponsors'>): number {
+  return (event.sponsors || []).reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+}
+
 /** Human-readable date range for an event, honoring a "dates to be decided" placeholder. */
 export function formatEventDateRange(event: Pick<EventItem, 'startDate' | 'endDate' | 'datesTBD'>): string {
   if (event.datesTBD || !event.startDate || !event.endDate) return 'Dates To Be Decided';
@@ -1833,6 +1858,24 @@ export function decideBudget(
   return current[idx];
 }
 
+/** Centre Head stage-1 verification, gating a budget's stage-2 Finance Head decision. */
+export function verifyBudgetByCentreHead(id: string, reviewerName: string): BudgetItem | null {
+  const current = getBudgets();
+  const idx = current.findIndex(b => b.id === id);
+  if (idx === -1) return null;
+
+  current[idx] = {
+    ...current[idx],
+    centreHeadVerified: true,
+    centreHeadVerifiedBy: reviewerName,
+    centreHeadVerifiedAt: new Date().toISOString().split('T')[0],
+  };
+  saveBudgets(current);
+  serverPatch('/api/budgets', id, current[idx]);
+  logAuditEvent('BUDGET_VERIFIED', reviewerName, `Centre Head verified a ₹${current[idx].amount.toLocaleString()} budget request, sending it to Finance Head`);
+  return current[idx];
+}
+
 /**
  * Lets the Centre Head revise their own budget request — before Finance
  * Head has decided, or even after it was already Approved. Either way the
@@ -1853,6 +1896,11 @@ export function updateBudget(id: string, updates: Partial<BudgetItem>, actorName
     decidedBy: undefined,
     decidedAt: undefined,
     decisionNotes: undefined,
+    // Composition changed — the Centre Head's earlier verification no longer
+    // reflects what's actually being sent to Finance Head, so it must happen again.
+    centreHeadVerified: false,
+    centreHeadVerifiedBy: undefined,
+    centreHeadVerifiedAt: undefined,
   };
   saveBudgets(current);
   serverPatch('/api/budgets', id, current[idx]);
@@ -1913,6 +1961,9 @@ export function syncBudgetLineItemsForEvent(eventId: string): void {
       b.decidedBy = undefined;
       b.decidedAt = undefined;
       b.decisionNotes = `Auto-reset to Pending: "${event.title}" moved out after its event date changed.`;
+      b.centreHeadVerified = false;
+      b.centreHeadVerifiedBy = undefined;
+      b.centreHeadVerifiedAt = undefined;
     }
     pulled.push(...matching);
     touchedIds.add(b.id);
@@ -1940,6 +1991,9 @@ export function syncBudgetLineItemsForEvent(eventId: string): void {
     target.decidedBy = undefined;
     target.decidedAt = undefined;
     target.decisionNotes = `Auto-reset to Pending: "${event.title}" moved in after its event date changed.`;
+    target.centreHeadVerified = false;
+    target.centreHeadVerifiedBy = undefined;
+    target.centreHeadVerifiedAt = undefined;
   }
   target.lineItems = [...(target.lineItems || []), ...pulled];
   target.amount = target.lineItems.reduce((s, li) => s + (li.amount || li.proposedAmount || 0), 0);
