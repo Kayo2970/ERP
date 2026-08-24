@@ -135,6 +135,11 @@ export interface TaskItem {
   // relying on a fragile title-string match.
   isDesignDeliverable?: boolean;
   workflowType?: 'design_caption_draft' | 'design_caption_review' | 'design_social_posting';
+  // Only set on workflowType 'design_social_posting' tasks — distinguishes
+  // the two separate posting tasks (one per platform) created once captions
+  // are approved, so each can be assigned, viewed, and marked complete
+  // independently of the other.
+  platform?: 'instagram' | 'linkedin';
   designId?: string;
   draftInstagramCaption?: string;
   draftLinkedinCaption?: string;
@@ -320,12 +325,13 @@ export interface DesignSubmissionItem {
   // approvals (e.g. approved -> changes requested -> re-approved) reuse the
   // same task instead of creating a duplicate each time.
   linkedTaskId?: string;
-  linkedInstagramTaskId?: string;
-  linkedLinkedinTaskId?: string;
   workflowStage?: 'caption_required' | 'caption_approval' | 'posting_required' | 'completed';
   captionTaskId?: string;
   captionApprovalTaskId?: string;
-  postingTaskId?: string;
+  postingInstagramTaskId?: string;
+  postingLinkedinTaskId?: string;
+  postingInstagramDone?: boolean;
+  postingLinkedinDone?: boolean;
   draftInstagramCaption?: string;
   draftLinkedinCaption?: string;
   approvedInstagramCaption?: string;
@@ -2215,6 +2221,40 @@ export function saveDesigns(designs: DesignSubmissionItem[]): void {
  * back and an error is thrown so the caller can show it and let the designer
  * retry, instead of a submission that silently goes nowhere.
  */
+/**
+ * Every design submission — regardless of category — must go to the Centre
+ * Head or the GG Campus Events Head for mandatory proofreading; there is no
+ * opt-out and no manual reviewer picker. Prefers a real Centre Head, falls
+ * back to the GG Campus Events Head, then to the Super User as a last
+ * resort so a submission is never left with no one able to review it.
+ */
+export function resolveDesignReviewer(): { id: string; name: string; email: string } | undefined {
+  const members = getMembers().filter(m => m.status !== 'Terminated');
+  const settings = getAccessLevelSettings();
+  const sectorKeywords = settings.sectorHeadKeywords.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
+  const centreHead = members.find(m => {
+    const role = (m.role || '').toLowerCase();
+    return role.includes('centre head') || role.includes('center head') || sectorKeywords.some(k => role.includes(k));
+  });
+  if (centreHead) return { id: centreHead.id, name: centreHead.name, email: centreHead.email };
+
+  const ggEventsHead = members.find(m => {
+    const role = (m.role || '').toLowerCase();
+    const committee = (m.committee || '').toLowerCase();
+    return m.tier === 2.5 ||
+      (role.includes('events head') && role.includes('gg')) ||
+      (role.includes('head of events') && role.includes('gg')) ||
+      (committee.includes('gg campus') && (role.includes('head of event') || role.includes('events head')));
+  });
+  if (ggEventsHead) return { id: ggEventsHead.id, name: ggEventsHead.name, email: ggEventsHead.email };
+
+  const superUser = members.find(m => m.tier === 1 || m.role === 'Super User');
+  if (superUser) return { id: superUser.id, name: superUser.name, email: superUser.email };
+
+  return undefined;
+}
+
 export async function addDesign(design: Omit<DesignSubmissionItem, 'id' | 'submittedAt' | 'expiresAt' | 'isExpired'>): Promise<DesignSubmissionItem> {
   if (design.fileSize > 25 * 1024 * 1024) {
     throw new Error('File size exceeds the 25 MB limit.');
@@ -2225,15 +2265,22 @@ export async function addDesign(design: Omit<DesignSubmissionItem, 'id' | 'submi
   const submittedAt = now.toISOString();
   const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
+  // Proofreading is mandatory for every design, no matter its category — the
+  // submitter can no longer opt out or hand-pick a reviewer.
+  const reviewer = resolveDesignReviewer();
   const newDesign: DesignSubmissionItem = {
     ...design,
     id: 'des_' + Date.now(),
     submittedAt,
     expiresAt,
     isExpired: false,
-    review: design.proofreadRequested && design.assignedProofreaderId ? {
-      proofreaderId: design.assignedProofreaderId,
-      proofreaderName: design.assignedProofreaderName || 'Proofreader',
+    proofreadRequested: true,
+    assignedProofreaderId: reviewer?.id,
+    assignedProofreaderName: reviewer?.name,
+    assignedProofreaderEmail: reviewer?.email,
+    review: reviewer ? {
+      proofreaderId: reviewer.id,
+      proofreaderName: reviewer.name,
       status: 'Pending Proofread',
     } : undefined
   };
@@ -2253,7 +2300,7 @@ export async function addDesign(design: Omit<DesignSubmissionItem, 'id' | 'submi
   current.unshift(createdDesign);
   saveDesigns(current);
 
-  const proofreadMsg = design.proofreadRequested ? ` (Requested proofread from ${design.assignedProofreaderName})` : '';
+  const proofreadMsg = reviewer ? ` (routed to ${reviewer.name} for mandatory proofread)` : ' (no Centre Head, GG Campus Events Head, or Super User found to route proofreading to)';
   logAuditEvent('DESIGN_SUBMITTED', design.designerName, `Submitted design "${design.title}" (${(design.fileSize / (1024 * 1024)).toFixed(2)} MB)${proofreadMsg}`, design.designerEmail);
 
   return createdDesign;
@@ -2261,18 +2308,20 @@ export async function addDesign(design: Omit<DesignSubmissionItem, 'id' | 'submi
 
 /**
  * Synchronize design finalization state with the Task & Rating system.
- * A design is considered finalized when:
- * 1. styleStatus === 'Style Approved'
- * 2. If proofreadRequested is true, review?.status === 'Proofread Approved'
+ * A design is considered finalized once its mandatory proofread has been
+ * approved by the Centre Head or GG Campus Events Head — that single action
+ * is the only gate; there is no separate style-review requirement blocking
+ * it. (The Style Review form elsewhere in the Design Portal still exists as
+ * an optional, independent annotation a Design Head can use, but it is no
+ * longer required for the design to finalize.)
  *
  * Once finalized, it automatically creates or completes a Task (linked to an Event
  * if present, or as a standalone deliverable if not), entering the Task Evaluation Queue
- * on the Ratings page.
+ * on the Ratings page, and kicks off Stage 1 of the caption/social-posting workflow
+ * (see submitDesignCaptions / reviewDesignCaptions / completeDesignPosting below).
  */
 function syncDesignTask(item: DesignSubmissionItem, reviewerName: string): DesignSubmissionItem {
-  const isStyleApproved = item.styleStatus === 'Style Approved';
-  const isProofreadApproved = !item.proofreadRequested || item.review?.status === 'Proofread Approved';
-  const isFullyFinalized = isStyleApproved && isProofreadApproved;
+  const isFullyFinalized = !item.proofreadRequested || item.review?.status === 'Proofread Approved';
 
   let updatedItem = { ...item };
 
@@ -2294,45 +2343,6 @@ function syncDesignTask(item: DesignSubmissionItem, reviewerName: string): Desig
         isDesignDeliverable: true,
       });
       updatedItem.linkedTaskId = task.id;
-    }
-
-    // Auto-create Instagram and LinkedIn posting follow-up tasks if not already created
-    if (!updatedItem.linkedInstagramTaskId || !updatedItem.linkedLinkedinTaskId) {
-      const dueDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-      if (!updatedItem.linkedInstagramTaskId) {
-        const instaTask = addTask({
-          title: `Instagram Posting: ${updatedItem.title}`,
-          event: updatedItem.eventName || undefined,
-          eventId: updatedItem.eventId || undefined,
-          assignee: updatedItem.designerName,
-          assigneeId: updatedItem.designerId,
-          assigneeEmail: updatedItem.designerEmail,
-          assigneeType: 'individual',
-          dueDate,
-          status: 'In Progress',
-          creatorName: reviewerName,
-          isDesignDeliverable: true,
-        });
-        updatedItem.linkedInstagramTaskId = instaTask.id;
-      }
-
-      if (!updatedItem.linkedLinkedinTaskId) {
-        const linkedinTask = addTask({
-          title: `LinkedIn Posting: ${updatedItem.title}`,
-          event: updatedItem.eventName || undefined,
-          eventId: updatedItem.eventId || undefined,
-          assignee: updatedItem.designerName,
-          assigneeId: updatedItem.designerId,
-          assigneeEmail: updatedItem.designerEmail,
-          assigneeType: 'individual',
-          dueDate,
-          status: 'In Progress',
-          creatorName: reviewerName,
-          isDesignDeliverable: true,
-        });
-        updatedItem.linkedLinkedinTaskId = linkedinTask.id;
-      }
     }
 
     // Stage 1: Initiate Caption Requirement Task for Designer
@@ -2362,8 +2372,9 @@ function syncDesignTask(item: DesignSubmissionItem, reviewerName: string): Desig
 
     return updatedItem;
   } else if (updatedItem.linkedTaskId) {
-    // If a previously approved design is no longer fully finalized (e.g. proofreader requested changes or style rejected),
-    // revert its task to 'In Progress' if not already rated.
+    // If a previously approved design is no longer finalized (e.g. the proofreader
+    // requested changes after approving), revert its task to 'In Progress' if not
+    // already rated.
     const linkedTask = getTasks().find(t => t.id === updatedItem.linkedTaskId);
     if (linkedTask && !linkedTask.ratingScore) {
       updateTask(updatedItem.linkedTaskId, { status: 'In Progress' }, reviewerName);
@@ -2387,16 +2398,22 @@ export function submitDesignCaptions(designId: string, instaCaption: string, lin
 
   const dueDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-  const members = getMembers();
-  const designHead = members.find(m => (m.role || '').toLowerCase().includes('design head') || m.tier === 2) || members.find(m => m.tier <= 2);
+  // Captions go back to whoever did the ORIGINAL proofread — not a separate
+  // "Design Head" lookup, which could resolve to no one at all if the roster
+  // has no tier-2/"design head" member. Falls back to re-resolving a Centre
+  // Head/GG Events Head only if this design predates mandatory routing and
+  // has no assigned proofreader on record.
+  const captionReviewer = (design.assignedProofreaderId && design.assignedProofreaderName && design.assignedProofreaderEmail)
+    ? { id: design.assignedProofreaderId, name: design.assignedProofreaderName, email: design.assignedProofreaderEmail }
+    : resolveDesignReviewer();
 
   const task2 = addTask({
     title: `[Caption Approval] Review Captions: ${design.title}`,
     event: design.eventName || undefined,
     eventId: design.eventId || undefined,
-    assignee: designHead ? designHead.name : 'Design Center Head',
-    assigneeId: designHead?.id,
-    assigneeEmail: designHead?.email,
+    assignee: captionReviewer ? captionReviewer.name : 'Centre Head',
+    assigneeId: captionReviewer?.id,
+    assigneeEmail: captionReviewer?.email,
     assigneeType: 'individual',
     dueDate,
     status: 'In Progress',
@@ -2435,8 +2452,11 @@ export function reviewDesignCaptions(designId: string, approved: boolean, commen
 
   if (approved) {
     const dueDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const task3 = addTask({
-      title: `[Social Media Posting] Post on Instagram & LinkedIn: ${design.title}`,
+
+    // Two separate tasks, one per platform, each independently assignable
+    // and markable complete — not one combined task for both.
+    const instaTask = addTask({
+      title: `[Social Media Posting] Post on Instagram: ${design.title}`,
       event: design.eventName || undefined,
       eventId: design.eventId || undefined,
       assignee: design.designerName,
@@ -2448,15 +2468,36 @@ export function reviewDesignCaptions(designId: string, approved: boolean, commen
       creatorName: actorName,
       isDesignDeliverable: true,
       workflowType: 'design_social_posting',
+      platform: 'instagram',
       designId: design.id,
       approvedInstagramCaption: design.draftInstagramCaption,
+    });
+
+    const linkedinTask = addTask({
+      title: `[Social Media Posting] Post on LinkedIn: ${design.title}`,
+      event: design.eventName || undefined,
+      eventId: design.eventId || undefined,
+      assignee: design.designerName,
+      assigneeId: design.designerId,
+      assigneeEmail: design.designerEmail,
+      assigneeType: 'individual',
+      dueDate,
+      status: 'In Progress',
+      creatorName: actorName,
+      isDesignDeliverable: true,
+      workflowType: 'design_social_posting',
+      platform: 'linkedin',
+      designId: design.id,
       approvedLinkedinCaption: design.draftLinkedinCaption,
     });
 
     design.approvedInstagramCaption = design.draftInstagramCaption;
     design.approvedLinkedinCaption = design.draftLinkedinCaption;
     design.workflowStage = 'posting_required';
-    design.postingTaskId = task3.id;
+    design.postingInstagramTaskId = instaTask.id;
+    design.postingLinkedinTaskId = linkedinTask.id;
+    design.postingInstagramDone = false;
+    design.postingLinkedinDone = false;
     design.captionStatus = 'approved';
     design.captionReviewComments = comments;
   } else {
@@ -2491,21 +2532,36 @@ export function reviewDesignCaptions(designId: string, approved: boolean, commen
   return design;
 }
 
-export function completeDesignPosting(designId: string, actorName: string): DesignSubmissionItem | null {
+/**
+ * Marks ONE of the two posting tasks (Instagram or LinkedIn) done. The
+ * design's workflowStage only flips to 'completed' once BOTH platforms have
+ * been marked — posting to just one is not the end of the workflow.
+ */
+export function completeDesignPosting(designId: string, platform: 'instagram' | 'linkedin', actorName: string): DesignSubmissionItem | null {
   const designs = getDesigns();
   const idx = designs.findIndex(d => d.id === designId);
   if (idx === -1) return null;
 
   const design = designs[idx];
-  if (design.postingTaskId) {
-    updateTaskStatus(design.postingTaskId, 'Completed', actorName);
+  const taskId = platform === 'instagram' ? design.postingInstagramTaskId : design.postingLinkedinTaskId;
+  if (taskId) {
+    updateTaskStatus(taskId, 'Completed', actorName);
   }
 
-  design.workflowStage = 'completed';
+  if (platform === 'instagram') {
+    design.postingInstagramDone = true;
+  } else {
+    design.postingLinkedinDone = true;
+  }
+
+  if (design.postingInstagramDone && design.postingLinkedinDone) {
+    design.workflowStage = 'completed';
+  }
+
   designs[idx] = design;
   saveDesigns(designs);
   serverPatch('/api/designs', design.id, design);
-  logAuditEvent('DESIGN_POSTING_COMPLETED', actorName, `Completed social media posting for design "${design.title}"`);
+  logAuditEvent('DESIGN_POSTING_COMPLETED', actorName, `Marked ${platform === 'instagram' ? 'Instagram' : 'LinkedIn'} posting complete for design "${design.title}"`);
   return design;
 }
 

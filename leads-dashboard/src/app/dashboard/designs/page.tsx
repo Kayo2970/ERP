@@ -40,6 +40,7 @@ import {
   submitDesignCaptions,
   reviewDesignCaptions,
   completeDesignPosting,
+  resolveDesignReviewer,
   DesignSubmissionItem,
   Member,
   EventItem,
@@ -254,9 +255,11 @@ export default function DesignPortalPage() {
   const [file, setFile] = useState<File | null>(null);
   const [fileData, setFileData] = useState<string>('');
   const [fileError, setFileError] = useState<string>('');
-  const [requestProofread, setRequestProofread] = useState<boolean>(false);
-  const [assignedProofreaderId, setAssignedProofreaderId] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  // Every submission is auto-routed to whoever resolveDesignReviewer() picks
+  // (Centre Head, then GG Campus Events Head, then Super User) — shown here
+  // purely so the submitter knows who'll be proofreading, nothing more.
+  const mandatoryReviewer = resolveDesignReviewer();
   // Reading the file into base64 happens asynchronously (FileReader), separately
   // from the "Uploading..." server round-trip — both get their own progress state
   // so a large file doesn't look "attached and ready" before it actually is.
@@ -337,9 +340,9 @@ export default function DesignPortalPage() {
     }
   };
 
-  const handleCompletePosting = () => {
+  const handleCompletePosting = (platform: 'instagram' | 'linkedin') => {
     if (!selectedDesign || !user) return;
-    const updated = completeDesignPosting(selectedDesign.id, user.name);
+    const updated = completeDesignPosting(selectedDesign.id, platform, user.name);
     if (updated) {
       setSelectedDesign(updated);
       setDesigns(getDesigns());
@@ -579,7 +582,6 @@ export default function DesignPortalPage() {
     setIsSubmitting(true);
     setSubmitError('');
     try {
-      const selectedProofreader = members.find(m => m.id === assignedProofreaderId);
       const selectedEvent = events.find(ev => ev.id === eventId);
 
       await addDesign({
@@ -593,10 +595,10 @@ export default function DesignPortalPage() {
         designerId: user?.id || 'guest',
         designerName: user?.name || 'Designer',
         designerEmail: user?.email || 'designer@msruas.ac.in',
-        proofreadRequested: requestProofread,
-        assignedProofreaderId: requestProofread ? assignedProofreaderId : undefined,
-        assignedProofreaderName: requestProofread ? selectedProofreader?.name : undefined,
-        assignedProofreaderEmail: requestProofread ? selectedProofreader?.email : undefined,
+        // proofreadRequested/assignedProofreader* are always overridden by
+        // addDesign() itself (see resolveDesignReviewer) — proofreading is
+        // mandatory and auto-routed, never opt-in or manually picked here.
+        proofreadRequested: true,
         eventId: selectedEvent?.id,
         eventName: selectedEvent?.title,
         ocrScan: ocrScanResult || undefined,
@@ -613,8 +615,6 @@ export default function DesignPortalPage() {
       setFile(null);
       setFileData('');
       setFileError('');
-      setRequestProofread(false);
-      setAssignedProofreaderId('');
       setOcrScanResult(null);
       setScanError('');
     } catch (err: any) {
@@ -1192,44 +1192,21 @@ export default function DesignPortalPage() {
                 )}
               </div>
 
-              {/* Proofreading Toggle & Person Selector */}
-              <div className="p-3.5 bg-muted/40 border border-border rounded-xl space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-2 cursor-pointer font-semibold text-foreground">
-                    <input
-                      type="checkbox"
-                      checked={requestProofread}
-                      onChange={e => setRequestProofread(e.target.checked)}
-                      className="rounded border-border text-accent focus:ring-accent"
-                    />
-                    Request Peer / Advisor Proofreading
-                  </label>
+              {/* Mandatory Proofreading Notice — every design, regardless of
+                  category, is automatically routed to the Centre Head or the
+                  GG Campus Events Head for a required proofread. There is no
+                  opt-out and no manual reviewer picker; this is purely
+                  informational. */}
+              <div className="p-3.5 bg-muted/40 border border-border rounded-xl space-y-1.5">
+                <div className="flex items-center gap-2 font-semibold text-foreground">
                   <MessageSquare className="h-4 w-4 text-accent" />
+                  Mandatory Proofreading
                 </div>
-
-                {requestProofread && (
-                  <div className="space-y-1.5 pt-1">
-                    <label className="font-medium text-foreground">
-                      Select Proofreader from Directory *
-                    </label>
-                    <select
-                      required={requestProofread}
-                      value={assignedProofreaderId}
-                      onChange={e => setAssignedProofreaderId(e.target.value)}
-                      className="w-full bg-background border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent"
-                    >
-                      <option value="">-- Choose Member --</option>
-                      {members.map(m => (
-                        <option key={m.id} value={m.id}>
-                          {m.name} ({m.role} - {m.division})
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-[11px] text-muted-foreground">
-                      The selected proofreader will be notified to review text accuracy, titles, and layout specs.
-                    </p>
-                  </div>
-                )}
+                <p className="text-[11px] text-muted-foreground">
+                  Every design, regardless of category, is automatically sent to{' '}
+                  <strong className="text-foreground">{mandatoryReviewer?.name || 'the Centre Head'}</strong>{' '}
+                  for required proofreading before it can be approved — this cannot be skipped or reassigned.
+                </p>
               </div>
 
               {isSubmitting && (
@@ -1620,7 +1597,7 @@ export default function DesignPortalPage() {
                       ? 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30'
                       : 'bg-muted/40 text-muted-foreground border-border'
                   }`}>
-                    2. Design Head Approval
+                    2. Proofreader Approval
                   </div>
                   <div className={`p-2 rounded-xl border font-semibold ${
                     selectedDesign.workflowStage === 'posting_required'
@@ -1642,7 +1619,7 @@ export default function DesignPortalPage() {
                     </p>
                     {selectedDesign.captionReviewComments && (
                       <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-lg text-[11px]">
-                        <strong>Design Head Revision Notes:</strong> {selectedDesign.captionReviewComments}
+                        <strong>Proofreader Revision Notes:</strong> {selectedDesign.captionReviewComments}
                       </div>
                     )}
                     <div className="space-y-1">
@@ -1671,17 +1648,17 @@ export default function DesignPortalPage() {
                       className="w-full py-2.5 rounded-xl bg-accent text-white font-semibold text-xs flex items-center justify-center gap-1.5 hover:bg-primary-light transition-all shadow-md shadow-accent/20 cursor-pointer"
                     >
                       <Send className="h-3.5 w-3.5" />
-                      Submit Captions for Design Center Head Approval
+                      Submit Captions for Proofreader Approval
                     </button>
                   </form>
                 )}
 
-                {/* Stage 2: Design Center Head Approves Captions */}
+                {/* Stage 2: Original Proofreader Approves Captions */}
                 {selectedDesign.workflowStage === 'caption_approval' && (
                   <div className="space-y-3 bg-background/50 p-4 rounded-xl border border-border">
                     <p className="font-semibold text-foreground flex items-center gap-1.5">
                       <UserCheck className="h-3.5 w-3.5 text-accent" />
-                      Stage 2: Review Draft Captions (Design Center Head Task)
+                      Stage 2: Review Draft Captions ({selectedDesign.assignedProofreaderName || 'Proofreader'}&apos;s Task)
                     </p>
                     <div className="space-y-2 text-[11px] bg-muted/30 p-3 rounded-lg border border-border">
                       <div>
@@ -1696,7 +1673,7 @@ export default function DesignPortalPage() {
                       )}
                     </div>
 
-                    {(isDesignHead(user) || isCentreHead(user) || (user && user.tier <= 3)) ? (
+                    {(selectedDesign.assignedProofreaderEmail === user?.email || canViewAllDesigns(user)) ? (
                       <form onSubmit={handleReviewCaptions} className="space-y-3 pt-1">
                         <div className="flex items-center gap-4">
                           <label className="flex items-center gap-2 cursor-pointer font-medium">
@@ -1744,40 +1721,69 @@ export default function DesignPortalPage() {
                       </form>
                     ) : (
                       <p className="text-[11px] text-muted-foreground italic">
-                        Draft captions submitted. Pending evaluation by Design Center Head / Centre Head.
+                        Draft captions submitted. Pending evaluation by {selectedDesign.assignedProofreaderName || 'the assigned proofreader'}.
                       </p>
                     )}
                   </div>
                 )}
 
-                {/* Stage 3: Social Media Posting Task */}
-                {selectedDesign.workflowStage === 'posting_required' && (
-                  <div className="space-y-3 bg-background/50 p-4 rounded-xl border border-border">
+                {/* Stage 3: Two independent posting tasks — Instagram and LinkedIn each
+                    get their own card and are marked done separately, since posting to
+                    one platform doesn't mean the other is done. */}
+                {(selectedDesign.workflowStage === 'posting_required' || selectedDesign.workflowStage === 'completed') && (
+                  <div className="space-y-3">
                     <p className="font-semibold text-foreground flex items-center gap-1.5">
                       <Send className="h-3.5 w-3.5 text-accent" />
-                      Stage 3: Social Media Posting Task (Designer Task)
+                      Stage 3: Social Media Posting Tasks (Designer Task — two separate tasks)
                     </p>
-                    <div className="space-y-2 text-[11px] bg-emerald-500/10 p-3 rounded-lg border border-emerald-500/20 text-foreground">
-                      <div>
-                        <span className="font-bold text-emerald-500">Approved Instagram Caption:</span>
-                        <p className="text-muted-foreground whitespace-pre-wrap mt-0.5">{selectedDesign.approvedInstagramCaption}</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className={`space-y-2.5 p-4 rounded-xl border ${
+                        selectedDesign.postingInstagramDone
+                          ? 'bg-emerald-500/10 border-emerald-500/20'
+                          : 'bg-background/50 border-border'
+                      }`}>
+                        <span className="font-bold text-foreground flex items-center gap-1.5">
+                          Instagram
+                          {selectedDesign.postingInstagramDone && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
+                        </span>
+                        <p className="text-[11px] text-muted-foreground whitespace-pre-wrap">{selectedDesign.approvedInstagramCaption}</p>
+                        {selectedDesign.postingInstagramDone ? (
+                          <p className="text-[11px] font-semibold text-emerald-500">Posted &amp; marked complete</p>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleCompletePosting('instagram')}
+                            className="w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[11px] flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            Task Done: Mark Posted on Instagram
+                          </button>
+                        )}
                       </div>
-                      {selectedDesign.approvedLinkedinCaption && (
-                        <div>
-                          <span className="font-bold text-emerald-500">Approved LinkedIn Caption:</span>
-                          <p className="text-muted-foreground whitespace-pre-wrap mt-0.5">{selectedDesign.approvedLinkedinCaption}</p>
-                        </div>
-                      )}
+                      <div className={`space-y-2.5 p-4 rounded-xl border ${
+                        selectedDesign.postingLinkedinDone
+                          ? 'bg-emerald-500/10 border-emerald-500/20'
+                          : 'bg-background/50 border-border'
+                      }`}>
+                        <span className="font-bold text-foreground flex items-center gap-1.5">
+                          LinkedIn
+                          {selectedDesign.postingLinkedinDone && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
+                        </span>
+                        <p className="text-[11px] text-muted-foreground whitespace-pre-wrap">{selectedDesign.approvedLinkedinCaption || selectedDesign.approvedInstagramCaption}</p>
+                        {selectedDesign.postingLinkedinDone ? (
+                          <p className="text-[11px] font-semibold text-emerald-500">Posted &amp; marked complete</p>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleCompletePosting('linkedin')}
+                            className="w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[11px] flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            Task Done: Mark Posted on LinkedIn
+                          </button>
+                        )}
+                      </div>
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={handleCompletePosting}
-                      className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
-                    >
-                      <CheckCircle2 className="h-4 w-4" />
-                      Task Done: Mark Posted on Instagram & LinkedIn
-                    </button>
                   </div>
                 )}
 
@@ -1789,14 +1795,8 @@ export default function DesignPortalPage() {
                       Social Media Workflow Completed
                     </div>
                     <p className="text-muted-foreground text-[11px]">
-                      The design and approved captions have been successfully verified and posted on Instagram & LinkedIn.
+                      The design and approved captions have been successfully verified and posted on both Instagram and LinkedIn.
                     </p>
-                    <div className="pt-2 text-[11px] space-y-1">
-                      <span className="font-semibold text-foreground">Approved Captions:</span>
-                      <p className="text-muted-foreground bg-background/50 p-2.5 rounded-lg border border-border whitespace-pre-wrap">
-                        {selectedDesign.approvedInstagramCaption}
-                      </p>
-                    </div>
                   </div>
                 )}
               </div>
