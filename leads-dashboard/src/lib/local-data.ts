@@ -246,6 +246,8 @@ export interface AnnouncementItem {
   status?: 'Pending Approval' | 'Approved' | 'Rejected';
   approvedBy?: string;
   approvedAt?: string;
+  rejectedBy?: string;
+  rejectedAt?: string;
   emailSent?: boolean;
 }
 
@@ -2042,9 +2044,14 @@ export function rejectAnnouncement(id: string, actorName: string): AnnouncementI
   const idx = current.findIndex(a => a.id === id);
   if (idx === -1) return null;
 
+  const now = new Date();
+  const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
   current[idx] = {
     ...current[idx],
     status: 'Rejected',
+    rejectedBy: actorName,
+    rejectedAt: formattedDate,
   };
   saveAnnouncements(current);
   serverPatch('/api/announcements', id, current[idx]);

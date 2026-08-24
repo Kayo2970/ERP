@@ -426,13 +426,21 @@ export default function AnnouncementsPage() {
                     {ann.scope}
                   </span>
                   {ann.status === 'Pending Approval' && (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 border border-amber-500/20">
+                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center gap-1">
+                      <Clock className="h-3 w-3 animate-pulse" />
                       Pending Approval (Centre Head / GG Campus Events Head)
                     </span>
                   )}
                   {ann.status === 'Approved' && (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 border border-emerald-500/20">
+                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                      <CheckCircle className="h-3 w-3" />
                       Approved & Published
+                    </span>
+                  )}
+                  {ann.status === 'Rejected' && (
+                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-danger/15 text-danger border border-danger/30 flex items-center gap-1">
+                      <X className="h-3 w-3" />
+                      Rejected
                     </span>
                   )}
                 </div>
@@ -448,6 +456,36 @@ export default function AnnouncementsPage() {
               <p className="text-xs text-theme-text-secondary leading-relaxed bg-theme-background/20 p-3 rounded-xl border border-theme-border/20 whitespace-pre-wrap">
                 {ann.content}
               </p>
+
+              {/* Status Indicator Audit Banner: Approved vs Rejected vs Pending */}
+              {ann.status === 'Approved' && (
+                <div className="flex items-center gap-2 p-2.5 bg-emerald-500/10 border border-emerald-500/25 rounded-xl text-[11px] text-emerald-400">
+                  <CheckCircle className="h-4 w-4 shrink-0 text-emerald-400" />
+                  <span>
+                    <strong>Approved & Circulated</strong> by <strong className="text-emerald-300">{ann.approvedBy || 'Centre Head'}</strong>
+                    {ann.approvedAt && ` on ${ann.approvedAt}`}
+                  </span>
+                </div>
+              )}
+
+              {ann.status === 'Rejected' && (
+                <div className="flex items-center gap-2 p-2.5 bg-danger/10 border border-danger/25 rounded-xl text-[11px] text-danger">
+                  <X className="h-4 w-4 shrink-0 text-danger" />
+                  <span>
+                    <strong>Rejected</strong> by <strong className="text-red-300">{ann.rejectedBy || 'Centre Head'}</strong>
+                    {ann.rejectedAt && ` on ${ann.rejectedAt}`}
+                  </span>
+                </div>
+              )}
+
+              {ann.status === 'Pending Approval' && (
+                <div className="flex items-center gap-2 p-2.5 bg-amber-500/10 border border-amber-500/25 rounded-xl text-[11px] text-amber-400">
+                  <Clock className="h-4 w-4 shrink-0 text-amber-400 animate-pulse" />
+                  <span>
+                    <strong>Pending Approval:</strong> Submitted by <strong>{ann.authorName}</strong>. Awaiting Centre Head review before email circulation.
+                  </span>
+                </div>
+              )}
 
               {ann.editedAt && (
                 <span className="text-[10px] text-theme-text-secondary italic">
