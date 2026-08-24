@@ -306,6 +306,11 @@ export interface PublicFormItem {
   status: 'active' | 'archived';
   eventId?: string;
   eventName?: string;
+  // Set when this form was built from a FormTemplateItem via the "Start from
+  // Template" picker. Drives template-exclusive features — e.g. the
+  // Feedback Form Template's "download filled Word copy" button only shows
+  // for forms whose sourceTemplateId matches that specific template's id.
+  sourceTemplateId?: string;
   // Group Policy approval workflow — mirrors EventItem/TaskItem's fields. A
   // form's public link (/forms/[slug]) only actually resolves once it's
   // 'approved' (or carries no approvalStatus at all, i.e. was built before
@@ -571,7 +576,55 @@ export const initialAnnouncements: AnnouncementItem[] = [];
 
 export const initialForms: PublicFormItem[] = [];
 
-export const initialFormTemplates: FormTemplateItem[] = [];
+// Fixed, stable id (never regenerated) so the "download filled Word copy"
+// feature and src/lib/docx-fill.ts can reliably recognize a form built from
+// this exact template, even though applying a template regenerates every
+// field's id — see PublicFormItem.sourceTemplateId.
+export const FEEDBACK_FORM_TEMPLATE_ID = 'tmpl_feedback_form';
+
+// Field labels here are matched by exact string in src/lib/docx-fill.ts to
+// map submitted answers onto the right blank/checkbox in the original
+// Feedback_Events.docx — keep them in sync if either side changes.
+export const initialFormTemplates: FormTemplateItem[] = [
+  {
+    id: FEEDBACK_FORM_TEMPLATE_ID,
+    name: 'Feedback Form Template',
+    description: 'The standard LEADS event feedback form — matches the official Feedback_Events.docx exactly, including the option to download each response as a filled copy of that Word document.',
+    createdBy: 'System',
+    createdAt: new Date().toISOString().split('T')[0],
+    fields: [
+      { id: 'f_event_name', label: 'Name of Event', type: 'text', required: true },
+      { id: 'f_event_type', label: 'Type of Event', type: 'select', options: ['MDP', 'FDP', 'Workshop', 'Guest Lecture', 'Seminar/Conference', 'Other'], required: true },
+      { id: 'f_date', label: 'Date', type: 'text', required: true },
+      { id: 'f_duration', label: 'Duration', type: 'text', required: false },
+      { id: 'f_resource_persons', label: 'Resource Person(s)', type: 'text', required: false },
+      { id: 'f_participant_name', label: 'Participant Name', type: 'text', required: true },
+      { id: 'f_designation', label: 'Designation/Program/Semester', type: 'text', required: false },
+      { id: 'f_department', label: 'Department', type: 'text', required: false },
+      { id: 'f_rate_relevance', label: 'Relevance of the topic', type: 'scale', required: true },
+      { id: 'f_rate_clarity', label: 'Clarity of objectives', type: 'scale', required: true },
+      { id: 'f_rate_content', label: 'Content quality & depth', type: 'scale', required: true },
+      { id: 'f_rate_practical', label: 'Practical applicability', type: 'scale', required: true },
+      { id: 'f_rate_effectiveness', label: 'Effectiveness of resource person', type: 'scale', required: true },
+      { id: 'f_rate_tools', label: 'Use of tools/technology', type: 'scale', required: true },
+      { id: 'f_rate_interaction', label: 'Interaction & engagement', type: 'scale', required: true },
+      { id: 'f_rate_organization', label: 'Organization & coordination', type: 'scale', required: true },
+      { id: 'f_rate_overall', label: 'Overall satisfaction', type: 'scale', required: true },
+      { id: 'f_lo_understand', label: 'Understand key concepts clearly', type: 'checkbox', required: false },
+      { id: 'f_lo_apply', label: 'Apply learning in practical/academic context', type: 'checkbox', required: false },
+      { id: 'f_lo_tools', label: 'Use relevant tools/techniques introduced', type: 'checkbox', required: false },
+      { id: 'f_lo_problemsolving', label: 'Enhance problem-solving/decision-making ability', type: 'checkbox', required: false },
+      { id: 'f_lo_industry', label: 'Relate concepts to industry practices', type: 'checkbox', required: false },
+      { id: 'f_takeaways', label: 'Key Takeaways from the Session', type: 'textarea', required: false },
+      { id: 'f_valuable', label: 'Most Valuable Aspect of the Event', type: 'textarea', required: false },
+      { id: 'f_suggestions', label: 'Suggestions for Improvement', type: 'textarea', required: false },
+      { id: 'f_future_topics', label: 'Topics you would like in future sessions', type: 'textarea', required: false },
+      { id: 'f_enhance_knowledge', label: 'Did the event enhance your knowledge/skills?', type: 'select', options: ['Yes', 'No'], required: true },
+      { id: 'f_apply_learning', label: 'Will you apply the learning in future?', type: 'select', options: ['Yes', 'No'], required: true },
+      { id: 'f_overall_rating', label: 'Overall Rating (Out of 5)', type: 'scale', required: true },
+    ],
+  },
+];
 
 export const initialSubmissions: FormSubmissionItem[] = [];
 

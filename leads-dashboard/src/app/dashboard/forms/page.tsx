@@ -14,17 +14,23 @@ import {
   Edit2,
   ShieldAlert,
   FileText,
+  FileDown,
+  FileSpreadsheet,
   Clock,
   Table2,
   BarChart3,
   Gauge,
   LayoutTemplate,
   CalendarDays,
-  Save
+  Save,
+  TrendingUp,
+  Users
 } from 'lucide-react';
 import {
   BarChart,
   Bar,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -47,6 +53,7 @@ import {
   addFormTemplate,
   deleteFormTemplate,
   getEvents,
+  FEEDBACK_FORM_TEMPLATE_ID,
   PublicFormItem,
   FormField,
   FormSubmissionItem,
@@ -91,6 +98,24 @@ function computeAverage(field: FormField, subs: FormSubmissionItem[]): number | 
     .filter(v => !isNaN(v));
   if (values.length === 0) return null;
   return values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+/** Response count per calendar day, oldest first, for the submissions-over-time trend chart. */
+function buildSubmissionsByDay(subs: FormSubmissionItem[]) {
+  const counts: Record<string, number> = {};
+  subs.forEach(s => {
+    const day = (s.submittedAt || '').slice(0, 10);
+    if (!day) return;
+    counts[day] = (counts[day] || 0) + 1;
+  });
+  return Object.entries(counts)
+    .map(([date, count]) => ({ date, count }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function escapeCsvValue(value: unknown): string {
+  const str = String(value ?? '').replace(/"/g, '""');
+  return `"${str}"`;
 }
 
 export default function FormsBuilderPage() {
@@ -292,6 +317,7 @@ export default function FormsBuilderPage() {
         eventName: linkedEvent?.title,
         createdBy: user?.name || 'User',
         status: 'active' as const,
+        sourceTemplateId: selectedTemplateId || undefined,
       };
       const approval = getFormApprovalRequirement(user, 'CREATE');
       if (approval.requiresApproval) {
@@ -358,6 +384,29 @@ export default function FormsBuilderPage() {
     triggerNotification('Rejected.');
   };
 
+  const handleDownloadSubmissionsCsv = () => {
+    if (!selectedForm || selectedSubmissions.length === 0) return;
+    const headers = ['Timestamp', ...selectedForm.fields.map(f => f.label)];
+    const rows = selectedSubmissions.map(sub => [
+      sub.submittedAt,
+      ...selectedForm.fields.map(f => sub.data[f.id] ?? sub.data[f.label] ?? ''),
+    ]);
+    const csv = [headers, ...rows].map(row => row.map(escapeCsvValue).join(',')).join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${selectedForm.slug}-submissions.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadFilledWord = (submissionId: string) => {
+    window.open(`/api/submissions/${submissionId}/word`, '_blank');
+  };
+
   const handleCopyLink = (formSlug: string) => {
     const linkUrl = `${window.location.origin}/forms/${formSlug}`;
     navigator.clipboard.writeText(linkUrl);
@@ -413,6 +462,55 @@ export default function FormsBuilderPage() {
           </span>
         )}
       </div>
+
+      {/* Top-of-page stats summary bar */}
+      {forms.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="glass-panel rounded-2xl p-4 flex items-center gap-3">
+            <div className="h-9 w-9 rounded-xl bg-accent/15 text-accent flex items-center justify-center shrink-0">
+              <FileText className="h-4.5 w-4.5" />
+            </div>
+            <div>
+              <p className="text-lg font-bold text-theme-text-primary leading-none">{forms.length}</p>
+              <p className="text-[10px] text-theme-text-secondary mt-1">Total Forms</p>
+            </div>
+          </div>
+          <div className="glass-panel rounded-2xl p-4 flex items-center gap-3">
+            <div className="h-9 w-9 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
+              <Users className="h-4.5 w-4.5" />
+            </div>
+            <div>
+              <p className="text-lg font-bold text-theme-text-primary leading-none">{submissions.length}</p>
+              <p className="text-[10px] text-theme-text-secondary mt-1">Total Responses</p>
+            </div>
+          </div>
+          <div className="glass-panel rounded-2xl p-4 flex items-center gap-3">
+            <div className="h-9 w-9 rounded-xl bg-blue-500/15 text-blue-400 flex items-center justify-center shrink-0">
+              <TrendingUp className="h-4.5 w-4.5" />
+            </div>
+            <div>
+              <p className="text-lg font-bold text-theme-text-primary leading-none">
+                {submissions.filter(s => {
+                  const d = new Date(s.submittedAt);
+                  const weekAgo = new Date();
+                  weekAgo.setDate(weekAgo.getDate() - 7);
+                  return !isNaN(d.getTime()) && d >= weekAgo;
+                }).length}
+              </p>
+              <p className="text-[10px] text-theme-text-secondary mt-1">Responses This Week</p>
+            </div>
+          </div>
+          <div className="glass-panel rounded-2xl p-4 flex items-center gap-3">
+            <div className="h-9 w-9 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0">
+              <LayoutTemplate className="h-4.5 w-4.5" />
+            </div>
+            <div>
+              <p className="text-lg font-bold text-theme-text-primary leading-none">{templates.length}</p>
+              <p className="text-[10px] text-theme-text-secondary mt-1">Saved Templates</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Forms and Responses Layout */}
       {forms.length === 0 ? (
@@ -618,19 +716,31 @@ export default function FormsBuilderPage() {
                     <h4 className="text-xs font-bold text-theme-text-primary uppercase tracking-wider">
                       Received Submissions ({selectedSubmissions.length})
                     </h4>
-                    <div className="flex items-center gap-1 bg-theme-border/20 rounded-xl p-1">
-                      <button
-                        onClick={() => setViewMode('table')}
-                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1 ${viewMode === 'table' ? 'bg-accent text-white' : 'text-theme-text-secondary'}`}
-                      >
-                        <Table2 className="h-3 w-3" /> Table
-                      </button>
-                      <button
-                        onClick={() => setViewMode('charts')}
-                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1 ${viewMode === 'charts' ? 'bg-accent text-white' : 'text-theme-text-secondary'}`}
-                      >
-                        <BarChart3 className="h-3 w-3" /> Charts
-                      </button>
+                    <div className="flex items-center gap-2">
+                      {selectedSubmissions.length > 0 && (
+                        <button
+                          onClick={handleDownloadSubmissionsCsv}
+                          className="px-2.5 py-1 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary rounded-lg transition-all text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                          title="Download all responses as CSV"
+                        >
+                          <FileDown className="h-3.5 w-3.5" />
+                          CSV
+                        </button>
+                      )}
+                      <div className="flex items-center gap-1 bg-theme-border/20 rounded-xl p-1">
+                        <button
+                          onClick={() => setViewMode('table')}
+                          className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1 ${viewMode === 'table' ? 'bg-accent text-white' : 'text-theme-text-secondary'}`}
+                        >
+                          <Table2 className="h-3 w-3" /> Table
+                        </button>
+                        <button
+                          onClick={() => setViewMode('charts')}
+                          className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1 ${viewMode === 'charts' ? 'bg-accent text-white' : 'text-theme-text-secondary'}`}
+                        >
+                          <BarChart3 className="h-3 w-3" /> Charts
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -647,6 +757,9 @@ export default function FormsBuilderPage() {
                             {selectedForm.fields.map(f => (
                               <th key={f.id} className="pb-3 font-semibold">{f.label}</th>
                             ))}
+                            {selectedForm.sourceTemplateId === FEEDBACK_FORM_TEMPLATE_ID && (
+                              <th className="pb-3 font-semibold">Filled Copy</th>
+                            )}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-theme-border/20">
@@ -663,6 +776,17 @@ export default function FormsBuilderPage() {
                                   {String(sub.data[f.id] || sub.data[f.label] || '—')}
                                 </td>
                               ))}
+                              {selectedForm.sourceTemplateId === FEEDBACK_FORM_TEMPLATE_ID && (
+                                <td className="py-3 pr-3">
+                                  <button
+                                    onClick={() => handleDownloadFilledWord(sub.id)}
+                                    className="p-1.5 bg-blue-500/10 hover:bg-blue-500/20 rounded-lg text-blue-400 transition-all cursor-pointer"
+                                    title="Download filled feedback form (.docx)"
+                                  >
+                                    <FileText className="h-3.5 w-3.5" />
+                                  </button>
+                                </td>
+                              )}
                             </tr>
                           ))}
                         </tbody>
@@ -671,14 +795,75 @@ export default function FormsBuilderPage() {
                   ) : (
                     (() => {
                       const chartableFields = selectedForm.fields.filter(f => CHARTABLE_TYPES.includes(f.type));
-                      if (chartableFields.length === 0) {
-                        return (
-                          <div className="text-center py-12 text-theme-text-secondary text-xs bg-theme-border/5 rounded-xl border border-theme-border/20">
-                            This form has no scale, number, or choice questions to chart yet — open text answers can't be charted.
-                          </div>
-                        );
-                      }
+                      const scaleFields = selectedForm.fields.filter(f => f.type === 'scale');
+                      const scaleAverages = scaleFields
+                        .map(f => computeAverage(f, selectedSubmissions))
+                        .filter((v): v is number => v !== null);
+                      const overallAverage = scaleAverages.length > 0
+                        ? scaleAverages.reduce((a, b) => a + b, 0) / scaleAverages.length
+                        : null;
+                      const weekAgo = new Date();
+                      weekAgo.setDate(weekAgo.getDate() - 7);
+                      const thisWeekCount = selectedSubmissions.filter(s => {
+                        const d = new Date(s.submittedAt);
+                        return !isNaN(d.getTime()) && d >= weekAgo;
+                      }).length;
+                      const trendData = buildSubmissionsByDay(selectedSubmissions);
+
                       return (
+                        <div className="space-y-4">
+                          {/* Analytics stats row */}
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            <div className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl">
+                              <p className="text-lg font-bold text-theme-text-primary leading-none">{selectedSubmissions.length}</p>
+                              <p className="text-[10px] text-theme-text-secondary mt-1">Total Responses</p>
+                            </div>
+                            <div className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl">
+                              <p className="text-lg font-bold text-theme-text-primary leading-none">{thisWeekCount}</p>
+                              <p className="text-[10px] text-theme-text-secondary mt-1">This Week</p>
+                            </div>
+                            {overallAverage !== null && (
+                              <div className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl">
+                                <p className="text-lg font-bold text-accent leading-none">{overallAverage.toFixed(1)} / 5.0</p>
+                                <p className="text-[10px] text-theme-text-secondary mt-1">Overall Avg. Rating</p>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Submissions-over-time trend */}
+                          {trendData.length > 1 && (
+                            <div className="p-4 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2">
+                              <h5 className="text-xs font-bold text-theme-text-primary flex items-center gap-1.5">
+                                <TrendingUp className="h-3.5 w-3.5 text-accent" />
+                                Responses Over Time
+                              </h5>
+                              <div className="h-40 w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <AreaChart data={trendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                                    <XAxis dataKey="date" tick={{ fill: 'currentColor', fontSize: 9 }} />
+                                    <YAxis allowDecimals={false} tick={{ fill: 'currentColor', fontSize: 10 }} />
+                                    <Tooltip
+                                      formatter={(value: any) => [`${value} response${value === 1 ? '' : 's'}`, 'Responses']}
+                                      contentStyle={{
+                                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                                        borderColor: 'rgba(255,255,255,0.1)',
+                                        borderRadius: '12px',
+                                        fontSize: '11px'
+                                      }}
+                                    />
+                                    <Area type="monotone" dataKey="count" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.25} />
+                                  </AreaChart>
+                                </ResponsiveContainer>
+                              </div>
+                            </div>
+                          )}
+
+                          {chartableFields.length === 0 ? (
+                            <div className="text-center py-12 text-theme-text-secondary text-xs bg-theme-border/5 rounded-xl border border-theme-border/20">
+                              This form has no scale, number, or choice questions to chart yet — open text answers can't be charted.
+                            </div>
+                          ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {chartableFields.map(f => {
                             const isNumeric = f.type === 'scale' || f.type === 'number';
@@ -725,6 +910,8 @@ export default function FormsBuilderPage() {
                               </div>
                             );
                           })}
+                        </div>
+                          )}
                         </div>
                       );
                     })()

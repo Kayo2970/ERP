@@ -236,6 +236,16 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
                       <option key={opt} value={opt}>{opt}</option>
                     ))}
                   </select>
+                ) : field.type === 'checkbox' ? (
+                  <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(formData[field.id])}
+                      onChange={(e) => handleInputChange(field.id, e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-600 bg-slate-900/60 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-[11px]">Yes</span>
+                  </label>
                 ) : (
                   <input
                     type={field.type === 'email' ? 'email' : field.type === 'number' ? 'number' : 'text'}

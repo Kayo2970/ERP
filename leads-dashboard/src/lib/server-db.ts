@@ -36,6 +36,7 @@ import {
   initialSystemSettings,
   initialGuests,
   initialBudgets,
+  FEEDBACK_FORM_TEMPLATE_ID,
 } from './local-data';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -381,6 +382,45 @@ function ensureProductionRosterPruned(): Promise<void> {
   return productionRosterPrunePromise;
 }
 
+/**
+ * One-time, idempotent seed: the built-in Feedback Form Template only
+ * auto-appears via SEED_DB on a brand-new formTemplates.json (first boot
+ * for that specific collection). Any database that already existed before
+ * this template shipped needs it inserted directly — same shape as the
+ * other one-off corrections above. Runs once per boot; a permanent no-op
+ * once the template id is present.
+ */
+let feedbackFormTemplateSeedPromise: Promise<void> | null = null;
+function ensureFeedbackFormTemplateSeeded(): Promise<void> {
+  if (!feedbackFormTemplateSeedPromise) {
+    feedbackFormTemplateSeedPromise = (async () => {
+      const builtIn = SEED_DB.formTemplates.find((t: any) => t.id === FEEDBACK_FORM_TEMPLATE_ID);
+      if (!builtIn) return;
+      try {
+        const raw = await fs.readFile(collectionPath('formTemplates'), 'utf-8');
+        const parsed = JSON.parse(raw);
+        let jsonContent: any = parsed;
+        if (isEncryptedPayload(parsed)) {
+          try {
+            jsonContent = JSON.parse(decryptData(parsed));
+          } catch {
+            return;
+          }
+        }
+        if (!Array.isArray(jsonContent)) return;
+        if (jsonContent.some((t: any) => t?.id === FEEDBACK_FORM_TEMPLATE_ID)) return;
+        await writeCollectionFile('formTemplates', [builtIn, ...jsonContent]);
+      } catch (err: any) {
+        if (err?.code !== 'ENOENT') {
+          console.error('[server-db] Feedback Form Template seed check failed:', err);
+        }
+        // ENOENT: no file yet — readCollectionFile's first-boot seed path handles it.
+      }
+    })();
+  }
+  return feedbackFormTemplateSeedPromise;
+}
+
 async function migrateDesignFilesToDisk(): Promise<void> {
   let designs: any[];
   try {
@@ -454,6 +494,7 @@ async function readCollectionFile<T = any>(key: keyof DbSchema): Promise<T[]> {
   await ensureSubhadeepEmailFixed();
   await ensureStaleEmailsFixed();
   await ensureProductionRosterPruned();
+  await ensureFeedbackFormTemplateSeeded();
   try {
     const raw = await fs.readFile(collectionPath(key), 'utf-8');
     const parsed = JSON.parse(raw);
