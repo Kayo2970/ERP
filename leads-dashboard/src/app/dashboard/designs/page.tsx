@@ -1360,19 +1360,18 @@ export default function DesignPortalPage() {
 
       {/* Design Inspector & Proofreader Review Modal */}
       {showInspectorModal && selectedDesign && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
-          <div className="glass-panel bg-slate-900/95 dark:bg-[#0B1B2E]/95 bg-white/95 backdrop-blur-2xl border border-white/20 dark:border-white/15 rounded-2xl max-w-2xl w-full p-6 space-y-6 shadow-2xl relative">
-            <button
-              onClick={() => {
-                setShowInspectorModal(false);
-                setSelectedDesign(null);
-              }}
-              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            <div className="flex items-start justify-between gap-4 border-b border-border pb-4">
+        <div
+          onClick={() => {
+            setShowInspectorModal(false);
+            setSelectedDesign(null);
+          }}
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="glass-panel bg-slate-900/95 dark:bg-[#0B1B2E]/95 bg-white/95 backdrop-blur-2xl border border-white/20 dark:border-white/15 rounded-2xl max-w-2xl w-full p-6 space-y-6 shadow-2xl relative max-h-[90vh] overflow-y-auto flex flex-col"
+          >
+            <div className="sticky -top-6 -mx-6 -mt-6 p-6 bg-slate-900/95 dark:bg-[#0B1B2E]/95 bg-white/95 backdrop-blur-xl border-b border-border z-30 flex items-start justify-between gap-4 rounded-t-2xl">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-accent/10 text-accent border border-accent/20">
@@ -1385,13 +1384,27 @@ export default function DesignPortalPage() {
                 </p>
               </div>
 
-              <div className="text-right">
-                <span className="text-[11px] font-mono bg-muted px-2 py-1 rounded border border-border block">
-                  {(selectedDesign.fileSize / (1024 * 1024)).toFixed(2)} MB / 25 MB
-                </span>
-                <span className="text-[10px] text-muted-foreground block mt-1">
-                  30-Day Expiration: {selectedDesign.expiresAt.split('T')[0]}
-                </span>
+              <div className="flex items-center gap-3 shrink-0">
+                <div className="text-right hidden sm:block">
+                  <span className="text-[11px] font-mono bg-muted px-2 py-0.5 rounded border border-border inline-block">
+                    {(selectedDesign.fileSize / (1024 * 1024)).toFixed(2)} MB / 25 MB
+                  </span>
+                  <span className="text-[10px] text-muted-foreground block">
+                    Exp: {selectedDesign.expiresAt.split('T')[0]}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowInspectorModal(false);
+                    setSelectedDesign(null);
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold transition-all border border-border cursor-pointer shadow-sm"
+                  title="Close Inspector"
+                >
+                  <X className="h-4 w-4" />
+                  <span>Close</span>
+                </button>
               </div>
             </div>
 
@@ -1802,6 +1815,24 @@ export default function DesignPortalPage() {
                   Only a member with the designation of Design Head or Centre Head can approve or reject designs based on design style.
                 </div>
               )}
+            </div>
+
+            {/* Sticky Bottom Close Inspector Bar */}
+            <div className="sticky -bottom-6 -mx-6 -mb-6 p-4 bg-slate-900/95 dark:bg-[#0B1B2E]/95 bg-white/95 backdrop-blur-xl border-t border-border z-30 flex items-center justify-between rounded-b-2xl mt-6">
+              <span className="text-xs text-muted-foreground font-medium">
+                Design Inspection & Proofread Desk
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowInspectorModal(false);
+                  setSelectedDesign(null);
+                }}
+                className="px-5 py-2 rounded-xl bg-accent hover:bg-primary-light text-white font-semibold text-xs flex items-center gap-2 transition-all shadow-md shadow-accent/20 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+                <span>Close Inspector</span>
+              </button>
             </div>
           </div>
         </div>
