@@ -36,8 +36,8 @@ import {
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
-import { getAnnouncements, getTasks, getDesigns, getMembers, logAuditEvent, Member, syncWithServer, getSystemSettings } from '@/lib/local-data';
-import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isFinanceHead, canAccessGuestDirectory } from '@/lib/permissions';
+import { getAnnouncements, getTasks, getDesigns, getMembers, getBudgets, getReimbursements, getEvents, logAuditEvent, Member, syncWithServer, getSystemSettings } from '@/lib/local-data';
+import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isFinanceHead, canAccessGuestDirectory, canVerifyBudgetCentreHead, canDecideBudget, canVerifyReimbursementCentreHead, canApproveAsSectorHead, canApproveAsFinanceHead } from '@/lib/permissions';
 import { TermsModal } from '@/components/terms-modal';
 import { NotFoundScreen } from '@/components/not-found-screen';
 import { LoadingScreen } from '@/components/loading-screen';
@@ -182,7 +182,49 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         link: `/dashboard/tasks?highlight=${t.id}`,
       }));
 
-    return [...proofreadNotifs, ...recentAnnounce, ...recentTasks];
+    // Budget requests awaiting this user's stage-1 (Centre Head) or stage-2
+    // (Finance Head) action — mirrors the reimbursement notifications below.
+    const budgetNotifs = getBudgets()
+      .filter(b => b.status === 'Pending')
+      .filter(b => (!b.centreHeadVerified && canVerifyBudgetCentreHead(currentUser)) || (b.centreHeadVerified && canDecideBudget(currentUser, b)))
+      .map(b => ({
+        id: 'bud_' + b.id,
+        title: b.centreHeadVerified
+          ? `Budget awaiting your approval: ${b.eventName || b.month || b.financialYear || 'Request'}`
+          : `Budget awaiting your verification: ${b.eventName || b.month || b.financialYear || 'Request'}`,
+        time: `From ${b.submittedBy}`,
+        read: false,
+        link: `/dashboard/budget`,
+      }));
+
+    // Reimbursement claims awaiting this user's stage-1 or stage-2 action.
+    const reimbursementNotifs = getReimbursements()
+      .filter(r => {
+        if (r.status === 'Pending') return canVerifyReimbursementCentreHead(currentUser) || canApproveAsSectorHead(currentUser);
+        if (r.status === 'Verified by Centre Head' || r.status === 'Under Review') return canApproveAsFinanceHead(currentUser, r);
+        return false;
+      })
+      .map(r => ({
+        id: 'rem_' + r.id,
+        title: `Reimbursement awaiting your review: ${r.memberName} — ₹${Number(r.amount).toLocaleString()}`,
+        time: r.category,
+        read: false,
+        link: `/dashboard/reimbursements`,
+      }));
+
+    // Event create/edit requests routed to this user for approval.
+    const eventApprovalNotifs = getEvents()
+      .filter(e => (e.approvalStatus === 'pending_create' || e.approvalStatus === 'pending_edit'))
+      .filter(e => e.approverMemberId === currentUser.id || (e.approverType === 'CENTER_HEAD' && isCentreHead(currentUser)))
+      .map(e => ({
+        id: 'evt_' + e.id,
+        title: `Event ${e.approvalStatus === 'pending_create' ? 'creation' : 'edit'} awaiting approval: ${e.title}`,
+        time: `From ${e.submittedBy || 'a member'}`,
+        read: false,
+        link: `/dashboard/events`,
+      }));
+
+    return [...budgetNotifs, ...reimbursementNotifs, ...eventApprovalNotifs, ...proofreadNotifs, ...recentAnnounce, ...recentTasks];
   };
 
   // Initialize theme, user session, notifications, and server sync

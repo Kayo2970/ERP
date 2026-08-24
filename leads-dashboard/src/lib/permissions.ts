@@ -12,7 +12,7 @@
  * There is no session-scoped "current user" object here; every function takes the
  * user explicitly so it works the same in pages, modals, and background sync code.
  */
-import { Member, TaskItem, RatingItem, ReimbursementItem, GroupPolicy, EventItem, getMembers, getGroupPolicies, getAccessLevelSettings, canViewTask } from './local-data';
+import { Member, TaskItem, RatingItem, ReimbursementItem, BudgetItem, GroupPolicy, EventItem, getMembers, getGroupPolicies, getAccessLevelSettings, canViewTask } from './local-data';
 
 export type SessionUser = {
   id?: string;
@@ -329,6 +329,29 @@ export function canApproveAsFinanceHead(user: SessionUser, claim?: Reimbursement
   if (user.tier === 1 || isCentreHead(user)) return true;
   if (!claim) return true;
   return claim.centreHeadVerified === true || claim.status === 'Verified by Centre Head' || claim.status === 'Under Review';
+}
+
+/** Centre Head can propose budgets (annual + monthly breakdowns). */
+export function canSubmitBudget(user: SessionUser): boolean {
+  return isCentreHead(user);
+}
+
+/** Centre Head stage-1 verification permission for a Pending budget request. */
+export function canVerifyBudgetCentreHead(user: SessionUser): boolean {
+  return isCentreHead(user) || user?.tier === 1;
+}
+
+/**
+ * Finance Head stage-2 final decision on a budget request. Requires the
+ * Centre Head's stage-1 verification first, unless the Finance Head is also
+ * the Centre Head (or Super User) — same bypass shape as
+ * canApproveAsFinanceHead() for reimbursements.
+ */
+export function canDecideBudget(user: SessionUser, budget?: BudgetItem): boolean {
+  if (!user || !isFinanceHead(user)) return false;
+  if (user.tier === 1 || isCentreHead(user)) return true;
+  if (!budget) return true;
+  return budget.centreHeadVerified === true;
 }
 
 /** Announcement approval gatekeeper — Centre Head or GG Campus Events Head (Tier 2.5). */
