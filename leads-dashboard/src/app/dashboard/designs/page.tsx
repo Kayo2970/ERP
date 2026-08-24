@@ -23,7 +23,8 @@ import {
   Sparkles,
   CheckSquare,
   Star,
-  Plus
+  Plus,
+  Edit2
 } from 'lucide-react';
 import {
   getDesigns,
@@ -36,6 +37,9 @@ import {
   getEvents,
   addEvent,
   getTasks,
+  submitDesignCaptions,
+  reviewDesignCaptions,
+  completeDesignPosting,
   DesignSubmissionItem,
   Member,
   EventItem,
@@ -285,26 +289,62 @@ export default function DesignPortalPage() {
   const [isScanningReplace, setIsScanningReplace] = useState<boolean>(false);
   const [replaceScanError, setReplaceScanError] = useState<string>('');
 
+  // Social Media Workflow form state inside Inspector Modal
+  const [instaCaptionInput, setInstaCaptionInput] = useState('');
+  const [linkedinCaptionInput, setLinkedinCaptionInput] = useState('');
+  const [captionReviewApproved, setCaptionReviewApproved] = useState(true);
+  const [captionReviewCommentsInput, setCaptionReviewCommentsInput] = useState('');
+
   // Deep link from a notification (?highlight=<designId>) — auto-open its Inspector once
   const [highlightDesignId, setHighlightDesignId] = useState<string | null>(null);
   const [hasOpenedHighlight, setHasOpenedHighlight] = useState(false);
 
   const openInspector = (design: DesignSubmissionItem) => {
     setSelectedDesign(design);
-    // Pre-fill both decision forms with this design's actual current state —
-    // previously these stayed at whatever was left over from the last design's
-    // Inspector session (or the hardcoded defaults), so reopening an already
-    // Changes-Requested/Style-Rejected design silently showed "Approved"
-    // pre-selected. A reviewer changing their mind needs to see what's
-    // actually on record before deliberately flipping it, not a stale guess.
     setReviewComments(design.review?.comments || '');
     setReviewStatus(design.review?.status === 'Changes Requested' ? 'Changes Requested' : 'Proofread Approved');
     setStyleFeedback(design.styleFeedback || '');
     setStyleStatus(design.styleStatus === 'Style Rejected' ? 'Style Rejected' : 'Style Approved');
+    setInstaCaptionInput(design.draftInstagramCaption || design.approvedInstagramCaption || '');
+    setLinkedinCaptionInput(design.draftLinkedinCaption || design.approvedLinkedinCaption || '');
+    setCaptionReviewApproved(true);
+    setCaptionReviewCommentsInput(design.captionReviewComments || '');
     setShowExtractedText(false);
     setReplaceOcrScanResult(null);
     setReplaceScanError('');
     setShowInspectorModal(true);
+  };
+
+  const handleSubmitCaptions = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedDesign || !user || !instaCaptionInput.trim()) return;
+    const updated = submitDesignCaptions(selectedDesign.id, instaCaptionInput.trim(), linkedinCaptionInput.trim(), user.name);
+    if (updated) {
+      setSelectedDesign(updated);
+      setDesigns(getDesigns());
+      setTasks(getTasks());
+    }
+  };
+
+  const handleReviewCaptions = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedDesign || !user) return;
+    const updated = reviewDesignCaptions(selectedDesign.id, captionReviewApproved, captionReviewCommentsInput.trim(), user.name);
+    if (updated) {
+      setSelectedDesign(updated);
+      setDesigns(getDesigns());
+      setTasks(getTasks());
+    }
+  };
+
+  const handleCompletePosting = () => {
+    if (!selectedDesign || !user) return;
+    const updated = completeDesignPosting(selectedDesign.id, user.name);
+    if (updated) {
+      setSelectedDesign(updated);
+      setDesigns(getDesigns());
+      setTasks(getTasks());
+    }
   };
 
   const handleSaveStyleReview = (e: React.FormEvent) => {
@@ -1545,69 +1585,220 @@ export default function DesignPortalPage() {
               </div>
             )}
 
-            {/* Social Media Posting Follow-Up Chain Status Card */}
-            {(selectedDesign.linkedInstagramTaskId || selectedDesign.linkedLinkedinTaskId) && (
-              <div className="bg-slate-900/60 dark:bg-slate-900/80 bg-slate-50 border border-border p-4 rounded-xl space-y-3 text-xs">
+            {/* Automated 3-Stage Social Media Workflow Tracker Card */}
+            {(selectedDesign.styleStatus === 'Style Approved' || selectedDesign.workflowStage) && (
+              <div className="bg-slate-900/60 dark:bg-slate-900/80 bg-slate-50 border border-accent/30 p-5 rounded-2xl space-y-4 text-xs">
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-foreground flex items-center gap-1.5 text-sm">
-                    <Send className="h-4 w-4 text-accent" />
-                    Social Media Posting Follow-Up Chain
+                  <span className="font-bold text-foreground flex items-center gap-2 text-sm">
+                    <Send className="h-4.5 w-4.5 text-accent" />
+                    Automated 3-Stage Social Media Workflow
                   </span>
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/20">
-                    Automated Tasks Assigned
+                  <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                    selectedDesign.workflowStage === 'completed'
+                      ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/20'
+                      : 'bg-accent/15 text-accent border border-accent/20'
+                  }`}>
+                    {selectedDesign.workflowStage === 'completed' ? '✨ Workflow Completed' : `Stage: ${selectedDesign.workflowStage || 'caption_required'}`}
                   </span>
                 </div>
-                <p className="text-muted-foreground text-[11px]">
-                  Upon design approval, follow-up social media posting tasks were automatically created and assigned to <strong className="text-foreground">{selectedDesign.designerName}</strong>.
-                </p>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  {/* Instagram Task Status */}
-                  {selectedDesign.linkedInstagramTaskId && (() => {
-                    const instaTask = tasks.find(t => t.id === selectedDesign.linkedInstagramTaskId);
-                    const isDone = instaTask?.status === 'Completed';
-                    return (
-                      <div className={`p-3 rounded-lg border flex items-center justify-between ${
-                        isDone ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-amber-500/10 border-amber-500/30'
-                      }`}>
-                        <div className="space-y-0.5">
-                          <span className="font-bold text-foreground text-xs block">📸 Instagram Posting</span>
-                          <span className="text-[10px] text-muted-foreground block">
-                            {isDone ? 'Posted & Marked Completed' : 'Pending Posting by Designer'}
-                          </span>
-                        </div>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          isDone ? 'bg-emerald-500 text-white' : 'bg-amber-500 text-black'
-                        }`}>
-                          {instaTask?.status || 'In Progress'}
-                        </span>
-                      </div>
-                    );
-                  })()}
-
-                  {/* LinkedIn Task Status */}
-                  {selectedDesign.linkedLinkedinTaskId && (() => {
-                    const linkedinTask = tasks.find(t => t.id === selectedDesign.linkedLinkedinTaskId);
-                    const isDone = linkedinTask?.status === 'Completed';
-                    return (
-                      <div className={`p-3 rounded-lg border flex items-center justify-between ${
-                        isDone ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-amber-500/10 border-amber-500/30'
-                      }`}>
-                        <div className="space-y-0.5">
-                          <span className="font-bold text-foreground text-xs block">💼 LinkedIn Posting</span>
-                          <span className="text-[10px] text-muted-foreground block">
-                            {isDone ? 'Posted & Marked Completed' : 'Pending Posting by Designer'}
-                          </span>
-                        </div>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          isDone ? 'bg-emerald-500 text-white' : 'bg-amber-500 text-black'
-                        }`}>
-                          {linkedinTask?.status || 'In Progress'}
-                        </span>
-                      </div>
-                    );
-                  })()}
+                {/* Stepper Progress Bar */}
+                <div className="grid grid-cols-3 gap-2 text-center text-[11px] pt-1">
+                  <div className={`p-2 rounded-xl border font-semibold ${
+                    selectedDesign.workflowStage === 'caption_required' || !selectedDesign.workflowStage
+                      ? 'bg-accent text-white border-accent'
+                      : selectedDesign.workflowStage === 'caption_approval' || selectedDesign.workflowStage === 'posting_required' || selectedDesign.workflowStage === 'completed'
+                      ? 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30'
+                      : 'bg-muted/40 text-muted-foreground border-border'
+                  }`}>
+                    1. Draft Captions
+                  </div>
+                  <div className={`p-2 rounded-xl border font-semibold ${
+                    selectedDesign.workflowStage === 'caption_approval'
+                      ? 'bg-accent text-white border-accent'
+                      : selectedDesign.workflowStage === 'posting_required' || selectedDesign.workflowStage === 'completed'
+                      ? 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30'
+                      : 'bg-muted/40 text-muted-foreground border-border'
+                  }`}>
+                    2. Design Head Approval
+                  </div>
+                  <div className={`p-2 rounded-xl border font-semibold ${
+                    selectedDesign.workflowStage === 'posting_required'
+                      ? 'bg-accent text-white border-accent'
+                      : selectedDesign.workflowStage === 'completed'
+                      ? 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30'
+                      : 'bg-muted/40 text-muted-foreground border-border'
+                  }`}>
+                    3. Post on Social Media
+                  </div>
                 </div>
+
+                {/* Stage 1: Designer Drafts Captions */}
+                {(!selectedDesign.workflowStage || selectedDesign.workflowStage === 'caption_required') && (
+                  <form onSubmit={handleSubmitCaptions} className="space-y-3 bg-background/50 p-4 rounded-xl border border-border">
+                    <p className="font-semibold text-foreground flex items-center gap-1.5">
+                      <Edit2 className="h-3.5 w-3.5 text-accent" />
+                      Stage 1: Submit Instagram & LinkedIn Captions (Designer Task)
+                    </p>
+                    {selectedDesign.captionReviewComments && (
+                      <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-lg text-[11px]">
+                        <strong>Design Head Revision Notes:</strong> {selectedDesign.captionReviewComments}
+                      </div>
+                    )}
+                    <div className="space-y-1">
+                      <label className="font-medium text-foreground">Instagram Caption *</label>
+                      <textarea
+                        rows={2}
+                        required
+                        placeholder="Write Instagram caption..."
+                        value={instaCaptionInput}
+                        onChange={e => setInstaCaptionInput(e.target.value)}
+                        className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-accent"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="font-medium text-foreground">LinkedIn Caption</label>
+                      <textarea
+                        rows={2}
+                        placeholder="Write LinkedIn caption (optional if same as IG)..."
+                        value={linkedinCaptionInput}
+                        onChange={e => setLinkedinCaptionInput(e.target.value)}
+                        className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-accent"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      className="w-full py-2.5 rounded-xl bg-accent text-white font-semibold text-xs flex items-center justify-center gap-1.5 hover:bg-primary-light transition-all shadow-md shadow-accent/20 cursor-pointer"
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                      Submit Captions for Design Center Head Approval
+                    </button>
+                  </form>
+                )}
+
+                {/* Stage 2: Design Center Head Approves Captions */}
+                {selectedDesign.workflowStage === 'caption_approval' && (
+                  <div className="space-y-3 bg-background/50 p-4 rounded-xl border border-border">
+                    <p className="font-semibold text-foreground flex items-center gap-1.5">
+                      <UserCheck className="h-3.5 w-3.5 text-accent" />
+                      Stage 2: Review Draft Captions (Design Center Head Task)
+                    </p>
+                    <div className="space-y-2 text-[11px] bg-muted/30 p-3 rounded-lg border border-border">
+                      <div>
+                        <span className="font-bold text-foreground">Draft Instagram Caption:</span>
+                        <p className="text-muted-foreground whitespace-pre-wrap mt-0.5">{selectedDesign.draftInstagramCaption || 'N/A'}</p>
+                      </div>
+                      {selectedDesign.draftLinkedinCaption && (
+                        <div>
+                          <span className="font-bold text-foreground">Draft LinkedIn Caption:</span>
+                          <p className="text-muted-foreground whitespace-pre-wrap mt-0.5">{selectedDesign.draftLinkedinCaption}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {(isDesignHead(user) || isCentreHead(user) || (user && user.tier <= 3)) ? (
+                      <form onSubmit={handleReviewCaptions} className="space-y-3 pt-1">
+                        <div className="flex items-center gap-4">
+                          <label className="flex items-center gap-2 cursor-pointer font-medium">
+                            <input
+                              type="radio"
+                              name="captionReviewApproved"
+                              checked={captionReviewApproved}
+                              onChange={() => setCaptionReviewApproved(true)}
+                              className="text-accent focus:ring-accent"
+                            />
+                            <span className="text-emerald-500 font-semibold flex items-center gap-1">
+                              <CheckCircle2 className="h-3.5 w-3.5" /> Approve Captions
+                            </span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer font-medium">
+                            <input
+                              type="radio"
+                              name="captionReviewApproved"
+                              checked={!captionReviewApproved}
+                              onChange={() => setCaptionReviewApproved(false)}
+                              className="text-accent focus:ring-accent"
+                            />
+                            <span className="text-rose-500 font-semibold flex items-center gap-1">
+                              <AlertCircle className="h-3.5 w-3.5" /> Request Caption Revision
+                            </span>
+                          </label>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="font-medium text-foreground">Review Comments / Revision Notes</label>
+                          <textarea
+                            rows={2}
+                            placeholder="Feedback or guidelines for the designer..."
+                            value={captionReviewCommentsInput}
+                            onChange={e => setCaptionReviewCommentsInput(e.target.value)}
+                            className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-accent"
+                          />
+                        </div>
+                        <button
+                          type="submit"
+                          className="w-full py-2.5 rounded-xl bg-accent text-white font-semibold text-xs flex items-center justify-center gap-1.5 hover:bg-primary-light transition-all shadow-md shadow-accent/20 cursor-pointer"
+                        >
+                          <Sparkles className="h-3.5 w-3.5" />
+                          Submit Caption Review Decision
+                        </button>
+                      </form>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground italic">
+                        Draft captions submitted. Pending evaluation by Design Center Head / Centre Head.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Stage 3: Social Media Posting Task */}
+                {selectedDesign.workflowStage === 'posting_required' && (
+                  <div className="space-y-3 bg-background/50 p-4 rounded-xl border border-border">
+                    <p className="font-semibold text-foreground flex items-center gap-1.5">
+                      <Send className="h-3.5 w-3.5 text-accent" />
+                      Stage 3: Social Media Posting Task (Designer Task)
+                    </p>
+                    <div className="space-y-2 text-[11px] bg-emerald-500/10 p-3 rounded-lg border border-emerald-500/20 text-foreground">
+                      <div>
+                        <span className="font-bold text-emerald-500">Approved Instagram Caption:</span>
+                        <p className="text-muted-foreground whitespace-pre-wrap mt-0.5">{selectedDesign.approvedInstagramCaption}</p>
+                      </div>
+                      {selectedDesign.approvedLinkedinCaption && (
+                        <div>
+                          <span className="font-bold text-emerald-500">Approved LinkedIn Caption:</span>
+                          <p className="text-muted-foreground whitespace-pre-wrap mt-0.5">{selectedDesign.approvedLinkedinCaption}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleCompletePosting}
+                      className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      Task Done: Mark Posted on Instagram & LinkedIn
+                    </button>
+                  </div>
+                )}
+
+                {/* Stage Completed */}
+                {selectedDesign.workflowStage === 'completed' && (
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl space-y-2 text-xs">
+                    <div className="flex items-center gap-2 text-emerald-500 font-bold">
+                      <CheckCircle2 className="h-4 w-4" />
+                      Social Media Workflow Completed
+                    </div>
+                    <p className="text-muted-foreground text-[11px]">
+                      The design and approved captions have been successfully verified and posted on Instagram & LinkedIn.
+                    </p>
+                    <div className="pt-2 text-[11px] space-y-1">
+                      <span className="font-semibold text-foreground">Approved Captions:</span>
+                      <p className="text-muted-foreground bg-background/50 p-2.5 rounded-lg border border-border whitespace-pre-wrap">
+                        {selectedDesign.approvedInstagramCaption}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

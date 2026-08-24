@@ -133,6 +133,12 @@ export interface TaskItem {
   // Design Heads evaluation rights on it (see permissions.ts) without
   // relying on a fragile title-string match.
   isDesignDeliverable?: boolean;
+  workflowType?: 'design_caption_draft' | 'design_caption_review' | 'design_social_posting';
+  designId?: string;
+  draftInstagramCaption?: string;
+  draftLinkedinCaption?: string;
+  approvedInstagramCaption?: string;
+  approvedLinkedinCaption?: string;
 }
 
 export interface RatingItem {
@@ -315,6 +321,16 @@ export interface DesignSubmissionItem {
   linkedTaskId?: string;
   linkedInstagramTaskId?: string;
   linkedLinkedinTaskId?: string;
+  workflowStage?: 'caption_required' | 'caption_approval' | 'posting_required' | 'completed';
+  captionTaskId?: string;
+  captionApprovalTaskId?: string;
+  postingTaskId?: string;
+  draftInstagramCaption?: string;
+  draftLinkedinCaption?: string;
+  approvedInstagramCaption?: string;
+  approvedLinkedinCaption?: string;
+  captionStatus?: 'pending_submission' | 'pending_approval' | 'approved' | 'changes_requested';
+  captionReviewComments?: string;
   isSample?: boolean;
   // Optional automated OCR + spell-check pass run client-side at upload time
   // (see /api/designs/ocr-scan). Purely advisory — never validated or
@@ -1254,6 +1270,7 @@ export function saveTasks(tasks: TaskItem[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_tasks', JSON.stringify(tasks));
   markLocalWrite('leads_tasks');
+  window.dispatchEvent(new CustomEvent('leads-data-sync'));
 }
 
 export function addTask(task: Omit<TaskItem, 'id' | 'status'> & { status?: TaskItem['status'] }): TaskItem {
@@ -2173,6 +2190,7 @@ export function saveDesigns(designs: DesignSubmissionItem[]): void {
     });
     localStorage.setItem('leads_designs', JSON.stringify(cleaned));
     markLocalWrite('leads_designs');
+    window.dispatchEvent(new CustomEvent('leads-data-sync'));
   } catch (e) {
     console.warn('[saveDesigns] Local storage quota exceeded or unavailable:', e);
   }
@@ -2309,6 +2327,32 @@ function syncDesignTask(item: DesignSubmissionItem, reviewerName: string): Desig
         updatedItem.linkedLinkedinTaskId = linkedinTask.id;
       }
     }
+
+    // Stage 1: Initiate Caption Requirement Task for Designer
+    if (!updatedItem.workflowStage || updatedItem.workflowStage === 'caption_required') {
+      if (!updatedItem.captionTaskId) {
+        const dueDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const task1 = addTask({
+          title: `[Caption Required] Draft Captions: ${updatedItem.title}`,
+          event: updatedItem.eventName || undefined,
+          eventId: updatedItem.eventId || undefined,
+          assignee: updatedItem.designerName,
+          assigneeId: updatedItem.designerId,
+          assigneeEmail: updatedItem.designerEmail,
+          assigneeType: 'individual',
+          dueDate,
+          status: 'In Progress',
+          creatorName: reviewerName,
+          isDesignDeliverable: true,
+          workflowType: 'design_caption_draft',
+          designId: updatedItem.id,
+        });
+        updatedItem.workflowStage = 'caption_required';
+        updatedItem.captionTaskId = task1.id;
+        updatedItem.captionStatus = 'pending_submission';
+      }
+    }
+
     return updatedItem;
   } else if (updatedItem.linkedTaskId) {
     // If a previously approved design is no longer fully finalized (e.g. proofreader requested changes or style rejected),
@@ -2320,6 +2364,142 @@ function syncDesignTask(item: DesignSubmissionItem, reviewerName: string): Desig
   }
 
   return updatedItem;
+}
+
+export function submitDesignCaptions(designId: string, instaCaption: string, linkedinCaption: string, actorName: string): DesignSubmissionItem | null {
+  const designs = getDesigns();
+  const idx = designs.findIndex(d => d.id === designId);
+  if (idx === -1) return null;
+
+  const design = designs[idx];
+
+  // Complete Stage 1 task
+  if (design.captionTaskId) {
+    updateTaskStatus(design.captionTaskId, 'Completed', actorName);
+  }
+
+  const dueDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  const members = getMembers();
+  const designHead = members.find(m => (m.role || '').toLowerCase().includes('design head') || m.tier === 2) || members.find(m => m.tier <= 2);
+
+  const task2 = addTask({
+    title: `[Caption Approval] Review Captions: ${design.title}`,
+    event: design.eventName || undefined,
+    eventId: design.eventId || undefined,
+    assignee: designHead ? designHead.name : 'Design Center Head',
+    assigneeId: designHead?.id,
+    assigneeEmail: designHead?.email,
+    assigneeType: 'individual',
+    dueDate,
+    status: 'In Progress',
+    creatorName: actorName,
+    isDesignDeliverable: true,
+    workflowType: 'design_caption_review',
+    designId: design.id,
+    draftInstagramCaption: instaCaption,
+    draftLinkedinCaption: linkedinCaption,
+  });
+
+  design.draftInstagramCaption = instaCaption;
+  design.draftLinkedinCaption = linkedinCaption;
+  design.workflowStage = 'caption_approval';
+  design.captionApprovalTaskId = task2.id;
+  design.captionStatus = 'pending_approval';
+
+  designs[idx] = design;
+  saveDesigns(designs);
+  serverPatch('/api/designs', design.id, design);
+  logAuditEvent('DESIGN_CAPTIONS_SUBMITTED', actorName, `Submitted draft captions for design "${design.title}"`);
+  return design;
+}
+
+export function reviewDesignCaptions(designId: string, approved: boolean, comments: string, actorName: string): DesignSubmissionItem | null {
+  const designs = getDesigns();
+  const idx = designs.findIndex(d => d.id === designId);
+  if (idx === -1) return null;
+
+  const design = designs[idx];
+
+  // Complete Stage 2 task
+  if (design.captionApprovalTaskId) {
+    updateTaskStatus(design.captionApprovalTaskId, 'Completed', actorName);
+  }
+
+  if (approved) {
+    const dueDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const task3 = addTask({
+      title: `[Social Media Posting] Post on Instagram & LinkedIn: ${design.title}`,
+      event: design.eventName || undefined,
+      eventId: design.eventId || undefined,
+      assignee: design.designerName,
+      assigneeId: design.designerId,
+      assigneeEmail: design.designerEmail,
+      assigneeType: 'individual',
+      dueDate,
+      status: 'In Progress',
+      creatorName: actorName,
+      isDesignDeliverable: true,
+      workflowType: 'design_social_posting',
+      designId: design.id,
+      approvedInstagramCaption: design.draftInstagramCaption,
+      approvedLinkedinCaption: design.draftLinkedinCaption,
+    });
+
+    design.approvedInstagramCaption = design.draftInstagramCaption;
+    design.approvedLinkedinCaption = design.draftLinkedinCaption;
+    design.workflowStage = 'posting_required';
+    design.postingTaskId = task3.id;
+    design.captionStatus = 'approved';
+    design.captionReviewComments = comments;
+  } else {
+    // Rejected -> re-open Stage 1 task for designer
+    const dueDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const task1 = addTask({
+      title: `[Caption Revision] Draft Captions: ${design.title}`,
+      event: design.eventName || undefined,
+      eventId: design.eventId || undefined,
+      assignee: design.designerName,
+      assigneeId: design.designerId,
+      assigneeEmail: design.designerEmail,
+      assigneeType: 'individual',
+      dueDate,
+      status: 'In Progress',
+      creatorName: actorName,
+      isDesignDeliverable: true,
+      workflowType: 'design_caption_draft',
+      designId: design.id,
+    });
+
+    design.workflowStage = 'caption_required';
+    design.captionTaskId = task1.id;
+    design.captionStatus = 'changes_requested';
+    design.captionReviewComments = comments;
+  }
+
+  designs[idx] = design;
+  saveDesigns(designs);
+  serverPatch('/api/designs', design.id, design);
+  logAuditEvent('DESIGN_CAPTIONS_REVIEWED', actorName, `${approved ? 'Approved' : 'Requested changes for'} captions on design "${design.title}"`);
+  return design;
+}
+
+export function completeDesignPosting(designId: string, actorName: string): DesignSubmissionItem | null {
+  const designs = getDesigns();
+  const idx = designs.findIndex(d => d.id === designId);
+  if (idx === -1) return null;
+
+  const design = designs[idx];
+  if (design.postingTaskId) {
+    updateTaskStatus(design.postingTaskId, 'Completed', actorName);
+  }
+
+  design.workflowStage = 'completed';
+  designs[idx] = design;
+  saveDesigns(designs);
+  serverPatch('/api/designs', design.id, design);
+  logAuditEvent('DESIGN_POSTING_COMPLETED', actorName, `Completed social media posting for design "${design.title}"`);
+  return design;
 }
 
 export function updateDesignReview(
