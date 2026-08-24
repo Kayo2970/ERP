@@ -212,22 +212,10 @@ export interface BudgetLineItem {
   variance?: number;
 }
 
-export interface AcademicYearBudget {
-  id: string;
-  academicYear: string; // e.g. "2025-2026"
-  totalProposedAmount: number;
-  status: 'Pending' | 'Approved' | 'Rejected';
-  submittedBy: string;
-  submittedByEmail?: string;
-  submittedAt: string;
-  decidedBy?: string;
-  decidedAt?: string;
-  decisionNotes?: string;
-}
-
 export interface BudgetItem {
   id: string;
-  academicYear?: string;
+  // Indian financial year, 'YYYY-YYYY' (Apr 1 - Mar 31), e.g. "2026-2027"
+  financialYear?: string;
   type: 'annual' | 'event' | 'monthly';
   eventId?: string;  // set when type === 'event'
   eventName?: string;
@@ -1075,12 +1063,17 @@ export function updateEvent(id: string, updates: Partial<EventItem>, actorName: 
   const idx = events.findIndex(e => e.id === id);
   if (idx === -1) return null;
 
+  const dateChanged =
+    ('startDate' in updates && updates.startDate !== events[idx].startDate) ||
+    ('datesTBD' in updates && updates.datesTBD !== events[idx].datesTBD);
+
   events[idx] = { ...events[idx], ...updates };
   saveEvents(events);
   // Send the full merged event, not just the diff, so a server-side upsert (a
   // client-only sample event that was never POSTed) creates a complete record.
   serverPatch('/api/events', id, events[idx]);
   logAuditEvent('EVENT_UPDATED', actorName, `Updated event: ${events[idx].title}`);
+  if (dateChanged) syncBudgetLineItemsForEvent(id);
   return events[idx];
 }
 
@@ -1866,6 +1859,100 @@ export function updateBudget(id: string, updates: Partial<BudgetItem>, actorName
     `Edited a ₹${current[idx].amount.toLocaleString()} budget request${wasApproved ? ' that was previously Approved — now pending re-approval' : ''}`
   );
   return current[idx];
+}
+
+// Indian financial year runs Apr 1 - Mar 31. Month index 0 (Jan) - 11 (Dec).
+function getFinancialYearForDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  const y = d.getFullYear();
+  const startYear = d.getMonth() >= 3 ? y : y - 1; // Apr(3)-Dec -> this year; Jan-Mar -> previous year
+  return `${startYear}-${startYear + 1}`;
+}
+
+function getMonthKeyForDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+export function getCurrentFinancialYear(): string {
+  return getFinancialYearForDate(new Date().toISOString());
+}
+
+/**
+ * When a TBD event's date is set (or an already-dated event's date moves to
+ * a different month), any budget line item already planned against it needs
+ * to move out of its old monthly budget and into the one matching the
+ * event's real date, so monthly/annual totals keep reflecting where the
+ * money is actually going. Approved months whose composition changes this
+ * way are reset to Pending, mirroring updateBudget()'s "edited budgets need
+ * re-approval" rule.
+ */
+export function syncBudgetLineItemsForEvent(eventId: string): void {
+  const event = getEventById(eventId);
+  if (!event || event.datesTBD || !event.startDate) return; // no real date to bucket by yet
+
+  const targetMonth = getMonthKeyForDate(event.startDate);
+  const targetFY = getFinancialYearForDate(event.startDate);
+  const budgets = getBudgets();
+  const touchedIds = new Set<string>();
+  const pulled: BudgetLineItem[] = [];
+
+  for (const b of budgets) {
+    if (b.type !== 'monthly' || b.month === targetMonth || !b.lineItems?.length) continue;
+    const matching = b.lineItems.filter(li => li.eventId === eventId);
+    if (!matching.length) continue;
+
+    b.lineItems = b.lineItems.filter(li => li.eventId !== eventId);
+    b.amount = b.lineItems.reduce((s, li) => s + (li.amount || li.proposedAmount || 0), 0);
+    b.proposedAmount = b.amount;
+    if (b.status === 'Approved') {
+      b.status = 'Pending';
+      b.decidedBy = undefined;
+      b.decidedAt = undefined;
+      b.decisionNotes = `Auto-reset to Pending: "${event.title}" moved out after its event date changed.`;
+    }
+    pulled.push(...matching);
+    touchedIds.add(b.id);
+  }
+
+  if (!pulled.length) return; // nothing was planned against this event yet
+
+  let target = budgets.find(b => b.type === 'monthly' && b.month === targetMonth);
+  if (!target) {
+    target = {
+      id: 'bud_' + Date.now() + '_auto',
+      type: 'monthly',
+      financialYear: targetFY,
+      month: targetMonth,
+      amount: 0,
+      proposedAmount: 0,
+      lineItems: [],
+      status: 'Pending',
+      submittedBy: 'System (Auto-Recalculated)',
+      submittedAt: new Date().toISOString().split('T')[0],
+    };
+    budgets.unshift(target);
+  } else if (target.status === 'Approved') {
+    target.status = 'Pending';
+    target.decidedBy = undefined;
+    target.decidedAt = undefined;
+    target.decisionNotes = `Auto-reset to Pending: "${event.title}" moved in after its event date changed.`;
+  }
+  target.lineItems = [...(target.lineItems || []), ...pulled];
+  target.amount = target.lineItems.reduce((s, li) => s + (li.amount || li.proposedAmount || 0), 0);
+  target.proposedAmount = target.amount;
+  touchedIds.add(target.id);
+
+  saveBudgets(budgets);
+  touchedIds.forEach(id => {
+    const b = budgets.find(x => x.id === id);
+    if (b) serverPost('/api/budgets', b); // POST upserts by id server-side
+  });
+  logAuditEvent(
+    'BUDGET_LINE_ITEM_RECALCULATED',
+    'System',
+    `Recalculated budget for "${event.title}": moved to ${targetMonth} (FY ${targetFY}) following its event date update.`
+  );
 }
 
 export function verifyReimbursementByCentreHead(id: string, reviewerName: string): ReimbursementItem | null {

@@ -33,15 +33,33 @@ import {
   getEvents,
   addEvent,
   getReimbursements,
+  getTasks,
+  getCurrentFinancialYear,
   BudgetItem,
   BudgetLineItem,
   EventItem,
   ReimbursementItem,
+  TaskItem,
 } from '@/lib/local-data';
 import { isCentreHead, isFinanceHead, getEventApprovalRequirement } from '@/lib/permissions';
 import { EmptyState } from '@/components/ui/empty-state';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+} from 'recharts';
 
-const ACADEMIC_YEARS = ['2025-2026', '2026-2027', '2027-2028'];
+const CURRENT_FY = getCurrentFinancialYear();
+const CURRENT_FY_START = parseInt(CURRENT_FY.split('-')[0], 10);
+// One FY back, current, and two ahead for forward planning.
+const FINANCIAL_YEARS = [-1, 0, 1, 2].map((offset) => `${CURRENT_FY_START + offset}-${CURRENT_FY_START + offset + 1}`);
+
+const CHART_COLORS = ['#2E75B6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316', '#6366F1'];
 
 const MONTH_NAMES = [
   'April', 'May', 'June', 'July', 'August', 'September',
@@ -59,9 +77,12 @@ export default function BudgetPage() {
   const [budgets, setBudgets] = useState<BudgetItem[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [reimbursements, setReimbursements] = useState<ReimbursementItem[]>([]);
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [expandedLineItems, setExpandedLineItems] = useState<Set<string>>(new Set());
+  const [eventChartScope, setEventChartScope] = useState<'month' | 'year'>('year');
 
-  const [selectedAcademicYear, setSelectedAcademicYear] = useState('2025-2026');
-  const [selectedMonthIndex, setSelectedMonthIndex] = useState<number | null>(0); // 0 = April (Start of Academic Year)
+  const [selectedFinancialYear, setSelectedFinancialYear] = useState(CURRENT_FY);
+  const [selectedMonthIndex, setSelectedMonthIndex] = useState<number | null>(0); // 0 = April (Start of Financial Year)
 
   // Annual Budget Proposal Modal
   const [isAnnualModalOpen, setIsAnnualModalOpen] = useState(false);
@@ -118,6 +139,7 @@ export default function BudgetPage() {
       setBudgets(getBudgets());
       setEvents(getEvents());
       setReimbursements(getReimbursements());
+      setTasks(getTasks());
     };
     refresh();
     setUserHydrated(true);
@@ -138,9 +160,9 @@ export default function BudgetPage() {
   const canSubmit = isCentreHead(user);
   const canDecide = isFinanceHead(user);
 
-  // Annual Academic Year Budget Calculation
+  // Annual Financial Year Budget Calculation
   const annualBudgetItem = budgets.find(
-    (b) => b.type === 'annual' && (b.academicYear === selectedAcademicYear || !b.academicYear)
+    (b) => b.type === 'annual' && (b.financialYear === selectedFinancialYear || !b.financialYear)
   );
 
   const annualApprovedAmount = annualBudgetItem && annualBudgetItem.status === 'Approved'
@@ -153,11 +175,22 @@ export default function BudgetPage() {
 
   // Monthly Allocations & Actual Reimbursement Expenses
   const getMonthKey = (mIdx: number) => {
-    const yearStart = parseInt(selectedAcademicYear.split('-')[0], 10);
+    const yearStart = parseInt(selectedFinancialYear.split('-')[0], 10);
     const year = mIdx < 9 ? yearStart : yearStart + 1; // April(0) to Dec(8) = yearStart, Jan(9) to Mar(11) = yearStart + 1
     const monthNum = mIdx < 9 ? mIdx + 4 : mIdx - 8;
     return `${year}-${String(monthNum).padStart(2, '0')}`;
   };
+
+  // Single source of truth for a line item's actual spend: the sum of
+  // Approved reimbursements filed against its linked event. Used for the
+  // per-line-item table AND every monthly/annual rollup below, so a month's
+  // "actual" total always matches what its own line items show.
+  const getLineItemActual = (li: BudgetLineItem) =>
+    li.eventId
+      ? reimbursements
+          .filter((r) => r.eventId === li.eventId && r.status === 'Approved')
+          .reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
+      : 0;
 
   // Compute monthly calculations for all 12 months
   const monthlyCalculations = MONTH_NAMES.map((mName, mIdx) => {
@@ -165,18 +198,17 @@ export default function BudgetPage() {
 
     // Find monthly budgets matching this month key
     const monthBudgets = budgets.filter((b) => b.type === 'monthly' && b.month === mKey);
-    const approvedMonthBudgets = monthBudgets.filter((b) => b.status === 'Approved');
 
     // Proposed allocation
     const proposed = monthBudgets.reduce((sum, b) => sum + (b.amount || b.proposedAmount || 0), 0);
 
-    // Actual spending calculated from approved reimbursements matching this month
-    const monthReimbursements = reimbursements.filter((r) => {
-      if (r.status !== 'Approved') return false;
-      const rDate = r.submittedAt || '';
-      return rDate.startsWith(mKey);
-    });
-    const actual = monthReimbursements.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    // Actual spending: rolled up from each line item's own linked-reimbursement
+    // total, not from reimbursement submission dates (a claim can be filed
+    // weeks after the event it's for).
+    const actual = monthBudgets.reduce(
+      (sum, b) => sum + (b.lineItems || []).reduce((s, li) => s + getLineItemActual(li), 0),
+      0
+    );
 
     const variance = proposed - actual;
 
@@ -197,6 +229,27 @@ export default function BudgetPage() {
   // Currently Selected Month Calculation
   const selectedMonthCalc = selectedMonthIndex !== null ? monthlyCalculations[selectedMonthIndex] : null;
 
+  // Event-wise spend breakdown: aggregate every line item across the FY (or
+  // just the selected month, when toggled) by its linked event.
+  const eventWiseSourceMonths = eventChartScope === 'month' && selectedMonthCalc ? [selectedMonthCalc] : monthlyCalculations;
+  const eventWiseData = (() => {
+    const map = new Map<string, { name: string; proposed: number; actual: number }>();
+    eventWiseSourceMonths.forEach((m) => {
+      m.budgets.forEach((b) => {
+        (b.lineItems || []).forEach((li) => {
+          const key = li.eventId || li.eventName;
+          const entry = map.get(key) || { name: li.eventName, proposed: 0, actual: 0 };
+          entry.proposed += li.amount || li.proposedAmount || 0;
+          entry.actual += getLineItemActual(li);
+          map.set(key, entry);
+        });
+      });
+    });
+    return Array.from(map.values())
+      .sort((a, b) => b.actual - a.actual || b.proposed - a.proposed)
+      .slice(0, 8);
+  })();
+
   // Handlers for Annual Budget
   const handleProposeAnnualBudget = (e: React.FormEvent) => {
     e.preventDefault();
@@ -208,7 +261,7 @@ export default function BudgetPage() {
         annualBudgetItem.id,
         {
           type: 'annual',
-          academicYear: selectedAcademicYear,
+          financialYear: selectedFinancialYear,
           amount: val,
           proposedAmount: val,
           notes: annualNotesInput,
@@ -217,18 +270,18 @@ export default function BudgetPage() {
         },
         user?.name || 'Centre Head'
       );
-      triggerToast(`Annual budget proposal updated for ${selectedAcademicYear}. Sent to Finance Head.`);
+      triggerToast(`Annual budget proposal updated for ${selectedFinancialYear}. Sent to Finance Head.`);
     } else {
       addBudget({
         type: 'annual',
-        academicYear: selectedAcademicYear,
+        financialYear: selectedFinancialYear,
         amount: val,
         proposedAmount: val,
         notes: annualNotesInput,
         submittedBy: user?.name || 'Centre Head',
         submittedByEmail: user?.email,
       });
-      triggerToast(`Annual budget proposed for ${selectedAcademicYear}. Sent to Finance Head.`);
+      triggerToast(`Annual budget proposed for ${selectedFinancialYear}. Sent to Finance Head.`);
     }
 
     setIsAnnualModalOpen(false);
@@ -240,7 +293,7 @@ export default function BudgetPage() {
   const handleDecideAnnualBudget = (status: 'Approved' | 'Rejected') => {
     if (!annualBudgetItem) return;
     decideBudget(annualBudgetItem.id, status, user?.name || 'Finance Head', decisionNotes);
-    triggerToast(`Annual Academic Year Budget ${status.toLowerCase()} successfully.`);
+    triggerToast(`Annual Financial Year Budget ${status.toLowerCase()} successfully.`);
     setDecidingBudget(null);
     setDecisionNotes('');
     setBudgets(getBudgets());
@@ -399,7 +452,7 @@ export default function BudgetPage() {
     }
 
     const payload = {
-      academicYear: selectedAcademicYear,
+      financialYear: selectedFinancialYear,
       type: 'monthly' as const,
       month: month || (selectedMonthCalc ? selectedMonthCalc.monthKey : getMonthKey(0)),
       amount: monthlyTotal,
@@ -455,23 +508,23 @@ export default function BudgetPage() {
               Financial & Budgeting Control Center
             </h1>
             <span className="px-2.5 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/30 text-[10px] font-extrabold uppercase tracking-wider">
-              {selectedAcademicYear}
+              {selectedFinancialYear}
             </span>
           </div>
           <p className="text-xs text-theme-text-secondary mt-1">
-            Academic Year Budgeting, Monthly Allocations, Event Tracking & Visual Analytics
+            Financial Year Budgeting, Monthly Allocations, Event Tracking & Visual Analytics
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Academic Year Picker */}
+          {/* Financial Year Picker */}
           <div className="flex items-center gap-1 bg-theme-card border border-theme-card-border p-1 rounded-xl">
-            {ACADEMIC_YEARS.map((year) => (
+            {FINANCIAL_YEARS.map((year) => (
               <button
                 key={year}
-                onClick={() => setSelectedAcademicYear(year)}
+                onClick={() => setSelectedFinancialYear(year)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  selectedAcademicYear === year
+                  selectedFinancialYear === year
                     ? 'bg-accent text-white shadow-md'
                     : 'text-theme-text-secondary hover:text-theme-text-primary'
                 }`}
@@ -497,7 +550,7 @@ export default function BudgetPage() {
         </div>
       </div>
 
-      {/* Top Academic Year Status & Financial Overview Banner */}
+      {/* Top Financial Year Status & Financial Overview Banner */}
       <div className="glass-panel rounded-2xl p-5 border border-theme-card-border space-y-4 relative overflow-hidden">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-theme-border/30 pb-4">
           <div className="flex items-center gap-3">
@@ -507,7 +560,7 @@ export default function BudgetPage() {
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-bold text-theme-text-primary">
-                  Academic Year {selectedAcademicYear} Annual Budget
+                  Financial Year {selectedFinancialYear} Annual Budget
                 </h2>
                 {annualBudgetItem ? (
                   <span
@@ -539,7 +592,7 @@ export default function BudgetPage() {
                 )}
               </div>
               <p className="text-xs text-theme-text-secondary mt-0.5">
-                Total Academic Year Allocation approved by Finance Head
+                Total Financial Year Allocation approved by Finance Head
               </p>
             </div>
           </div>
@@ -573,7 +626,7 @@ export default function BudgetPage() {
             <div className="text-lg font-extrabold text-accent">
               ₹{annualApprovedAmount > 0 ? annualApprovedAmount.toLocaleString() : (annualProposedAmount > 0 ? `${annualProposedAmount.toLocaleString()} (Pending)` : '0')}
             </div>
-            <span className="text-[10px] text-theme-text-secondary">Approved for {selectedAcademicYear}</span>
+            <span className="text-[10px] text-theme-text-secondary">Approved for {selectedFinancialYear}</span>
           </div>
 
           <div className="bg-theme-background/50 border border-theme-card-border p-4 rounded-xl space-y-1">
@@ -739,13 +792,78 @@ export default function BudgetPage() {
         </div>
       </div>
 
+      {/* Event-Wise Spend Breakdown Chart */}
+      <div className="glass-panel rounded-2xl p-5 border border-theme-card-border space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-accent" />
+            <h3 className="text-sm font-bold text-theme-text-primary">
+              Event-Wise Spend Breakdown
+              {eventChartScope === 'month' && selectedMonthCalc ? ` — ${selectedMonthCalc.monthName}` : ` — FY ${selectedFinancialYear}`}
+            </h3>
+          </div>
+          <div className="flex items-center gap-1 bg-theme-background/40 border border-theme-card-border p-1 rounded-xl">
+            <button
+              onClick={() => setEventChartScope('month')}
+              className={`px-3 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+                eventChartScope === 'month' ? 'bg-accent text-white' : 'text-theme-text-secondary hover:text-theme-text-primary'
+              }`}
+            >
+              Selected Month
+            </button>
+            <button
+              onClick={() => setEventChartScope('year')}
+              className={`px-3 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+                eventChartScope === 'year' ? 'bg-accent text-white' : 'text-theme-text-secondary hover:text-theme-text-primary'
+              }`}
+            >
+              Full Year
+            </button>
+          </div>
+        </div>
+
+        {eventWiseData.length === 0 ? (
+          <EmptyState
+            icon={BarChart3}
+            title="No event-linked spend to chart yet"
+            description="Add event budget line items and approved reimbursements to see the breakdown here."
+          />
+        ) : (
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={eventWiseData} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <XAxis
+                  dataKey="name"
+                  tick={{ fill: 'currentColor', fontSize: 10 }}
+                  interval={0}
+                  angle={-25}
+                  textAnchor="end"
+                />
+                <YAxis tick={{ fill: 'currentColor', fontSize: 10 }} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
+                <Tooltip
+                  formatter={(value: any) => `₹${Number(value).toLocaleString()}`}
+                  contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 11 }}
+                />
+                <Bar dataKey="proposed" name="Proposed" fill="#2E75B6" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="actual" name="Actual" radius={[4, 4, 0, 0]}>
+                  {eventWiseData.map((_, index) => (
+                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+
       {/* Month-Wise Calendar Breakdown Bar & Month Selector */}
       <div className="glass-panel rounded-2xl p-5 border border-theme-card-border space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <CalendarIcon className="h-5 w-5 text-accent" />
             <h3 className="text-sm font-bold text-theme-text-primary">
-              Month-Wise Calendar Breakdown ({selectedAcademicYear})
+              Month-Wise Calendar Breakdown ({selectedFinancialYear})
             </h3>
           </div>
 
@@ -889,44 +1007,113 @@ export default function BudgetPage() {
                               <th className="py-1.5 font-semibold text-right">Proposed Budget</th>
                               <th className="py-1.5 font-semibold text-right">Actual Spent</th>
                               <th className="py-1.5 font-semibold text-right">Variance</th>
+                              <th className="py-1.5 font-semibold text-right">Linked</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-theme-border/20">
                             {b.lineItems.map((li, liIdx) => {
-                              const liActual = li.eventId
-                                ? reimbursements
-                                    .filter((r) => r.eventId === li.eventId && r.status === 'Approved')
-                                    .reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
-                                : 0;
+                              const liActual = getLineItemActual(li);
                               const liVariance = (li.amount || li.proposedAmount || 0) - liActual;
+                              const liClaims = li.eventId
+                                ? reimbursements.filter((r) => r.eventId === li.eventId)
+                                : [];
+                              const liTasks = li.eventId
+                                ? tasks.filter((t) => t.eventId === li.eventId)
+                                : [];
+                              const liTasksDone = liTasks.filter((t) => t.status === 'Completed').length;
+                              const rowKey = `${b.id}_${liIdx}`;
+                              const isExpanded = expandedLineItems.has(rowKey);
 
                               return (
-                                <tr key={liIdx}>
-                                  <td className="py-2 font-medium text-theme-text-primary">
-                                    {li.eventName}
-                                    {li.eventId && (
-                                      <span className="ml-1.5 text-[9px] px-1.5 py-0.2 rounded bg-accent/15 text-accent border border-accent/30 font-semibold">
-                                        Linked Event
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td className="py-2 text-theme-text-secondary">{li.category || 'Event'}</td>
-                                  <td className="py-2 text-right font-bold text-accent">
-                                    ₹{(li.amount || li.proposedAmount || 0).toLocaleString()}
-                                  </td>
-                                  <td className="py-2 text-right font-bold text-emerald-400">
-                                    ₹{liActual.toLocaleString()}
-                                  </td>
-                                  <td
-                                    className={`py-2 text-right font-bold ${
-                                      liVariance >= 0 ? 'text-emerald-400' : 'text-danger'
-                                    }`}
-                                  >
-                                    {liVariance >= 0
-                                      ? `+₹${liVariance.toLocaleString()}`
-                                      : `-₹${Math.abs(liVariance).toLocaleString()}`}
-                                  </td>
-                                </tr>
+                                <React.Fragment key={rowKey}>
+                                  <tr>
+                                    <td className="py-2 font-medium text-theme-text-primary">
+                                      {li.eventName}
+                                      {li.eventId && (
+                                        <span className="ml-1.5 text-[9px] px-1.5 py-0.2 rounded bg-accent/15 text-accent border border-accent/30 font-semibold">
+                                          Linked Event
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="py-2 text-theme-text-secondary">{li.category || 'Event'}</td>
+                                    <td className="py-2 text-right font-bold text-accent">
+                                      ₹{(li.amount || li.proposedAmount || 0).toLocaleString()}
+                                    </td>
+                                    <td className="py-2 text-right font-bold text-emerald-400">
+                                      ₹{liActual.toLocaleString()}
+                                    </td>
+                                    <td
+                                      className={`py-2 text-right font-bold ${
+                                        liVariance >= 0 ? 'text-emerald-400' : 'text-danger'
+                                      }`}
+                                    >
+                                      {liVariance >= 0
+                                        ? `+₹${liVariance.toLocaleString()}`
+                                        : `-₹${Math.abs(liVariance).toLocaleString()}`}
+                                    </td>
+                                    <td className="py-2 text-right">
+                                      {li.eventId && (
+                                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                                          {liTasks.length > 0 && (
+                                            <a
+                                              href="/dashboard/tasks"
+                                              className="text-[10px] px-1.5 py-0.5 rounded bg-theme-border/30 text-theme-text-secondary hover:text-accent hover:bg-accent/10 font-semibold whitespace-nowrap"
+                                              title="Open Task List"
+                                            >
+                                              📋 {liTasksDone}/{liTasks.length} tasks
+                                            </a>
+                                          )}
+                                          {liClaims.length > 0 && (
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                setExpandedLineItems((prev) => {
+                                                  const next = new Set(prev);
+                                                  next.has(rowKey) ? next.delete(rowKey) : next.add(rowKey);
+                                                  return next;
+                                                })
+                                              }
+                                              className="text-[10px] px-1.5 py-0.5 rounded bg-theme-border/30 text-theme-text-secondary hover:text-accent hover:bg-accent/10 font-semibold cursor-pointer whitespace-nowrap"
+                                            >
+                                              💳 {liClaims.length} claim{liClaims.length !== 1 ? 's' : ''} {isExpanded ? '▲' : '▼'}
+                                            </button>
+                                          )}
+                                        </div>
+                                      )}
+                                    </td>
+                                  </tr>
+                                  {isExpanded && liClaims.length > 0 && (
+                                    <tr>
+                                      <td colSpan={6} className="pb-2">
+                                        <div className="bg-theme-background/40 border border-theme-card-border rounded-lg p-2 space-y-1">
+                                          {liClaims.map((claim) => (
+                                            <div key={claim.id} className="flex items-center justify-between text-[11px]">
+                                              <span className="text-theme-text-secondary">
+                                                {claim.memberName} — {claim.category} ({claim.submittedAt})
+                                              </span>
+                                              <span className="flex items-center gap-2">
+                                                <span className="font-mono font-semibold text-theme-text-primary">
+                                                  ₹{Number(claim.amount).toLocaleString()}
+                                                </span>
+                                                <span
+                                                  className={`px-1.5 py-0.5 rounded-full font-bold text-[9px] border ${
+                                                    claim.status === 'Approved'
+                                                      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                                                      : claim.status === 'Denied'
+                                                      ? 'bg-danger/15 text-danger border-danger/30'
+                                                      : 'bg-warning/15 text-warning border-warning/30'
+                                                  }`}
+                                                >
+                                                  {claim.status}
+                                                </span>
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
                               );
                             })}
                           </tbody>
@@ -952,7 +1139,7 @@ export default function BudgetPage() {
               <X className="h-5 w-5" />
             </button>
             <h2 className="text-base font-bold text-theme-text-primary">
-              Propose Academic Year Budget ({selectedAcademicYear})
+              Propose Financial Year Budget ({selectedFinancialYear})
             </h2>
             <form onSubmit={handleProposeAnnualBudget} className="space-y-4 text-xs">
               <div className="space-y-1.5">
@@ -1024,11 +1211,11 @@ export default function BudgetPage() {
             <form onSubmit={handleSubmit} className="space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Academic Year</label>
+                  <label className="block font-medium text-theme-text-secondary">Financial Year</label>
                   <input
                     type="text"
                     disabled
-                    value={selectedAcademicYear}
+                    value={selectedFinancialYear}
                     className="w-full px-4 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-secondary"
                   />
                 </div>
