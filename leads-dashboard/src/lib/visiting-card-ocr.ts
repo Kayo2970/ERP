@@ -53,7 +53,8 @@ const ORG_MARKERS = [
   'systems', 'enterprise', 'enterprises', 'labs', 'laboratory', 'studio',
   'university', 'institute', 'college', 'foundation', 'agency', 'ventures',
   'industries', 'global', 'software', 'pvt.', 'ltd.', 'inc.', 'co.', 'hospital',
-  'clinic', 'school', 'academy', 'trust', 'society', 'council', 'federation'
+  'clinic', 'school', 'academy', 'trust', 'society', 'council', 'federation',
+  'chamber', 'commerce', 'confederation', 'authority', 'board', 'union',
 ];
 
 const INDUSTRY_KEYWORDS = [
@@ -68,18 +69,46 @@ const INDUSTRY_KEYWORDS = [
 ];
 
 const HONORIFICS = [
-  'dr.', 'dr', 'mr.', 'mr', 'mrs.', 'mrs', 'ms.', 'ms', 'prof.', 'prof',
+  'dr.', 'dr', 'mr.', 'mr', 'mrs.', 'mrs', 'ms.', 'ms', 'prof.', 'prof', 'pro.', 'pro',
   'eng.', 'engr.', 'er.', 'er', 'adv.', 'adv', 'shri', 'smt.', 'smt', 'ca', 'cs',
   'capt.', 'col.', 'maj.', 'sir'
 ];
 
-const ADDRESS_KEYWORDS = [
+/**
+ * Academic/organizational-unit phrases ("Department of Economics", "School
+ * of Management") — never a person's name, but without an explicit penalty
+ * one could still out-score the real name candidate on a faculty card: it's
+ * a clean 2-4 word, letters-only line that often sits right next to the
+ * Designation line (the same physical adjacency the real name gets credit
+ * for), while a name prefixed with a less common honorific like "Pro:"
+ * (a common abbreviation for Professor) picks up fewer of the other bonuses.
+ */
+const DEPARTMENT_MARKERS = [
+  'department of', 'dept of', 'dept.', 'faculty of', 'school of',
+  'division of', 'centre for', 'center for', 'institute of',
+];
+
+// Address vocabulary split by how conclusive a match is. STRONG entries are
+// street/building/layout terms that essentially never appear outside a
+// physical address, so a match on their own is enough to definitively
+// classify a line as address text. WEAK entries are bare city/state/country
+// names — real address signals, but also common inside legitimate
+// organization names ("Bangalore Chamber of Industry and Commerce", "Delhi
+// Public School", "Mumbai Indians"), so a weak match alone must never
+// override an otherwise-plausible organization candidate, and never
+// disqualifies a line from being definitively classified as an address in
+// Pass A — only a strong keyword or a pincode does that.
+const STRONG_ADDRESS_KEYWORDS = [
   'road', 'rd', 'street', 'st', 'avenue', 'ave', 'block', 'sector',
   'floor', 'suite', 'building', 'complex', 'area', 'nagar', 'layout',
-  'district', 'city', 'state', 'pincode', 'pin', 'zip', 'india',
+  'district', 'pincode', 'pin', 'zip',
+];
+const WEAK_ADDRESS_KEYWORDS = [
+  'city', 'state', 'india',
   'bangalore', 'bengaluru', 'mumbai', 'delhi', 'hyderabad', 'chennai',
   'kolkata', 'pune', 'ahmedabad', 'gurgaon', 'noida', 'karnataka', 'maharashtra'
 ];
+const ADDRESS_KEYWORDS = [...STRONG_ADDRESS_KEYWORDS, ...WEAK_ADDRESS_KEYWORDS];
 
 /** Strip OCR symbols and noise characters from boundaries of string */
 function cleanOcrLine(line: string): string {
@@ -130,6 +159,20 @@ function normalizeForComparison(str: string): string {
  */
 function matchesAddressKeyword(text: string): boolean {
   return ADDRESS_KEYWORDS.some((kw) => new RegExp(`\\b${kw}\\b`, 'i').test(text));
+}
+
+/**
+ * Word-boundary match against STRONG_ADDRESS_KEYWORDS only — street/layout
+ * terms with no legitimate reading outside a physical address. Used
+ * wherever a match needs to be conclusive on its own: definitively routing
+ * a line into the address field in Pass A, and penalizing a line's chances
+ * of being the organization name. A bare city/state name is deliberately
+ * excluded from both of those — "Bangalore Chamber of Industry and
+ * Commerce" is a real organization name, not an address line, even though
+ * it starts with a city name.
+ */
+function matchesStrongAddressKeyword(text: string): boolean {
+  return STRONG_ADDRESS_KEYWORDS.some((kw) => new RegExp(`\\b${kw}\\b`, 'i').test(text));
 }
 
 /** Checks if candidate line is a duplicate or part of an extracted main field */
@@ -189,10 +232,28 @@ async function tryNativeTesseractOcr(imageBuffer: Buffer): Promise<string | null
   }
 }
 
+/**
+ * True if `lower` starts with one of the HONORIFICS immediately followed by
+ * a non-letter (colon, period, space, or end of string) — a plain
+ * `.startsWith()` would also match "pro" inside "Product Manager" or
+ * "Project Lead", which are designations, not honorific-prefixed names.
+ */
+function startsWithHonorific(lower: string): boolean {
+  return HONORIFICS.some((h) => {
+    if (!lower.startsWith(h)) return false;
+    const nextChar = lower[h.length];
+    return !nextChar || !/[a-z]/i.test(nextChar);
+  });
+}
+
 /** Computes a score evaluating how likely a line is to be the Person's Name */
 function scoreNameCandidate(line: string, lineIndex: number, lines: string[], designationIndices: number[]): number {
   const lower = line.toLowerCase();
-  const cleaned = line.replace(/^(dr\.|mr\.|mrs\.|ms\.|prof\.|eng\.|er\.|adv\.|shri|smt\.|ca|cs)\s+/i, '').trim();
+  // Strips a leading honorific before scoring word count / letters-only, so
+  // "Pro: Ravi Bhanari" is judged as the 2-word name "Ravi Bhanari" rather
+  // than penalized for the ":" that OCR (and some card layouts) place right
+  // after an abbreviated honorific like "Pro" (for Professor) or "Dr".
+  const cleaned = line.replace(/^(dr\.?|mr\.?|mrs\.?|ms\.?|prof\.?|pro\.?|eng\.?|er\.?|adv\.?|shri|smt\.?|ca|cs)\s*:?\s+/i, '').trim();
 
   // Hard Rejections
   if (/@|www|\.com|\.in|http/i.test(line)) return -500;
@@ -203,6 +264,10 @@ function scoreNameCandidate(line: string, lineIndex: number, lines: string[], de
   if (ORG_MARKERS.some((m) => new RegExp(`\\b${m}\\b`, 'i').test(lower))) return -500;
   if (matchesAddressKeyword(lower)) return -500;
   if (INDUSTRY_KEYWORDS.some((kw) => new RegExp(`\\b${kw}\\b`, 'i').test(lower))) return -150;
+  // "Department of X" / "School of Y" etc. — an organizational unit, never
+  // a person's name, even though it's often a clean 2-4 word letters-only
+  // line sitting right next to the Designation line just like a real name.
+  if (DEPARTMENT_MARKERS.some((m) => new RegExp(`\\b${m}\\b`, 'i').test(lower))) return -400;
 
   let score = 0;
   const words = cleaned.split(/\s+/).filter((w) => w.length > 0);
@@ -217,7 +282,7 @@ function scoreNameCandidate(line: string, lineIndex: number, lines: string[], de
   }
 
   // Honorific Bonus
-  if (HONORIFICS.some((h) => lower.startsWith(h))) {
+  if (startsWithHonorific(lower)) {
     score += 100;
   }
 
@@ -259,7 +324,11 @@ function scoreOrgCandidate(line: string, lineIndex: number): number {
     score += 90;
   }
 
-  if (matchesAddressKeyword(lower)) {
+  // Only a strong (street/building) keyword counts against a line being the
+  // organization — a bare city name doesn't, since plenty of real
+  // organizations are named after their city ("Bangalore Chamber of
+  // Industry and Commerce").
+  if (matchesStrongAddressKeyword(lower)) {
     score -= 100;
   }
 
@@ -413,7 +482,7 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
     // "Industrial Layout" could get misread as a bare Name/Designation part,
     // silently dropping the whole address line instead of letting it reach
     // the Address Check below.
-    const looksLikeAddress = /\b\d{6}\b/.test(line) || matchesAddressKeyword(lower);
+    const looksLikeAddress = /\b\d{3}[\s-]?\d{3}\b/.test(line) || matchesAddressKeyword(lower);
     if (!looksLikeAddress && /[|\-,\/]/.test(line)) {
       const parts = line.split(/[|\-,\/]/).map((p) => cleanOcrLine(p)).filter((p) => p.length > 0);
       let splitHandled = false;
@@ -438,13 +507,18 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
       return;
     }
 
-    // Address Check. Indian PIN codes are always exactly 6 digits — 5 was
-    // also matching the individual digit groups of a phone number written
-    // in the conventional "98765 43210" spacing (see the phone/telephone
-    // skip above, which is the primary guard; this stays deliberately
-    // narrow as a second line of defense).
-    const hasPinCode = /\b\d{6}\b/.test(line);
-    const hasAddressKw = matchesAddressKeyword(lower);
+    // Address Check. Indian PIN codes are always 6 digits, sometimes printed
+    // as one contiguous run ("560058") and sometimes as two groups of 3
+    // ("560 001" / "560-001") — matched either way, but a bare 5-digit run
+    // is deliberately excluded since that's also how a phone number's
+    // individual digit groups look in the conventional "98765 43210"
+    // spacing (the phone/telephone skip above is the primary guard against
+    // that; this stays narrow as a second line of defense). Only a STRONG
+    // keyword definitively routes a line to the address field here — a bare
+    // city/state name alone does not, since it's also common inside a real
+    // organization's own name (see matchesStrongAddressKeyword).
+    const hasPinCode = /\b\d{3}[\s-]?\d{3}\b/.test(line);
+    const hasAddressKw = matchesStrongAddressKeyword(lower);
     if (hasPinCode || hasAddressKw) {
       addressLines.push(cleanOcrLine(line));
       return;
@@ -471,6 +545,43 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
     if (oScore > bestOrgScore) {
       bestOrgScore = oScore;
       bestOrgCandidate = line;
+    }
+  }
+
+  // A letterhead/logo often wraps its institution name across several short
+  // stacked lines ("RAMAIAH" / "UNIVERSITY" / "OF APPLIED SCIENCES") — none
+  // of which alone reads as the full name, so whichever fragment happens to
+  // contain a strong ORG_MARKER wins by default even though it's incomplete.
+  // Try joining a leading run of such fragments (short, no digits/@/colon,
+  // strictly before the first name/designation line found) into one extra
+  // candidate and re-score it — this only ever ADDS a candidate alongside
+  // the individual lines above, so a card without this pattern is
+  // unaffected (the run is empty or length 1, and the join is skipped).
+  const firstMarkedIndex = Math.min(
+    designationIndices.length > 0 ? Math.min(...designationIndices) : Infinity,
+    nonAddressLines.length > 0
+      ? nonAddressLines.reduce((min, { line: l, originalIndex: i }) =>
+          i < min && startsWithHonorific(l.toLowerCase()) ? i : min, Infinity)
+      : Infinity
+  );
+  const headerRun: string[] = [];
+  for (const { line, originalIndex } of nonAddressLines) {
+    if (originalIndex >= firstMarkedIndex) break;
+    if (/[@:0-9]/.test(line)) break;
+    const wordCount = line.split(/\s+/).filter(Boolean).length;
+    if (wordCount > 4) break;
+    headerRun.push(line);
+  }
+  if (headerRun.length >= 2) {
+    const merged = headerRun.join(' ');
+    const mergedScore = scoreOrgCandidate(merged, nonAddressLines[0].originalIndex);
+    // >= rather than > : the merged, more-complete name is presumptively at
+    // least as good as any one of its own fragments already considered
+    // above, so a tie (nothing else on the card scored higher either way)
+    // should resolve in favor of the fuller string.
+    if (mergedScore > 0 && mergedScore >= bestOrgScore) {
+      bestOrgScore = mergedScore;
+      bestOrgCandidate = merged;
     }
   }
 
@@ -711,6 +822,16 @@ export async function performCardOcr(
   }
 
   let nativeCombinedText = '';
+  // Tracks whether the native tesseract binary actually produced any text,
+  // independent of nativeCombinedText's raw length. Without this, the
+  // "--- BACK OF CARD ---" divider appended below (purely cosmetic, to
+  // separate front/back text for the parser) was enough on its own to make
+  // nativeCombinedText non-empty even when the native binary is missing
+  // entirely (as it is wherever tesseract-ocr isn't installed system-wide) —
+  // so every scan submitted with a back-of-card photo returned near-empty
+  // garbage parsed from just that marker string, and Tier 3 (the WASM
+  // engine, which actually works) was never even attempted.
+  let nativeOcrFoundText = false;
 
   // Tier 2: Try Direct Native C++ Tesseract 5.5 Engine with PSM 11 + PSM 6
   for (const rawBuf of frontRawBuffers) {
@@ -718,13 +839,13 @@ export async function performCardOcr(
       const { normal, inverted } = await preprocessCardImageBuffer(rawBuf);
 
       const normText = await tryNativeTesseractOcr(normal);
-      if (normText) nativeCombinedText += '\n' + normText;
+      if (normText) { nativeCombinedText += '\n' + normText; nativeOcrFoundText = true; }
 
       const invText = await tryNativeTesseractOcr(inverted);
-      if (invText) nativeCombinedText += '\n' + invText;
+      if (invText) { nativeCombinedText += '\n' + invText; nativeOcrFoundText = true; }
     } catch (e) {
       const rawText = await tryNativeTesseractOcr(rawBuf);
-      if (rawText) nativeCombinedText += '\n' + rawText;
+      if (rawText) { nativeCombinedText += '\n' + rawText; nativeOcrFoundText = true; }
     }
   }
 
@@ -740,19 +861,19 @@ export async function performCardOcr(
       try {
         const { normal, inverted } = await preprocessCardImageBuffer(rawBuf);
         const normText = await tryNativeTesseractOcr(normal);
-        if (normText) nativeCombinedText += '\n' + normText;
+        if (normText) { nativeCombinedText += '\n' + normText; nativeOcrFoundText = true; }
 
         const invText = await tryNativeTesseractOcr(inverted);
-        if (invText) nativeCombinedText += '\n' + invText;
+        if (invText) { nativeCombinedText += '\n' + invText; nativeOcrFoundText = true; }
       } catch (e) {
         const rawText = await tryNativeTesseractOcr(rawBuf);
-        if (rawText) nativeCombinedText += '\n' + rawText;
+        if (rawText) { nativeCombinedText += '\n' + rawText; nativeOcrFoundText = true; }
       }
     }
   }
 
   // If native C++ engine produced results, parse and return immediately
-  if (nativeCombinedText.trim().length > 0) {
+  if (nativeOcrFoundText) {
     const parsedNative = parseVisitingCardText(nativeCombinedText);
     if (parsedNative.name || parsedNative.phone || parsedNative.email || parsedNative.organization) {
       return parsedNative;
