@@ -47,7 +47,7 @@ import {
   TaskItem,
   OcrScanResult
 } from '@/lib/local-data';
-import { canViewAllDesigns, isDesignHead, isCentreHead } from '@/lib/permissions';
+import { canViewAllDesigns, isDesignHead, isCentreHead, hasCapability } from '@/lib/permissions';
 
 /** Renders an OCR scan's flagged spelling issues + extracted text preview. Advisory only. */
 function OcrScanPanel({
@@ -65,9 +65,9 @@ function OcrScanPanel({
 
   if (error) {
     return (
-      <p className="text-rose-500 font-medium text-[11px] flex items-center gap-1 pt-2">
+      <p className="text-amber-500 font-medium text-[11px] flex items-center gap-1 pt-2">
         <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-        {error}
+        {error} You can still submit this file without scanning it.
       </p>
     );
   }
@@ -1007,7 +1007,7 @@ export default function DesignPortalPage() {
                       Inspect & Review
                     </button>
 
-                    {(design.designerEmail === user?.email || user?.tier <= 3) && (
+                    {(design.designerEmail === user?.email || user?.tier <= 3 || hasCapability(user, 'DESIGN_DELETE')) && (
                       <button
                         onClick={() => handleDelete(design.id, design.title)}
                         className="p-1.5 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
@@ -1132,7 +1132,7 @@ export default function DesignPortalPage() {
                   <input
                     type="file"
                     id="design-file-input"
-                    accept="image/*,application/pdf"
+                    accept="image/*,video/*,application/pdf,.psd,.ai,.eps,.svg,.indd,.cdr,.ppt,.pptx,.doc,.docx,.zip"
                     onChange={handleFileChange}
                     className="hidden"
                   />
@@ -1143,7 +1143,7 @@ export default function DesignPortalPage() {
                         {file ? file.name : 'Click to select design file'}
                       </p>
                       <p className="text-[11px] text-muted-foreground">
-                        Supports PNG, JPG, WEBP, PDF up to 25 MB
+                        Images, video, PDF, PSD, AI, PPTX, DOCX & more — up to 25 MB
                       </p>
                     </div>
                   </label>
@@ -1946,7 +1946,7 @@ export default function DesignPortalPage() {
                 </div>
               )}
 
-              {(isDesignHead(user) || isCentreHead(user)) ? (
+              {(isDesignHead(user) || isCentreHead(user) || hasCapability(user, 'DESIGN_STYLE_APPROVE')) ? (
                 <form onSubmit={handleSaveStyleReview} className="space-y-3 text-xs bg-accent/5 p-4 rounded-xl border border-accent/20">
                   <p className="font-medium text-foreground">{selectedDesign.styleStatus ? 'Update Design Style Decision:' : 'Submit Design Style Decision:'}</p>
 

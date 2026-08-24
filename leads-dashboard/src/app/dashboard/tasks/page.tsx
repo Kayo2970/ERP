@@ -8,6 +8,8 @@ import {
   User,
   Briefcase,
   CheckCircle2,
+  Check,
+  Ban,
   Users,
   Edit2,
   Trash2,
@@ -23,13 +25,16 @@ import {
   updateTask,
   updateTaskStatus,
   deleteTask,
+  submitTaskEdit,
+  approveTask,
+  rejectTask,
   addEventCommittee,
   updateEventCommitteeMembers,
   TaskItem,
   EventItem,
   Member
 } from '@/lib/local-data';
-import { canViewTaskExtended, canManageTasks, canRequestTaskExtension, canDecideTaskExtension, isHeadRole } from '@/lib/permissions';
+import { canViewTaskExtended, canManageTasks, canCreateTask, canEditTask, canDeleteTask, canRequestTaskExtension, canDecideTaskExtension, isHeadRole, getTaskApprovalRequirement, canApprovePendingTask } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -45,6 +50,8 @@ export default function TasksPage() {
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [extensionTask, setExtensionTask] = useState<TaskItem | null>(null);
   const [extensionReasonInput, setExtensionReasonInput] = useState('');
+  const [rejectingTaskId, setRejectingTaskId] = useState<string | null>(null);
+  const [rejectionReasonInput, setRejectionReasonInput] = useState('');
 
   // Form State
   const [title, setTitle] = useState('');
@@ -288,7 +295,7 @@ export default function TasksPage() {
     }
 
     if (editingTask) {
-      updateTask(editingTask.id, {
+      const changes = {
         title,
         event: eventTitle,
         eventId: eventIdVal,
@@ -301,11 +308,23 @@ export default function TasksPage() {
         assigneeType,
         dueDate,
         status,
-      }, user?.name || 'User');
-      triggerSuccess('Task updated successfully.');
+      };
+      const approval = getTaskApprovalRequirement(user, 'EDIT');
+      if (approval.requiresApproval) {
+        submitTaskEdit(editingTask.id, changes, user?.name || 'User', user?.email || '', {
+          approverType: approval.approverType,
+          approverMemberId: approval.approverMemberId,
+          approverPolicyTagId: approval.approverPolicyTagId,
+          policyName: approval.policyName,
+        });
+        triggerSuccess(`Edit submitted for approval from ${approval.approverName}. It will apply once approved.`);
+      } else {
+        updateTask(editingTask.id, changes, user?.name || 'User');
+        triggerSuccess('Task updated successfully.');
+      }
       setEditingTask(null);
     } else {
-      addTask({
+      const newTaskBase = {
         title,
         event: eventTitle,
         eventId: eventIdVal,
@@ -319,12 +338,43 @@ export default function TasksPage() {
         dueDate,
         status,
         creatorName: user?.name || 'User'
-      });
-      triggerSuccess('Task assigned successfully.');
+      };
+      const approval = getTaskApprovalRequirement(user, 'CREATE');
+      if (approval.requiresApproval) {
+        addTask({
+          ...newTaskBase,
+          approvalStatus: 'pending_create',
+          approverType: approval.approverType,
+          approverMemberId: approval.approverMemberId,
+          approverPolicyTagId: approval.approverPolicyTagId,
+          approvalPolicyName: approval.policyName,
+          submittedBy: user?.name,
+          submittedByEmail: user?.email,
+        });
+        triggerSuccess(`Task submitted for approval from ${approval.approverName}. It will be assigned once approved.`);
+      } else {
+        addTask(newTaskBase);
+        triggerSuccess('Task assigned successfully.');
+      }
       setIsCreateModalOpen(false);
     }
 
     setTasks(getTasks());
+  };
+
+  const handleApproveTask = (id: string) => {
+    approveTask(id, user?.name || 'User');
+    setTasks(getTasks());
+    triggerSuccess('Approved. The task is now live.');
+  };
+
+  const handleConfirmRejectTask = () => {
+    if (!rejectingTaskId) return;
+    rejectTask(rejectingTaskId, user?.name || 'User', rejectionReasonInput || undefined);
+    setTasks(getTasks());
+    setRejectingTaskId(null);
+    setRejectionReasonInput('');
+    triggerSuccess('Rejected.');
   };
 
   const handleStatusChange = (id: string, newStatus: TaskItem['status']) => {
@@ -383,8 +433,19 @@ export default function TasksPage() {
     triggerSuccess('Task deleted successfully.');
   };
 
-  // Filter tasks based on shared permission helper
-  const displayedTasks = tasks.filter(task => canViewTaskExtended(task, user));
+  // Visibility: a pending/rejected submission is only shown to its submitter, its
+  // resolved approver, and the Super User — everyone else sees nothing of it
+  // until it's approved, mirroring the same rule on the Events page.
+  const canSeeTaskApprovalMeta = (task: TaskItem) =>
+    user?.tier === 1 || task.submittedByEmail === user?.email || canApprovePendingTask(task, user);
+
+  // Filter tasks based on shared permission helper, layered with the approval-visibility rule above
+  const displayedTasks = tasks.filter(task => {
+    if (task.approvalStatus === 'pending_create' || task.approvalStatus === 'rejected') {
+      return canSeeTaskApprovalMeta(task);
+    }
+    return canViewTaskExtended(task, user);
+  });
   const canManage = canManageTasks(user);
 
   const selectedAssigneeMember = members.find(m => m.id === selectedAssigneeId);
@@ -530,6 +591,43 @@ export default function TasksPage() {
                   </span>
                 </div>
                 
+                {(task.approvalStatus === 'pending_create' || task.approvalStatus === 'pending_edit') && canSeeTaskApprovalMeta(task) && (
+                  <div className="flex items-center justify-between gap-2 p-2.5 bg-warning/10 border border-warning/25 rounded-xl text-[11px]">
+                    <div className="flex items-center gap-1.5 text-warning font-semibold">
+                      <Clock className="h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        {task.approvalStatus === 'pending_edit' ? 'Edit awaiting approval' : 'Awaiting approval'}
+                        {task.submittedBy ? ` from ${task.submittedBy === user?.name ? 'you' : task.submittedBy}` : ''}
+                      </span>
+                    </div>
+                    {canApprovePendingTask(task, user) && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => handleApproveTask(task.id)}
+                          className="p-1 hover:bg-success/15 rounded-md text-success cursor-pointer"
+                          title="Approve"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setRejectingTaskId(task.id)}
+                          className="p-1 hover:bg-danger/15 rounded-md text-danger cursor-pointer"
+                          title="Reject"
+                        >
+                          <Ban className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {task.approvalStatus === 'rejected' && canSeeTaskApprovalMeta(task) && (
+                  <div className="flex items-center gap-1.5 p-2.5 bg-danger/10 border border-danger/25 rounded-xl text-[11px] text-danger font-semibold">
+                    <Ban className="h-3.5 w-3.5 shrink-0" />
+                    <span>Rejected by {task.decidedBy || 'approver'}{task.rejectionReason ? `: ${task.rejectionReason}` : ''}</span>
+                  </div>
+                )}
+
                 <div className="space-y-1">
                   <h3 className="font-bold text-sm text-theme-text-primary leading-snug">{task.title}</h3>
                   <p className="text-[11px] text-theme-text-secondary flex items-center gap-1">
@@ -586,22 +684,26 @@ export default function TasksPage() {
                   )}
                 </div>
 
-                {canManage && (
+                {(canEditTask(user) || canDeleteTask(user, task)) && (
                   <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => handleOpenEdit(task)}
-                      className="p-1 hover:bg-theme-border/30 rounded-md text-theme-text-secondary hover:text-accent transition-all cursor-pointer"
-                      title="Edit Task"
-                    >
-                      <Edit2 className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      onClick={() => setDeletingTaskId(task.id)}
-                      className="p-1 hover:bg-danger/10 rounded-md text-danger transition-all cursor-pointer"
-                      title="Delete Task"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    {canEditTask(user) && (
+                      <button
+                        onClick={() => handleOpenEdit(task)}
+                        className="p-1 hover:bg-theme-border/30 rounded-md text-theme-text-secondary hover:text-accent transition-all cursor-pointer"
+                        title="Edit Task"
+                      >
+                        <Edit2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    {canDeleteTask(user, task) && (
+                      <button
+                        onClick={() => setDeletingTaskId(task.id)}
+                        className="p-1 hover:bg-danger/10 rounded-md text-danger transition-all cursor-pointer"
+                        title="Delete Task"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -958,6 +1060,41 @@ export default function TasksPage() {
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeletingTaskId(null)}
       />
+
+      {rejectingTaskId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="glass-panel w-full max-w-md rounded-3xl p-6 flex flex-col space-y-4 relative border border-white/15 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-theme-text-primary flex items-center gap-2">
+                <Ban className="h-4.5 w-4.5 text-danger" />
+                Reject Submission
+              </h2>
+              <button
+                onClick={() => { setRejectingTaskId(null); setRejectionReasonInput(''); }}
+                className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-1.5 text-xs">
+              <label className="block font-medium text-theme-text-secondary">Reason (optional)</label>
+              <textarea
+                value={rejectionReasonInput}
+                onChange={(e) => setRejectionReasonInput(e.target.value)}
+                rows={3}
+                placeholder="Let the submitter know why this was rejected..."
+                className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent resize-none"
+              />
+            </div>
+            <button
+              onClick={handleConfirmRejectTask}
+              className="w-full py-3 bg-danger hover:bg-danger/90 text-white font-semibold text-xs rounded-xl transition-all shadow-md cursor-pointer"
+            >
+              Confirm Rejection
+            </button>
+          </div>
+        </div>
+      )}
 
     </div>
   );

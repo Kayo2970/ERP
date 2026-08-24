@@ -12,7 +12,7 @@
  * There is no session-scoped "current user" object here; every function takes the
  * user explicitly so it works the same in pages, modals, and background sync code.
  */
-import { Member, TaskItem, RatingItem, ReimbursementItem, BudgetItem, GroupPolicy, EventItem, getMembers, getGroupPolicies, getAccessLevelSettings, canViewTask } from './local-data';
+import { Member, TaskItem, RatingItem, ReimbursementItem, BudgetItem, GroupPolicy, EventItem, PublicFormItem, getMembers, getGroupPolicies, getAccessLevelSettings, canViewTask } from './local-data';
 
 export type SessionUser = {
   id?: string;
@@ -111,9 +111,12 @@ export function isCoreCommitteeTier(user: SessionUser): boolean {
 export function isCentreHead(user: SessionUser): boolean {
   if (!user) return false;
   if (user.tier === 1) return true;
-  const role = ((user as any)?.role || '').toLowerCase();
+  const role = (user as any)?.role || '';
   const settings = getAccessLevelSettings();
-  return user.tier <= settings.sectorHeadMaxTier || anyKeywordMatches(role, settings.sectorHeadKeywords) || role.includes('advisor');
+  // Whole-word match on "advisor" so "Faculty Advisor" qualifies but "Advisory
+  // Board Member" does not (a raw substring check would wrongly match
+  // "Advisory" too, since it starts with the letters "advisor").
+  return user.tier <= settings.sectorHeadMaxTier || anyKeywordMatches(role, settings.sectorHeadKeywords) || keywordMatches(role, 'advisor');
 }
 
 /** Check if user holds the designation of Head of Events (or Events Head). */
@@ -226,6 +229,14 @@ export const CAPABILITY_CATALOG: { key: string; label: string; description: stri
   { key: 'VIEW_ALL_DESIGNS', label: 'View All Design Submissions', description: 'See every submission in the Design Portal, not just their own.' },
   { key: 'APPROVE_REIMBURSEMENTS_SECTOR', label: 'Approve Reimbursements (Sector Head stage)', description: 'First-pass reimbursement review and approval.' },
   { key: 'APPROVE_REIMBURSEMENTS_FINANCE', label: 'Approve Reimbursements (Finance Head stage)', description: 'Final-stage reimbursement approval.' },
+  { key: 'TERMINATE_MEMBER', label: 'Terminate/Reactivate Members', description: 'Terminate or reactivate any member account.' },
+  { key: 'DESIGN_STYLE_APPROVE', label: 'Style Approve/Reject Designs', description: 'Approve or reject a design submission on the Style Review step.' },
+  { key: 'DESIGN_DELETE', label: 'Delete Design Submissions', description: 'Delete any design submission, not just their own.' },
+  { key: 'APPROVE_ANNOUNCEMENT', label: 'Approve Announcements', description: 'Approve or reject a Pending announcement before it circulates.' },
+  { key: 'PROPOSE_BUDGET', label: 'Propose Budgets', description: 'Propose an annual or monthly budget request.' },
+  { key: 'DECIDE_TASK_EXTENSION', label: 'Decide Task Extensions', description: 'Approve or reject a Pending Extension request on a task.' },
+  { key: 'RATING_EDIT_ANY', label: 'Edit/Delete Any Rating', description: 'Edit or delete a rating authored by someone else.' },
+  { key: 'VIEW_ALL_REPORTS', label: 'View All Reports', description: 'See every report/rating record, not just their own or their department’s.' },
 ];
 
 /** True if a policy is enabled and, when it has an expiry date, hasn't passed it yet. */
@@ -333,7 +344,7 @@ export function canApproveAsFinanceHead(user: SessionUser, claim?: Reimbursement
 
 /** Centre Head can propose budgets (annual + monthly breakdowns). */
 export function canSubmitBudget(user: SessionUser): boolean {
-  return isCentreHead(user);
+  return isCentreHead(user) || hasCapability(user, 'PROPOSE_BUDGET');
 }
 
 /** Centre Head stage-1 verification permission for a Pending budget request. */
@@ -357,7 +368,7 @@ export function canDecideBudget(user: SessionUser, budget?: BudgetItem): boolean
 /** Announcement approval gatekeeper — Centre Head or GG Campus Events Head (Tier 2.5). */
 export function canApproveAnnouncement(user: SessionUser): boolean {
   if (!user) return false;
-  return isCentreHead(user) || isEventsHeadGgCampus(user) || user.tier === 1 || user.tier === 2.5;
+  return isCentreHead(user) || isEventsHeadGgCampus(user) || user.tier === 1 || user.tier === 2.5 || hasCapability(user, 'APPROVE_ANNOUNCEMENT');
 }
 
 /**
@@ -381,6 +392,12 @@ export function canViewReimbursement(claim: ReimbursementItem, user: SessionUser
 
   // Sector Head sees all claims, including stage-1 Pending claims
   if (isSectorHead(user)) return true;
+
+  // Centre Head (or Centre-Head-equivalent, e.g. a Faculty Advisor) verifies
+  // stage-1 claims directly on the Reimbursements page — they need to see
+  // Pending claims too, or the verify/reject buttons they're entitled to
+  // would never actually appear on anything.
+  if (isCentreHead(user)) return true;
 
   // Finance Head sees claims ONLY AFTER Sector Head approval ('Under Review', 'Approved', 'Denied')
   if (isFinanceHead(user)) {
@@ -445,7 +462,7 @@ export function canViewEvent(event: EventItem, user: SessionUser): boolean {
 }
 
 /** Whether `user` acting under `action` (create/edit) needs approval, and from whom. */
-export function getEventApprovalRequirement(user: SessionUser, action: 'CREATE' | 'EDIT'): ApprovalRequirement {
+export function getEventApprovalRequirement(user: SessionUser, action: 'CREATE' | 'EDIT' | 'DELETE'): ApprovalRequirement {
   if (isExecutiveRole(user) && !isCentreHead(user) && user?.tier !== 1) {
     return {
       requiresApproval: true,
@@ -454,16 +471,22 @@ export function getEventApprovalRequirement(user: SessionUser, action: 'CREATE' 
       policyName: 'Executive Event Sign-off Requirement'
     };
   }
+  if (action === 'DELETE') {
+    // Deletion's built-in (no-approval-needed) grant is narrower than create/edit's —
+    // it mirrors canDeleteEvent() exactly: Base Leadership only, not every Head/Core
+    // Committee role, since deleting is destructive and irreversible.
+    return getApprovalRequirement(user, 'EVENTS_DELETE', isBaseLeadership(user));
+  }
   const capability = action === 'CREATE' ? 'EVENTS_CREATE' : 'EVENTS_EDIT';
   const builtIn = isBaseLeadership(user) || user?.tier === 2.5 || isCoreCommitteeTier(user) || isHeadRole(user);
   return getApprovalRequirement(user, capability, builtIn);
 }
 
-/** Whether `user` is the resolved approver for a specific pending event (create or edit). */
+/** Whether `user` is the resolved approver for a specific pending event (create, edit, or delete). */
 export function canApprovePendingEvent(event: EventItem, user: SessionUser): boolean {
   if (!user) return false;
   if (user.tier === 1) return true;
-  if (event.approvalStatus !== 'pending_create' && event.approvalStatus !== 'pending_edit') return false;
+  if (event.approvalStatus !== 'pending_create' && event.approvalStatus !== 'pending_edit' && event.approvalStatus !== 'pending_delete') return false;
 
   const member = resolveMember(user);
   if (!member) return false;
@@ -476,6 +499,58 @@ export function canApprovePendingEvent(event: EventItem, user: SessionUser): boo
   return isSectorHead(user); // CENTER_HEAD (default)
 }
 
+/**
+ * Whether creating/editing a task lands immediately or needs sign-off first.
+ * Deliberately narrower than getEventApprovalRequirement's trusted set:
+ * a plain Core Committee tier (no Head role, no Base Leadership) always
+ * routes through approval here — Tasks assigns real people real deliverables,
+ * so it trusts fewer roles unconditionally than Events does.
+ */
+export function getTaskApprovalRequirement(user: SessionUser, action: 'CREATE' | 'EDIT'): ApprovalRequirement {
+  if (isExecutiveRole(user) && !isCentreHead(user) && user?.tier !== 1) {
+    return {
+      requiresApproval: true,
+      approverType: 'CENTER_HEAD',
+      approverName: 'the Centre Head or GG Campus Events Head',
+      policyName: 'Executive Task Sign-off Requirement'
+    };
+  }
+  const trusted = isBaseLeadership(user) || user?.tier === 2.5 || isHeadRole(user);
+  if (trusted) return { requiresApproval: false };
+
+  // Not trusted, but they may still hold create/edit access from a different
+  // built-in rule entirely (Core Committee's canCreateTask/canEditTask grant
+  // needs no policy at all) or from a TASKS_CREATE/TASKS_EDIT policy capability.
+  // getApprovalRequirement() can't see the former — it only ever reasons about
+  // policy-granted capabilities — so check the real access gate directly and,
+  // if they have it by any means, always route it through approval here.
+  const hasAccess = action === 'CREATE' ? canCreateTask(user) : canEditTask(user);
+  if (!hasAccess) return { requiresApproval: false };
+  return {
+    requiresApproval: true,
+    approverType: 'CENTER_HEAD',
+    approverName: 'the Centre Head or GG Campus Events Head',
+    policyName: 'Task Sign-off Requirement',
+  };
+}
+
+/** Whether `user` is the resolved approver for a specific pending task (create or edit). */
+export function canApprovePendingTask(task: TaskItem, user: SessionUser): boolean {
+  if (!user) return false;
+  if (user.tier === 1) return true;
+  if (task.approvalStatus !== 'pending_create' && task.approvalStatus !== 'pending_edit') return false;
+
+  const member = resolveMember(user);
+  if (!member) return false;
+
+  if (task.approverType === 'SPECIFIC_MEMBER') return member.id === task.approverMemberId;
+  if (task.approverType === 'POLICY_TAG' && task.approverPolicyTagId) {
+    const tagPolicy = getGroupPolicies().find(p => p.id === task.approverPolicyTagId);
+    return !!tagPolicy && memberMatchesPolicy(member, tagPolicy);
+  }
+  return isCentreHead(user) || isEventsHeadGgCampus(user); // CENTER_HEAD (default): Centre Head or GG Campus Events Head
+}
+
 /** Task creation — leadership, Core Committee, any Head, or a TASKS_CREATE grant. */
 export function canCreateTask(user: SessionUser): boolean {
   return isBaseLeadership(user) || isCoreCommitteeTier(user) || isHeadRole(user) || hasCapability(user, 'TASKS_CREATE');
@@ -486,9 +561,16 @@ export function canEditTask(user: SessionUser): boolean {
   return isBaseLeadership(user) || isCoreCommitteeTier(user) || isHeadRole(user) || hasCapability(user, 'TASKS_EDIT');
 }
 
-/** Task deletion — base leadership only by default, or a TASKS_DELETE grant. */
-export function canDeleteTask(user: SessionUser): boolean {
-  return isBaseLeadership(user) || hasCapability(user, 'TASKS_DELETE');
+/**
+ * Task deletion — base leadership or a TASKS_DELETE grant can delete any task
+ * immediately. Passing the task additionally lets its own creator delete it
+ * (no approval needed — deleting your own not-yet-relevant task is not the
+ * same risk as deleting someone else's).
+ */
+export function canDeleteTask(user: SessionUser, task?: TaskItem): boolean {
+  if (isBaseLeadership(user) || hasCapability(user, 'TASKS_DELETE')) return true;
+  if (task && user?.name && task.creatorName === user.name) return true;
+  return false;
 }
 
 /** Umbrella check replacing the old canManageTasksAndEvents() for the Tasks page. */
@@ -607,7 +689,7 @@ export function canEditDirectory(user: SessionUser): boolean {
 /** Check if user can terminate members (Centre Head or Super User only). */
 export function canTerminateMember(user: SessionUser): boolean {
   if (isExecutiveRole(user) || isAlumniRole(user)) return false;
-  return isCentreHead(user) || user?.tier === 1;
+  return isCentreHead(user) || user?.tier === 1 || hasCapability(user, 'TERMINATE_MEMBER');
 }
 
 /**
@@ -650,6 +732,50 @@ export function canDeleteForms(user: SessionUser): boolean {
   return isCentreHead(user) || user?.tier === 1;
 }
 
+/**
+ * Whether building/editing/deleting a public form lands immediately or needs
+ * Centre Head sign-off first. Forms are public-facing (a live link goes out
+ * the moment it's built), so the trusted-without-approval set is narrower and
+ * specific: Centre Head, Finance Head, any of the three named Events Head
+ * roles, or Design Head — a generic/unnamed "Head" role, Executive roles,
+ * Advisory Board, and Core Committee all route through approval.
+ */
+export function getFormApprovalRequirement(user: SessionUser, action: 'CREATE' | 'EDIT' | 'DELETE'): ApprovalRequirement {
+  const trusted = user?.tier === 1 || isCentreHead(user) || isFinanceHead(user) || isDesignHead(user) || isHeadOfEvents(user);
+  if (trusted) return { requiresApproval: false };
+
+  // canBuildForms()/canDeleteForms() grant Core Committee, any generic Head
+  // role, and Executive roles access with no policy involved at all —
+  // getApprovalRequirement() only reasons about policy-granted capabilities,
+  // so it can't see that built-in grant. Check the real access gate directly
+  // and route it through approval whenever they have access by any means.
+  const hasAccess = action === 'DELETE' ? canDeleteForms(user) || canBuildForms(user) : canBuildForms(user);
+  if (!hasAccess) return { requiresApproval: false };
+  return {
+    requiresApproval: true,
+    approverType: 'CENTER_HEAD',
+    approverName: 'the Centre Head',
+    policyName: 'Public Form Sign-off Requirement',
+  };
+}
+
+/** Whether `user` is the resolved approver for a specific pending form (create, edit, or delete). */
+export function canApprovePendingForm(form: PublicFormItem, user: SessionUser): boolean {
+  if (!user) return false;
+  if (user.tier === 1) return true;
+  if (form.approvalStatus !== 'pending_create' && form.approvalStatus !== 'pending_edit' && form.approvalStatus !== 'pending_delete') return false;
+
+  const member = resolveMember(user);
+  if (!member) return false;
+
+  if (form.approverType === 'SPECIFIC_MEMBER') return member.id === form.approverMemberId;
+  if (form.approverType === 'POLICY_TAG' && form.approverPolicyTagId) {
+    const tagPolicy = getGroupPolicies().find(p => p.id === form.approverPolicyTagId);
+    return !!tagPolicy && memberMatchesPolicy(member, tagPolicy);
+  }
+  return isCentreHead(user); // CENTER_HEAD (default)
+}
+
 /** Announcement authoring — Core Committee, Advisory Board, Faculty, Heads, Centre Head & GG Campus Events Head. */
 export function canCreateAnnouncement(user: SessionUser): boolean {
   if (!user || isAlumniRole(user)) return false;
@@ -685,7 +811,7 @@ export function canRequestTaskExtension(task: TaskItem, user: SessionUser): bool
 
 /** Task extension approval/rejection: base leadership, or Faculty. */
 export function canDecideTaskExtension(user: SessionUser): boolean {
-  return isBaseLeadership(user) || isFaculty(user);
+  return isBaseLeadership(user) || isFaculty(user) || hasCapability(user, 'DECIDE_TASK_EXTENSION');
 }
 
 /**

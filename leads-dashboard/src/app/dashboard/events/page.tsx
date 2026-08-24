@@ -20,7 +20,7 @@ import {
   Ban,
   Handshake
 } from 'lucide-react';
-import { getEvents, addEvent, updateEvent, deleteEvent, approveEvent, rejectEvent, submitEventEdit, getEffectiveEventStatus, formatEventDateRange, getEventSortTime, getEventSponsorTotal, EventItem, EventSponsor } from '@/lib/local-data';
+import { getEvents, addEvent, updateEvent, deleteEvent, approveEvent, rejectEvent, submitEventEdit, submitEventDelete, getEffectiveEventStatus, formatEventDateRange, getEventSortTime, getEventSponsorTotal, EventItem, EventSponsor } from '@/lib/local-data';
 import { canCreateEvent, canEditEvent, canDeleteEvent, canManageEvents, canViewEvent, canApprovePendingEvent, getEventApprovalRequirement } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -321,9 +321,10 @@ export default function EventsPage() {
   };
 
   const handleApproveEvent = (id: string) => {
+    const wasDelete = events.find(e => e.id === id)?.approvalStatus === 'pending_delete';
     approveEvent(id, user?.name || 'User');
     setEvents(getEvents());
-    triggerSuccess('Approved. The change is now live.');
+    triggerSuccess(wasDelete ? 'Approved. The event has been deleted.' : 'Approved. The change is now live.');
   };
 
   const handleConfirmReject = () => {
@@ -337,10 +338,21 @@ export default function EventsPage() {
 
   const handleConfirmDelete = () => {
     if (!deletingEventId) return;
-    deleteEvent(deletingEventId, user?.name || 'User');
+    const approval = getEventApprovalRequirement(user, 'DELETE');
+    if (approval.requiresApproval) {
+      submitEventDelete(deletingEventId, user?.name || 'User', user?.email || '', {
+        approverType: approval.approverType,
+        approverMemberId: approval.approverMemberId,
+        approverPolicyTagId: approval.approverPolicyTagId,
+        policyName: approval.policyName,
+      });
+      triggerSuccess(`Deletion submitted for approval from ${approval.approverName}. The event stays live until then.`);
+    } else {
+      deleteEvent(deletingEventId, user?.name || 'User');
+      triggerSuccess('Event removed from system.');
+    }
     setDeletingEventId(null);
     setEvents(getEvents());
-    triggerSuccess('Event removed from system.');
   };
 
   const canManage = canManageEvents(user);
@@ -528,12 +540,12 @@ export default function EventsPage() {
                     </span>
                   </div>
 
-                  {(event.approvalStatus === 'pending_create' || event.approvalStatus === 'pending_edit') && canSeeApprovalMeta(event) && (
-                    <div className="flex items-center justify-between gap-2 p-2.5 bg-warning/10 border border-warning/25 rounded-xl text-[11px]">
-                      <div className="flex items-center gap-1.5 text-warning font-semibold">
+                  {(event.approvalStatus === 'pending_create' || event.approvalStatus === 'pending_edit' || event.approvalStatus === 'pending_delete') && canSeeApprovalMeta(event) && (
+                    <div className={`flex items-center justify-between gap-2 p-2.5 border rounded-xl text-[11px] ${event.approvalStatus === 'pending_delete' ? 'bg-danger/10 border-danger/25' : 'bg-warning/10 border-warning/25'}`}>
+                      <div className={`flex items-center gap-1.5 font-semibold ${event.approvalStatus === 'pending_delete' ? 'text-danger' : 'text-warning'}`}>
                         <Clock className="h-3.5 w-3.5 shrink-0" />
                         <span>
-                          {event.approvalStatus === 'pending_edit' ? 'Edit awaiting approval' : 'Awaiting approval'}
+                          {event.approvalStatus === 'pending_delete' ? 'Deletion awaiting approval' : event.approvalStatus === 'pending_edit' ? 'Edit awaiting approval' : 'Awaiting approval'}
                           {event.submittedBy ? ` from ${event.submittedBy === user?.name ? 'you' : event.submittedBy}` : ''}
                         </span>
                       </div>
@@ -620,7 +632,7 @@ export default function EventsPage() {
                           <Edit2 className="h-3.5 w-3.5" />
                         </button>
                       )}
-                      {canDeleteEvent(user) && (
+                      {canDeleteEvent(user) && event.approvalStatus !== 'pending_delete' && (
                         <button
                           onClick={() => setDeletingEventId(event.id)}
                           className="p-1.5 hover:bg-danger/10 rounded-lg transition-all text-danger cursor-pointer"
