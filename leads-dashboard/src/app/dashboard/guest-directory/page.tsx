@@ -192,7 +192,7 @@ export default function GuestDirectoryPage() {
       const url = URL.createObjectURL(file);
       img.onload = () => {
         URL.revokeObjectURL(url);
-        const maxDim = 1600;
+        const maxDim = 1200; // Optimal scaling dimension for instant upload & sharp OCR parsing
         let { width, height } = img;
         if (width > maxDim || height > maxDim) {
           if (width > height) {
@@ -208,8 +208,10 @@ export default function GuestDirectoryPage() {
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (ctx) {
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
           ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.85));
+          resolve(canvas.toDataURL('image/jpeg', 0.80));
         } else {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result as string);
@@ -229,10 +231,11 @@ export default function GuestDirectoryPage() {
   const handleFrontCardChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
     setFrontCardError('');
-    setOcrStatus(null);
+    setOcrStatus('⚡ Auto-scaling & optimizing card photo for OCR...');
     if (!selected) {
       setFrontCardFile(null);
       setFrontCardData('');
+      setOcrStatus(null);
       return;
     }
     setFrontCardFile(selected);
@@ -241,17 +244,19 @@ export default function GuestDirectoryPage() {
       setFrontCardData(compressedBase64);
       runOcrScan(compressedBase64, backCardData);
     } catch {
-      setFrontCardError('Failed to read file.');
+      setFrontCardError('Failed to read and process image file.');
+      setOcrStatus(null);
     }
   };
 
   const handleBackCardChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
     setBackCardError('');
-    setOcrStatus(null);
+    setOcrStatus('⚡ Auto-scaling & optimizing card photo for OCR...');
     if (!selected) {
       setBackCardFile(null);
       setBackCardData('');
+      setOcrStatus(null);
       return;
     }
     setBackCardFile(selected);
@@ -262,7 +267,8 @@ export default function GuestDirectoryPage() {
         runOcrScan(frontCardData, compressedBase64);
       }
     } catch {
-      setBackCardError('Failed to read file.');
+      setBackCardError('Failed to read and process image file.');
+      setOcrStatus(null);
     }
   };
 
