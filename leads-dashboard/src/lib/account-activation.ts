@@ -11,6 +11,7 @@
 import { randomBytes } from 'crypto';
 import { mutateCollection } from './server-db';
 import { dispatchEmail, generateWelcomeActivationEmailTemplate } from './email-service';
+import { getAppBaseUrl } from './app-url';
 
 const ACTIVATION_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -38,13 +39,15 @@ export interface ActivationToken {
  */
 export async function createActivationTokenAndSendEmail(
   member: { id: string; name: string; email: string },
-  originUrl?: string
-): Promise<{ token: string; activationLink: string }> {
-  const token = randomBytes(32).toString('hex');
-  const expiresAt = Date.now() + ACTIVATION_WINDOW_MS;
+  actorName: string,
+  originUrl?: string,
+  req?: Request | null
+) {
+  const token = `act-${Date.now()}-${randomBytes(8).toString('hex')}`;
+  const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
 
   const activationToken: ActivationToken = {
-    id: `activate-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    id: `token-${Date.now()}`,
     memberId: member.id,
     email: member.email.toLowerCase(),
     token,
@@ -57,8 +60,8 @@ export async function createActivationTokenAndSendEmail(
     return [activationToken, ...filtered];
   });
 
-  const baseUrl = originUrl || process.env.NEXT_PUBLIC_APP_URL || 'https://leads.pavris.in';
-  const activationLink = `${baseUrl.replace(/\/+$/, '')}/activate?token=${token}`;
+  const baseUrl = getAppBaseUrl(req, originUrl);
+  const activationLink = `${baseUrl}/activate?token=${token}`;
   const template = generateWelcomeActivationEmailTemplate(member.name, activationLink);
 
   await dispatchEmail({
