@@ -8,6 +8,8 @@ import {
   Eye,
   Copy,
   CheckCircle2,
+  Check,
+  Ban,
   X,
   Edit2,
   ShieldAlert,
@@ -35,6 +37,10 @@ import {
   addForm,
   updateForm,
   deleteForm,
+  submitFormEdit,
+  submitFormDelete,
+  approveForm,
+  rejectForm,
   getSubmissions,
   isSlugUnique,
   getFormTemplates,
@@ -47,7 +53,7 @@ import {
   FormTemplateItem,
   EventItem
 } from '@/lib/local-data';
-import { canBuildForms } from '@/lib/permissions';
+import { canBuildForms, getFormApprovalRequirement, canApprovePendingForm } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -98,6 +104,8 @@ export default function FormsBuilderPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingForm, setEditingForm] = useState<PublicFormItem | null>(null);
   const [deletingFormId, setDeletingFormId] = useState<string | null>(null);
+  const [rejectingFormId, setRejectingFormId] = useState<string | null>(null);
+  const [rejectionReasonInput, setRejectionReasonInput] = useState('');
   const [isSaveTemplateOpen, setIsSaveTemplateOpen] = useState(false);
   const [templateNameDraft, setTemplateNameDraft] = useState('');
 
@@ -246,7 +254,7 @@ export default function FormsBuilderPage() {
         setFormError(`The slug "${formattedSlug}" is already taken by another form. Choose a unique slug.`);
         return;
       }
-      updateForm(editingForm.id, {
+      const changes = {
         title,
         slug: formattedSlug,
         description,
@@ -254,15 +262,27 @@ export default function FormsBuilderPage() {
         fields,
         eventId: eventId || undefined,
         eventName: linkedEvent?.title,
-      }, user?.name || 'User');
-      triggerNotification('Public form updated successfully.');
+      };
+      const approval = getFormApprovalRequirement(user, 'EDIT');
+      if (approval.requiresApproval) {
+        submitFormEdit(editingForm.id, changes, user?.name || 'User', user?.email || '', {
+          approverType: approval.approverType,
+          approverMemberId: approval.approverMemberId,
+          approverPolicyTagId: approval.approverPolicyTagId,
+          policyName: approval.policyName,
+        });
+        triggerNotification(`Edit submitted for approval from ${approval.approverName}. The live link keeps showing the current version until then.`);
+      } else {
+        updateForm(editingForm.id, changes, user?.name || 'User');
+        triggerNotification('Public form updated successfully.');
+      }
       setEditingForm(null);
     } else {
       if (!isSlugUnique(formattedSlug)) {
         setFormError(`The slug "${formattedSlug}" is already taken by another form. Choose a unique slug.`);
         return;
       }
-      addForm({
+      const newFormBase = {
         title,
         slug: formattedSlug,
         description,
@@ -271,9 +291,25 @@ export default function FormsBuilderPage() {
         eventId: eventId || undefined,
         eventName: linkedEvent?.title,
         createdBy: user?.name || 'User',
-        status: 'active'
-      });
-      triggerNotification('New dynamic public form created successfully.');
+        status: 'active' as const,
+      };
+      const approval = getFormApprovalRequirement(user, 'CREATE');
+      if (approval.requiresApproval) {
+        addForm({
+          ...newFormBase,
+          approvalStatus: 'pending_create',
+          approverType: approval.approverType,
+          approverMemberId: approval.approverMemberId,
+          approverPolicyTagId: approval.approverPolicyTagId,
+          approvalPolicyName: approval.policyName,
+          submittedBy: user?.name,
+          submittedByEmail: user?.email,
+        });
+        triggerNotification(`Form submitted for approval from ${approval.approverName}. Its public link goes live once approved.`);
+      } else {
+        addForm(newFormBase);
+        triggerNotification('New dynamic public form created successfully.');
+      }
       setIsCreateModalOpen(false);
     }
 
@@ -283,6 +319,19 @@ export default function FormsBuilderPage() {
 
   const handleConfirmDelete = () => {
     if (!deletingFormId) return;
+    const approval = getFormApprovalRequirement(user, 'DELETE');
+    if (approval.requiresApproval) {
+      submitFormDelete(deletingFormId, user?.name || 'User', user?.email || '', {
+        approverType: approval.approverType,
+        approverMemberId: approval.approverMemberId,
+        approverPolicyTagId: approval.approverPolicyTagId,
+        policyName: approval.policyName,
+      });
+      triggerNotification(`Deletion submitted for approval from ${approval.approverName}. The form stays live until then.`);
+      setDeletingFormId(null);
+      setForms(getForms());
+      return;
+    }
     deleteForm(deletingFormId, user?.name || 'User');
     setDeletingFormId(null);
     const updated = getForms();
@@ -291,6 +340,22 @@ export default function FormsBuilderPage() {
       setSelectedFormId(updated[0].id);
     }
     triggerNotification('Public form deleted.');
+  };
+
+  const handleApproveForm = (id: string) => {
+    const wasDelete = forms.find(f => f.id === id)?.approvalStatus === 'pending_delete';
+    approveForm(id, user?.name || 'User');
+    setForms(getForms());
+    triggerNotification(wasDelete ? 'Approved. The form has been deleted.' : 'Approved. The form is now live.');
+  };
+
+  const handleConfirmRejectForm = () => {
+    if (!rejectingFormId) return;
+    rejectForm(rejectingFormId, user?.name || 'User', rejectionReasonInput || undefined);
+    setForms(getForms());
+    setRejectingFormId(null);
+    setRejectionReasonInput('');
+    triggerNotification('Rejected.');
   };
 
   const handleCopyLink = (formSlug: string) => {
@@ -303,7 +368,18 @@ export default function FormsBuilderPage() {
   // PRD Gating: Super User (Tier 1) and Core Committee (Tier 5)
   const canBuild = canBuildForms(user);
 
-  const selectedForm = forms.find(f => f.id === selectedFormId) || forms[0];
+  // Visibility: a pending/rejected submission is only shown to its submitter, its
+  // resolved approver, and the Super User — mirrors the same rule on Events/Tasks.
+  const canSeeFormApprovalMeta = (form: PublicFormItem) =>
+    user?.tier === 1 || form.submittedByEmail === user?.email || canApprovePendingForm(form, user);
+  const displayedForms = forms.filter(form => {
+    if (form.approvalStatus === 'pending_create' || form.approvalStatus === 'rejected') {
+      return canSeeFormApprovalMeta(form);
+    }
+    return true;
+  });
+
+  const selectedForm = displayedForms.find(f => f.id === selectedFormId) || displayedForms[0];
   const selectedSubmissions = selectedForm ? submissions.filter(s => s.formId === selectedForm.id || s.slug === selectedForm.slug) : [];
 
   return (
@@ -353,11 +429,11 @@ export default function FormsBuilderPage() {
           {/* Active Forms List */}
           <div className="glass-panel rounded-2xl p-6 lg:col-span-1 space-y-4 flex flex-col">
             <h3 className="text-sm font-bold text-theme-text-primary uppercase tracking-wider">
-              Published Forms ({forms.length})
+              Published Forms ({displayedForms.length})
             </h3>
 
             <div className="space-y-3 flex-1 overflow-y-auto max-h-[600px] pr-1">
-              {forms.map(form => {
+              {displayedForms.map(form => {
                 const isSelected = selectedForm?.id === form.id;
                 const formSubs = submissions.filter(s => s.formId === form.id || s.slug === form.slug);
 
@@ -388,6 +464,42 @@ export default function FormsBuilderPage() {
                       </span>
                     </div>
 
+                    {(form.approvalStatus === 'pending_create' || form.approvalStatus === 'pending_edit' || form.approvalStatus === 'pending_delete') && canSeeFormApprovalMeta(form) && (
+                      <div className={`flex items-center justify-between gap-2 p-2 border rounded-lg text-[10px] ${form.approvalStatus === 'pending_delete' ? 'bg-danger/10 border-danger/25' : 'bg-warning/10 border-warning/25'}`}>
+                        <div className={`flex items-center gap-1 font-semibold ${form.approvalStatus === 'pending_delete' ? 'text-danger' : 'text-warning'}`}>
+                          <Clock className="h-3 w-3 shrink-0" />
+                          <span>
+                            {form.approvalStatus === 'pending_delete' ? 'Deletion awaiting approval' : form.approvalStatus === 'pending_edit' ? 'Edit awaiting approval' : 'Awaiting approval'}
+                          </span>
+                        </div>
+                        {canApprovePendingForm(form, user) && (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleApproveForm(form.id); }}
+                              className="p-0.5 hover:bg-success/15 rounded text-success cursor-pointer"
+                              title="Approve"
+                            >
+                              <Check className="h-3 w-3" />
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setRejectingFormId(form.id); }}
+                              className="p-0.5 hover:bg-danger/15 rounded text-danger cursor-pointer"
+                              title="Reject"
+                            >
+                              <Ban className="h-3 w-3" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {form.approvalStatus === 'rejected' && canSeeFormApprovalMeta(form) && (
+                      <div className="flex items-center gap-1 p-2 bg-danger/10 border border-danger/25 rounded-lg text-[10px] text-danger font-semibold">
+                        <Ban className="h-3 w-3 shrink-0" />
+                        <span>Rejected by {form.decidedBy || 'approver'}{form.rejectionReason ? `: ${form.rejectionReason}` : ''}</span>
+                      </div>
+                    )}
+
                     <p className="text-[11px] text-theme-text-secondary line-clamp-1">
                       {form.description || `${form.fields.length} question fields`}
                     </p>
@@ -400,27 +512,33 @@ export default function FormsBuilderPage() {
                     )}
 
                     <div className="flex items-center justify-between pt-1 border-t border-theme-border/20 text-[11px]">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleCopyLink(form.slug);
-                        }}
-                        className="text-accent hover:underline font-semibold flex items-center gap-1 cursor-pointer"
-                      >
-                        <Copy className="h-3 w-3" />
-                        {copiedSlug === form.slug ? 'Copied Link!' : 'Copy Link'}
-                      </button>
+                      {form.approvalStatus === 'pending_create' ? (
+                        <span className="text-theme-text-secondary italic">Link generates once approved</span>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCopyLink(form.slug);
+                          }}
+                          className="text-accent hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Copy className="h-3 w-3" />
+                          {copiedSlug === form.slug ? 'Copied Link!' : 'Copy Link'}
+                        </button>
+                      )}
 
                       <div className="flex items-center gap-1.5">
-                        <Link
-                          href={`/forms/${form.slug}`}
-                          target="_blank"
-                          onClick={(e) => e.stopPropagation()}
-                          className="p-1 hover:bg-theme-border/30 rounded text-theme-text-secondary hover:text-theme-text-primary"
-                          title="Open Public Form View"
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                        </Link>
+                        {form.approvalStatus !== 'pending_create' && (
+                          <Link
+                            href={`/forms/${form.slug}`}
+                            target="_blank"
+                            onClick={(e) => e.stopPropagation()}
+                            className="p-1 hover:bg-theme-border/30 rounded text-theme-text-secondary hover:text-theme-text-primary"
+                            title="Open Public Form View"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                          </Link>
+                        )}
                         {canBuild && (
                           <>
                             <button
@@ -433,16 +551,18 @@ export default function FormsBuilderPage() {
                             >
                               <Edit2 className="h-3.5 w-3.5" />
                             </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDeletingFormId(form.id);
-                              }}
-                              className="p-1 hover:bg-danger/10 rounded text-danger cursor-pointer"
-                              title="Delete Form"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
+                            {form.approvalStatus !== 'pending_delete' && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeletingFormId(form.id);
+                                }}
+                                className="p-1 hover:bg-danger/10 rounded text-danger cursor-pointer"
+                                title="Delete Form"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
                           </>
                         )}
                       </div>
@@ -477,13 +597,19 @@ export default function FormsBuilderPage() {
                       </p>
                     )}
                   </div>
-                  <button
-                    onClick={() => handleCopyLink(selectedForm.slug)}
-                    className="px-3 py-1.5 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 self-start sm:self-auto"
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                    {copiedSlug === selectedForm.slug ? 'Copied!' : 'Share Public Link'}
-                  </button>
+                  {selectedForm.approvalStatus === 'pending_create' ? (
+                    <span className="text-xs text-warning font-semibold flex items-center gap-1.5 self-start sm:self-auto">
+                      <Clock className="h-3.5 w-3.5" /> Link generates once approved
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => handleCopyLink(selectedForm.slug)}
+                      className="px-3 py-1.5 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 self-start sm:self-auto"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                      {copiedSlug === selectedForm.slug ? 'Copied!' : 'Share Public Link'}
+                    </button>
+                  )}
                 </div>
 
                 {/* Submissions: Table / Charts toggle */}
@@ -868,6 +994,41 @@ export default function FormsBuilderPage() {
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeletingFormId(null)}
       />
+
+      {rejectingFormId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="glass-panel w-full max-w-md rounded-3xl p-6 flex flex-col space-y-4 relative border border-white/15 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-theme-text-primary flex items-center gap-2">
+                <Ban className="h-4.5 w-4.5 text-danger" />
+                Reject Submission
+              </h2>
+              <button
+                onClick={() => { setRejectingFormId(null); setRejectionReasonInput(''); }}
+                className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-1.5 text-xs">
+              <label className="block font-medium text-theme-text-secondary">Reason (optional)</label>
+              <textarea
+                value={rejectionReasonInput}
+                onChange={(e) => setRejectionReasonInput(e.target.value)}
+                rows={3}
+                placeholder="Let the submitter know why this was rejected..."
+                className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent resize-none"
+              />
+            </div>
+            <button
+              onClick={handleConfirmRejectForm}
+              className="w-full py-3 bg-danger hover:bg-danger/90 text-white font-semibold text-xs rounded-xl transition-all shadow-md cursor-pointer"
+            >
+              Confirm Rejection
+            </button>
+          </div>
+        </div>
+      )}
 
     </div>
   );

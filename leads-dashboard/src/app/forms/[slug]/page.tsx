@@ -23,7 +23,10 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
 
     const applyForm = (matchedForm: PublicFormItem | undefined) => {
       if (cancelled) return;
-      if (!matchedForm) {
+      // A form that's never been approved (still pending, or was rejected)
+      // has no live public link yet — treat it exactly like a missing slug
+      // rather than exposing an unreviewed form to respondents.
+      if (!matchedForm || matchedForm.approvalStatus === 'pending_create' || matchedForm.approvalStatus === 'rejected') {
         setNotFound(true);
         setLoading(false);
         return;

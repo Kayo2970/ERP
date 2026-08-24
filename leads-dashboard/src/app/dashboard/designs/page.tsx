@@ -47,7 +47,7 @@ import {
   TaskItem,
   OcrScanResult
 } from '@/lib/local-data';
-import { canViewAllDesigns, isDesignHead, isCentreHead } from '@/lib/permissions';
+import { canViewAllDesigns, isDesignHead, isCentreHead, hasCapability } from '@/lib/permissions';
 
 /** Renders an OCR scan's flagged spelling issues + extracted text preview. Advisory only. */
 function OcrScanPanel({
@@ -1007,7 +1007,7 @@ export default function DesignPortalPage() {
                       Inspect & Review
                     </button>
 
-                    {(design.designerEmail === user?.email || user?.tier <= 3) && (
+                    {(design.designerEmail === user?.email || user?.tier <= 3 || hasCapability(user, 'DESIGN_DELETE')) && (
                       <button
                         onClick={() => handleDelete(design.id, design.title)}
                         className="p-1.5 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
@@ -1946,7 +1946,7 @@ export default function DesignPortalPage() {
                 </div>
               )}
 
-              {(isDesignHead(user) || isCentreHead(user)) ? (
+              {(isDesignHead(user) || isCentreHead(user) || hasCapability(user, 'DESIGN_STYLE_APPROVE')) ? (
                 <form onSubmit={handleSaveStyleReview} className="space-y-3 text-xs bg-accent/5 p-4 rounded-xl border border-accent/20">
                   <p className="font-medium text-foreground">{selectedDesign.styleStatus ? 'Update Design Style Decision:' : 'Submit Design Style Decision:'}</p>
 

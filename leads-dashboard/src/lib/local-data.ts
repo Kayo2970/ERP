@@ -106,7 +106,7 @@ export interface EventItem {
   // from a policy tag marked "requires approval." Absent/'approved' means normal,
   // immediately-effective events (every event created before this feature, and
   // every one created by someone with a built-in or non-approval-gated grant).
-  approvalStatus?: 'pending_create' | 'pending_edit' | 'approved' | 'rejected';
+  approvalStatus?: 'pending_create' | 'pending_edit' | 'pending_delete' | 'approved' | 'rejected';
   pendingChange?: Partial<EventItem>; // for pending_edit: the proposed diff, applied on approval
   approverType?: 'CENTER_HEAD' | 'SPECIFIC_MEMBER' | 'POLICY_TAG';
   approverMemberId?: string;
@@ -159,6 +159,20 @@ export interface TaskItem {
   draftLinkedinCaption?: string;
   approvedInstagramCaption?: string;
   approvedLinkedinCaption?: string;
+  // Group Policy approval workflow — mirrors EventItem's fields. Set only when
+  // the creator/editor's grant is not one of Tasks' built-in trusted roles
+  // (Base Leadership, any Head role, GG Campus tier) or came from an
+  // approval-required policy tag; absent/'approved' means a normal,
+  // immediately-effective task.
+  approvalStatus?: 'pending_create' | 'pending_edit' | 'approved' | 'rejected';
+  pendingChange?: Partial<TaskItem>; // for pending_edit: the proposed diff, applied on approval
+  approverType?: 'CENTER_HEAD' | 'SPECIFIC_MEMBER' | 'POLICY_TAG';
+  approverMemberId?: string;
+  approverPolicyTagId?: string;
+  approvalPolicyName?: string;
+  submittedBy?: string;
+  submittedByEmail?: string;
+  rejectionReason?: string;
 }
 
 export interface RatingItem {
@@ -292,6 +306,21 @@ export interface PublicFormItem {
   status: 'active' | 'archived';
   eventId?: string;
   eventName?: string;
+  // Group Policy approval workflow — mirrors EventItem/TaskItem's fields. A
+  // form's public link (/forms/[slug]) only actually resolves once it's
+  // 'approved' (or carries no approvalStatus at all, i.e. was built before
+  // this feature, or by someone in Forms' trusted role set).
+  approvalStatus?: 'pending_create' | 'pending_edit' | 'pending_delete' | 'approved' | 'rejected';
+  pendingChange?: Partial<PublicFormItem>;
+  approverType?: 'CENTER_HEAD' | 'SPECIFIC_MEMBER' | 'POLICY_TAG';
+  approverMemberId?: string;
+  approverPolicyTagId?: string;
+  approvalPolicyName?: string;
+  submittedBy?: string;
+  submittedByEmail?: string;
+  decidedBy?: string;
+  decidedAt?: string;
+  rejectionReason?: string;
 }
 
 export interface FormTemplateItem {
@@ -1113,6 +1142,37 @@ export function deleteEvent(id: string, actorName: string): boolean {
 }
 
 /**
+ * Submit a deletion request for sign-off instead of deleting immediately — used
+ * when the requester's EVENTS_DELETE grant came from an approval-required Group
+ * Policy (this is also how every Executive role's delete request is routed,
+ * per getEventApprovalRequirement's built-in "always needs Centre Head sign-off"
+ * rule). The event stays fully visible/unaffected until the deletion is approved
+ * (removed) or rejected (reverts to 'approved', no data lost).
+ */
+export function submitEventDelete(
+  id: string,
+  submittedBy: string,
+  submittedByEmail: string,
+  approval: { approverType?: GroupPolicy['approverType']; approverMemberId?: string; approverPolicyTagId?: string; policyName?: string }
+): EventItem | null {
+  const events = getEvents();
+  const target = events.find(e => e.id === id);
+  if (!target) return null;
+
+  const result = updateEvent(id, {
+    approvalStatus: 'pending_delete',
+    approverType: approval.approverType,
+    approverMemberId: approval.approverMemberId,
+    approverPolicyTagId: approval.approverPolicyTagId,
+    approvalPolicyName: approval.policyName,
+    submittedBy,
+    submittedByEmail,
+  }, submittedBy);
+  logAuditEvent('EVENT_DELETE_SUBMITTED', submittedBy, `Submitted deletion of event "${target.title}" for approval`, submittedByEmail);
+  return result;
+}
+
+/**
  * Submit an edit to an already-approved event for sign-off instead of applying it
  * immediately — used when the editor's EVENTS_EDIT grant came from an
  * approval-required Group Policy. The event keeps showing its last-approved values
@@ -1143,12 +1203,19 @@ export function submitEventEdit(
   return result;
 }
 
-/** Approve a pending event creation or edit. For a pending edit, merges the staged
- *  pendingChange into the record; for a pending creation, simply marks it approved. */
+/** Approve a pending event creation, edit, or deletion. For a pending edit, merges
+ *  the staged pendingChange into the record; for a pending creation, simply marks
+ *  it approved; for a pending deletion, actually removes the event now. */
 export function approveEvent(id: string, actorName: string): EventItem | null {
   const events = getEvents();
   const target = events.find(e => e.id === id);
   if (!target) return null;
+
+  if (target.approvalStatus === 'pending_delete') {
+    deleteEvent(id, actorName);
+    logAuditEvent('EVENT_APPROVED', actorName, `Approved and completed the deletion of event "${target.title}"`);
+    return null;
+  }
 
   const isEdit = target.approvalStatus === 'pending_edit';
   const result = updateEvent(id, {
@@ -1162,23 +1229,25 @@ export function approveEvent(id: string, actorName: string): EventItem | null {
   return result;
 }
 
-/** Reject a pending event creation or edit. A rejected creation is marked
- *  'rejected' (kept for audit, hidden from general view). A rejected edit simply
- *  discards the staged pendingChange — the original approved event stands. */
+/** Reject a pending event creation, edit, or deletion. A rejected creation is
+ *  marked 'rejected' (kept for audit, hidden from general view). A rejected edit
+ *  or deletion simply reverts to 'approved' — the original event stands, nothing
+ *  is lost. */
 export function rejectEvent(id: string, actorName: string, reason?: string): EventItem | null {
   const events = getEvents();
   const target = events.find(e => e.id === id);
   if (!target) return null;
 
-  const isEdit = target.approvalStatus === 'pending_edit';
+  const isCreate = target.approvalStatus === 'pending_create';
   const result = updateEvent(id, {
-    approvalStatus: isEdit ? 'approved' : 'rejected',
+    approvalStatus: isCreate ? 'rejected' : 'approved',
     pendingChange: undefined,
     decidedBy: actorName,
     decidedAt: new Date().toISOString(),
     rejectionReason: reason,
   }, actorName);
-  logAuditEvent('EVENT_REJECTED', actorName, `Rejected ${isEdit ? 'an edit to' : 'the creation of'} event "${target.title}"${reason ? `: ${reason}` : ''}`);
+  const kind = target.approvalStatus === 'pending_delete' ? 'the deletion of' : isCreate ? 'the creation of' : 'an edit to';
+  logAuditEvent('EVENT_REJECTED', actorName, `Rejected ${kind} event "${target.title}"${reason ? `: ${reason}` : ''}`);
   return result;
 }
 
@@ -1366,6 +1435,79 @@ export function deleteTask(id: string, actorName: string): boolean {
   serverDelete('/api/tasks', id);
   logAuditEvent('TASK_DELETED', actorName, `Deleted task: ${target.title}`);
   return true;
+}
+
+/**
+ * Submit an edit to an already-approved task for sign-off instead of applying it
+ * immediately — used when the editor doesn't hold one of Tasks' trusted built-in
+ * roles (see getTaskApprovalRequirement). The task keeps showing its
+ * last-approved values to everyone else until the change is approved (merged
+ * in) or rejected (discarded).
+ */
+export function submitTaskEdit(
+  id: string,
+  changes: Partial<TaskItem>,
+  submittedBy: string,
+  submittedByEmail: string,
+  approval: { approverType?: GroupPolicy['approverType']; approverMemberId?: string; approverPolicyTagId?: string; policyName?: string }
+): TaskItem | null {
+  const tasks = getTasks();
+  const target = tasks.find(t => t.id === id);
+  if (!target) return null;
+
+  const result = updateTask(id, {
+    pendingChange: changes,
+    approvalStatus: 'pending_edit',
+    approverType: approval.approverType,
+    approverMemberId: approval.approverMemberId,
+    approverPolicyTagId: approval.approverPolicyTagId,
+    approvalPolicyName: approval.policyName,
+    submittedBy,
+    submittedByEmail,
+  }, submittedBy);
+  logAuditEvent('TASK_EDIT_SUBMITTED', submittedBy, `Submitted an edit to task "${target.title}" for approval`, submittedByEmail);
+  return result;
+}
+
+/** Approve a pending task creation or edit. For a pending edit, merges the
+ *  staged pendingChange into the record; for a pending creation, simply marks
+ *  it approved. */
+export function approveTask(id: string, actorName: string): TaskItem | null {
+  const tasks = getTasks();
+  const target = tasks.find(t => t.id === id);
+  if (!target) return null;
+
+  const isEdit = target.approvalStatus === 'pending_edit';
+  const result = updateTask(id, {
+    ...(isEdit ? target.pendingChange : {}),
+    approvalStatus: 'approved',
+    pendingChange: undefined,
+    decidedBy: actorName,
+    decidedAt: new Date().toISOString(),
+  }, actorName);
+  logAuditEvent('TASK_APPROVED', actorName, `Approved ${isEdit ? 'an edit to' : 'the creation of'} task "${target.title}"`);
+  return result;
+}
+
+/** Reject a pending task creation or edit. A rejected creation is marked
+ *  'rejected' (kept for audit, hidden from general view). A rejected edit
+ *  simply discards the staged pendingChange — the original approved task
+ *  stands. */
+export function rejectTask(id: string, actorName: string, reason?: string): TaskItem | null {
+  const tasks = getTasks();
+  const target = tasks.find(t => t.id === id);
+  if (!target) return null;
+
+  const isEdit = target.approvalStatus === 'pending_edit';
+  const result = updateTask(id, {
+    approvalStatus: isEdit ? 'approved' : 'rejected',
+    pendingChange: undefined,
+    decidedBy: actorName,
+    decidedAt: new Date().toISOString(),
+    rejectionReason: reason,
+  }, actorName);
+  logAuditEvent('TASK_REJECTED', actorName, `Rejected ${isEdit ? 'an edit to' : 'the creation of'} task "${target.title}"${reason ? `: ${reason}` : ''}`);
+  return result;
 }
 
 export function canViewTask(
@@ -2204,6 +2346,102 @@ export function deleteForm(id: string, actorName: string): boolean {
   serverDelete('/api/forms', id);
   logAuditEvent('FORM_DELETED', actorName, `Deleted public form "${target.title}"`);
   return true;
+}
+
+/** Submit an edit to an already-approved form for sign-off — the public link keeps
+ *  serving the last-approved version until the change is approved or rejected. */
+export function submitFormEdit(
+  id: string,
+  changes: Partial<PublicFormItem>,
+  submittedBy: string,
+  submittedByEmail: string,
+  approval: { approverType?: GroupPolicy['approverType']; approverMemberId?: string; approverPolicyTagId?: string; policyName?: string }
+): PublicFormItem | null {
+  const current = getForms();
+  const target = current.find(f => f.id === id);
+  if (!target) return null;
+
+  const result = updateForm(id, {
+    pendingChange: changes,
+    approvalStatus: 'pending_edit',
+    approverType: approval.approverType,
+    approverMemberId: approval.approverMemberId,
+    approverPolicyTagId: approval.approverPolicyTagId,
+    approvalPolicyName: approval.policyName,
+    submittedBy,
+    submittedByEmail,
+  }, submittedBy);
+  logAuditEvent('FORM_EDIT_SUBMITTED', submittedBy, `Submitted an edit to form "${target.title}" for approval`, submittedByEmail);
+  return result;
+}
+
+/** Submit a deletion request for sign-off instead of deleting immediately. */
+export function submitFormDelete(
+  id: string,
+  submittedBy: string,
+  submittedByEmail: string,
+  approval: { approverType?: GroupPolicy['approverType']; approverMemberId?: string; approverPolicyTagId?: string; policyName?: string }
+): PublicFormItem | null {
+  const current = getForms();
+  const target = current.find(f => f.id === id);
+  if (!target) return null;
+
+  const result = updateForm(id, {
+    approvalStatus: 'pending_delete',
+    approverType: approval.approverType,
+    approverMemberId: approval.approverMemberId,
+    approverPolicyTagId: approval.approverPolicyTagId,
+    approvalPolicyName: approval.policyName,
+    submittedBy,
+    submittedByEmail,
+  }, submittedBy);
+  logAuditEvent('FORM_DELETE_SUBMITTED', submittedBy, `Submitted deletion of form "${target.title}" for approval`, submittedByEmail);
+  return result;
+}
+
+/** Approve a pending form creation, edit, or deletion. */
+export function approveForm(id: string, actorName: string): PublicFormItem | null {
+  const current = getForms();
+  const target = current.find(f => f.id === id);
+  if (!target) return null;
+
+  if (target.approvalStatus === 'pending_delete') {
+    deleteForm(id, actorName);
+    logAuditEvent('FORM_APPROVED', actorName, `Approved and completed the deletion of form "${target.title}"`);
+    return null;
+  }
+
+  const isEdit = target.approvalStatus === 'pending_edit';
+  const result = updateForm(id, {
+    ...(isEdit ? target.pendingChange : {}),
+    approvalStatus: 'approved',
+    pendingChange: undefined,
+    decidedBy: actorName,
+    decidedAt: new Date().toISOString(),
+  }, actorName);
+  logAuditEvent('FORM_APPROVED', actorName, `Approved ${isEdit ? 'an edit to' : 'the creation of'} form "${target.title}" — its public link is now live`);
+  return result;
+}
+
+/** Reject a pending form creation, edit, or deletion. A rejected creation is
+ *  marked 'rejected' (its link never goes live). A rejected edit or deletion
+ *  reverts to 'approved' — the original form stands. */
+export function rejectForm(id: string, actorName: string, reason?: string): PublicFormItem | null {
+  const current = getForms();
+  const target = current.find(f => f.id === id);
+  if (!target) return null;
+
+  const isCreate = target.approvalStatus === 'pending_create';
+  const result = updateForm(id, {
+    approvalStatus: isCreate ? 'rejected' : 'approved',
+    pendingChange: undefined,
+    decidedBy: actorName,
+    decidedAt: new Date().toISOString(),
+    rejectionReason: reason,
+  }, actorName);
+  const kind = target.approvalStatus === 'pending_delete' ? 'the deletion of' : isCreate ? 'the creation of' : 'an edit to';
+  logAuditEvent('FORM_REJECTED', actorName, `Rejected ${kind} form "${target.title}"${reason ? `: ${reason}` : ''}`);
+  return result;
 }
 
 export function isSlugUnique(slug: string, excludeFormId?: string): boolean {
