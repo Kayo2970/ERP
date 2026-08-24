@@ -83,7 +83,7 @@ const ADDRESS_KEYWORDS = [
 
 /** Strip OCR symbols and noise characters from boundaries of string */
 function cleanOcrLine(line: string): string {
-  return line.replace(/^[;>=+|~*^<>:_#\-\s\.]+|[;>=+|~*^<>:_#\-\s\.]+$/g, '').trim();
+  return line.replace(/^[;>=+|~*^<>:_#,\-\s\.]+|[;>=+|~*^<>:_#,\-\s\.]+$/g, '').trim();
 }
 
 /** Returns true if a text line is OCR noise, background artifact, or gibberish */
@@ -116,6 +116,20 @@ function isGibberishLine(line: string): boolean {
 /** Normalize string by keeping only lowercase alphanumeric characters for fuzzy duplicate checking */
 function normalizeForComparison(str: string): string {
   return str.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * Word-boundary match against ADDRESS_KEYWORDS. Short entries like "st",
+ * "rd", "pin", and "ave" are common English/Indian address abbreviations,
+ * but as a plain substring check they also match inside completely
+ * unrelated words — "st" inside "Industries", "rd" inside "award", "pin"
+ * inside "opinion" — which used to misclassify organization/name lines as
+ * address text and swallow them into the address field. \b anchors each
+ * keyword to a real word boundary the same way ORG_MARKERS/INDUSTRY_KEYWORDS
+ * already do.
+ */
+function matchesAddressKeyword(text: string): boolean {
+  return ADDRESS_KEYWORDS.some((kw) => new RegExp(`\\b${kw}\\b`, 'i').test(text));
 }
 
 /** Checks if candidate line is a duplicate or part of an extracted main field */
@@ -187,7 +201,7 @@ function scoreNameCandidate(line: string, lineIndex: number, lines: string[], de
 
   // Org markers or industry words penalize Name score heavily
   if (ORG_MARKERS.some((m) => new RegExp(`\\b${m}\\b`, 'i').test(lower))) return -500;
-  if (ADDRESS_KEYWORDS.some((kw) => lower.includes(kw))) return -500;
+  if (matchesAddressKeyword(lower)) return -500;
   if (INDUSTRY_KEYWORDS.some((kw) => new RegExp(`\\b${kw}\\b`, 'i').test(lower))) return -150;
 
   let score = 0;
@@ -245,7 +259,7 @@ function scoreOrgCandidate(line: string, lineIndex: number): number {
     score += 90;
   }
 
-  if (ADDRESS_KEYWORDS.some((kw) => lower.includes(kw))) {
+  if (matchesAddressKeyword(lower)) {
     score -= 100;
   }
 
@@ -264,7 +278,31 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
     .filter((l) => l.length > 0);
 
   // Filter out gibberish noise lines
-  const lines = rawLines.filter((l) => !isGibberishLine(l));
+  const withoutGibberish = rawLines.filter((l) => !isGibberishLine(l));
+
+  // performCardOcr runs OCR on both a "normal" and an "inverted" version of
+  // every card image (dark-theme cards need the opposite of what light-theme
+  // cards need, and the auto-detection guesses which is which) and
+  // concatenates both full results as a robustness measure — first the
+  // entire "normal" pass, then the entire "inverted" pass appended after it,
+  // not interleaved. For the common case where the first guess was already
+  // correct, this means every real line of text on the card appears twice,
+  // far apart in the list, which used to double-count in name/org scoring
+  // and left every address/notes line literally repeated in the output.
+  // Drop later exact repeats (once punctuation/case/whitespace differences
+  // are ignored), keeping only each line's first occurrence. This only ever
+  // removes lines that are identical after normalization, so two distinct
+  // lines that merely share a value (e.g. a phone number listed once under
+  // "Mobile:" and again under "WhatsApp:") are never affected — only a
+  // literal repeat of the very same line is.
+  const seenNormalized = new Set<string>();
+  const lines: string[] = [];
+  for (const line of withoutGibberish) {
+    const key = normalizeForComparison(line);
+    if (key && seenNormalized.has(key)) continue;
+    if (key) seenNormalized.add(key);
+    lines.push(line);
+  }
 
   let email = '';
   let website = '';
@@ -272,9 +310,16 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
   let phone = '';
   let telephone = '';
 
-  // 1. Extract Email
+  // 1. Extract Email. Tesseract routinely misreads the tight kerning right
+  // after a '.' in an email local-part as a real space (e.g. "rajesh.
+  // kumar@domain.com"), which used to truncate the match to just
+  // "kumar@domain.com" since the regex doesn't span whitespace. Re-join a
+  // single stray space between a dot and the next token only when that next
+  // token leads into an "@" — never touches genuine sentence text elsewhere
+  // in the raw OCR text used for other fields.
   const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/gi;
-  const emailMatch = rawText.match(emailRegex);
+  const textForEmailMatch = rawText.replace(/([a-zA-Z0-9._%+-]+)\.\s+([a-zA-Z0-9._%+-]+@)/g, '$1.$2');
+  const emailMatch = textForEmailMatch.match(emailRegex);
   if (emailMatch && emailMatch.length > 0) {
     email = emailMatch[0].toLowerCase()
       .replace(/gmai1\.com$/i, 'gmail.com')
@@ -347,6 +392,13 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
     if (email && lower.includes(email)) return;
     if (website && lower.includes(website.toLowerCase())) return;
     if (linkedin && lower.includes(linkedin.toLowerCase())) return;
+    // A phone/telephone number is already captured in its own field — without
+    // this, a line like "M: 98765 43210" fell through to the Address Check
+    // below, where its 5-digit groups (the conventional Indian mobile
+    // spacing) matched the pincode heuristic and the whole number got
+    // wrongly appended to the address instead.
+    if (phone && line.includes(phone)) return;
+    if (telephone && line.includes(telephone)) return;
     if (/^(tel|phone|mob|mobile|cell|fax|mail|email|web|website|site|address|location|add):/i.test(line)) {
       if (/^(address|location|add):/i.test(line)) {
         addressLines.push(line.replace(/^(address|location|add):/i, '').trim());
@@ -354,8 +406,15 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
       return;
     }
 
-    // Split inline Name | Designation or Name - Designation
-    if (/[|\-,\/]/.test(line)) {
+    // Split inline Name | Designation or Name - Designation — but never for
+    // a line that already looks like an address. A comma is also the
+    // standard separator in a multi-part Indian address ("No. 45,
+    // Industrial Layout, Peenya,"), and without this guard a fragment like
+    // "Industrial Layout" could get misread as a bare Name/Designation part,
+    // silently dropping the whole address line instead of letting it reach
+    // the Address Check below.
+    const looksLikeAddress = /\b\d{6}\b/.test(line) || matchesAddressKeyword(lower);
+    if (!looksLikeAddress && /[|\-,\/]/.test(line)) {
       const parts = line.split(/[|\-,\/]/).map((p) => cleanOcrLine(p)).filter((p) => p.length > 0);
       let splitHandled = false;
       for (const part of parts) {
@@ -379,9 +438,13 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
       return;
     }
 
-    // Address Check
-    const hasPinCode = /\b\d{5,6}\b/.test(line);
-    const hasAddressKw = ADDRESS_KEYWORDS.some((kw) => lower.includes(kw));
+    // Address Check. Indian PIN codes are always exactly 6 digits — 5 was
+    // also matching the individual digit groups of a phone number written
+    // in the conventional "98765 43210" spacing (see the phone/telephone
+    // skip above, which is the primary guard; this stays deliberately
+    // narrow as a second line of defense).
+    const hasPinCode = /\b\d{6}\b/.test(line);
+    const hasAddressKw = matchesAddressKeyword(lower);
     if (hasPinCode || hasAddressKw) {
       addressLines.push(cleanOcrLine(line));
       return;

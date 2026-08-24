@@ -65,9 +65,9 @@ function OcrScanPanel({
 
   if (error) {
     return (
-      <p className="text-rose-500 font-medium text-[11px] flex items-center gap-1 pt-2">
+      <p className="text-amber-500 font-medium text-[11px] flex items-center gap-1 pt-2">
         <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-        {error}
+        {error} You can still submit this file without scanning it.
       </p>
     );
   }
@@ -1132,7 +1132,7 @@ export default function DesignPortalPage() {
                   <input
                     type="file"
                     id="design-file-input"
-                    accept="image/*,application/pdf"
+                    accept="image/*,video/*,application/pdf,.psd,.ai,.eps,.svg,.indd,.cdr,.ppt,.pptx,.doc,.docx,.zip"
                     onChange={handleFileChange}
                     className="hidden"
                   />
@@ -1143,7 +1143,7 @@ export default function DesignPortalPage() {
                         {file ? file.name : 'Click to select design file'}
                       </p>
                       <p className="text-[11px] text-muted-foreground">
-                        Supports PNG, JPG, WEBP, PDF up to 25 MB
+                        Images, video, PDF, PSD, AI, PPTX, DOCX & more — up to 25 MB
                       </p>
                     </div>
                   </label>
