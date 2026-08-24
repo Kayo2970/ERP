@@ -66,6 +66,7 @@ An enterprise-grade, institutional management and operations platform designed f
 
 #### 9. Public Forms Builder (`/dashboard/forms` & `/forms/[slug]`)
 - **Interactive Form Builder**: Custom form creation engine for student signups, feedback collection, and event registrations.
+- **QR Code Preview & Download**: Instant QR Code preview generated for every public form (`/forms/[slug]`), with a single-click download of a high-resolution PNG poster card (featuring official branding header, event title, scannable QR code, and URL string) for physical printing and distribution, plus direct browser printing.
 - **Reusable Field Templates**: Save a form's field schema as a template, then start any future form from one instead of rebuilding it from scratch.
 - **Event Linking**: Tag a form to a specific event — shown as a badge in the builder and on the public form page itself.
 - **Field Customization**: Text inputs, textareas, dropdowns, checkboxes, and file upload fields.

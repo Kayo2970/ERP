@@ -75,7 +75,7 @@ For the complete roster of all 35 accounts, see [docs/login_creds.md](docs/login
 - **Styling**: Tailwind CSS v4 & custom space glassmorphism utilities (`globals.css`)
 - **State & Theme**: Client-side theme context with localStorage persistence
 - **Charts**: Recharts (fully responsive custom graphs and metrics radar)
-- **Forms**: Dynamic public feedback builder and submissions logger
+- **Forms**: Dynamic public feedback builder, QR code preview & poster export, and submissions logger
 - **Orchestration**: Direct integration of task workflows, event milestones, and dynamic event-based committees (Logistics, Stage, Food, etc.)
 
 ---
