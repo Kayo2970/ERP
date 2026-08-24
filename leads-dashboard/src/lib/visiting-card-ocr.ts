@@ -105,7 +105,7 @@ function isDuplicateOfField(line: string, field: string): boolean {
   return normLine === normField || normLine.includes(normField) || normField.includes(normLine);
 }
 
-/** Parse raw text extracted from visiting card images into structured fields */
+/** Format-agnostic semantic parser for arbitrary visiting card layouts */
 export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
   const rawLines = rawText
     .split('\n')
@@ -120,12 +120,6 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
   let linkedin = '';
   let phone = '';
   let telephone = '';
-  let designation = '';
-  let organization = '';
-  let name = '';
-  const addressLines: string[] = [];
-  const candidateNameLines: string[] = [];
-  const unusedLines: string[] = [];
 
   // 1. Extract Email
   const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/gi;
@@ -186,11 +180,17 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
     }
   }
 
-  // Process line by line for Name, Designation, Organization, and Address
+  let name = '';
+  let designation = '';
+  let organization = '';
+  const addressLines: string[] = [];
+  const unusedLines: string[] = [];
+
+  // Multi-heuristic line processing:
   for (let line of lines) {
     const lower = line.toLowerCase();
 
-    // Skip lines that are purely contacts/links already extracted
+    // Skip extracted contacts
     if (email && lower.includes(email)) continue;
     if (website && lower.includes(website.toLowerCase())) continue;
     if (linkedin && lower.includes(linkedin.toLowerCase())) continue;
@@ -201,35 +201,36 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
       continue;
     }
 
-    // Check if line combines Name and Designation with separator (e.g. "Rajesh Sharma | Managing Director")
+    // Split inline Name | Designation or Name - Designation
     if (/[|\-,\/]/.test(line)) {
       const parts = line.split(/[|\-,\/]/).map((p) => cleanOcrLine(p)).filter((p) => p.length > 0);
-      let foundDesigInPart = false;
+      let splitHandled = false;
       for (const part of parts) {
         const pLower = part.toLowerCase();
         if (!designation && DESIGNATION_KEYWORDS.some((kw) => pLower.includes(kw))) {
           designation = part;
-          foundDesigInPart = true;
+          splitHandled = true;
         } else if (!name && /^[A-Za-z.'\s-]+$/.test(part) && part.split(/\s+/).length <= 4) {
           name = part;
+          splitHandled = true;
         }
       }
-      if (foundDesigInPart) continue;
+      if (splitHandled) continue;
     }
 
-    // Check Designation
+    // Designation check
     if (!designation && DESIGNATION_KEYWORDS.some((kw) => lower.includes(kw))) {
       designation = line;
       continue;
     }
 
-    // Check Organization
+    // Organization check
     if (!organization && ORG_MARKERS.some((marker) => new RegExp(`\\b${marker}\\b`, 'i').test(lower))) {
       organization = cleanOcrLine(line.replace(/^(gion|co\.|company)\s+/i, ''));
       continue;
     }
 
-    // Check Address
+    // Address check
     const hasPinCode = /\b\d{5,6}\b/.test(line);
     const hasAddressKw = ADDRESS_KEYWORDS.some((kw) => lower.includes(kw));
     if (hasPinCode || hasAddressKw) {
@@ -237,24 +238,18 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
       continue;
     }
 
-    // Evaluate Name candidate
+    // Name Candidate check (Format-agnostic line scoring)
     if (/visiting card|business card|identity card|card|front of card|back of card/i.test(lower)) continue;
 
-    // Honorific cleaning
     const cleaned = line.replace(/^(dr\.|mr\.|mrs\.|ms\.|prof\.|eng\.|er\.|adv\.|shri|smt\.|ca|cs)\s+/i, '').trim();
     const words = cleaned.split(/\s+/);
     const hasNoDigits = !/\d/.test(cleaned);
     const validWordCount = words.length >= 1 && words.length <= 5;
-    const looksLikeName = words.every((w) => /^[A-Za-z.'-]+$/.test(w) || /^[A-Z]\.$/.test(w));
+    const wordLettersOnly = words.every((w) => /^[A-Za-z.'-]+$/.test(w) || /^[A-Z]\.$/.test(w));
 
-    if (hasNoDigits && validWordCount && looksLikeName) {
-      if (!name) {
-        name = line;
-        continue;
-      } else {
-        candidateNameLines.push(line);
-        continue;
-      }
+    if (!name && hasNoDigits && validWordCount && wordLettersOnly) {
+      name = line;
+      continue;
     }
 
     if (!isGibberishLine(line)) {
@@ -262,10 +257,16 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
     }
   }
 
-  // Fallback for organization if top line is title/company
+  // Smart fallback for Organization if missing
   if (!organization && unusedLines.length > 0) {
     const candidate = unusedLines[0];
-    if (!isDuplicateOfField(candidate, name) && !isDuplicateOfField(candidate, designation) && candidate.length > 2 && candidate.length < 60 && !isGibberishLine(candidate)) {
+    if (
+      !isDuplicateOfField(candidate, name) &&
+      !isDuplicateOfField(candidate, designation) &&
+      candidate.length > 2 &&
+      candidate.length < 60 &&
+      !isGibberishLine(candidate)
+    ) {
       organization = candidate;
       unusedLines.shift();
     }
@@ -273,8 +274,7 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
 
   const address = addressLines.join(', ');
 
-  // Strict Anti-Pollution Filter for `notes`:
-  // Never include name, designation, organization, address, phone, email, website, linkedin, or duplicate versions of them in notes!
+  // Format-Agnostic Anti-Pollution Notes Filter
   const cleanUnused = unusedLines.filter((l) => {
     if (isGibberishLine(l)) return false;
     if (isDuplicateOfField(l, name)) return false;
@@ -403,7 +403,7 @@ async function preprocessCardImageBuffer(inputBuffer: Buffer): Promise<{ normal:
   };
 }
 
-/** Optional Multimodal Gemini Vision AI OCR execution */
+/** Format-Agnostic Multimodal Gemini Vision AI OCR execution */
 async function tryGeminiVisionOcr(frontBuffer: Buffer, backBuffer?: Buffer): Promise<ExtractedCardDetails | null> {
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY;
   if (!apiKey) return null;
@@ -411,17 +411,17 @@ async function tryGeminiVisionOcr(frontBuffer: Buffer, backBuffer?: Buffer): Pro
   try {
     const parts: any[] = [
       {
-        text: `You are an expert visiting card OCR and entity parsing system.
-Analyze the visiting card image(s) provided and extract contact details into JSON:
-- "name": Full name
-- "organization": Company, University, or Institution name
-- "designation": Job title / role
-- "phone": Primary mobile phone number
-- "telephone": Landline or secondary telephone number (if present)
+        text: `You are an expert visiting card OCR and entity parsing AI system.
+Analyze the visiting card image(s) provided (which may be horizontal, vertical, dark-themed, or complex layout) and extract details into structured JSON:
+- "name": Full name of the person (including honorifics like Dr., Mr., etc.)
+- "organization": Company, Organization, Institution, or University name
+- "designation": Job title, role, or designation (e.g. "Managing Director", "Founder & CEO", "Sr. Vice President - Sales")
+- "phone": Primary mobile phone number (formatted nicely, e.g. +91 98765 43210)
+- "telephone": Landline, extension, or secondary phone number (if present, e.g. 080-23608000)
 - "email": Primary email address
 - "website": Website URL
-- "address": Address or location
-- "linkedin": LinkedIn link
+- "address": Complete address (street, building, industrial area, city, pincode, state)
+- "linkedin": LinkedIn URL or handle (if present)
 - "notes": Any other clear text on the card (DO NOT include OCR noise, symbols, or duplicate fields)
 
 Respond strictly with valid JSON inside a \`\`\`json block.`
