@@ -23,6 +23,7 @@ import {
   Upload,
   Sparkles,
   Loader2,
+  FileText,
   CheckCircle2,
   Scan,
 } from 'lucide-react';
@@ -635,33 +636,40 @@ export default function GuestDirectoryPage() {
               </div>
 
               <div className="pt-2 border-t border-theme-border/20 flex flex-wrap items-center gap-3">
-                {(guest.visitingCardFrontUrl || guest.visitingCardUrl) ? (
-                  <a
-                    href={guest.visitingCardFrontUrl || guest.visitingCardUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-[11px] font-semibold text-accent hover:underline"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    Front Card
-                  </a>
-                ) : (
+                {(guest.visitingCardFrontUrl || guest.visitingCardUrl) ? (() => {
+                  const url = guest.visitingCardFrontUrl || guest.visitingCardUrl || '';
+                  const isPdf = url.toLowerCase().includes('.pdf');
+                  return (
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 text-[11px] font-semibold text-accent hover:underline"
+                    >
+                      {isPdf ? <FileText className="h-3.5 w-3.5 text-danger" /> : <ExternalLink className="h-3 w-3" />}
+                      {isPdf ? 'Front Card (PDF)' : 'Front Card'}
+                    </a>
+                  );
+                })() : (
                   <span className="flex items-center gap-1.5 text-[11px] text-theme-text-secondary/70">
                     <ImageOff className="h-3 w-3" />
                     No card photo on file
                   </span>
                 )}
-                {guest.visitingCardBackUrl && (
-                  <a
-                    href={guest.visitingCardBackUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-[11px] font-semibold text-accent hover:underline"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    Back Card
-                  </a>
-                )}
+                {guest.visitingCardBackUrl && (() => {
+                  const isPdf = guest.visitingCardBackUrl.toLowerCase().includes('.pdf');
+                  return (
+                    <a
+                      href={guest.visitingCardBackUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 text-[11px] font-semibold text-accent hover:underline"
+                    >
+                      {isPdf ? <FileText className="h-3.5 w-3.5 text-danger" /> : <ExternalLink className="h-3 w-3" />}
+                      {isPdf ? 'Back Card (PDF)' : 'Back Card'}
+                    </a>
+                  );
+                })()}
               </div>
             </div>
           ))}
@@ -799,43 +807,43 @@ export default function GuestDirectoryPage() {
                   </span>
                 </div>
                 <p className="text-[11px] text-theme-text-secondary leading-snug">
-                  Uploading card photographs automatically runs OCR to extract and fill in all guest details below. Front of card is compulsory when uploading photos, while back of card is optional. All fields remain subject to manual override.
+                  Uploading card photographs or PDF files automatically runs OCR to extract and fill in all guest details below. Front of card is compulsory when uploading a card, while back of card is optional. All fields remain subject to manual override.
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {/* Front of Card — COMPULSORY */}
                   <div className="space-y-1">
                     <label className="block text-[11px] font-medium text-theme-text-secondary">
-                      Front of Card <span className="text-danger font-bold">* (Compulsory)</span>
+                      Front of Card (Image/PDF) <span className="text-danger font-bold">* (Compulsory)</span>
                     </label>
                     <input
                       ref={frontInputRef}
                       type="file"
-                      accept="image/*"
+                      accept="image/*,application/pdf"
                       onChange={handleFrontCardChange}
                       className="w-full text-[11px] file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:bg-accent file:text-white file:text-[11px] file:font-medium file:cursor-pointer cursor-pointer"
                     />
                     {frontCardError && <p className="text-danger text-[11px] font-medium">{frontCardError}</p>}
                     {(editingGuest?.visitingCardFrontUrl || editingGuest?.visitingCardUrl) && !frontCardData && (
-                      <p className="text-[10px] text-theme-text-secondary">Front card on file. Choose new image to replace.</p>
+                      <p className="text-[10px] text-theme-text-secondary">Front card on file. Choose new image or PDF to replace.</p>
                     )}
                   </div>
 
                   {/* Back of Card — OPTIONAL */}
                   <div className="space-y-1">
                     <label className="block text-[11px] font-medium text-theme-text-secondary">
-                      Back of Card <span className="text-theme-text-secondary/70 font-normal">(Optional)</span>
+                      Back of Card (Image/PDF) <span className="text-theme-text-secondary/70 font-normal">(Optional)</span>
                     </label>
                     <input
                       ref={backInputRef}
                       type="file"
-                      accept="image/*"
+                      accept="image/*,application/pdf"
                       onChange={handleBackCardChange}
                       className="w-full text-[11px] file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:bg-theme-border/40 file:text-theme-text-primary file:text-[11px] file:font-medium file:cursor-pointer cursor-pointer"
                     />
                     {backCardError && <p className="text-danger text-[11px] font-medium">{backCardError}</p>}
                     {editingGuest?.visitingCardBackUrl && !backCardData && (
-                      <p className="text-[10px] text-theme-text-secondary">Back card on file. Choose new image to replace.</p>
+                      <p className="text-[10px] text-theme-text-secondary">Back card on file. Choose new image or PDF to replace.</p>
                     )}
                   </div>
                 </div>

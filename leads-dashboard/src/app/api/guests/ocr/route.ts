@@ -4,7 +4,7 @@ import { performCardOcr } from '@/lib/visiting-card-ocr';
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 function base64ToBuffer(dataUrl: string): Buffer {
-  const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+  const base64Data = dataUrl.replace(/^data:(image\/\w+|application\/pdf);base64,/, '');
   return Buffer.from(base64Data, 'base64');
 }
 

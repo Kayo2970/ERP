@@ -186,20 +186,70 @@ export function parseVisitingCardText(rawText: string): ExtractedCardDetails {
   };
 }
 
-/** Server-side OCR execution for card image buffer(s) */
+function isPdfBuffer(buffer: Buffer): boolean {
+  return buffer.length > 4 && buffer.subarray(0, 4).toString('utf-8') === '%PDF';
+}
+
+async function convertPdfToImageBuffers(pdfBuffer: Buffer): Promise<Buffer[]> {
+  const { createCanvas } = await import('@napi-rs/canvas');
+  const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+
+  const loadingTask = pdfjsLib.getDocument({
+    data: new Uint8Array(pdfBuffer),
+    standardFontDataUrl: path.join(process.cwd(), 'node_modules', 'pdfjs-dist', 'standard_fonts') + path.sep,
+  });
+  const pdf = await loadingTask.promise;
+  const pageCount = Math.min(pdf.numPages, 2); // Max 2 pages (Front & Back)
+
+  const pages: Buffer[] = [];
+  for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const viewport = page.getViewport({ scale: 2 });
+    const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+    const context = canvas.getContext('2d');
+    // @ts-expect-error — @napi-rs/canvas context is API-compatible with pdfjs-dist
+    await page.render({ canvasContext: context, viewport }).promise;
+    pages.push(canvas.encodeSync('png'));
+  }
+
+  await loadingTask.destroy();
+  return pages;
+}
+
+/** Server-side OCR execution for card image/PDF buffer(s) */
 export async function performCardOcr(
   frontBuffer: Buffer,
   backBuffer?: Buffer
 ): Promise<ExtractedCardDetails> {
   const worker = await getWorker();
 
-  const { data: frontResult } = await worker.recognize(frontBuffer);
-  let combinedText = frontResult.text || '';
+  let frontImages: Buffer[] = [];
+  if (isPdfBuffer(frontBuffer)) {
+    frontImages = await convertPdfToImageBuffers(frontBuffer);
+  } else {
+    frontImages = [frontBuffer];
+  }
+
+  let combinedText = '';
+  for (const imgBuf of frontImages) {
+    const { data } = await worker.recognize(imgBuf);
+    if (data.text) {
+      combinedText += (combinedText ? '\n' : '') + data.text;
+    }
+  }
 
   if (backBuffer) {
-    const { data: backResult } = await worker.recognize(backBuffer);
-    if (backResult.text) {
-      combinedText += '\n--- BACK OF CARD ---\n' + backResult.text;
+    let backImages: Buffer[] = [];
+    if (isPdfBuffer(backBuffer)) {
+      backImages = await convertPdfToImageBuffers(backBuffer);
+    } else {
+      backImages = [backBuffer];
+    }
+    for (const imgBuf of backImages) {
+      const { data } = await worker.recognize(imgBuf);
+      if (data.text) {
+        combinedText += '\n--- BACK OF CARD ---\n' + data.text;
+      }
     }
   }
 
