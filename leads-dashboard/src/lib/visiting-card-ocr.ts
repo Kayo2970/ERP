@@ -1,5 +1,11 @@
 import path from 'path';
+import fs from 'fs/promises';
+import os from 'os';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { createWorker, type Worker } from 'tesseract.js';
+
+const execFileAsync = promisify(execFile);
 
 const OCR_CACHE_DIR = path.join(process.cwd(), 'data', 'ocr-cache');
 
@@ -103,6 +109,53 @@ function isDuplicateOfField(line: string, field: string): boolean {
   if (!normLine || !normField) return false;
 
   return normLine === normField || normLine.includes(normField) || normField.includes(normLine);
+}
+
+/** Direct execution of native C++ Tesseract engine with multi-PSM & native character whitelist */
+async function tryNativeTesseractOcr(imageBuffer: Buffer): Promise<string | null> {
+  const tmpDir = os.tmpdir();
+  const randSuffix = `${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  const inputPath = path.join(tmpDir, `card_ocr_in_${randSuffix}.png`);
+  const outputPathBase = path.join(tmpDir, `card_ocr_out_${randSuffix}`);
+
+  try {
+    await fs.writeFile(inputPath, imageBuffer);
+
+    let resultText = '';
+
+    // Pass 1: Native C++ Tesseract with PSM 11 (Sparse Text - best for business cards & scattered text)
+    try {
+      await execFileAsync('tesseract', [
+        inputPath,
+        outputPathBase + '_psm11',
+        '--psm', '11',
+        '-c', 'tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,@:+-()/&# '
+      ]);
+      const txt11 = await fs.readFile(outputPathBase + '_psm11.txt', 'utf-8');
+      resultText += '\n' + txt11;
+    } catch (e) {}
+
+    // Pass 2: Native C++ Tesseract with PSM 6 (Uniform Block Text)
+    try {
+      await execFileAsync('tesseract', [
+        inputPath,
+        outputPathBase + '_psm6',
+        '--psm', '6',
+      ]);
+      const txt6 = await fs.readFile(outputPathBase + '_psm6.txt', 'utf-8');
+      resultText += '\n' + txt6;
+    } catch (e) {}
+
+    // Clean up temporary files
+    await fs.unlink(inputPath).catch(() => {});
+    await fs.unlink(outputPathBase + '_psm11.txt').catch(() => {});
+    await fs.unlink(outputPathBase + '_psm6.txt').catch(() => {});
+
+    return resultText.trim() || null;
+  } catch (err) {
+    await fs.unlink(inputPath).catch(() => {});
+    return null;
+  }
 }
 
 /** Format-agnostic semantic parser for arbitrary visiting card layouts */
@@ -476,20 +529,18 @@ Respond strictly with valid JSON inside a \`\`\`json block.`
   }
 }
 
-/** Server-side OCR execution for card image/PDF buffer(s) */
+/** Server-side 3-tiered OCR execution for card image/PDF buffer(s) */
 export async function performCardOcr(
   frontBuffer: Buffer,
   backBuffer?: Buffer
 ): Promise<ExtractedCardDetails> {
-  // 1. Try Gemini Multimodal AI Vision OCR if GEMINI_API_KEY is configured
+  // Tier 1: Try Gemini Multimodal AI Vision OCR if GEMINI_API_KEY is configured
   const geminiResult = await tryGeminiVisionOcr(frontBuffer, backBuffer);
   if (geminiResult && (geminiResult.name || geminiResult.email || geminiResult.phone || geminiResult.organization)) {
     return geminiResult;
   }
 
-  // 2. Enhanced Local Pre-processing + Multi-Pass Tesseract OCR
-  const worker = await getWorker();
-
+  // Pre-process input buffers
   let frontRawBuffers: Buffer[] = [];
   if (isPdfBuffer(frontBuffer)) {
     frontRawBuffers = await convertPdfToImageBuffers(frontBuffer);
@@ -497,20 +548,21 @@ export async function performCardOcr(
     frontRawBuffers = [frontBuffer];
   }
 
-  let combinedText = '';
+  let nativeCombinedText = '';
 
+  // Tier 2: Try Direct Native C++ Tesseract 5.5 Engine with PSM 11 + PSM 6
   for (const rawBuf of frontRawBuffers) {
     try {
       const { normal, inverted } = await preprocessCardImageBuffer(rawBuf);
 
-      const { data: normData } = await worker.recognize(normal);
-      if (normData.text) combinedText += '\n' + normData.text;
+      const normText = await tryNativeTesseractOcr(normal);
+      if (normText) nativeCombinedText += '\n' + normText;
 
-      const { data: invData } = await worker.recognize(inverted);
-      if (invData.text) combinedText += '\n' + invData.text;
+      const invText = await tryNativeTesseractOcr(inverted);
+      if (invText) nativeCombinedText += '\n' + invText;
     } catch (e) {
-      const { data } = await worker.recognize(rawBuf);
-      if (data.text) combinedText += '\n' + data.text;
+      const rawText = await tryNativeTesseractOcr(rawBuf);
+      if (rawText) nativeCombinedText += '\n' + rawText;
     }
   }
 
@@ -521,21 +573,71 @@ export async function performCardOcr(
     } else {
       backRawBuffers = [backBuffer];
     }
-    combinedText += '\n--- BACK OF CARD ---\n';
+    nativeCombinedText += '\n--- BACK OF CARD ---\n';
     for (const rawBuf of backRawBuffers) {
       try {
         const { normal, inverted } = await preprocessCardImageBuffer(rawBuf);
-        const { data: normData } = await worker.recognize(normal);
-        if (normData.text) combinedText += '\n' + normData.text;
+        const normText = await tryNativeTesseractOcr(normal);
+        if (normText) nativeCombinedText += '\n' + normText;
 
-        const { data: invData } = await worker.recognize(inverted);
-        if (invData.text) combinedText += '\n' + invData.text;
+        const invText = await tryNativeTesseractOcr(inverted);
+        if (invText) nativeCombinedText += '\n' + invText;
       } catch (e) {
-        const { data } = await worker.recognize(rawBuf);
-        if (data.text) combinedText += '\n' + data.text;
+        const rawText = await tryNativeTesseractOcr(rawBuf);
+        if (rawText) nativeCombinedText += '\n' + rawText;
       }
     }
   }
 
-  return parseVisitingCardText(combinedText);
+  // If native C++ engine produced results, parse and return immediately
+  if (nativeCombinedText.trim().length > 0) {
+    const parsedNative = parseVisitingCardText(nativeCombinedText);
+    if (parsedNative.name || parsedNative.phone || parsedNative.email || parsedNative.organization) {
+      return parsedNative;
+    }
+  }
+
+  // Tier 3: WebAssembly tesseract.js Fallback if native engine binary is not present
+  const worker = await getWorker();
+  let wasmCombinedText = '';
+
+  for (const rawBuf of frontRawBuffers) {
+    try {
+      const { normal, inverted } = await preprocessCardImageBuffer(rawBuf);
+
+      const { data: normData } = await worker.recognize(normal);
+      if (normData.text) wasmCombinedText += '\n' + normData.text;
+
+      const { data: invData } = await worker.recognize(inverted);
+      if (invData.text) wasmCombinedText += '\n' + invData.text;
+    } catch (e) {
+      const { data } = await worker.recognize(rawBuf);
+      if (data.text) wasmCombinedText += '\n' + data.text;
+    }
+  }
+
+  if (backBuffer) {
+    let backRawBuffers: Buffer[] = [];
+    if (isPdfBuffer(backBuffer)) {
+      backRawBuffers = await convertPdfToImageBuffers(backBuffer);
+    } else {
+      backRawBuffers = [backBuffer];
+    }
+    wasmCombinedText += '\n--- BACK OF CARD ---\n';
+    for (const rawBuf of backRawBuffers) {
+      try {
+        const { normal, inverted } = await preprocessCardImageBuffer(rawBuf);
+        const { data: normData } = await worker.recognize(normal);
+        if (normData.text) wasmCombinedText += '\n' + normData.text;
+
+        const { data: invData } = await worker.recognize(inverted);
+        if (invData.text) wasmCombinedText += '\n' + invData.text;
+      } catch (e) {
+        const { data } = await worker.recognize(rawBuf);
+        if (data.text) wasmCombinedText += '\n' + data.text;
+      }
+    }
+  }
+
+  return parseVisitingCardText(wasmCombinedText);
 }
