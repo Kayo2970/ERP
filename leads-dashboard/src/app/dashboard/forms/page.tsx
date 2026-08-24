@@ -24,8 +24,10 @@ import {
   CalendarDays,
   Save,
   TrendingUp,
-  Users
+  Users,
+  QrCode
 } from 'lucide-react';
+import { FormQrModal } from '@/components/form-qr-modal';
 import {
   BarChart,
   Bar,
@@ -133,6 +135,7 @@ export default function FormsBuilderPage() {
   const [rejectionReasonInput, setRejectionReasonInput] = useState('');
   const [isSaveTemplateOpen, setIsSaveTemplateOpen] = useState(false);
   const [templateNameDraft, setTemplateNameDraft] = useState('');
+  const [qrModalForm, setQrModalForm] = useState<PublicFormItem | null>(null);
 
   // Form Creator State
   const [title, setTitle] = useState('');
@@ -334,13 +337,22 @@ export default function FormsBuilderPage() {
         triggerNotification(`Form submitted for approval from ${approval.approverName}. Its public link goes live once approved.`);
       } else {
         addForm(newFormBase);
-        triggerNotification('New dynamic public form created successfully.');
+        triggerNotification('New dynamic public form created successfully. QR Code is ready.');
       }
       setIsCreateModalOpen(false);
     }
 
     const updated = getForms();
     setForms(updated);
+    
+    // Auto-open QR preview for newly created form if it wasn't an edit
+    if (!editingForm) {
+      const newlyCreated = updated.find(f => f.slug.toLowerCase() === formattedSlug.toLowerCase());
+      if (newlyCreated) {
+        setSelectedFormId(newlyCreated.id);
+        setQrModalForm(newlyCreated);
+      }
+    }
   };
 
   const handleConfirmDelete = () => {
@@ -627,15 +639,27 @@ export default function FormsBuilderPage() {
 
                       <div className="flex items-center gap-1.5">
                         {form.approvalStatus !== 'pending_create' && (
-                          <Link
-                            href={`/forms/${form.slug}`}
-                            target="_blank"
-                            onClick={(e) => e.stopPropagation()}
-                            className="p-1 hover:bg-theme-border/30 rounded text-theme-text-secondary hover:text-theme-text-primary"
-                            title="Open Public Form View"
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                          </Link>
+                          <>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setQrModalForm(form);
+                              }}
+                              className="p-1 hover:bg-accent/15 rounded text-accent hover:text-accent cursor-pointer"
+                              title="Preview & Download QR Code"
+                            >
+                              <QrCode className="h-3.5 w-3.5" />
+                            </button>
+                            <Link
+                              href={`/forms/${form.slug}`}
+                              target="_blank"
+                              onClick={(e) => e.stopPropagation()}
+                              className="p-1 hover:bg-theme-border/30 rounded text-theme-text-secondary hover:text-theme-text-primary"
+                              title="Open Public Form View"
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                            </Link>
+                          </>
                         )}
                         {canBuild && (
                           <>
@@ -700,13 +724,22 @@ export default function FormsBuilderPage() {
                       <Clock className="h-3.5 w-3.5" /> Link generates once approved
                     </span>
                   ) : (
-                    <button
-                      onClick={() => handleCopyLink(selectedForm.slug)}
-                      className="px-3 py-1.5 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 self-start sm:self-auto"
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                      {copiedSlug === selectedForm.slug ? 'Copied!' : 'Share Public Link'}
-                    </button>
+                    <div className="flex items-center gap-2 self-start sm:self-auto">
+                      <button
+                        onClick={() => setQrModalForm(selectedForm)}
+                        className="px-3 py-1.5 bg-accent/15 hover:bg-accent/25 text-accent text-xs font-semibold rounded-xl transition-all border border-accent/30 cursor-pointer flex items-center gap-1.5"
+                      >
+                        <QrCode className="h-3.5 w-3.5" />
+                        QR Code & Print
+                      </button>
+                      <button
+                        onClick={() => handleCopyLink(selectedForm.slug)}
+                        className="px-3 py-1.5 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                        {copiedSlug === selectedForm.slug ? 'Copied!' : 'Share Link'}
+                      </button>
+                    </div>
                   )}
                 </div>
 
@@ -1216,6 +1249,13 @@ export default function FormsBuilderPage() {
           </div>
         </div>
       )}
+
+      {/* QR Code Preview & Download Modal */}
+      <FormQrModal
+        isOpen={Boolean(qrModalForm)}
+        onClose={() => setQrModalForm(null)}
+        form={qrModalForm}
+      />
 
     </div>
   );
