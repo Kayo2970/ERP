@@ -13,12 +13,17 @@ import {
   UserPlus,
   CheckCircle2,
   User,
-  Award
+  Award,
+  Wallet,
+  Landmark,
+  TrendingUp,
 } from 'lucide-react';
 import {
   getEventById,
   getMembers,
   getTasks,
+  getBudgets,
+  getReimbursements,
   addTask,
   addEventCommittee,
   updateEventCommitteeMembers,
@@ -236,6 +241,114 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
       </div>
+
+      {/* Event Financial & Budget Health Card (Integrated with Budgeting Module) */}
+      {(() => {
+        const allBudgets = getBudgets();
+        const allReimbursements = getReimbursements();
+
+        // Calculate proposed budget allocated to this event
+        let proposedAmount = 0;
+        allBudgets.forEach((b) => {
+          if (b.eventId === event.id) {
+            proposedAmount += b.amount || b.proposedAmount || 0;
+          }
+          if (b.lineItems) {
+            b.lineItems.forEach((li) => {
+              if (li.eventId === event.id) {
+                proposedAmount += li.amount || li.proposedAmount || 0;
+              }
+            });
+          }
+        });
+
+        // Calculate actual approved reimbursements for this event
+        const actualSpent = allReimbursements
+          .filter((r) => r.eventId === event.id && r.status === 'Approved')
+          .reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
+        const variance = proposedAmount - actualSpent;
+        const percentUsed = proposedAmount > 0 ? Math.min(Math.round((actualSpent / proposedAmount) * 100), 100) : 0;
+
+        return (
+          <div className="glass-panel rounded-2xl p-5 border border-theme-card-border space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="h-10 w-10 rounded-xl bg-accent/15 border border-accent/30 flex items-center justify-center text-accent shrink-0">
+                  <Wallet className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-theme-text-primary flex items-center gap-2">
+                    Event Financial Health & Budget Status
+                    <Link
+                      href="/dashboard/budget"
+                      className="text-[10px] text-accent hover:underline font-semibold flex items-center gap-0.5"
+                    >
+                      View in Budget Module &rarr;
+                    </Link>
+                  </h3>
+                  <p className="text-[11px] text-theme-text-secondary">
+                    Synced live with Budgeting Module & Approved Reimbursements
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 text-xs">
+                <div>
+                  <span className="text-[10px] text-theme-text-secondary block font-medium uppercase tracking-wider">
+                    Allocated Proposed Budget
+                  </span>
+                  <span className="font-extrabold text-accent text-sm">
+                    ₹{proposedAmount.toLocaleString()}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-theme-text-secondary block font-medium uppercase tracking-wider">
+                    Realized Actual Spent
+                  </span>
+                  <span className="font-extrabold text-emerald-400 text-sm">
+                    ₹{actualSpent.toLocaleString()}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-theme-text-secondary block font-medium uppercase tracking-wider">
+                    Variance / Forecast
+                  </span>
+                  <span
+                    className={`font-extrabold text-sm ${
+                      variance >= 0 ? 'text-emerald-400' : 'text-danger'
+                    }`}
+                  >
+                    {variance >= 0 ? `+₹${variance.toLocaleString()}` : `-₹${Math.abs(variance).toLocaleString()}`}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Budget Progress Bar */}
+            {proposedAmount > 0 && (
+              <div className="space-y-1 pt-1">
+                <div className="flex justify-between text-[10px] text-theme-text-secondary font-medium">
+                  <span>Budget Utilization: {percentUsed}%</span>
+                  <span>{variance >= 0 ? `₹${variance.toLocaleString()} remaining` : 'Over budget!'}</span>
+                </div>
+                <div className="h-2 w-full bg-theme-background/60 rounded-full overflow-hidden border border-theme-border/20">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      actualSpent > proposedAmount
+                        ? 'bg-danger'
+                        : percentUsed > 85
+                        ? 'bg-warning'
+                        : 'bg-emerald-500'
+                    }`}
+                    style={{ width: `${percentUsed}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Main Grid: Event Committees (Sub-categories) & Event Tasks */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

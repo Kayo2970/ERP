@@ -8,14 +8,22 @@ import {
   CheckCircle2,
   XCircle,
   TrendingDown,
+  TrendingUp,
   PiggyBank,
   ShieldAlert,
   Landmark,
   ArrowRight,
   Edit2,
   Eye,
-  EyeOff,
   CalendarPlus,
+  BarChart3,
+  PieChart,
+  Calendar as CalendarIcon,
+  Layers,
+  Sparkles,
+  Check,
+  AlertCircle,
+  FileSpreadsheet,
 } from 'lucide-react';
 import {
   getBudgets,
@@ -33,6 +41,17 @@ import {
 import { isCentreHead, isFinanceHead, getEventApprovalRequirement } from '@/lib/permissions';
 import { EmptyState } from '@/components/ui/empty-state';
 
+const ACADEMIC_YEARS = ['2025-2026', '2026-2027', '2027-2028'];
+
+const MONTH_NAMES = [
+  'April', 'May', 'June', 'July', 'August', 'September',
+  'October', 'November', 'December', 'January', 'February', 'March'
+];
+
+const CATEGORY_OPTIONS = [
+  'Event', 'Operational', 'Equipment', 'Marketing', 'Logistics', 'Other'
+];
+
 export default function BudgetPage() {
   const [user, setUser] = useState<any>(null);
   const [userHydrated, setUserHydrated] = useState(false);
@@ -41,33 +60,40 @@ export default function BudgetPage() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [reimbursements, setReimbursements] = useState<ReimbursementItem[]>([]);
 
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState('2025-2026');
+  const [selectedMonthIndex, setSelectedMonthIndex] = useState<number | null>(0); // 0 = April (Start of Academic Year)
+
+  // Annual Budget Proposal Modal
+  const [isAnnualModalOpen, setIsAnnualModalOpen] = useState(false);
+  const [annualAmountInput, setAnnualAmountInput] = useState('');
+  const [annualNotesInput, setAnnualNotesInput] = useState('');
+
+  // Monthly Budget Breakdown Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBudget, setEditingBudget] = useState<BudgetItem | null>(null);
-  const [budgetType, setBudgetType] = useState<'event' | 'monthly'>('event');
+  const [budgetType, setBudgetType] = useState<'annual' | 'monthly' | 'event'>('monthly');
   const [eventId, setEventId] = useState('');
   const [month, setMonth] = useState('');
   const [amount, setAmount] = useState('');
-  // A monthly budget is proposed as a set of planned events with their own
-  // cost, which must sum to the monthly total — not one blind figure. Each
-  // row must point at a real EventItem (existing or newly created inline),
-  // never a free-typed label.
-  const [monthlyLineItems, setMonthlyLineItems] = useState<{ eventId: string; eventName: string; amount: string }[]>([
-    { eventId: '', eventName: '', amount: '' },
+  const [monthlyLineItems, setMonthlyLineItems] = useState<{
+    eventId: string;
+    eventName: string;
+    category: string;
+    amount: string;
+  }[]>([
+    { eventId: '', eventName: '', category: 'Event', amount: '' },
   ]);
   const [notes, setNotes] = useState('');
   const [formError, setFormError] = useState('');
 
+  // Decision Modal
   const [decidingBudget, setDecidingBudget] = useState<BudgetItem | null>(null);
   const [decisionNotes, setDecisionNotes] = useState('');
 
   const [toastMsg, setToastMsg] = useState('');
-  // Rejected requests are hidden by default — only Approved (and Pending,
-  // since those need action) show without opting in.
   const [showRejected, setShowRejected] = useState(false);
 
-  // Inline "create a new event on the spot" for a monthly line item — a
-  // real EventItem gets created (synced with the Events module & Calendar
-  // like any other event), not a free-text label.
+  // On-The-Spot Event Creation Modal inside Budget Module
   const [isCreateEventModalOpen, setIsCreateEventModalOpen] = useState(false);
   const [newEventLineItemIndex, setNewEventLineItemIndex] = useState<number | null>(null);
   const [newEventTitle, setNewEventTitle] = useState('');
@@ -112,12 +138,121 @@ export default function BudgetPage() {
   const canSubmit = isCentreHead(user);
   const canDecide = isFinanceHead(user);
 
+  // Annual Academic Year Budget Calculation
+  const annualBudgetItem = budgets.find(
+    (b) => b.type === 'annual' && (b.academicYear === selectedAcademicYear || !b.academicYear)
+  );
+
+  const annualApprovedAmount = annualBudgetItem && annualBudgetItem.status === 'Approved'
+    ? (annualBudgetItem.amount || annualBudgetItem.proposedAmount || 0)
+    : 0;
+
+  const annualProposedAmount = annualBudgetItem
+    ? (annualBudgetItem.amount || annualBudgetItem.proposedAmount || 0)
+    : 0;
+
+  // Monthly Allocations & Actual Reimbursement Expenses
+  const getMonthKey = (mIdx: number) => {
+    const yearStart = parseInt(selectedAcademicYear.split('-')[0], 10);
+    const year = mIdx < 9 ? yearStart : yearStart + 1; // April(0) to Dec(8) = yearStart, Jan(9) to Mar(11) = yearStart + 1
+    const monthNum = mIdx < 9 ? mIdx + 4 : mIdx - 8;
+    return `${year}-${String(monthNum).padStart(2, '0')}`;
+  };
+
+  // Compute monthly calculations for all 12 months
+  const monthlyCalculations = MONTH_NAMES.map((mName, mIdx) => {
+    const mKey = getMonthKey(mIdx);
+
+    // Find monthly budgets matching this month key
+    const monthBudgets = budgets.filter((b) => b.type === 'monthly' && b.month === mKey);
+    const approvedMonthBudgets = monthBudgets.filter((b) => b.status === 'Approved');
+
+    // Proposed allocation
+    const proposed = monthBudgets.reduce((sum, b) => sum + (b.amount || b.proposedAmount || 0), 0);
+
+    // Actual spending calculated from approved reimbursements matching this month
+    const monthReimbursements = reimbursements.filter((r) => {
+      if (r.status !== 'Approved') return false;
+      const rDate = r.submittedAt || '';
+      return rDate.startsWith(mKey);
+    });
+    const actual = monthReimbursements.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
+    const variance = proposed - actual;
+
+    return {
+      monthName: mName,
+      monthKey: mKey,
+      proposed,
+      actual,
+      variance,
+      budgets: monthBudgets,
+    };
+  });
+
+  const totalAllocatedToMonths = monthlyCalculations.reduce((sum, m) => sum + m.proposed, 0);
+  const totalActualSpent = monthlyCalculations.reduce((sum, m) => sum + m.actual, 0);
+  const totalAnnualVariance = (annualApprovedAmount || annualProposedAmount) - totalActualSpent;
+
+  // Currently Selected Month Calculation
+  const selectedMonthCalc = selectedMonthIndex !== null ? monthlyCalculations[selectedMonthIndex] : null;
+
+  // Handlers for Annual Budget
+  const handleProposeAnnualBudget = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = Number(annualAmountInput);
+    if (!val || val <= 0) return;
+
+    if (annualBudgetItem) {
+      updateBudget(
+        annualBudgetItem.id,
+        {
+          type: 'annual',
+          academicYear: selectedAcademicYear,
+          amount: val,
+          proposedAmount: val,
+          notes: annualNotesInput,
+          submittedBy: user?.name || 'Centre Head',
+          submittedByEmail: user?.email,
+        },
+        user?.name || 'Centre Head'
+      );
+      triggerToast(`Annual budget proposal updated for ${selectedAcademicYear}. Sent to Finance Head.`);
+    } else {
+      addBudget({
+        type: 'annual',
+        academicYear: selectedAcademicYear,
+        amount: val,
+        proposedAmount: val,
+        notes: annualNotesInput,
+        submittedBy: user?.name || 'Centre Head',
+        submittedByEmail: user?.email,
+      });
+      triggerToast(`Annual budget proposed for ${selectedAcademicYear}. Sent to Finance Head.`);
+    }
+
+    setIsAnnualModalOpen(false);
+    setAnnualAmountInput('');
+    setAnnualNotesInput('');
+    setBudgets(getBudgets());
+  };
+
+  const handleDecideAnnualBudget = (status: 'Approved' | 'Rejected') => {
+    if (!annualBudgetItem) return;
+    decideBudget(annualBudgetItem.id, status, user?.name || 'Finance Head', decisionNotes);
+    triggerToast(`Annual Academic Year Budget ${status.toLowerCase()} successfully.`);
+    setDecidingBudget(null);
+    setDecisionNotes('');
+    setBudgets(getBudgets());
+  };
+
+  // Handlers for Monthly Line Items & Breakdown
   const resetForm = () => {
-    setBudgetType('event');
+    setBudgetType('monthly');
     setEventId('');
-    setMonth('');
+    setMonth(selectedMonthCalc ? selectedMonthCalc.monthKey : getMonthKey(0));
     setAmount('');
-    setMonthlyLineItems([{ eventId: '', eventName: '', amount: '' }]);
+    setMonthlyLineItems([{ eventId: '', eventName: '', category: 'Event', amount: '' }]);
     setNotes('');
     setFormError('');
   };
@@ -132,12 +267,17 @@ export default function BudgetPage() {
     setEditingBudget(b);
     setBudgetType(b.type);
     setEventId(b.eventId || '');
-    setMonth(b.month || '');
-    setAmount(b.type === 'event' ? String(b.amount) : '');
+    setMonth(b.month || (selectedMonthCalc ? selectedMonthCalc.monthKey : getMonthKey(0)));
+    setAmount(String(b.amount || b.proposedAmount || ''));
     setMonthlyLineItems(
       b.lineItems && b.lineItems.length > 0
-        ? b.lineItems.map(li => ({ eventId: li.eventId || '', eventName: li.eventName, amount: String(li.amount) }))
-        : [{ eventId: '', eventName: '', amount: '' }]
+        ? b.lineItems.map((li) => ({
+            eventId: li.eventId || '',
+            eventName: li.eventName,
+            category: li.category || 'Event',
+            amount: String(li.amount || li.proposedAmount || ''),
+          }))
+        : [{ eventId: '', eventName: '', category: 'Event', amount: '' }]
     );
     setNotes(b.notes || '');
     setFormError('');
@@ -145,16 +285,25 @@ export default function BudgetPage() {
   };
 
   const addLineItemRow = () => {
-    setMonthlyLineItems(rows => [...rows, { eventId: '', eventName: '', amount: '' }]);
+    setMonthlyLineItems((rows) => [...rows, { eventId: '', eventName: '', category: 'Event', amount: '' }]);
   };
+
   const removeLineItemRow = (index: number) => {
-    setMonthlyLineItems(rows => rows.filter((_, i) => i !== index));
+    setMonthlyLineItems((rows) => rows.filter((_, i) => i !== index));
   };
-  const updateLineItemRow = (index: number, patch: Partial<{ eventId: string; eventName: string; amount: string }>) => {
-    setMonthlyLineItems(rows => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+
+  const updateLineItemRow = (
+    index: number,
+    patch: Partial<{ eventId: string; eventName: string; category: string; amount: string }>
+  ) => {
+    setMonthlyLineItems((rows) =>
+      rows.map((row, i) => (i === index ? { ...row, ...patch } : row))
+    );
   };
+
   const monthlyTotal = monthlyLineItems.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
 
+  // On-the-spot event creation inside budget module
   const openCreateEventModal = (lineItemIndex: number) => {
     setNewEventLineItemIndex(lineItemIndex);
     setNewEventTitle('');
@@ -167,10 +316,6 @@ export default function BudgetPage() {
     setIsCreateEventModalOpen(true);
   };
 
-  // Creates a real EventItem — the exact same way the Events module itself
-  // does (default sub-committees, the same approval-requirement check) — so
-  // it's a fully live event on the Calendar/Events module immediately, not
-  // a free-text label that only means something inside this budget request.
   const handleCreateEventForLineItem = (e: React.FormEvent) => {
     e.preventDefault();
     setNewEventError('');
@@ -181,10 +326,6 @@ export default function BudgetPage() {
     }
     if (!newEventDatesTBD && (!newEventStartDate || !newEventEndDate)) {
       setNewEventError('Enter both dates, or mark dates as To Be Decided.');
-      return;
-    }
-    if (!newEventDatesTBD && new Date(newEventEndDate) < new Date(newEventStartDate)) {
-      setNewEventError('End Date must be on or after Start Date.');
       return;
     }
 
@@ -201,8 +342,8 @@ export default function BudgetPage() {
       committees: [
         { id: 'c_' + Date.now() + '_1', name: 'Logistics & Venue Committee', memberIds: [] },
         { id: 'c_' + Date.now() + '_2', name: 'Technical & AV Committee', memberIds: [] },
-        { id: 'c_' + Date.now() + '_3', name: 'Design & Media Committee', memberIds: [] }
-      ]
+        { id: 'c_' + Date.now() + '_3', name: 'Design & Media Committee', memberIds: [] },
+      ],
     };
 
     const approval = getEventApprovalRequirement(user, 'CREATE');
@@ -220,712 +361,979 @@ export default function BudgetPage() {
       : addEvent(newEventBase);
 
     setEvents(getEvents());
+
     if (newEventLineItemIndex !== null) {
-      updateLineItemRow(newEventLineItemIndex, { eventId: created.id, eventName: created.title });
-    }
-    setIsCreateEventModalOpen(false);
-    triggerToast(
-      approval.requiresApproval
-        ? `Event submitted for approval from ${approval.approverName}. It will go live once approved.`
-        : 'New event created and linked to this line item.'
-    );
-  };
-
-  const handleSubmitBudget = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    let payload: Partial<BudgetItem>;
-
-    if (budgetType === 'event') {
-      const amountNum = Number(amount);
-      if (!amountNum || amountNum <= 0) {
-        setFormError('Enter a valid budget amount.');
-        return;
-      }
-      if (!eventId) {
-        setFormError('Select an event for this budget request.');
-        return;
-      }
-      const selectedEvent = events.find(ev => ev.id === eventId);
-      payload = {
-        type: 'event',
-        eventId,
-        eventName: selectedEvent?.title,
-        month: undefined,
-        lineItems: undefined,
-        amount: amountNum,
-        notes: notes.trim() || undefined,
-      };
-    } else {
-      if (!month) {
-        setFormError('Select a month for this budget request.');
-        return;
-      }
-      const cleanedLineItems: BudgetLineItem[] = monthlyLineItems
-        .filter(row => row.eventId && Number(row.amount) > 0)
-        .map(row => ({
-          eventId: row.eventId,
-          eventName: row.eventName,
-          amount: Number(row.amount),
-        }));
-      if (cleanedLineItems.length === 0) {
-        setFormError('Add at least one planned event with a cost — pick an existing event or create a new one.');
-        return;
-      }
-      const total = cleanedLineItems.reduce((sum, li) => sum + li.amount, 0);
-      payload = {
-        type: 'monthly',
-        eventId: undefined,
-        eventName: undefined,
-        month,
-        amount: total,
-        lineItems: cleanedLineItems,
-        notes: notes.trim() || undefined,
-      };
-    }
-
-    if (editingBudget) {
-      updateBudget(editingBudget.id, payload, user?.name || 'Centre Head');
-    } else {
-      addBudget({
-        ...(payload as Omit<BudgetItem, 'id' | 'status' | 'submittedAt'>),
-        submittedBy: user?.name || 'Centre Head',
-        submittedByEmail: user?.email,
+      updateLineItemRow(newEventLineItemIndex, {
+        eventId: created.id,
+        eventName: created.title,
       });
     }
 
-    setBudgets(getBudgets());
-    setIsModalOpen(false);
-    setEditingBudget(null);
-    resetForm();
-    triggerToast(
-      editingBudget
-        ? (editingBudget.status === 'Approved'
-            ? 'Budget request updated — sent back to the Finance Head for re-approval.'
-            : 'Budget request updated.')
-        : 'Budget request submitted to the Finance Head.'
-    );
+    setIsCreateEventModalOpen(false);
+    triggerToast(`Event "${created.title}" created on the spot and linked to budget line item.`);
   };
 
-  const handleDecide = (status: 'Approved' | 'Rejected') => {
-    if (!decidingBudget) return;
-    decideBudget(decidingBudget.id, status, user?.name || 'Finance Head', decisionNotes.trim() || undefined);
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError('');
+
+    const parsedLines: BudgetLineItem[] = [];
+    for (const r of monthlyLineItems) {
+      const nameClean = r.eventName.trim();
+      const val = Number(r.amount);
+      if (!nameClean) {
+        setFormError('Every item in the breakdown needs a title.');
+        return;
+      }
+      if (!val || val <= 0) {
+        setFormError(`Item "${nameClean}" needs an amount > 0.`);
+        return;
+      }
+      parsedLines.push({
+        eventId: r.eventId || undefined,
+        eventName: nameClean,
+        category: r.category || 'Event',
+        amount: val,
+        proposedAmount: val,
+      });
+    }
+
+    const payload = {
+      academicYear: selectedAcademicYear,
+      type: 'monthly' as const,
+      month: month || (selectedMonthCalc ? selectedMonthCalc.monthKey : getMonthKey(0)),
+      amount: monthlyTotal,
+      proposedAmount: monthlyTotal,
+      lineItems: parsedLines,
+      notes: notes.trim(),
+      submittedBy: user?.name || 'Centre Head',
+      submittedByEmail: user?.email,
+    };
+
+    if (editingBudget) {
+      updateBudget(editingBudget.id, payload, user?.name || 'Centre Head');
+      triggerToast('Monthly budget allocation updated successfully.');
+    } else {
+      addBudget(payload);
+      triggerToast('Monthly budget breakdown submitted successfully.');
+    }
+
+    setIsModalOpen(false);
     setBudgets(getBudgets());
+  };
+
+  const handleDecision = (status: 'Approved' | 'Rejected') => {
+    if (!decidingBudget) return;
+    decideBudget(decidingBudget.id, status, user?.name || 'Finance Head', decisionNotes);
+    triggerToast(`Budget request ${status.toLowerCase()} successfully.`);
     setDecidingBudget(null);
     setDecisionNotes('');
-    triggerToast(`Budget request ${status.toLowerCase()}.`);
+    setBudgets(getBudgets());
   };
 
-  if (!userHydrated) return null;
-
-  if (!canSubmit && !canDecide) {
-    return (
-      <div className="p-6 md:p-8">
-        <EmptyState
-          icon={ShieldAlert}
-          title="Access Restricted"
-          description="The Budget module is available to the Centre Head (submitting requests) and Finance Head (reviewing and tracking funds) only."
-        />
-      </div>
-    );
-  }
-
-  // Fund Overview (Finance Head only): every Approved budget is money made
-  // available; every Approved reimbursement is money actually spent. The
-  // difference is a plain running balance — unspent budget automatically
-  // "carries forward" simply because nothing here ever resets per period.
-  const totalApprovedBudget = budgets.filter(b => b.status === 'Approved').reduce((s, b) => s + b.amount, 0);
-  const totalExpenses = reimbursements.filter(r => r.status === 'Approved').reduce((s, r) => s + r.amount, 0);
-  const availableBalance = totalApprovedBudget - totalExpenses;
-
-  const eventBudgetIds = new Set<string>([
-    ...budgets.filter(b => b.type === 'event' && b.eventId).map(b => b.eventId as string),
-    ...reimbursements.filter(r => r.eventId).map(r => r.eventId as string),
-  ]);
-  const eventBreakdown = Array.from(eventBudgetIds).map(id => {
-    const ev = events.find(e => e.id === id);
-    const budgetForEvent = budgets.find(b => b.eventId === id);
-    const allocated = budgets.filter(b => b.eventId === id && b.status === 'Approved').reduce((s, b) => s + b.amount, 0);
-    const spent = reimbursements.filter(r => r.eventId === id && r.status === 'Approved').reduce((s, r) => s + r.amount, 0);
-    return {
-      id,
-      name: ev?.title || budgetForEvent?.eventName || 'Unknown Event',
-      allocated,
-      spent,
-      remaining: allocated - spent,
-    };
-  }).sort((a, b) => b.allocated - a.allocated);
-
-  const visibleBudgets = canDecide
-    ? budgets
-    : budgets.filter(b => (user?.email && b.submittedByEmail === user.email) || b.submittedBy === user?.name);
-
-  const pendingBudgets = visibleBudgets.filter(b => b.status === 'Pending');
-  const approvedBudgets = visibleBudgets.filter(b => b.status === 'Approved');
-  const rejectedBudgets = visibleBudgets.filter(b => b.status === 'Rejected');
-  const pendingCount = pendingBudgets.length;
-
-  const isOwnBudget = (b: BudgetItem) => (user?.email && b.submittedByEmail === user.email) || b.submittedBy === user?.name;
-
-  const statusBadge = (status: BudgetItem['status']) => {
-    if (status === 'Approved') return 'bg-success/15 text-success border border-success/20';
-    if (status === 'Rejected') return 'bg-danger/15 text-danger border border-danger/20';
-    return 'bg-warning/15 text-warning border border-warning/20';
-  };
-
-  const renderBudgetCard = (b: BudgetItem) => (
-    <div key={b.id} className="p-4 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2 text-xs">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <span className="font-bold text-theme-text-primary">
-            {b.type === 'event' ? (b.eventName || 'Event') : `Monthly — ${b.month}`}
-          </span>
-          <p className="text-[11px] text-theme-text-secondary">
-            Submitted by {b.submittedBy} on {b.submittedAt}
-          </p>
-        </div>
-        <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${statusBadge(b.status)}`}>
-          {b.status}
-        </span>
-      </div>
-      <p className="text-sm font-bold text-accent">₹{b.amount.toLocaleString()}</p>
-      {b.lineItems && b.lineItems.length > 0 && (
-        <ul className="pl-1 space-y-0.5 border-l-2 border-theme-border/30">
-          {b.lineItems.map((li, i) => (
-            <li key={i} className="pl-2 flex items-center justify-between text-[11px] text-theme-text-secondary">
-              <span>{li.eventName}</span>
-              <span className="font-mono">₹{li.amount.toLocaleString()}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {b.notes && <p className="text-[11px] text-theme-text-secondary italic">"{b.notes}"</p>}
-      {b.decidedBy && (
-        <p className="text-[10px] text-theme-text-secondary">
-          Decision by {b.decidedBy} on {b.decidedAt}{b.decisionNotes ? ` — "${b.decisionNotes}"` : ''}
-        </p>
-      )}
-      <div className="flex gap-2 pt-1">
-        {canDecide && b.status === 'Pending' && (
-          <button
-            onClick={() => setDecidingBudget(b)}
-            className="flex-1 py-1.5 bg-accent hover:bg-primary-light text-white font-semibold text-[11px] rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1"
-          >
-            Review Request
-            <ArrowRight className="h-3 w-3" />
-          </button>
-        )}
-        {canSubmit && isOwnBudget(b) && (
-          <button
-            onClick={() => openEditModal(b)}
-            title={b.status === 'Approved' ? 'Editing this will send it back to the Finance Head for re-approval' : 'Edit request'}
-            className="flex-1 py-1.5 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary font-semibold text-[11px] rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1"
-          >
-            <Edit2 className="h-3 w-3" />
-            {b.status === 'Approved' ? 'Edit (Needs Re-approval)' : 'Edit Request'}
-          </button>
-        )}
-      </div>
-    </div>
+  // Max value for SVG bar chart scaling
+  const maxBarValue = Math.max(
+    ...monthlyCalculations.map((m) => Math.max(m.proposed, m.actual)),
+    100000
   );
 
   return (
-    <div className="p-6 md:p-8 space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold text-theme-text-primary flex items-center gap-2">
-            <Wallet className="h-5 w-5 text-accent" />
-            Budget & Funds
-          </h1>
-          <p className="text-xs text-theme-text-secondary">
-            {canDecide
-              ? 'Review event and monthly budget requests, and track available funds.'
-              : 'Submit event or monthly budget requests to the Finance Head for approval.'}
-          </p>
-        </div>
-        {canSubmit && (
-          <button
-            onClick={openModal}
-            className="flex items-center gap-1.5 px-4 py-2 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer shrink-0"
-          >
-            <Plus className="h-4 w-4" />
-            Request Budget
-          </button>
-        )}
-      </div>
-
+    <div className="space-y-6 pb-12">
+      {/* Toast Notification */}
       {toastMsg && (
-        <div className="flex items-center gap-3 p-4 bg-success/15 border border-success/20 rounded-2xl text-theme-text-primary text-xs animate-in fade-in duration-300">
-          <CheckCircle2 className="h-5 w-5 text-success shrink-0" />
+        <div className="fixed top-20 right-6 z-50 bg-emerald-500 text-white font-semibold px-4 py-3 rounded-xl shadow-xl flex items-center gap-2 animate-in fade-in slide-in-from-top-2 text-xs">
+          <CheckCircle2 className="h-4 w-4" />
           <span>{toastMsg}</span>
         </div>
       )}
 
-      {/* Fund Overview — Finance Head only */}
-      {canDecide && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="glass-panel rounded-2xl p-5 space-y-1">
-            <span className="flex items-center gap-1.5 text-[11px] font-semibold text-theme-text-secondary uppercase tracking-wider">
-              <Landmark className="h-3.5 w-3.5" />
-              Total Budget Approved
+      {/* Header Bar */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-theme-text-primary tracking-tight">
+              Financial & Budgeting Control Center
+            </h1>
+            <span className="px-2.5 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/30 text-[10px] font-extrabold uppercase tracking-wider">
+              {selectedAcademicYear}
             </span>
-            <p className="text-xl font-bold text-theme-text-primary">₹{totalApprovedBudget.toLocaleString()}</p>
           </div>
-          <div className="glass-panel rounded-2xl p-5 space-y-1">
-            <span className="flex items-center gap-1.5 text-[11px] font-semibold text-theme-text-secondary uppercase tracking-wider">
-              <TrendingDown className="h-3.5 w-3.5" />
-              Total Expenses
-            </span>
-            <p className="text-xl font-bold text-danger">₹{totalExpenses.toLocaleString()}</p>
-          </div>
-          <div className="glass-panel rounded-2xl p-5 space-y-1 border border-accent/30">
-            <span className="flex items-center gap-1.5 text-[11px] font-semibold text-theme-text-secondary uppercase tracking-wider">
-              <PiggyBank className="h-3.5 w-3.5" />
-              Available Balance (Carry Forward)
-            </span>
-            <p className={`text-xl font-bold ${availableBalance >= 0 ? 'text-success' : 'text-danger'}`}>
-              ₹{availableBalance.toLocaleString()}
-            </p>
-          </div>
+          <p className="text-xs text-theme-text-secondary mt-1">
+            Academic Year Budgeting, Monthly Allocations, Event Tracking & Visual Analytics
+          </p>
         </div>
-      )}
 
-      {/* Event-wise budget vs actual spend — Finance Head only */}
-      {canDecide && eventBreakdown.length > 0 && (
-        <div className="glass-panel rounded-2xl p-6 space-y-4">
-          <h3 className="text-sm font-bold text-theme-text-primary">Event-wise Budget vs Spend</h3>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-xs text-left">
-              <thead>
-                <tr className="text-theme-text-secondary border-b border-theme-border/40">
-                  <th className="pb-2.5 font-semibold">Event</th>
-                  <th className="pb-2.5 font-semibold">Allocated</th>
-                  <th className="pb-2.5 font-semibold">Spent</th>
-                  <th className="pb-2.5 font-semibold">Remaining</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-theme-border/20">
-                {eventBreakdown.map(row => (
-                  <tr key={row.id}>
-                    <td className="py-2.5 font-semibold text-theme-text-primary">{row.name}</td>
-                    <td className="py-2.5 text-theme-text-secondary">₹{row.allocated.toLocaleString()}</td>
-                    <td className="py-2.5 text-theme-text-secondary">₹{row.spent.toLocaleString()}</td>
-                    <td className={`py-2.5 font-semibold ${row.remaining >= 0 ? 'text-success' : 'text-danger'}`}>
-                      ₹{row.remaining.toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div className="flex items-center gap-3">
+          {/* Academic Year Picker */}
+          <div className="flex items-center gap-1 bg-theme-card border border-theme-card-border p-1 rounded-xl">
+            {ACADEMIC_YEARS.map((year) => (
+              <button
+                key={year}
+                onClick={() => setSelectedAcademicYear(year)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  selectedAcademicYear === year
+                    ? 'bg-accent text-white shadow-md'
+                    : 'text-theme-text-secondary hover:text-theme-text-primary'
+                }`}
+              >
+                {year}
+              </button>
+            ))}
           </div>
-        </div>
-      )}
 
-      {/* Budget Requests */}
-      <div className="glass-panel rounded-2xl p-6 space-y-5">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <h3 className="text-sm font-bold text-theme-text-primary">
-            {canDecide ? 'Budget Requests' : 'My Budget Requests'}
-            {pendingCount > 0 && (
-              <span className="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-warning/15 text-warning border border-warning/20">
-                {pendingCount} pending
-              </span>
-            )}
-          </h3>
-          {rejectedBudgets.length > 0 && (
+          {canSubmit && (
             <button
-              onClick={() => setShowRejected(v => !v)}
-              className="flex items-center gap-1.5 text-[11px] font-semibold text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
+              onClick={() => {
+                setAnnualAmountInput(String(annualApprovedAmount || annualProposedAmount || ''));
+                setAnnualNotesInput(annualBudgetItem?.notes || '');
+                setIsAnnualModalOpen(true);
+              }}
+              className="px-4 py-2.5 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl text-xs flex items-center gap-2 transition-all shadow-md shadow-accent/20 cursor-pointer shrink-0"
             >
-              {showRejected ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-              {showRejected ? 'Hide' : 'Show'} Rejected ({rejectedBudgets.length})
+              <Landmark className="h-4 w-4" />
+              Propose / Edit Annual Budget
             </button>
           )}
         </div>
+      </div>
 
-        {visibleBudgets.length === 0 ? (
-          <div className="text-center py-10 text-theme-text-secondary text-xs bg-theme-border/5 rounded-xl border border-theme-border/20">
-            No budget requests {canDecide ? 'submitted yet' : 'submitted by you yet'}.
-          </div>
-        ) : (
-          <>
-            {pendingBudgets.length > 0 && (
-              <div className="space-y-2.5">
-                <h4 className="text-[11px] font-bold uppercase tracking-wider text-warning">Pending Review</h4>
-                <div className="space-y-2.5">{pendingBudgets.map(renderBudgetCard)}</div>
+      {/* Top Academic Year Status & Financial Overview Banner */}
+      <div className="glass-panel rounded-2xl p-5 border border-theme-card-border space-y-4 relative overflow-hidden">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-theme-border/30 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="h-12 w-12 rounded-2xl bg-accent/15 border border-accent/30 flex items-center justify-center text-accent shrink-0">
+              <Landmark className="h-6 w-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-theme-text-primary">
+                  Academic Year {selectedAcademicYear} Annual Budget
+                </h2>
+                {annualBudgetItem ? (
+                  <span
+                    className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                      annualBudgetItem.status === 'Approved'
+                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                        : annualBudgetItem.status === 'Rejected'
+                        ? 'bg-danger/15 text-danger border-danger/30'
+                        : 'bg-warning/15 text-warning border-warning/30'
+                    }`}
+                  >
+                    {annualBudgetItem.status === 'Approved' ? (
+                      <CheckCircle2 className="h-3 w-3" />
+                    ) : annualBudgetItem.status === 'Rejected' ? (
+                      <XCircle className="h-3 w-3" />
+                    ) : (
+                      <AlertCircle className="h-3 w-3 animate-pulse" />
+                    )}
+                    {annualBudgetItem.status === 'Approved'
+                      ? 'Approved by Finance Head'
+                      : annualBudgetItem.status === 'Rejected'
+                      ? 'Rejected'
+                      : 'Pending Finance Head Approval'}
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-theme-border/30 text-theme-text-secondary border border-theme-border/40">
+                    Not Proposed Yet
+                  </span>
+                )}
               </div>
-            )}
+              <p className="text-xs text-theme-text-secondary mt-0.5">
+                Total Academic Year Allocation approved by Finance Head
+              </p>
+            </div>
+          </div>
 
-            <div className="space-y-2.5">
-              <h4 className="text-[11px] font-bold uppercase tracking-wider text-success">Approved</h4>
-              {approvedBudgets.length === 0 ? (
-                <div className="text-center py-6 text-theme-text-secondary text-xs bg-theme-border/5 rounded-xl border border-theme-border/20">
-                  No approved budgets yet.
+          {/* Finance Head Approval Action */}
+          {canDecide && annualBudgetItem && annualBudgetItem.status === 'Pending' && (
+            <div className="flex items-center gap-2 shrink-0 bg-warning/10 border border-warning/30 p-2 rounded-xl">
+              <span className="text-xs text-warning font-semibold">Annual Budget Action:</span>
+              <button
+                onClick={() => handleDecideAnnualBudget('Approved')}
+                className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-lg text-xs flex items-center gap-1 shadow-md cursor-pointer"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" /> Approve Annual Budget
+              </button>
+              <button
+                onClick={() => setDecidingBudget(annualBudgetItem)}
+                className="px-3 py-1.5 bg-danger hover:bg-red-600 text-white font-bold rounded-lg text-xs flex items-center gap-1 shadow-md cursor-pointer"
+              >
+                <XCircle className="h-3.5 w-3.5" /> Reject
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* 4 Financial Stat Metric Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-theme-background/50 border border-theme-card-border p-4 rounded-xl space-y-1">
+            <span className="text-[11px] font-semibold text-theme-text-secondary uppercase tracking-wider block">
+              Annual Approved Budget
+            </span>
+            <div className="text-lg font-extrabold text-accent">
+              ₹{annualApprovedAmount > 0 ? annualApprovedAmount.toLocaleString() : (annualProposedAmount > 0 ? `${annualProposedAmount.toLocaleString()} (Pending)` : '0')}
+            </div>
+            <span className="text-[10px] text-theme-text-secondary">Approved for {selectedAcademicYear}</span>
+          </div>
+
+          <div className="bg-theme-background/50 border border-theme-card-border p-4 rounded-xl space-y-1">
+            <span className="text-[11px] font-semibold text-theme-text-secondary uppercase tracking-wider block">
+              Allocated to Months
+            </span>
+            <div className="text-lg font-extrabold text-theme-text-primary">
+              ₹{totalAllocatedToMonths.toLocaleString()}
+            </div>
+            <span className="text-[10px] text-theme-text-secondary">Sum of monthly line items</span>
+          </div>
+
+          <div className="bg-theme-background/50 border border-theme-card-border p-4 rounded-xl space-y-1">
+            <span className="text-[11px] font-semibold text-theme-text-secondary uppercase tracking-wider block">
+              Realized Actual Spent
+            </span>
+            <div className="text-lg font-extrabold text-emerald-400">
+              ₹{totalActualSpent.toLocaleString()}
+            </div>
+            <span className="text-[10px] text-theme-text-secondary">Approved reimbursements</span>
+          </div>
+
+          <div className="bg-theme-background/50 border border-theme-card-border p-4 rounded-xl space-y-1">
+            <span className="text-[11px] font-semibold text-theme-text-secondary uppercase tracking-wider block">
+              Net Annual Savings / Variance
+            </span>
+            <div className={`text-lg font-extrabold ${totalAnnualVariance >= 0 ? 'text-emerald-400' : 'text-danger'}`}>
+              {totalAnnualVariance >= 0 ? `+₹${totalAnnualVariance.toLocaleString()}` : `-₹${Math.abs(totalAnnualVariance).toLocaleString()}`}
+            </div>
+            <span className="text-[10px] text-theme-text-secondary">
+              {totalAnnualVariance >= 0 ? 'Under budget (Savings)' : 'Over budget warning'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Graphical Visual Analytics Dashboard (SVG Charts) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* SVG Chart 1: 12-Month Proposed vs Actual Bar Chart */}
+        <div className="lg:col-span-2 glass-panel rounded-2xl p-5 border border-theme-card-border space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-accent" />
+              <h3 className="text-sm font-bold text-theme-text-primary">
+                12-Month Financial Breakdown (Proposed vs Actual)
+              </h3>
+            </div>
+            <div className="flex items-center gap-3 text-[11px]">
+              <span className="flex items-center gap-1 text-theme-text-secondary">
+                <span className="h-3 w-3 rounded-sm bg-accent inline-block" /> Proposed Target
+              </span>
+              <span className="flex items-center gap-1 text-theme-text-secondary">
+                <span className="h-3 w-3 rounded-sm bg-emerald-500 inline-block" /> Actual Spent
+              </span>
+            </div>
+          </div>
+
+          {/* Interactive SVG Bar Chart */}
+          <div className="h-56 w-full pt-4">
+            <svg className="h-full w-full overflow-visible" viewBox="0 0 600 180">
+              {/* Baseline */}
+              <line x1="30" y1="150" x2="590" y2="150" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+
+              {monthlyCalculations.map((m, idx) => {
+                const x = 40 + idx * 45;
+                const propHeight = Math.min((m.proposed / maxBarValue) * 120, 120);
+                const actHeight = Math.min((m.actual / maxBarValue) * 120, 120);
+
+                const isSelected = selectedMonthIndex === idx;
+
+                return (
+                  <g key={m.monthKey} className="cursor-pointer" onClick={() => setSelectedMonthIndex(idx)}>
+                    {/* Background selection highlight */}
+                    {isSelected && (
+                      <rect x={x - 6} y="10" width="38" height="150" fill="rgba(46,117,182,0.15)" rx="6" />
+                    )}
+
+                    {/* Proposed Bar (Accent) */}
+                    <rect
+                      x={x}
+                      y={150 - propHeight}
+                      width="12"
+                      height={Math.max(propHeight, 2)}
+                      fill="#2E75B6"
+                      rx="3"
+                      className="transition-all hover:opacity-80"
+                    />
+
+                    {/* Actual Bar (Emerald/Red) */}
+                    <rect
+                      x={x + 14}
+                      y={150 - actHeight}
+                      width="12"
+                      height={Math.max(actHeight, 2)}
+                      fill={m.actual > m.proposed && m.proposed > 0 ? '#EF4444' : '#10B981'}
+                      rx="3"
+                      className="transition-all hover:opacity-80"
+                    />
+
+                    {/* Month Label */}
+                    <text
+                      x={x + 13}
+                      y="168"
+                      fontSize="9"
+                      fill={isSelected ? '#38BDF8' : 'rgba(255,255,255,0.6)'}
+                      fontWeight={isSelected ? 'bold' : 'normal'}
+                      textAnchor="middle"
+                    >
+                      {m.monthName.substring(0, 3)}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+        </div>
+
+        {/* SVG Chart 2: Annual Utilization Ring / Donut Chart */}
+        <div className="glass-panel rounded-2xl p-5 border border-theme-card-border space-y-4 flex flex-col justify-between">
+          <div className="flex items-center gap-2">
+            <PieChart className="h-5 w-5 text-accent" />
+            <h3 className="text-sm font-bold text-theme-text-primary">Annual Budget Utilization</h3>
+          </div>
+
+          <div className="flex flex-col items-center justify-center py-2 relative">
+            <svg className="h-44 w-44 -rotate-90 transform" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="40" stroke="rgba(255,255,255,0.1)" strokeWidth="12" fill="transparent" />
+              <circle
+                cx="50"
+                cy="50"
+                r="40"
+                stroke={annualApprovedAmount > 0 && totalActualSpent > annualApprovedAmount ? '#EF4444' : '#10B981'}
+                strokeWidth="12"
+                strokeDasharray={251.2}
+                strokeDashoffset={
+                  annualApprovedAmount > 0
+                    ? 251.2 - (Math.min(totalActualSpent / annualApprovedAmount, 1) * 251.2)
+                    : 251.2
+                }
+                strokeLinecap="round"
+                fill="transparent"
+                className="transition-all duration-700"
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+              <span className="text-2xl font-extrabold text-theme-text-primary">
+                {annualApprovedAmount > 0 ? `${Math.round((totalActualSpent / annualApprovedAmount) * 100)}%` : '0%'}
+              </span>
+              <span className="text-[10px] text-theme-text-secondary uppercase font-semibold">Spent of Total</span>
+            </div>
+          </div>
+
+          <div className="space-y-2 text-xs border-t border-theme-border/30 pt-3">
+            <div className="flex justify-between">
+              <span className="text-theme-text-secondary">Approved Budget:</span>
+              <span className="font-bold text-theme-text-primary">₹{annualApprovedAmount.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-theme-text-secondary">Total Realized Spent:</span>
+              <span className="font-bold text-emerald-400">₹{totalActualSpent.toLocaleString()}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Month-Wise Calendar Breakdown Bar & Month Selector */}
+      <div className="glass-panel rounded-2xl p-5 border border-theme-card-border space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <CalendarIcon className="h-5 w-5 text-accent" />
+            <h3 className="text-sm font-bold text-theme-text-primary">
+              Month-Wise Calendar Breakdown ({selectedAcademicYear})
+            </h3>
+          </div>
+
+          {canSubmit && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={openModal}
+                className="px-3.5 py-2 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
+              >
+                <Plus className="h-4 w-4" />
+                Add / Breakdown Monthly Budget
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* 12-Month Calendar Month Selector Tabs */}
+        <div className="flex items-center gap-1 overflow-x-auto pb-2 scrollbar-none">
+          {monthlyCalculations.map((m, idx) => {
+            const isSelected = selectedMonthIndex === idx;
+            const hasVarianceAlert = m.actual > m.proposed && m.proposed > 0;
+
+            return (
+              <button
+                key={m.monthKey}
+                onClick={() => setSelectedMonthIndex(idx)}
+                className={`px-3 py-2 rounded-xl text-xs font-semibold shrink-0 transition-all cursor-pointer flex flex-col items-center min-w-[80px] border ${
+                  isSelected
+                    ? 'bg-accent text-white border-accent shadow-md'
+                    : 'bg-theme-background/30 text-theme-text-secondary border-theme-card-border hover:bg-theme-border/20 hover:text-theme-text-primary'
+                }`}
+              >
+                <span>{m.monthName}</span>
+                <span className={`text-[10px] mt-0.5 ${isSelected ? 'text-white/80' : hasVarianceAlert ? 'text-danger font-bold' : 'text-emerald-400'}`}>
+                  ₹{m.proposed > 0 ? (m.proposed / 1000).toFixed(0) + 'k' : '0'}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Selected Month Detail Cards & Line Items */}
+        {selectedMonthCalc && (
+          <div className="space-y-4 bg-theme-background/30 border border-theme-card-border p-4 rounded-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-theme-border/30 pb-3">
+              <div>
+                <h4 className="text-sm font-bold text-theme-text-primary flex items-center gap-2">
+                  <span>{selectedMonthCalc.monthName} Financial Summary</span>
+                  <span className="text-xs font-mono text-theme-text-secondary">({selectedMonthCalc.monthKey})</span>
+                </h4>
+              </div>
+
+              {/* Monthly Triple Metrics: Proposed, Actual, Variance */}
+              <div className="flex items-center gap-4 text-xs">
+                <div>
+                  <span className="text-theme-text-secondary block text-[10px]">Proposed Target:</span>
+                  <span className="font-bold text-accent">₹{selectedMonthCalc.proposed.toLocaleString()}</span>
                 </div>
-              ) : (
-                <div className="space-y-2.5">{approvedBudgets.map(renderBudgetCard)}</div>
-              )}
+                <div>
+                  <span className="text-theme-text-secondary block text-[10px]">Actual Spent:</span>
+                  <span className="font-bold text-emerald-400">₹{selectedMonthCalc.actual.toLocaleString()}</span>
+                </div>
+                <div>
+                  <span className="text-theme-text-secondary block text-[10px]">Variance / Forecast:</span>
+                  <span className={`font-bold ${selectedMonthCalc.variance >= 0 ? 'text-emerald-400' : 'text-danger'}`}>
+                    {selectedMonthCalc.variance >= 0 ? `+₹${selectedMonthCalc.variance.toLocaleString()}` : `-₹${Math.abs(selectedMonthCalc.variance).toLocaleString()}`}
+                  </span>
+                </div>
+              </div>
             </div>
 
-            {showRejected && rejectedBudgets.length > 0 && (
-              <div className="space-y-2.5">
-                <h4 className="text-[11px] font-bold uppercase tracking-wider text-danger">Rejected</h4>
-                <div className="space-y-2.5">{rejectedBudgets.map(renderBudgetCard)}</div>
+            {/* Monthly Line Items Breakdown Table */}
+            {selectedMonthCalc.budgets.length === 0 ? (
+              <EmptyState
+                icon={FileSpreadsheet}
+                title={`No budget breakdown submitted for ${selectedMonthCalc.monthName}`}
+                description="Click 'Add / Breakdown Monthly Budget' above to allocate target costs across events & categories."
+              />
+            ) : (
+              <div className="space-y-4">
+                {selectedMonthCalc.budgets.map((b) => (
+                  <div key={b.id} className="bg-theme-card border border-theme-card-border p-4 rounded-xl space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-xs text-theme-text-primary">
+                          {b.submittedBy} ({b.submittedAt})
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                            b.status === 'Approved'
+                              ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                              : b.status === 'Rejected'
+                              ? 'bg-danger/15 text-danger border-danger/30'
+                              : 'bg-warning/15 text-warning border-warning/30'
+                          }`}
+                        >
+                          {b.status}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {canSubmit && (
+                          <button
+                            onClick={() => openEditModal(b)}
+                            className="p-1 text-theme-text-secondary hover:text-accent rounded transition-all cursor-pointer"
+                            title="Edit Breakdown"
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        {canDecide && b.status === 'Pending' && (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => {
+                                decideBudget(b.id, 'Approved', user?.name || 'Finance Head');
+                                triggerToast('Budget request approved.');
+                                setBudgets(getBudgets());
+                              }}
+                              className="px-2 py-1 bg-emerald-500 text-white font-bold rounded text-[11px] cursor-pointer"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              onClick={() => setDecidingBudget(b)}
+                              className="px-2 py-1 bg-danger text-white font-bold rounded text-[11px] cursor-pointer"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {b.lineItems && b.lineItems.length > 0 && (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead>
+                            <tr className="border-b border-theme-border/30 text-theme-text-secondary text-[11px]">
+                              <th className="py-1.5 font-semibold">Event / Line Item Title</th>
+                              <th className="py-1.5 font-semibold">Category</th>
+                              <th className="py-1.5 font-semibold text-right">Proposed Budget</th>
+                              <th className="py-1.5 font-semibold text-right">Actual Spent</th>
+                              <th className="py-1.5 font-semibold text-right">Variance</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-theme-border/20">
+                            {b.lineItems.map((li, liIdx) => {
+                              const liActual = li.eventId
+                                ? reimbursements
+                                    .filter((r) => r.eventId === li.eventId && r.status === 'Approved')
+                                    .reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
+                                : 0;
+                              const liVariance = (li.amount || li.proposedAmount || 0) - liActual;
+
+                              return (
+                                <tr key={liIdx}>
+                                  <td className="py-2 font-medium text-theme-text-primary">
+                                    {li.eventName}
+                                    {li.eventId && (
+                                      <span className="ml-1.5 text-[9px] px-1.5 py-0.2 rounded bg-accent/15 text-accent border border-accent/30 font-semibold">
+                                        Linked Event
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="py-2 text-theme-text-secondary">{li.category || 'Event'}</td>
+                                  <td className="py-2 text-right font-bold text-accent">
+                                    ₹{(li.amount || li.proposedAmount || 0).toLocaleString()}
+                                  </td>
+                                  <td className="py-2 text-right font-bold text-emerald-400">
+                                    ₹{liActual.toLocaleString()}
+                                  </td>
+                                  <td
+                                    className={`py-2 text-right font-bold ${
+                                      liVariance >= 0 ? 'text-emerald-400' : 'text-danger'
+                                    }`}
+                                  >
+                                    {liVariance >= 0
+                                      ? `+₹${liVariance.toLocaleString()}`
+                                      : `-₹${Math.abs(liVariance).toLocaleString()}`}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
 
-      {/* Request Budget Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="glass-panel w-full max-w-md rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-theme-text-primary">
-                {editingBudget ? 'Edit Budget Request' : 'Request Budget'}
-              </h2>
-              <button
-                onClick={() => { setIsModalOpen(false); setEditingBudget(null); }}
-                className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            {editingBudget?.status === 'Approved' && (
-              <div className="p-3 bg-warning/10 border border-warning/25 rounded-xl text-warning text-xs flex items-center gap-2">
-                <ShieldAlert className="h-4 w-4 shrink-0" />
-                <span>This request was already Approved. Saving changes sends it back to the Finance Head for re-approval.</span>
-              </div>
-            )}
-
-            {formError && (
-              <div className="p-3 bg-danger/10 border border-danger/25 rounded-xl text-danger text-xs flex items-center gap-2">
-                <ShieldAlert className="h-4 w-4 shrink-0" />
-                <span>{formError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleSubmitBudget} className="space-y-4 text-xs">
-              <div className="flex items-center gap-4">
-                <label className="flex items-center gap-1.5 cursor-pointer font-medium text-theme-text-primary">
-                  <input type="radio" checked={budgetType === 'event'} onChange={() => setBudgetType('event')} className="text-accent focus:ring-accent" />
-                  Event-wise
+      {/* Propose Annual Budget Modal */}
+      {isAnnualModalOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-theme-card border border-theme-card-border rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
+            <button
+              onClick={() => setIsAnnualModalOpen(false)}
+              className="absolute top-4 right-4 text-theme-text-secondary hover:text-theme-text-primary"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <h2 className="text-base font-bold text-theme-text-primary">
+              Propose Academic Year Budget ({selectedAcademicYear})
+            </h2>
+            <form onSubmit={handleProposeAnnualBudget} className="space-y-4 text-xs">
+              <div className="space-y-1.5">
+                <label className="block font-medium text-theme-text-secondary">
+                  Total Annual Budget Amount (₹) *
                 </label>
-                <label className="flex items-center gap-1.5 cursor-pointer font-medium text-theme-text-primary">
-                  <input type="radio" checked={budgetType === 'monthly'} onChange={() => setBudgetType('monthly')} className="text-accent focus:ring-accent" />
-                  Monthly
-                </label>
+                <input
+                  type="number"
+                  required
+                  min={1000}
+                  value={annualAmountInput}
+                  onChange={(e) => setAnnualAmountInput(e.target.value)}
+                  placeholder="e.g. 500000"
+                  className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-mono"
+                />
               </div>
-
-              {budgetType === 'event' ? (
-                <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Event *</label>
-                  <select
-                    value={eventId}
-                    onChange={e => setEventId(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                  >
-                    <option value="">-- Select Event --</option>
-                    {events.map(ev => (
-                      <option key={ev.id} value={ev.id}>{ev.title}</option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Month *</label>
-                  <input
-                    type="month"
-                    value={month}
-                    onChange={e => setMonth(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                  />
-                </div>
-              )}
-
-              {budgetType === 'event' ? (
-                <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Amount Requested (₹) *</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={amount}
-                    onChange={e => setAmount(e.target.value)}
-                    placeholder="e.g. 25000"
-                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                  />
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="block font-medium text-theme-text-secondary">Planned Events & Costs *</label>
-                    <button
-                      type="button"
-                      onClick={addLineItemRow}
-                      className="flex items-center gap-1 text-[11px] font-semibold text-accent hover:underline cursor-pointer"
-                    >
-                      <Plus className="h-3 w-3" /> Add Event
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    {monthlyLineItems.map((row, index) => (
-                      <div key={index} className="flex items-center gap-1.5">
-                        {row.eventId ? (
-                          <button
-                            type="button"
-                            onClick={() => updateLineItemRow(index, { eventId: '', eventName: '' })}
-                            title="Click to change the linked event"
-                            className="flex-1 min-w-0 px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary truncate text-left cursor-pointer hover:border-accent"
-                          >
-                            {row.eventName}
-                          </button>
-                        ) : (
-                          <select
-                            value=""
-                            onChange={e => {
-                              const ev = events.find(ev2 => ev2.id === e.target.value);
-                              if (ev) updateLineItemRow(index, { eventId: ev.id, eventName: ev.title });
-                            }}
-                            className="flex-1 min-w-0 px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent"
-                          >
-                            <option value="">-- Select Event --</option>
-                            {events.map(ev => (
-                              <option key={ev.id} value={ev.id}>{ev.title}</option>
-                            ))}
-                          </select>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => openCreateEventModal(index)}
-                          title="Create a new event for this line item"
-                          className="h-9 w-9 shrink-0 flex items-center justify-center rounded-lg bg-accent/10 hover:bg-accent/20 text-accent transition-all cursor-pointer"
-                        >
-                          <CalendarPlus className="h-4 w-4" />
-                        </button>
-                        <input
-                          type="number"
-                          min="1"
-                          value={row.amount}
-                          onChange={e => updateLineItemRow(index, { amount: e.target.value })}
-                          placeholder="₹"
-                          className="w-24 shrink-0 px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeLineItemRow(index)}
-                          disabled={monthlyLineItems.length === 1}
-                          className="h-8 w-8 shrink-0 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-danger transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-[10px] text-theme-text-secondary">
-                    Pick an existing event, or tap <CalendarPlus className="h-2.5 w-2.5 inline" /> to create a new one on the spot — it's added to the Events module and Calendar immediately.
-                  </p>
-                  <div className="flex items-center justify-between pt-1.5 border-t border-theme-border/20">
-                    <span className="font-semibold text-theme-text-secondary">Monthly Total</span>
-                    <span className="text-sm font-bold text-accent">₹{monthlyTotal.toLocaleString()}</span>
-                  </div>
-                </div>
-              )}
 
               <div className="space-y-1.5">
                 <label className="block font-medium text-theme-text-secondary">Notes / Justification</label>
                 <textarea
-                  value={notes}
-                  onChange={e => setNotes(e.target.value)}
-                  placeholder="What this budget will cover..."
                   rows={3}
-                  className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  value={annualNotesInput}
+                  onChange={(e) => setAnnualNotesInput(e.target.value)}
+                  placeholder="Provide context or key goals for this academic year..."
+                  className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                 />
               </div>
 
-              <button
-                type="submit"
-                className="w-full py-3 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer mt-2"
-              >
-                {editingBudget
-                  ? (editingBudget.status === 'Approved' ? 'Save & Send for Re-approval' : 'Save Changes')
-                  : 'Submit to Finance Head'}
-              </button>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAnnualModalOpen(false)}
+                  className="px-4 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary font-semibold rounded-xl text-xs cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl text-xs shadow-md shadow-accent/20 cursor-pointer"
+                >
+                  Submit for Approval
+                </button>
+              </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Review (Approve / Reject) Modal */}
-      {decidingBudget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="glass-panel w-full max-w-md rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-theme-text-primary">Review Budget Request</h2>
-              <button
-                onClick={() => { setDecidingBudget(null); setDecisionNotes(''); }}
-                className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+      {/* Monthly Line Items Breakdown Modal with On-The-Spot Event Creation */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-theme-card border border-theme-card-border rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setIsModalOpen(false)}
+              className="absolute top-4 right-4 text-theme-text-secondary hover:text-theme-text-primary"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <h2 className="text-base font-bold text-theme-text-primary">
+              {editingBudget ? 'Edit Monthly Budget Breakdown' : 'Submit Monthly Budget Breakdown'}
+            </h2>
 
-            <div className="text-xs space-y-1 p-3.5 bg-theme-background/30 border border-theme-border/20 rounded-xl">
-              <p className="font-bold text-theme-text-primary">
-                {decidingBudget.type === 'event' ? decidingBudget.eventName : `Monthly — ${decidingBudget.month}`}
-              </p>
-              <p className="text-theme-text-secondary">Requested by {decidingBudget.submittedBy}</p>
-              <p className="text-accent font-bold text-sm">₹{decidingBudget.amount.toLocaleString()}</p>
-              {decidingBudget.lineItems && decidingBudget.lineItems.length > 0 && (
-                <ul className="pl-1 space-y-0.5 border-l-2 border-theme-border/30">
-                  {decidingBudget.lineItems.map((li, i) => (
-                    <li key={i} className="pl-2 flex items-center justify-between text-theme-text-secondary">
-                      <span>{li.eventName}</span>
-                      <span className="font-mono">₹{li.amount.toLocaleString()}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {decidingBudget.notes && <p className="text-theme-text-secondary italic">"{decidingBudget.notes}"</p>}
-            </div>
+            {formError && (
+              <div className="p-3 bg-danger/10 border border-danger/25 text-danger rounded-xl text-xs">
+                {formError}
+              </div>
+            )}
 
-            <div className="space-y-1.5 text-xs">
-              <label className="block font-medium text-theme-text-secondary">Decision Notes (optional)</label>
-              <textarea
-                value={decisionNotes}
-                onChange={e => setDecisionNotes(e.target.value)}
-                placeholder="Any remarks for the record..."
-                rows={2}
-                className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-              />
-            </div>
+            <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">Academic Year</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={selectedAcademicYear}
+                    className="w-full px-4 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-secondary"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">Target Month</label>
+                  <select
+                    value={month}
+                    onChange={(e) => setMonth(e.target.value)}
+                    className="w-full px-4 py-2 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  >
+                    {MONTH_NAMES.map((mName, mIdx) => {
+                      const mKey = getMonthKey(mIdx);
+                      return (
+                        <option key={mKey} value={mKey}>
+                          {mName} ({mKey})
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              </div>
 
-            <div className="flex gap-2">
-              <button
-                onClick={() => handleDecide('Rejected')}
-                className="flex-1 py-2.5 bg-danger/15 hover:bg-danger/25 text-danger border border-danger/30 font-semibold text-xs rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5"
-              >
-                <XCircle className="h-4 w-4" />
-                Reject
-              </button>
-              <button
-                onClick={() => handleDecide('Approved')}
-                className="flex-1 py-2.5 bg-success hover:bg-success/90 text-white font-semibold text-xs rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5"
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                Approve
-              </button>
-            </div>
+              {/* Monthly Line Items Breakdown Table */}
+              <div className="space-y-3 border-t border-theme-border/30 pt-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-theme-text-primary">Line Items Breakdown</span>
+                  <span className="text-accent font-extrabold text-sm">Total: ₹{monthlyTotal.toLocaleString()}</span>
+                </div>
+
+                {monthlyLineItems.map((item, idx) => (
+                  <div key={idx} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-theme-background/40 p-3 rounded-xl border border-theme-card-border">
+                    <div className="flex-1 space-y-1">
+                      <select
+                        value={item.eventId}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === 'CREATE_NEW') {
+                            openCreateEventModal(idx);
+                          } else if (val) {
+                            const found = events.find((ev) => ev.id === val);
+                            updateLineItemRow(idx, {
+                              eventId: val,
+                              eventName: found ? found.title : item.eventName,
+                            });
+                          } else {
+                            updateLineItemRow(idx, { eventId: '' });
+                          }
+                        }}
+                        className="w-full px-3 py-1.5 bg-theme-card border border-theme-card-border rounded-lg text-theme-text-primary text-xs"
+                      >
+                        <option value="">-- Select Existing Event --</option>
+                        <option value="CREATE_NEW">✨ + Create New Event On The Spot...</option>
+                        {events.map((ev) => (
+                          <option key={ev.id} value={ev.id}>
+                            {ev.title} ({ev.campus})
+                          </option>
+                        ))}
+                      </select>
+
+                      <input
+                        type="text"
+                        value={item.eventName}
+                        onChange={(e) => updateLineItemRow(idx, { eventName: e.target.value })}
+                        placeholder="Item Title (e.g. Stage Setup / Marketing)"
+                        className="w-full px-3 py-1.5 bg-theme-card border border-theme-card-border rounded-lg text-theme-text-primary text-xs"
+                      />
+                    </div>
+
+                    <div className="w-28">
+                      <select
+                        value={item.category}
+                        onChange={(e) => updateLineItemRow(idx, { category: e.target.value })}
+                        className="w-full px-3 py-1.5 bg-theme-card border border-theme-card-border rounded-lg text-theme-text-primary text-xs"
+                      >
+                        {CATEGORY_OPTIONS.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {cat}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="w-28">
+                      <input
+                        type="number"
+                        min={1}
+                        value={item.amount}
+                        onChange={(e) => updateLineItemRow(idx, { amount: e.target.value })}
+                        placeholder="Amount (₹)"
+                        className="w-full px-3 py-1.5 bg-theme-card border border-theme-card-border rounded-lg text-theme-text-primary text-xs font-mono"
+                      />
+                    </div>
+
+                    {monthlyLineItems.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeLineItemRow(idx)}
+                        className="p-1.5 text-danger hover:bg-danger/10 rounded-lg cursor-pointer"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={addLineItemRow}
+                  className="text-xs text-accent font-semibold flex items-center gap-1 hover:underline cursor-pointer pt-1"
+                >
+                  <Plus className="h-3.5 w-3.5" /> + Add Another Item Line
+                </button>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block font-medium text-theme-text-secondary">Notes / Justification</label>
+                <textarea
+                  rows={2}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Optional notes for Finance Head..."
+                  className="w-full px-4 py-2 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary font-semibold rounded-xl text-xs cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl text-xs shadow-md shadow-accent/20 cursor-pointer"
+                >
+                  Submit Monthly Breakdown
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
 
-      {/* Create Event Modal — for a monthly line item, opened over the Request Budget modal */}
+      {/* On-The-Spot Event Creation Modal */}
       {isCreateEventModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="glass-panel w-full max-w-sm rounded-3xl p-6 flex flex-col space-y-4 relative border border-white/15 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-theme-text-primary flex items-center gap-1.5">
-                <CalendarPlus className="h-4 w-4 text-accent" />
-                Create New Event
-              </h2>
-              <button
-                onClick={() => setIsCreateEventModalOpen(false)}
-                className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
-              >
-                <X className="h-5 w-5" />
-              </button>
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-md z-[60] flex items-center justify-center p-4">
+          <div className="bg-theme-card border border-theme-card-border rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
+            <button
+              onClick={() => setIsCreateEventModalOpen(false)}
+              className="absolute top-4 right-4 text-theme-text-secondary hover:text-theme-text-primary"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-accent" />
+              <h3 className="text-base font-bold text-theme-text-primary">Create Event On The Spot</h3>
             </div>
+            <p className="text-xs text-theme-text-secondary">
+              Creates a live event in the Events Module & Calendar immediately and links its budget line item.
+            </p>
 
             {newEventError && (
-              <div className="p-3 bg-danger/10 border border-danger/25 rounded-xl text-danger text-xs flex items-center gap-2">
-                <ShieldAlert className="h-4 w-4 shrink-0" />
-                <span>{newEventError}</span>
+              <div className="p-3 bg-danger/10 border border-danger/25 text-danger rounded-xl text-xs">
+                {newEventError}
               </div>
             )}
 
-            <form onSubmit={handleCreateEventForLineItem} className="space-y-3 text-xs">
+            <form onSubmit={handleCreateEventForLineItem} className="space-y-4 text-xs">
               <div className="space-y-1.5">
                 <label className="block font-medium text-theme-text-secondary">Event Title *</label>
                 <input
                   type="text"
+                  required
                   value={newEventTitle}
-                  onChange={e => setNewEventTitle(e.target.value)}
-                  placeholder="e.g. Freshers Orientation"
-                  className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  onChange={(e) => setNewEventTitle(e.target.value)}
+                  placeholder="e.g. Annual Design Summit 2026"
+                  className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="block font-medium text-theme-text-secondary">Campus</label>
                   <select
                     value={newEventCampus}
-                    onChange={e => setNewEventCampus(e.target.value as any)}
-                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                    onChange={(e) => setNewEventCampus(e.target.value as any)}
+                    className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   >
                     <option value="GG Campus">GG Campus</option>
                     <option value="RTC Campus">RTC Campus</option>
                     <option value="Both Campuses">Both Campuses</option>
                   </select>
                 </div>
+
                 <div className="space-y-1.5">
                   <label className="block font-medium text-theme-text-secondary">Location</label>
                   <input
                     type="text"
                     value={newEventLocation}
-                    onChange={e => setNewEventLocation(e.target.value)}
-                    placeholder="Optional"
-                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                    onChange={(e) => setNewEventLocation(e.target.value)}
+                    placeholder="e.g. Main Auditorium"
+                    className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   />
                 </div>
               </div>
 
-              <label className="flex items-center gap-2 cursor-pointer font-medium text-theme-text-primary">
-                <input
-                  type="checkbox"
-                  checked={newEventDatesTBD}
-                  onChange={e => setNewEventDatesTBD(e.target.checked)}
-                  className="accent-accent"
-                />
-                Dates To Be Decided
-              </label>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={newEventDatesTBD}
+                    onChange={(e) => setNewEventDatesTBD(e.target.checked)}
+                    className="rounded border-theme-card-border text-accent focus:ring-accent"
+                  />
+                  <span className="text-xs text-theme-text-primary font-medium">Dates To Be Decided (TBD)</span>
+                </label>
 
-              {!newEventDatesTBD && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="block font-medium text-theme-text-secondary">Start Date *</label>
-                    <input
-                      type="date"
-                      value={newEventStartDate}
-                      onChange={e => setNewEventStartDate(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                    />
+                {!newEventDatesTBD && (
+                  <div className="grid grid-cols-2 gap-4 pt-1">
+                    <div className="space-y-1">
+                      <label className="block text-[11px] text-theme-text-secondary">Start Date</label>
+                      <input
+                        type="date"
+                        value={newEventStartDate}
+                        onChange={(e) => setNewEventStartDate(e.target.value)}
+                        className="w-full px-3 py-2 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-[11px] text-theme-text-secondary">End Date</label>
+                      <input
+                        type="date"
+                        value={newEventEndDate}
+                        onChange={(e) => setNewEventEndDate(e.target.value)}
+                        className="w-full px-3 py-2 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary text-xs"
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="block font-medium text-theme-text-secondary">End Date *</label>
-                    <input
-                      type="date"
-                      value={newEventEndDate}
-                      onChange={e => setNewEventEndDate(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                    />
-                  </div>
-                </div>
-              )}
+                )}
+              </div>
 
-              <p className="text-[10px] text-theme-text-secondary">
-                This creates a real event in the Events module and Calendar, with its own default sub-committees, immediately.
-              </p>
-
-              <button
-                type="submit"
-                className="w-full py-2.5 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer mt-1"
-              >
-                Create Event
-              </button>
+              <div className="flex justify-end gap-2 pt-2 border-t border-theme-border/30">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateEventModalOpen(false)}
+                  className="px-4 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary font-semibold rounded-xl text-xs cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl text-xs shadow-md shadow-accent/20 cursor-pointer"
+                >
+                  Create & Link Event
+                </button>
+              </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Decision Modal */}
+      {decidingBudget && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-theme-card border border-theme-card-border rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
+            <button
+              onClick={() => setDecidingBudget(null)}
+              className="absolute top-4 right-4 text-theme-text-secondary hover:text-theme-text-primary"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <h2 className="text-base font-bold text-theme-text-primary">
+              Reject Budget Request
+            </h2>
+            <p className="text-xs text-theme-text-secondary">
+              Provide feedback or instructions for the Centre Head regarding this rejection.
+            </p>
+            <div className="space-y-1.5">
+              <label className="block font-medium text-theme-text-secondary">Decision Notes</label>
+              <textarea
+                rows={3}
+                value={decisionNotes}
+                onChange={(e) => setDecisionNotes(e.target.value)}
+                placeholder="Reason for rejection or requested changes..."
+                className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent text-xs"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDecidingBudget(null)}
+                className="px-4 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary font-semibold rounded-xl text-xs cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDecision('Rejected')}
+                className="px-5 py-2 bg-danger hover:bg-red-600 text-white font-semibold rounded-xl text-xs shadow-md cursor-pointer"
+              >
+                Confirm Rejection
+              </button>
+            </div>
           </div>
         </div>
       )}

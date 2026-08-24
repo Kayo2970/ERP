@@ -202,23 +202,40 @@ export interface ReimbursementItem {
 }
 
 export interface BudgetLineItem {
+  id?: string;
   eventId?: string;  // set when the line item points at an existing event
-  eventName: string; // display label — an existing event's title, or a free-typed name for an event not created yet
-  amount: number;
+  eventName: string; // display label
+  category?: string; // 'Event' | 'Operational' | 'Equipment' | 'Marketing' | 'Logistics' | 'Other'
+  amount: number;    // Proposed / Amount alias for compatibility
+  proposedAmount?: number;
+  actualAmount?: number;
+  variance?: number;
+}
+
+export interface AcademicYearBudget {
+  id: string;
+  academicYear: string; // e.g. "2025-2026"
+  totalProposedAmount: number;
+  status: 'Pending' | 'Approved' | 'Rejected';
+  submittedBy: string;
+  submittedByEmail?: string;
+  submittedAt: string;
+  decidedBy?: string;
+  decidedAt?: string;
+  decisionNotes?: string;
 }
 
 export interface BudgetItem {
   id: string;
-  type: 'event' | 'monthly';
+  academicYear?: string;
+  type: 'annual' | 'event' | 'monthly';
   eventId?: string;  // set when type === 'event'
   eventName?: string;
   month?: string;    // set when type === 'monthly', 'YYYY-MM'
-  amount: number;
-  // Set on a 'monthly' budget proposed as a breakdown of per-event costs
-  // (the Centre Head lists each planned event for the month and what it
-  // will cost); `amount` is always kept equal to the sum of these.
-  // A 'monthly' budget submitted without a breakdown (or an 'event' one)
-  // leaves this undefined.
+  amount: number;    // Proposed amount alias
+  proposedAmount?: number;
+  actualAmount?: number;
+  variance?: number;
   lineItems?: BudgetLineItem[];
   notes?: string;
   submittedBy: string;
