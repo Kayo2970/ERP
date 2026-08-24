@@ -68,8 +68,9 @@ export async function POST(request: Request) {
 
         if (proofreader && proofreader.email) {
           const { dispatchEmail, wrapInMasterEmailTemplate } = await import('@/lib/email-service');
-          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL || 'http://localhost:3000';
-          const designLink = `${baseUrl.replace(/\/$/, '')}/dashboard/designs?highlight=${created.id}`;
+          const { getAppBaseUrl } = await import('@/lib/app-url');
+          const baseUrl = getAppBaseUrl(request);
+          const designLink = `${baseUrl}/dashboard/designs?highlight=${created.id}`;
           const bodyText = `Dear ${proofreader.name},\n\nYou have been requested to proofread a design asset: "${created.title}".\n\nCategory: ${created.category || 'Design Asset'}\nEvent: ${created.eventTitle || 'LEADS Event'}\nSubmitted By: ${created.designerName || 'Designer'} (${created.designerEmail || 'N/A'})\n\nPlease inspect and complete your proofread review here:\n${designLink}\n\nRegards,\nLEADS Design Portal`;
 
           const bodyHtml = wrapInMasterEmailTemplate({

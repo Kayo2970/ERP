@@ -29,7 +29,7 @@ export async function POST(request: Request) {
         const proto = request.headers.get('x-forwarded-proto') || (host?.includes('localhost') ? 'http' : 'https');
         const origin = request.headers.get('origin') || (host ? `${proto}://${host}` : undefined);
 
-        const result = await createActivationTokenAndSendEmail({ id: created.id, name: created.name, email: created.email }, origin);
+        const result = await createActivationTokenAndSendEmail({ id: created.id, name: created.name, email: created.email }, 'Super User', origin, request);
         activationLink = result.activationLink;
       } catch (emailErr) {
         console.error('[members-api] Welcome email dispatch failed:', emailErr);

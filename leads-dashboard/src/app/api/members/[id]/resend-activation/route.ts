@@ -23,7 +23,7 @@ export async function POST(
     const proto = request.headers.get('x-forwarded-proto') || (host?.includes('localhost') ? 'http' : 'https');
     const origin = request.headers.get('origin') || (host ? `${proto}://${host}` : undefined);
 
-    const { activationLink } = await createActivationTokenAndSendEmail({ id: member.id, name: member.name, email: member.email }, origin);
+    const { activationLink } = await createActivationTokenAndSendEmail({ id: member.id, name: member.name, email: member.email }, 'Super User', origin, request);
     return NextResponse.json({
       success: true,
       activationLink,

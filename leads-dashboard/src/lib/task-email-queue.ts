@@ -1,5 +1,6 @@
 import { dispatchEmail, wrapInMasterEmailTemplate } from './email-service';
 import { readCollection, mutateCollection } from './server-db';
+import { getAppBaseUrl } from './app-url';
 
 interface PendingTaskItem {
   id: string;
@@ -95,8 +96,8 @@ export async function flushTaskEmailDigest(recipientEmail: string) {
   const taskCount = itemsToSend.length;
   const taskIds = itemsToSend.map(i => i.id).join(',');
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL || 'http://localhost:3000';
-  const ackUrl = `${baseUrl.replace(/\/$/, '')}/dashboard/tasks?ack=${encodeURIComponent(taskIds)}&email=${encodeURIComponent(recipientEmail)}`;
+  const baseUrl = getAppBaseUrl();
+  const ackUrl = `${baseUrl}/dashboard/tasks?ack=${encodeURIComponent(taskIds)}&email=${encodeURIComponent(recipientEmail)}`;
 
   const subject = taskCount === 1
     ? `Task Assignment: ${firstItem?.title || 'New Task'}`
