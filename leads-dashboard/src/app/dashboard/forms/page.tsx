@@ -239,6 +239,26 @@ export default function FormsBuilderPage() {
     if (template) {
       setFields(template.fields.map((f, i) => ({ ...f, id: `field_${Date.now()}_${i}` })));
     }
+    // A form built from the Feedback Form Template should actually be
+    // titled "Feedback Form" (for the linked event, if one's already
+    // picked) — not left as whatever generic/blank title happened to be
+    // in the field, which is what was showing up on the QR poster and
+    // everywhere else the form's name is displayed.
+    if (templateId === FEEDBACK_FORM_TEMPLATE_ID) {
+      const linkedEvent = events.find(ev => ev.id === eventId);
+      setTitle(linkedEvent ? `Feedback Form – ${linkedEvent.title}` : 'Feedback Form');
+    }
+  };
+
+  const handleEventLink = (newEventId: string) => {
+    setEventId(newEventId);
+    // Keep an auto-generated Feedback Form title in sync with whichever
+    // event is currently linked, as long as the title still looks
+    // auto-generated (i.e. the user hasn't typed a custom one over it).
+    if (selectedTemplateId === FEEDBACK_FORM_TEMPLATE_ID && (title === '' || title === 'Feedback Form' || title.startsWith('Feedback Form – '))) {
+      const linkedEvent = events.find(ev => ev.id === newEventId);
+      setTitle(linkedEvent ? `Feedback Form – ${linkedEvent.title}` : 'Feedback Form');
+    }
   };
 
   const handleSaveTemplate = (e: React.FormEvent) => {
@@ -1080,7 +1100,7 @@ export default function FormsBuilderPage() {
                 </label>
                 <select
                   value={eventId}
-                  onChange={(e) => setEventId(e.target.value)}
+                  onChange={(e) => handleEventLink(e.target.value)}
                   className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                 >
                   <option value="">-- No Event Linked --</option>

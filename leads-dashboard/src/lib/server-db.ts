@@ -383,6 +383,60 @@ function ensureProductionRosterPruned(): Promise<void> {
 }
 
 /**
+ * One-time, idempotent cleanup: deleting a form used to leave its
+ * submissions behind forever (fixed going forward — DELETE /api/forms/[id]
+ * now cascades), but that fix only stops NEW orphans from being created —
+ * any database that already had a form deleted before that shipped is
+ * still carrying old orphaned submissions, which can even resurface under
+ * a brand-new form later built on the same slug (submissions are matched
+ * by slug as a fallback for records predating a reliable formId). Prunes
+ * any submission whose formId AND slug both fail to match a currently
+ * existing form. Runs once per boot; a permanent no-op once there's
+ * nothing left to prune.
+ */
+let orphanedSubmissionsPrunePromise: Promise<void> | null = null;
+function ensureOrphanedSubmissionsPruned(): Promise<void> {
+  if (!orphanedSubmissionsPrunePromise) {
+    orphanedSubmissionsPrunePromise = (async () => {
+      try {
+        const readJsonArray = async (key: keyof DbSchema): Promise<any[] | null> => {
+          const raw = await fs.readFile(collectionPath(key), 'utf-8');
+          const parsed = JSON.parse(raw);
+          let content: any = parsed;
+          if (isEncryptedPayload(parsed)) {
+            try {
+              content = JSON.parse(decryptData(parsed));
+            } catch {
+              return null;
+            }
+          }
+          return Array.isArray(content) ? content : null;
+        };
+
+        const forms = await readJsonArray('forms');
+        if (!forms) return; // no forms file yet, or undecryptable — nothing safe to prune against
+
+        const validFormIds = new Set(forms.map((f: any) => f?.id).filter(Boolean));
+        const validSlugs = new Set(forms.map((f: any) => f?.slug).filter(Boolean));
+
+        const submissions = await readJsonArray('submissions');
+        if (!submissions) return;
+
+        const pruned = submissions.filter((s: any) => validFormIds.has(s?.formId) || validSlugs.has(s?.slug));
+        if (pruned.length !== submissions.length) {
+          await writeCollectionFile('submissions', pruned);
+        }
+      } catch (err: any) {
+        if (err?.code !== 'ENOENT') {
+          console.error('[server-db] Orphaned submissions prune check failed:', err);
+        }
+      }
+    })();
+  }
+  return orphanedSubmissionsPrunePromise;
+}
+
+/**
  * One-time, idempotent seed: the built-in Feedback Form Template only
  * auto-appears via SEED_DB on a brand-new formTemplates.json (first boot
  * for that specific collection). Any database that already existed before
@@ -509,6 +563,7 @@ async function readCollectionFile<T = any>(key: keyof DbSchema): Promise<T[]> {
   await ensureSubhadeepEmailFixed();
   await ensureStaleEmailsFixed();
   await ensureProductionRosterPruned();
+  await ensureOrphanedSubmissionsPruned();
   await ensureFeedbackFormTemplateSeeded();
   try {
     const raw = await fs.readFile(collectionPath(key), 'utf-8');
