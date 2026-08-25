@@ -373,7 +373,10 @@ export interface DesignSubmissionItem {
   designerName: string;
   designerEmail: string;
   submittedAt: string;    // ISO timestamp
-  expiresAt: string;      // ISO timestamp (submittedAt + 30 days)
+  // ISO timestamp the stored file gets purged at (see processDesignRetention
+  // in server-db.ts) — submittedAt + 30 days by default, but reset to
+  // styleDecidedAt + 30 days once Style Approved (see updateDesignStyleReview).
+  expiresAt: string;
   isExpired?: boolean;
   proofreadRequested: boolean;
   assignedProofreaderId?: string;
@@ -3101,6 +3104,19 @@ export function updateDesignStyleReview(
     styleDecidedBy: reviewerName,
     styleDecidedAt: new Date().toISOString()
   };
+
+  // Once Style Approved, the 30-day storage-retention clock restarts from
+  // the approval date instead of the original upload date — reviewers can
+  // take a while to get to a submission, and the file should stay usable
+  // for a full 30 days after being cleared for use, not expire mid-review.
+  // Only the stored file/image is ever purged at expiry (processDesignRetention
+  // in server-db.ts) — the proofread review, style feedback, and any Ratings
+  // awarded against this design (a separate collection, keyed off the task
+  // synced below) are untouched and stay visible permanently.
+  if (styleStatus === 'Style Approved') {
+    updated.expiresAt = new Date(new Date(updated.styleDecidedAt as string).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    updated.isExpired = false;
+  }
 
   updated = syncDesignTask(updated, reviewerName);
 
