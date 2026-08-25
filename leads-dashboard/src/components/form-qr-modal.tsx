@@ -3,15 +3,84 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, Download, Copy, Printer, CheckCircle2, QrCode, ExternalLink } from 'lucide-react';
 import QRCode from 'qrcode';
-import { PublicFormItem } from '@/lib/local-data';
+import { PublicFormItem, FormTemplateItem } from '@/lib/local-data';
+
+const LEADS_LOGO_SRC = '/images/leads-short-logo.png';
 
 interface FormQrModalProps {
   isOpen: boolean;
   onClose: () => void;
   form: PublicFormItem | null;
+  templates?: FormTemplateItem[];
 }
 
-export function FormQrModal({ isOpen, onClose, form }: FormQrModalProps) {
+/**
+ * Every generated QR always gets the LEADS mark stamped in the center —
+ * drawn directly onto the same canvas the QR itself was rendered to, at
+ * errorCorrectionLevel 'H' (tolerates up to ~30% obstruction), well inside
+ * the ~20% area this occupies. Callers pass the target canvas (the small
+ * modal preview canvas, or a higher-res poster canvas) so it renders crisp
+ * at whatever size that canvas actually is, not just the modal's.
+ */
+function drawCenterLogo(canvas: HTMLCanvasElement | null): Promise<void> {
+  return new Promise((resolve) => {
+    if (!canvas) { resolve(); return; }
+    const ctx = canvas.getContext('2d');
+    if (!ctx) { resolve(); return; }
+
+    const logo = new Image();
+    logo.onload = () => {
+      const size = canvas.width;
+      const logoSize = Math.round(size * 0.2);
+      const pad = Math.round(logoSize * 0.16);
+      const boxSize = logoSize + pad * 2;
+      const boxX = (size - boxSize) / 2;
+      const boxY = (size - boxSize) / 2;
+      const radius = Math.round(boxSize * 0.14);
+
+      // White backdrop (rounded) behind the logo so it reads cleanly against
+      // the QR's dark modules instead of blending into them.
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(boxX + radius, boxY);
+      ctx.arcTo(boxX + boxSize, boxY, boxX + boxSize, boxY + boxSize, radius);
+      ctx.arcTo(boxX + boxSize, boxY + boxSize, boxX, boxY + boxSize, radius);
+      ctx.arcTo(boxX, boxY + boxSize, boxX, boxY, radius);
+      ctx.arcTo(boxX, boxY, boxX + boxSize, boxY, radius);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.drawImage(logo, (size - logoSize) / 2, (size - logoSize) / 2, logoSize, logoSize);
+      resolve();
+    };
+    logo.onerror = () => {
+      console.error('Failed to load LEADS logo for QR center overlay.');
+      resolve();
+    };
+    logo.src = LEADS_LOGO_SRC;
+  });
+}
+
+/**
+ * The name shown on the QR poster/print sheet — the actual kind of form
+ * this is, not a hardcoded "Registration Form" regardless of what the form
+ * actually does. A form built from a named template (e.g. "Feedback Form
+ * Template") is labeled from that template's own name ("Feedback Form");
+ * anything else falls back to the generic "Registration Form" label this
+ * module has always used for freeform/custom forms.
+ */
+function getFormTypeLabel(form: PublicFormItem, templates: FormTemplateItem[]): string {
+  if (form.sourceTemplateId) {
+    const template = templates.find(t => t.id === form.sourceTemplateId);
+    if (template?.name) {
+      const stripped = template.name.replace(/\s*Template$/i, '').trim();
+      return stripped || template.name;
+    }
+  }
+  return 'Registration Form';
+}
+
+export function FormQrModal({ isOpen, onClose, form, templates = [] }: FormQrModalProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [copied, setCopied] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -25,12 +94,14 @@ export function FormQrModal({ isOpen, onClose, form }: FormQrModalProps) {
   };
 
   const fullUrl = getFullUrl();
+  const formTypeLabel = form ? getFormTypeLabel(form, templates) : 'Registration Form';
 
   useEffect(() => {
     if (!isOpen || !form || !canvasRef.current) return;
+    const canvas = canvasRef.current;
 
     QRCode.toCanvas(
-      canvasRef.current,
+      canvas,
       fullUrl,
       {
         width: 260,
@@ -42,7 +113,11 @@ export function FormQrModal({ isOpen, onClose, form }: FormQrModalProps) {
         errorCorrectionLevel: 'H',
       },
       (error) => {
-        if (error) console.error('Failed to generate QR Code:', error);
+        if (error) {
+          console.error('Failed to generate QR Code:', error);
+          return;
+        }
+        drawCenterLogo(canvas);
       }
     );
   }, [isOpen, form, fullUrl]);
@@ -55,7 +130,7 @@ export function FormQrModal({ isOpen, onClose, form }: FormQrModalProps) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleDownloadImage = () => {
+  const handleDownloadImage = async () => {
     setIsGenerating(true);
     try {
       // Create a high-res printable canvas for poster export
@@ -89,7 +164,7 @@ export function FormQrModal({ isOpen, onClose, form }: FormQrModalProps) {
       ctx.fillStyle = '#64748b';
       ctx.font = 'bold 13px system-ui, -apple-system, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('MSRUAS LEADS — OFFICIAL REGISTRATION FORM', width / 2, 55);
+      ctx.fillText(`MSRUAS LEADS — OFFICIAL ${formTypeLabel.toUpperCase()}`, width / 2, 55);
 
       // Form Title
       ctx.fillStyle = '#0f172a';
@@ -121,32 +196,41 @@ export function FormQrModal({ isOpen, onClose, form }: FormQrModalProps) {
         y += 24;
       }
 
-      // Draw QR Code
-      if (canvasRef.current) {
-        const qrSize = 340;
-        const qrX = (width - qrSize) / 2;
-        const qrY = y + 10;
-        
-        // Draw white card behind QR with shadow box
-        ctx.fillStyle = '#ffffff';
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.08)';
-        ctx.shadowBlur = 15;
-        ctx.shadowOffsetY = 4;
-        ctx.fillRect(qrX - 15, qrY - 15, qrSize + 30, qrSize + 30);
-        ctx.shadowColor = 'transparent'; // reset
+      // Draw QR Code — rendered fresh at full poster resolution (rather than
+      // scaling up the small 260px modal-preview canvas) so both the QR
+      // modules and the center logo stay crisp instead of blurring.
+      const qrSize = 340;
+      const qrCanvas = document.createElement('canvas');
+      await QRCode.toCanvas(qrCanvas, fullUrl, {
+        width: qrSize,
+        margin: 2,
+        color: { dark: '#0f172a', light: '#ffffff' },
+        errorCorrectionLevel: 'H',
+      });
+      await drawCenterLogo(qrCanvas);
 
-        ctx.strokeStyle = '#cbd5e1';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(qrX - 15, qrY - 15, qrSize + 30, qrSize + 30);
+      const qrX = (width - qrSize) / 2;
+      const qrY = y + 10;
 
-        ctx.drawImage(canvasRef.current, qrX, qrY, qrSize, qrSize);
-        y = qrY + qrSize + 40;
-      }
+      // Draw white card behind QR with shadow box
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.08)';
+      ctx.shadowBlur = 15;
+      ctx.shadowOffsetY = 4;
+      ctx.fillRect(qrX - 15, qrY - 15, qrSize + 30, qrSize + 30);
+      ctx.shadowColor = 'transparent'; // reset
+
+      ctx.strokeStyle = '#cbd5e1';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(qrX - 15, qrY - 15, qrSize + 30, qrSize + 30);
+
+      ctx.drawImage(qrCanvas, qrX, qrY, qrSize, qrSize);
+      y = qrY + qrSize + 40;
 
       // Scan Call to Action
       ctx.fillStyle = '#1e293b';
       ctx.font = 'bold 16px system-ui, -apple-system, sans-serif';
-      ctx.fillText('Scan QR Code with camera to fill out form', width / 2, y);
+      ctx.fillText(`Scan QR Code with camera to fill out ${formTypeLabel.toLowerCase()}`, width / 2, y);
       y += 24;
 
       // Public URL Text
@@ -216,7 +300,7 @@ export function FormQrModal({ isOpen, onClose, form }: FormQrModalProps) {
         </head>
         <body>
           <div class="poster">
-            <p><strong>MSRUAS LEADS &bull; PUBLIC REGISTRATION FORM</strong></p>
+            <p><strong>MSRUAS LEADS &bull; PUBLIC ${formTypeLabel.toUpperCase()}</strong></p>
             <h1>${form.title}</h1>
             ${form.eventName ? `<p>Event: <strong>${form.eventName}</strong></p>` : ''}
             <img src="${qrDataUrl}" alt="Form QR Code" />
@@ -264,7 +348,7 @@ export function FormQrModal({ isOpen, onClose, form }: FormQrModalProps) {
         </div>
 
         <p className="text-[11px] text-theme-text-secondary max-w-xs">
-          Scan this QR code with any smartphone camera to open and complete the registration form.
+          Scan this QR code with any smartphone camera to open and complete the {formTypeLabel.toLowerCase()}.
         </p>
 
         {/* Action Buttons */}

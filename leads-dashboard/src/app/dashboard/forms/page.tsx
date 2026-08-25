@@ -1290,6 +1290,7 @@ export default function FormsBuilderPage() {
         isOpen={Boolean(qrModalForm)}
         onClose={() => setQrModalForm(null)}
         form={qrModalForm}
+        templates={templates}
       />
 
     </div>
