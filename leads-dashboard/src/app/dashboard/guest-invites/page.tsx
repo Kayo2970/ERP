@@ -20,7 +20,7 @@ import {
   CheckSquare,
   Square,
 } from 'lucide-react';
-import { logAuditEvent, getGuests, Guest as DirectoryGuest } from '@/lib/local-data';
+import { logAuditEvent, getGuests, getMembers, Guest as DirectoryGuest, Member } from '@/lib/local-data';
 import { isCentreHead } from '@/lib/permissions';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -56,10 +56,16 @@ export default function GuestInvitesPage() {
   const [sendProgress, setSendProgress] = useState({ sent: 0, failed: 0, total: 0 });
   const [resultMsg, setResultMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Guest Directory picker — lets a Centre Head add people already on file
-  // instead of retyping their name/email by hand each time.
+  // Guest Directory / Members Directory picker — lets a Centre Head add
+  // people already on file instead of retyping their name/email by hand
+  // each time. Two sources share one modal: external guest-directory
+  // contacts, and internal LEADS members. Selections are keyed with a
+  // "guests:"/"members:" prefix so switching tabs never loses a pick made
+  // on the other one.
   const [directoryGuests, setDirectoryGuests] = useState<DirectoryGuest[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [pickerTab, setPickerTab] = useState<'guests' | 'members'>('guests');
   const [pickerSearch, setPickerSearch] = useState('');
   const [pickerSelectedIds, setPickerSelectedIds] = useState<Set<string>>(new Set());
 
@@ -74,7 +80,10 @@ export default function GuestInvitesPage() {
     }
     setUserHydrated(true);
 
-    const refreshDirectory = () => setDirectoryGuests(getGuests());
+    const refreshDirectory = () => {
+      setDirectoryGuests(getGuests());
+      setMembers(getMembers());
+    };
     refreshDirectory();
     window.addEventListener('leads-data-sync', refreshDirectory);
     window.addEventListener('storage', refreshDirectory);
@@ -134,6 +143,9 @@ export default function GuestInvitesPage() {
   // Guests in the Directory that have an email on file — invites need one, so
   // records without an email address aren't selectable here.
   const eligibleDirectoryGuests = directoryGuests.filter(g => isValidEmail(g.email || ''));
+  // Terminated members can't log in anymore but their record stays on file —
+  // exclude them from invites the same way an email-less guest is excluded.
+  const eligibleMembers = members.filter(m => m.status !== 'Terminated' && isValidEmail(m.email || ''));
 
   const filteredDirectoryGuests = eligibleDirectoryGuests.filter(g => {
     const q = pickerSearch.toLowerCase();
@@ -145,34 +157,52 @@ export default function GuestInvitesPage() {
     );
   });
 
-  const openPicker = () => {
+  const filteredMembers = eligibleMembers.filter(m => {
+    const q = pickerSearch.toLowerCase();
+    if (!q) return true;
+    return (
+      m.name.toLowerCase().includes(q) ||
+      (m.department || '').toLowerCase().includes(q) ||
+      (m.role || '').toLowerCase().includes(q) ||
+      (m.email || '').toLowerCase().includes(q)
+    );
+  });
+
+  const openPicker = (tab: 'guests' | 'members' = 'guests') => {
     setPickerSearch('');
+    setPickerTab(tab);
     setPickerSelectedIds(new Set());
     setIsPickerOpen(true);
   };
 
-  const togglePickerSelection = (id: string) => {
+  const togglePickerSelection = (key: string) => {
     setPickerSelectedIds(prev => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+      if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
   };
 
   const handleAddFromDirectory = () => {
     const existingEmails = new Set(guests.map(g => g.email));
-    const toAdd = eligibleDirectoryGuests
-      .filter(g => pickerSelectedIds.has(g.id))
-      .filter(g => !existingEmails.has((g.email || '').toLowerCase()))
-      .map(g => ({
+    const selectedGuests = eligibleDirectoryGuests.filter(g => pickerSelectedIds.has(`guests:${g.id}`));
+    const selectedMembers = eligibleMembers.filter(m => pickerSelectedIds.has(`members:${m.id}`));
+
+    const toAdd = [...selectedGuests, ...selectedMembers]
+      .filter(p => !existingEmails.has((p.email || '').toLowerCase()))
+      .map(p => ({
         id: `guest_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        name: g.name,
-        email: (g.email || '').toLowerCase(),
+        name: p.name,
+        email: (p.email || '').toLowerCase(),
       }));
 
     if (toAdd.length > 0) {
       setGuests(prev => [...prev, ...toAdd]);
-      setResultMsg({ type: 'success', text: `Added ${toAdd.length} guest(s) from the Guest Directory.` });
+      const parts = [
+        selectedGuests.length > 0 ? `${selectedGuests.length} from the Guest Directory` : '',
+        selectedMembers.length > 0 ? `${selectedMembers.length} from LEADS Members` : '',
+      ].filter(Boolean).join(' and ');
+      setResultMsg({ type: 'success', text: `Added ${toAdd.length} guest(s) — ${parts}.` });
     }
     setIsPickerOpen(false);
   };
@@ -277,14 +307,24 @@ export default function GuestInvitesPage() {
             Guest List ({guests.length})
           </h2>
 
-          <button
-            type="button"
-            onClick={openPicker}
-            className="w-full flex items-center justify-center gap-1.5 px-3.5 py-2 bg-accent/15 hover:bg-accent/25 border border-accent/30 text-accent text-xs font-semibold rounded-xl transition-all cursor-pointer"
-          >
-            <BookUser className="h-3.5 w-3.5" />
-            Select from Guest Directory{eligibleDirectoryGuests.length > 0 ? ` (${eligibleDirectoryGuests.length})` : ''}
-          </button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => openPicker('guests')}
+              className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-accent/15 hover:bg-accent/25 border border-accent/30 text-accent text-xs font-semibold rounded-xl transition-all cursor-pointer"
+            >
+              <BookUser className="h-3.5 w-3.5" />
+              Guest Directory{eligibleDirectoryGuests.length > 0 ? ` (${eligibleDirectoryGuests.length})` : ''}
+            </button>
+            <button
+              type="button"
+              onClick={() => openPicker('members')}
+              className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-accent/15 hover:bg-accent/25 border border-accent/30 text-accent text-xs font-semibold rounded-xl transition-all cursor-pointer"
+            >
+              <Users className="h-3.5 w-3.5" />
+              LEADS Members{eligibleMembers.length > 0 ? ` (${eligibleMembers.length})` : ''}
+            </button>
+          </div>
 
           <form onSubmit={handleAddGuest} className="flex flex-col sm:flex-row gap-2">
             <input
@@ -494,7 +534,7 @@ export default function GuestInvitesPage() {
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-theme-text-primary flex items-center gap-2">
                 <BookUser className="h-4.5 w-4.5 text-accent" />
-                Select from Guest Directory
+                Add People
               </h2>
               <button
                 onClick={() => setIsPickerOpen(false)}
@@ -504,54 +544,113 @@ export default function GuestInvitesPage() {
               </button>
             </div>
 
+            <div className="flex items-center gap-1 bg-theme-border/20 rounded-xl p-1">
+              <button
+                type="button"
+                onClick={() => setPickerTab('guests')}
+                className={`flex-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg transition-all cursor-pointer ${pickerTab === 'guests' ? 'bg-accent text-white' : 'text-theme-text-secondary'}`}
+              >
+                Guest Directory{eligibleDirectoryGuests.length > 0 ? ` (${eligibleDirectoryGuests.length})` : ''}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPickerTab('members')}
+                className={`flex-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg transition-all cursor-pointer ${pickerTab === 'members' ? 'bg-accent text-white' : 'text-theme-text-secondary'}`}
+              >
+                LEADS Members{eligibleMembers.length > 0 ? ` (${eligibleMembers.length})` : ''}
+              </button>
+            </div>
+
             <div className="flex items-center gap-2 px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl">
               <Search className="h-4 w-4 text-theme-text-secondary shrink-0" />
               <input
                 type="text"
                 value={pickerSearch}
                 onChange={e => setPickerSearch(e.target.value)}
-                placeholder="Search by name, organization, or email..."
+                placeholder={pickerTab === 'guests' ? 'Search by name, organization, or email...' : 'Search by name, role/department, or email...'}
                 className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-xs text-theme-text-primary placeholder-theme-text-secondary"
               />
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-1.5 min-h-[12rem]">
-              {eligibleDirectoryGuests.length === 0 ? (
-                <p className="text-xs text-theme-text-secondary py-8 text-center">
-                  No Guest Directory entries with an email address on file yet.
-                </p>
-              ) : filteredDirectoryGuests.length === 0 ? (
-                <p className="text-xs text-theme-text-secondary py-8 text-center">No matches for your search.</p>
+              {pickerTab === 'guests' ? (
+                eligibleDirectoryGuests.length === 0 ? (
+                  <p className="text-xs text-theme-text-secondary py-8 text-center">
+                    No Guest Directory entries with an email address on file yet.
+                  </p>
+                ) : filteredDirectoryGuests.length === 0 ? (
+                  <p className="text-xs text-theme-text-secondary py-8 text-center">No matches for your search.</p>
+                ) : (
+                  filteredDirectoryGuests.map(g => {
+                    const key = `guests:${g.id}`;
+                    const isSelected = pickerSelectedIds.has(key);
+                    const alreadyAdded = guests.some(existing => existing.email === (g.email || '').toLowerCase());
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        disabled={alreadyAdded}
+                        onClick={() => togglePickerSelection(key)}
+                        className={`w-full flex items-center gap-2.5 text-left px-3 py-2.5 rounded-xl text-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                          isSelected ? 'bg-accent/10 border border-accent/40' : 'bg-theme-background/30 border border-theme-border/20 hover:bg-theme-border/20'
+                        }`}
+                      >
+                        {isSelected ? (
+                          <CheckSquare className="h-4 w-4 text-accent shrink-0" />
+                        ) : (
+                          <Square className="h-4 w-4 text-theme-text-secondary/60 shrink-0" />
+                        )}
+                        <div className="min-w-0">
+                          <span className="font-semibold text-theme-text-primary block truncate">
+                            {g.name}{g.organization ? ` — ${g.organization}` : ''}
+                          </span>
+                          <span className="text-theme-text-secondary block truncate">
+                            {g.email}{alreadyAdded ? ' (already in list)' : ''}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })
+                )
               ) : (
-                filteredDirectoryGuests.map(g => {
-                  const isSelected = pickerSelectedIds.has(g.id);
-                  const alreadyAdded = guests.some(existing => existing.email === (g.email || '').toLowerCase());
-                  return (
-                    <button
-                      key={g.id}
-                      type="button"
-                      disabled={alreadyAdded}
-                      onClick={() => togglePickerSelection(g.id)}
-                      className={`w-full flex items-center gap-2.5 text-left px-3 py-2.5 rounded-xl text-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
-                        isSelected ? 'bg-accent/10 border border-accent/40' : 'bg-theme-background/30 border border-theme-border/20 hover:bg-theme-border/20'
-                      }`}
-                    >
-                      {isSelected ? (
-                        <CheckSquare className="h-4 w-4 text-accent shrink-0" />
-                      ) : (
-                        <Square className="h-4 w-4 text-theme-text-secondary/60 shrink-0" />
-                      )}
-                      <div className="min-w-0">
-                        <span className="font-semibold text-theme-text-primary block truncate">
-                          {g.name}{g.organization ? ` — ${g.organization}` : ''}
-                        </span>
-                        <span className="text-theme-text-secondary block truncate">
-                          {g.email}{alreadyAdded ? ' (already in list)' : ''}
-                        </span>
-                      </div>
-                    </button>
-                  );
-                })
+                eligibleMembers.length === 0 ? (
+                  <p className="text-xs text-theme-text-secondary py-8 text-center">
+                    No Members Directory entries with an email address on file yet.
+                  </p>
+                ) : filteredMembers.length === 0 ? (
+                  <p className="text-xs text-theme-text-secondary py-8 text-center">No matches for your search.</p>
+                ) : (
+                  filteredMembers.map(m => {
+                    const key = `members:${m.id}`;
+                    const isSelected = pickerSelectedIds.has(key);
+                    const alreadyAdded = guests.some(existing => existing.email === (m.email || '').toLowerCase());
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        disabled={alreadyAdded}
+                        onClick={() => togglePickerSelection(key)}
+                        className={`w-full flex items-center gap-2.5 text-left px-3 py-2.5 rounded-xl text-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                          isSelected ? 'bg-accent/10 border border-accent/40' : 'bg-theme-background/30 border border-theme-border/20 hover:bg-theme-border/20'
+                        }`}
+                      >
+                        {isSelected ? (
+                          <CheckSquare className="h-4 w-4 text-accent shrink-0" />
+                        ) : (
+                          <Square className="h-4 w-4 text-theme-text-secondary/60 shrink-0" />
+                        )}
+                        <div className="min-w-0">
+                          <span className="font-semibold text-theme-text-primary block truncate">
+                            {m.name}{m.role ? ` — ${m.role}` : ''}
+                          </span>
+                          <span className="text-theme-text-secondary block truncate">
+                            {m.email}{alreadyAdded ? ' (already in list)' : ''}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })
+                )
               )}
             </div>
 
