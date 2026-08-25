@@ -7,6 +7,21 @@ import { PublicFormItem, FormTemplateItem } from '@/lib/local-data';
 
 const LEADS_LOGO_SRC = '/images/leads-short-logo.png';
 
+/**
+ * iPadOS 13+ masquerades as "Macintosh" in the UA string — the only way to
+ * tell it apart from an actual Mac is that it still reports touch support.
+ */
+function isIOSDevice(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent;
+  const isIPadOS = ua.includes('Macintosh') && typeof document !== 'undefined' && 'ontouchend' in document;
+  return /iPad|iPhone|iPod/.test(ua) || isIPadOS;
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob | null> {
+  return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), 'image/png'));
+}
+
 interface FormQrModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -244,12 +259,45 @@ export function FormQrModal({ isOpen, onClose, form, templates = [] }: FormQrMod
       ctx.font = '11px system-ui, -apple-system, sans-serif';
       ctx.fillText('Powered by MSRUAS LEADS Operations Portal', width / 2, height - 35);
 
-      // Trigger Download
-      const dataUrl = downloadCanvas.toDataURL('image/png');
+      // Trigger Download — iOS Safari doesn't reliably honor <a download>;
+      // tapping it just opens/navigates to the image instead of saving a
+      // file. The Web Share API's native share sheet (with a "Save Image"
+      // action straight to Photos) is the one iOS-reliable path; when that's
+      // unavailable, fall back to opening the image in a new tab so the
+      // user can long-press to save it manually. Everywhere else keeps the
+      // normal anchor-download flow.
+      const filename = `${form.slug}-qr-code.png`;
+      const blob = await canvasToBlob(downloadCanvas);
+      if (!blob) {
+        const dataUrl = downloadCanvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.download = filename;
+        link.href = dataUrl;
+        link.click();
+        return;
+      }
+
+      if (isIOSDevice()) {
+        const file = new File([blob], filename, { type: 'image/png' });
+        const canShareFile = typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] });
+        if (canShareFile && navigator.share) {
+          try {
+            await navigator.share({ files: [file], title: filename });
+            return;
+          } catch {
+            // User dismissed the share sheet, or it failed — fall through to the tab fallback below.
+          }
+        }
+        window.open(URL.createObjectURL(blob), '_blank');
+        return;
+      }
+
+      const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.download = `${form.slug}-qr-code.png`;
-      link.href = dataUrl;
+      link.download = filename;
+      link.href = blobUrl;
       link.click();
+      URL.revokeObjectURL(blobUrl);
     } catch (err) {
       console.error('Error generating printable QR card:', err);
     } finally {
