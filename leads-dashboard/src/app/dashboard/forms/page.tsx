@@ -99,9 +99,29 @@ function buildScaleChartData(field: FormField, subs: FormSubmissionItem[]) {
 
 function buildCategoryChartData(field: FormField, subs: FormSubmissionItem[]) {
   const counts = buildFieldCounts(field, subs);
+  // Checkbox answers are stored as raw booleans, so their bucket keys are
+  // the literal strings "true"/"false" — humanize those into Yes/No rather
+  // than showing respondents' answers as JS boolean stringification.
+  const labelFor = (key: string) => {
+    if (field.type !== 'checkbox') return key;
+    if (key === 'true') return 'Yes';
+    if (key === 'false') return 'No';
+    return key;
+  };
   return Object.entries(counts)
-    .map(([name, count]) => ({ name, count }))
+    .map(([name, count]) => ({ name: labelFor(name), count }))
     .sort((a, b) => b.count - a.count);
+}
+
+/** A "nice" (round, never-too-tall) Y-axis ceiling for small response counts —
+ *  recharts' own auto-domain rounds up aggressively (e.g. a max of 1 becomes
+ *  a 0-4 axis), which leaves bars looking lost in mostly-empty charts on
+ *  forms with only a handful of submissions so far. */
+function chartCountDomainMax(dataMax: number): number {
+  const max = Math.max(1, Math.ceil(dataMax));
+  if (max <= 5) return max;
+  const magnitude = 10 ** Math.floor(Math.log10(max));
+  return Math.ceil(max / magnitude) * magnitude;
 }
 
 function computeAverage(field: FormField, subs: FormSubmissionItem[]): number | null {
@@ -911,7 +931,7 @@ export default function FormsBuilderPage() {
                                   <AreaChart data={trendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                                     <XAxis dataKey="date" tick={{ fill: 'currentColor', fontSize: 9 }} />
-                                    <YAxis allowDecimals={false} tick={{ fill: 'currentColor', fontSize: 10 }} />
+                                    <YAxis allowDecimals={false} domain={[0, chartCountDomainMax(Math.max(...trendData.map(d => d.count)))]} tick={{ fill: 'currentColor', fontSize: 10 }} />
                                     <Tooltip
                                       formatter={(value: any) => [`${value} response${value === 1 ? '' : 's'}`, 'Responses']}
                                       contentStyle={{
@@ -957,7 +977,7 @@ export default function FormsBuilderPage() {
                                       <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                                         <XAxis dataKey="name" tick={{ fill: 'currentColor', fontSize: 10 }} interval={0} angle={f.type === 'scale' ? 0 : -20} textAnchor={f.type === 'scale' ? 'middle' : 'end'} />
-                                        <YAxis allowDecimals={false} tick={{ fill: 'currentColor', fontSize: 10 }} />
+                                        <YAxis allowDecimals={false} domain={[0, chartCountDomainMax(Math.max(...data.map(d => d.count)))]} tick={{ fill: 'currentColor', fontSize: 10 }} />
                                         <Tooltip
                                           formatter={(value: any) => [`${value} response${value === 1 ? '' : 's'}`, f.label]}
                                           contentStyle={{
