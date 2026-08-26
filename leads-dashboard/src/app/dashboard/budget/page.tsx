@@ -1408,10 +1408,15 @@ export default function BudgetPage() {
                                       ₹{(li.amount || li.proposedAmount || 0).toLocaleString()}
                                     </td>
                                     <td className="py-2 text-right font-bold text-emerald-400">
-                                      ₹{liActual.toLocaleString()}
+                                      ₹{getLineItemTotalSpend(li).toLocaleString()}
                                       {liSponsorCovered > 0 && (
-                                        <div className="text-[9px] font-semibold text-theme-text-secondary">
-                                          (+₹{liSponsorCovered.toLocaleString()} sponsor-covered)
+                                        <div className="text-[9px] font-semibold text-emerald-400/90 font-mono">
+                                          🤝 ₹{liSponsorCovered.toLocaleString()} sponsor covered
+                                        </div>
+                                      )}
+                                      {liActual > 0 && (
+                                        <div className="text-[9px] font-semibold text-rose-400 font-mono">
+                                          🏛️ ₹{liActual.toLocaleString()} Centre cost
                                         </div>
                                       )}
                                     </td>

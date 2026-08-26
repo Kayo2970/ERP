@@ -20,7 +20,7 @@ import {
   Ban,
   Handshake
 } from 'lucide-react';
-import { getEvents, addEvent, updateEvent, deleteEvent, approveEvent, rejectEvent, submitEventEdit, submitEventDelete, getEffectiveEventStatus, formatEventDateRange, getEventSortTime, getEventSponsorTotal, EventItem, EventSponsor } from '@/lib/local-data';
+import { getEvents, addEvent, updateEvent, deleteEvent, approveEvent, rejectEvent, submitEventEdit, submitEventDelete, getEffectiveEventStatus, formatEventDateRange, getEventSortTime, getEventSponsors, getEventSponsorTotal, EventItem, EventSponsor } from '@/lib/local-data';
 import { canCreateEvent, canEditEvent, canDeleteEvent, canManageEvents, canViewEvent, canApprovePendingEvent, getEventApprovalRequirement } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -600,15 +600,19 @@ export default function EventsPage() {
                         <span className="truncate">{event.location}</span>
                       </div>
                     )}
-                    {event.sponsors && event.sponsors.length > 0 && (
-                      <div className="flex items-center gap-1.5 text-[11px]">
-                        <Handshake className="h-3.5 w-3.5 text-emerald-400" />
-                        <span className="truncate">
-                          {event.sponsors.map((s) => s.name).join(', ')}
-                          {getEventSponsorTotal(event) > 0 && ` — ₹${getEventSponsorTotal(event).toLocaleString()}`}
-                        </span>
-                      </div>
-                    )}
+                    {(() => {
+                      const allSponsors = getEventSponsors(event.id);
+                      const spTotal = getEventSponsorTotal(event);
+                      if (allSponsors.length === 0) return null;
+                      return (
+                        <div className="flex items-center gap-1.5 text-[11px]">
+                          <Handshake className="h-3.5 w-3.5 text-emerald-400" />
+                          <span className="truncate">
+                            🤝 {allSponsors.map((s) => s.name).join(', ')} — ₹{spTotal.toLocaleString()}
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 

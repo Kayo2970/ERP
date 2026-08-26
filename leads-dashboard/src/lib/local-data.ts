@@ -1335,17 +1335,61 @@ export function rejectEvent(id: string, actorName: string, reason?: string): Eve
   return result;
 }
 
-/** Total confirmed sponsor contribution for an event (from event.sponsors & linked income sources). */
-export function getEventSponsorTotal(event: Pick<EventItem, 'id' | 'sponsors'>): number {
-  const directTotal = (event.sponsors || []).reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
-  if (!event.id) return directTotal;
-  const incomeSources = getIncomeSources();
-  const linkedTotal = incomeSources
-    .filter(inc => inc.eventId === event.id)
-    .reduce((sum, inc) => sum + (Number(inc.amount) || 0), 0);
-  return directTotal + linkedTotal;
+export interface UnifiedSponsor {
+  name: string;
+  amount: number;
+  type?: string;
+  tier?: string;
+  notes?: string;
+  source: 'event' | 'income_source';
+  incomeSourceId?: string;
 }
 
+/** Get all sponsors for an event, unifying direct event.sponsors and linked IncomeSourceItems. */
+export function getEventSponsors(eventId: string): UnifiedSponsor[] {
+  const events = getEvents();
+  const event = events.find(e => e.id === eventId);
+  const list: UnifiedSponsor[] = [];
+
+  if (event && event.sponsors) {
+    event.sponsors.forEach(sp => {
+      list.push({
+        name: sp.name,
+        amount: Number(sp.amount) || 0,
+        type: 'sponsor',
+        tier: (sp as any).tier,
+        notes: 'Direct Event Sponsor',
+        source: 'event',
+      });
+    });
+  }
+
+  const incomeSources = getIncomeSources();
+  incomeSources.filter(inc => inc.eventId === eventId).forEach(inc => {
+    const exists = list.some(s => s.name.toLowerCase() === inc.name.toLowerCase() && s.amount === Number(inc.amount));
+    if (!exists) {
+      list.push({
+        name: inc.name,
+        amount: Number(inc.amount) || 0,
+        type: inc.type || 'sponsor',
+        notes: inc.notes || 'Budget Income Source',
+        source: 'income_source',
+        incomeSourceId: inc.id,
+      });
+    }
+  });
+
+  return list;
+}
+
+/** Total confirmed sponsor contribution for an event (from event.sponsors & linked income sources). */
+export function getEventSponsorTotal(event: Pick<EventItem, 'id' | 'sponsors'>): number {
+  if (!event.id) {
+    return (event.sponsors || []).reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+  }
+  const sponsors = getEventSponsors(event.id);
+  return sponsors.reduce((sum, s) => sum + s.amount, 0);
+}
 
 /** Human-readable date range for an event, honoring a "dates to be decided" placeholder. */
 export function formatEventDateRange(event: Pick<EventItem, 'startDate' | 'endDate' | 'datesTBD'>): string {
@@ -1364,29 +1408,14 @@ export function getEventSortTime(event: Pick<EventItem, 'startDate' | 'datesTBD'
 }
 
 /**
- * An event's stored `status` is set manually (planned/active/completed/archived),
- * but nothing ever moved it to "completed" once its end date passed — it just sat
- * as "planned"/"active" forever. This derives the status that should actually be
- * shown/filtered on: past its end date, treat it as completed, unless someone has
- * deliberately archived it (archiving always wins, it's a manual terminal state) —
- * or unless a task tied to this event is still open OR has been completed but not
- * yet rated, in which case the event stays whatever its stored status is instead
- * of silently completing with loose ends. A task counts as "rated" once it carries
- * `ratedAt` — for committee/group tasks a single evaluation submission propagates
- * to every member (see propagateCommitteeRating/propagateGroupRating), so that one
- * `ratedAt` timestamp already means everyone who worked on it has been reviewed.
- * `tasks` defaults to a fresh getTasks() read when the caller doesn't already have
- * a copy on hand.
+ * Derives the effective status of an event: if its end date (or start date) has passed,
+ * treat it as completed (unless explicitly archived).
  */
 export function getEffectiveEventStatus(event: EventItem, tasks?: TaskItem[]): EventItem['status'] {
   if (event.status === 'archived') return 'archived';
   const today = new Date().toISOString().split('T')[0];
-  if (event.endDate && event.endDate < today) {
-    const relevantTasks = (tasks ?? getTasks()).filter(t => t.eventId === event.id);
-    const hasPendingTask = relevantTasks.some(t => t.status !== 'Completed');
-    if (hasPendingTask) return event.status;
-    const hasUnratedTask = relevantTasks.some(t => !t.ratedAt);
-    if (hasUnratedTask) return event.status;
+  const compareDate = event.endDate || event.startDate;
+  if (compareDate && compareDate < today) {
     return 'completed';
   }
   return event.status;

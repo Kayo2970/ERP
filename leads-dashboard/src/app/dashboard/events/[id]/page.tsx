@@ -29,6 +29,8 @@ import {
   updateEventCommitteeMembers,
   deleteEventCommittee,
   formatEventDateRange,
+  getEventSponsors,
+  getEventSponsorTotal,
   EventItem,
   EventCommittee,
   Member,
@@ -267,6 +269,12 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
           .filter((r) => r.eventId === event.id && r.status === 'Approved')
           .reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
 
+        // Calculate sponsors and surplus for this event
+        const eventSponsors = getEventSponsors(event.id);
+        const sponsorTotal = getEventSponsorTotal(event);
+        const sponsorCovered = Math.min(actualSpent, sponsorTotal);
+        const surplusReturned = Math.max(0, sponsorTotal - actualSpent);
+
         const variance = proposedAmount - actualSpent;
         const percentUsed = proposedAmount > 0 ? Math.min(Math.round((actualSpent / proposedAmount) * 100), 100) : 0;
 
@@ -324,6 +332,27 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                 </div>
               </div>
             </div>
+
+            {/* Event Sponsorship & Surplus Return Status Banner */}
+            {sponsorTotal > 0 && (
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/25 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-emerald-400">
+                    🤝 Event Sponsors ({eventSponsors.map((s) => s.name).join(', ')}): ₹{sponsorTotal.toLocaleString()}
+                  </span>
+                </div>
+                <div className="text-[11px] text-theme-text-secondary">
+                  {actualSpent > 0 ? (
+                    <span>
+                      <strong className="text-emerald-400">₹{sponsorCovered.toLocaleString()}</strong> depleted from sponsor &middot;{' '}
+                      <strong className="text-indigo-400">₹{surplusReturned.toLocaleString()}</strong> surplus returned to Centre
+                    </span>
+                  ) : (
+                    <span>Fully sponsored — ₹{sponsorTotal.toLocaleString()} surplus available</span>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Budget Progress Bar */}
             {proposedAmount > 0 && (
