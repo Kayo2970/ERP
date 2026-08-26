@@ -179,10 +179,59 @@ export default function BudgetPage() {
 
   const canSubmit = isCentreHead(user);
 
+  // Helper to determine if an event belongs to the selected Financial Year
+  const isEventInSelectedFY = (ev: EventItem) => {
+    if ((ev as any).financialYear) return (ev as any).financialYear === selectedFinancialYear;
+    if (ev.startDate) {
+      const yearStart = parseInt(selectedFinancialYear.split('-')[0], 10);
+      const evDate = new Date(ev.startDate);
+      const evYear = evDate.getFullYear();
+      const evMonth = evDate.getMonth() + 1; // 1-indexed
+      const evFY = evMonth >= 4 ? `${evYear}-${evYear + 1}` : `${evYear - 1}-${evYear}`;
+      return evFY === selectedFinancialYear;
+    }
+    // If no start date, check if an income source linked to it belongs to selected FY
+    const hasFYIncome = incomeSources.some((inc) => inc.eventId === ev.id && inc.financialYear === selectedFinancialYear);
+    return hasFYIncome;
+  };
+
+  const fyEvents = events.filter(isEventInSelectedFY);
+
   // Income Sources for currently selected Financial Year
   const fyIncomeSources = incomeSources.filter((inc) => inc.financialYear === selectedFinancialYear);
+
+  // Direct event sponsors from events in this FY (not already in incomeSources)
+  const directEventSponsors = fyEvents.flatMap((ev) =>
+    (ev.sponsors || []).map((sp, idx) => ({
+      id: `direct_sp_${ev.id}_${idx}`,
+      name: `${sp.name} (${ev.title})`,
+      amount: Number(sp.amount) || 0,
+      type: 'sponsor' as const,
+      eventId: ev.id,
+      eventName: ev.title,
+      financialYear: selectedFinancialYear,
+      notes: (sp as any).tier ? `Tier: ${(sp as any).tier}` : 'Direct event sponsor',
+      isDirectEventSponsor: true,
+    }))
+  );
+
+  // Combined list of display income items for FY
+  const allFyIncomeItems = [
+    ...fyIncomeSources,
+    ...directEventSponsors,
+  ];
+
   const generalIncomeSources = fyIncomeSources.filter((inc) => !inc.eventId);
   const totalGeneralIncome = generalIncomeSources.reduce((sum, inc) => sum + (Number(inc.amount) || 0), 0);
+
+  const eventLinkedIncomeTotal = fyIncomeSources
+    .filter((inc) => inc.eventId)
+    .reduce((sum, inc) => sum + (Number(inc.amount) || 0), 0);
+
+  const directSponsorsTotal = directEventSponsors.reduce((sum, sp) => sum + sp.amount, 0);
+
+  const totalEventSponsorships = eventLinkedIncomeTotal + directSponsorsTotal;
+  const totalAllIncomeAndSponsorships = totalGeneralIncome + totalEventSponsorships;
 
   // Annual Financial Year Budget Calculation
   const annualBudgetItem = budgets.find(
@@ -253,9 +302,7 @@ export default function BudgetPage() {
     // Proposed allocation
     const proposed = monthBudgets.reduce((sum, b) => sum + (b.amount || b.proposedAmount || 0), 0);
 
-    // Actual spending: rolled up from each line item's own linked-reimbursement
-    // total, not from reimbursement submission dates (a claim can be filed
-    // weeks after the event it's for).
+    // Actual spending: rolled up from each line item's own linked-reimbursement total
     const actual = monthBudgets.reduce(
       (sum, b) => sum + (b.lineItems || []).reduce((s, li) => s + getLineItemActual(li), 0),
       0
@@ -274,20 +321,30 @@ export default function BudgetPage() {
   });
 
   const totalAllocatedToMonths = monthlyCalculations.reduce((sum, m) => sum + m.proposed, 0);
-  const totalActualSpent = monthlyCalculations.reduce((sum, m) => sum + m.actual, 0);
 
-  // Total Leftover Sponsor money returned to Centre main account across all events in FY
-  const totalLeftoverSponsorReturned = monthlyCalculations.reduce(
-    (sum, m) =>
-      sum +
-      m.budgets.reduce(
-        (bSum, b) =>
-          bSum +
-          (b.lineItems || []).reduce((liSum, li) => liSum + getLineItemLeftoverSponsor(li), 0),
-        0
-      ),
-    0
-  );
+  // Universal event calculation engine across ALL FY events (ongoing & completed)
+  let totalLeftoverSponsorReturned = 0;
+  let totalCentreCostFromEvents = 0;
+
+  fyEvents.forEach((ev) => {
+    const approvedReimbursements = reimbursements.filter(
+      (r) => r.eventId === ev.id && r.status === 'Approved'
+    );
+    const totalSpend = approvedReimbursements.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    const sponsorTotal = getEventSponsorTotal(ev);
+    const surplusReturned = Math.max(0, sponsorTotal - totalSpend);
+    const centreCost = Math.max(0, totalSpend - sponsorTotal);
+
+    totalLeftoverSponsorReturned += surplusReturned;
+    totalCentreCostFromEvents += centreCost;
+  });
+
+  // Calculate non-event reimbursements
+  const nonEventApprovedSpend = reimbursements
+    .filter((r) => !r.eventId && r.status === 'Approved')
+    .reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
+  const totalActualSpent = totalCentreCostFromEvents + nonEventApprovedSpend;
 
   // Effective Total Centre Available Capital = Annual Approved Budget + General Income + Returned Sponsor Surplus
   const effectiveTotalCentreCapital = (annualApprovedAmount || annualProposedAmount) + totalGeneralIncome + totalLeftoverSponsorReturned;
@@ -1003,7 +1060,7 @@ export default function BudgetPage() {
           </button>
         </div>
 
-        {fyIncomeSources.length === 0 ? (
+        {allFyIncomeItems.length === 0 ? (
           <div className="text-center py-6 border border-dashed border-theme-border/40 rounded-xl bg-theme-background/20 space-y-2">
             <PiggyBank className="h-8 w-8 text-theme-text-secondary mx-auto opacity-50" />
             <p className="text-xs text-theme-text-secondary font-medium">
@@ -1029,7 +1086,7 @@ export default function BudgetPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-theme-border/20">
-                {fyIncomeSources.map((item) => (
+                {allFyIncomeItems.map((item: any) => (
                   <tr key={item.id} className="hover:bg-theme-background/30 transition-colors">
                     <td className="py-2.5 font-medium text-theme-text-primary">
                       {item.name}
@@ -1055,22 +1112,26 @@ export default function BudgetPage() {
                       +₹{item.amount.toLocaleString()}
                     </td>
                     <td className="py-2.5 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => openIncomeModal(item)}
-                          className="p-1 text-theme-text-secondary hover:text-accent rounded transition-all cursor-pointer"
-                          title="Edit"
-                        >
-                          <Edit2 className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteIncomeSourceItem(item.id, item.name)}
-                          className="p-1 text-theme-text-secondary hover:text-danger rounded transition-all cursor-pointer"
-                          title="Delete"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
+                      {!item.isDirectEventSponsor ? (
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => openIncomeModal(item)}
+                            className="p-1 text-theme-text-secondary hover:text-accent rounded transition-all cursor-pointer"
+                            title="Edit"
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteIncomeSourceItem(item.id, item.name)}
+                            className="p-1 text-theme-text-secondary hover:text-danger rounded transition-all cursor-pointer"
+                            title="Delete"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-theme-text-secondary italic">From Event Desk</span>
+                      )}
                     </td>
                   </tr>
                 ))}
