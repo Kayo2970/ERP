@@ -62,6 +62,15 @@ An enterprise-grade, institutional management and operations platform designed f
 
 #### 8. Budget & Funds (`/dashboard/budget`)
 - **Financial Governance**: Ledger for university fund allocations, department budgets, and operational expenditures.
+- **Income Sources & Sponsorships**: Track external corporate sponsors, research/institutional grants, alumni donations, and general Centre income. Income sources can be linked to specific events or assigned as General Centre Income.
+- **Smart Sponsorship Calculation Engine**:
+  - *Sponsor Depletion First*: Event expenses automatically deplete linked event sponsor funds first before touching the Centre's main budget allocation.
+  - *Centre Budget Fallback*: Any expenses exceeding total sponsorship are deducted from the Centre's main account.
+  - *Sponsor Surplus Return Rule*: If actual event spending is less than sponsorship received, unused sponsor funds automatically return to the Centre's main account, increasing the Centre's total available balance.
+  - *Total Available Capital*: Real-time financial formula: `Annual Approved Budget + General Income/Grants + Returned Sponsor Surplus`.
+- **Multi-Year Budgeting Engine**: Extended Financial Year selector allowing proposing, reviewing, editing, and inspecting budgets across a 9-year range (`-5` years back to `+3` years forward) for historical access and multi-year forward planning.
+- **Financial Analytics & Metric Dashboard**: 6 real-time stat cards (Annual Approved Budget, General Income & Grants, Sponsor Surplus Returned, Total Available Capital, Realized Net Spent, Net Remaining Balance) along with event line-item badges (`🤝 Depleted` and `🔄 Returned to Centre`).
+- **Encrypted API Data Layer**: Fully backed by AES-256-GCM encrypted server collection persistence via `/api/income-sources` and `/api/income-sources/[id]`.
 - **Access Scoping**: Restricted strictly to Super User, Centre Head, and Finance Leadership.
 
 #### 9. Public Forms Builder (`/dashboard/forms` & `/forms/[slug]`)

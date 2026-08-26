@@ -36,6 +36,7 @@ import {
   initialSystemSettings,
   initialGuests,
   initialBudgets,
+  initialIncomeSources,
   FEEDBACK_FORM_TEMPLATE_ID,
 } from './local-data';
 
@@ -66,6 +67,7 @@ export interface DbSchema {
   emailSettings: any[];
   guests: any[];
   budgets: any[];
+  incomeSources: any[];
   // One row per (memberId, date) a birthday email was actually sent for —
   // see src/lib/birthday-scheduler.ts. Purely an idempotency guard so a
   // PM2 restart near midnight (or two scheduler ticks landing on the same
@@ -96,6 +98,7 @@ const EMPTY_DB: DbSchema = {
   emailSettings: [],
   guests: [],
   budgets: [],
+  incomeSources: [],
   birthdayEmailLog: [],
 };
 
@@ -135,6 +138,7 @@ const SEED_DB: DbSchema = {
   ],
   guests: initialGuests,
   budgets: initialBudgets,
+  incomeSources: initialIncomeSources,
   birthdayEmailLog: [],
 };
 

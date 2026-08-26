@@ -38,11 +38,16 @@ import {
   getTasks,
   getCurrentFinancialYear,
   getEventSponsorTotal,
+  getIncomeSources,
+  addIncomeSource,
+  updateIncomeSource,
+  deleteIncomeSource,
   BudgetItem,
   BudgetLineItem,
   EventItem,
   ReimbursementItem,
   TaskItem,
+  IncomeSourceItem,
 } from '@/lib/local-data';
 import { isCentreHead, isFinanceHead, canVerifyBudgetCentreHead, canDecideBudget, getEventApprovalRequirement } from '@/lib/permissions';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -59,8 +64,8 @@ import {
 
 const CURRENT_FY = getCurrentFinancialYear();
 const CURRENT_FY_START = parseInt(CURRENT_FY.split('-')[0], 10);
-// One FY back, current, and two ahead for forward planning.
-const FINANCIAL_YEARS = [-1, 0, 1, 2].map((offset) => `${CURRENT_FY_START + offset}-${CURRENT_FY_START + offset + 1}`);
+// Multi-Year range: -5 years back to +3 years ahead for historical access & forward planning.
+const FINANCIAL_YEARS = [-5, -4, -3, -2, -1, 0, 1, 2, 3].map((offset) => `${CURRENT_FY_START + offset}-${CURRENT_FY_START + offset + 1}`);
 
 const CHART_COLORS = ['#2E75B6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316', '#6366F1'];
 
@@ -81,11 +86,22 @@ export default function BudgetPage() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [reimbursements, setReimbursements] = useState<ReimbursementItem[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [incomeSources, setIncomeSources] = useState<IncomeSourceItem[]>([]);
   const [expandedLineItems, setExpandedLineItems] = useState<Set<string>>(new Set());
   const [eventChartScope, setEventChartScope] = useState<'month' | 'year'>('year');
 
   const [selectedFinancialYear, setSelectedFinancialYear] = useState(CURRENT_FY);
   const [selectedMonthIndex, setSelectedMonthIndex] = useState<number | null>(0); // 0 = April (Start of Financial Year)
+
+  // Income Sources / Sponsorships Modal State
+  const [isIncomeModalOpen, setIsIncomeModalOpen] = useState(false);
+  const [editingIncomeSource, setEditingIncomeSource] = useState<IncomeSourceItem | null>(null);
+  const [incomeName, setIncomeName] = useState('');
+  const [incomeAmount, setIncomeAmount] = useState('');
+  const [incomeType, setIncomeType] = useState<'sponsor' | 'grant' | 'donation' | 'other'>('sponsor');
+  const [incomeEventId, setIncomeEventId] = useState('');
+  const [incomeNotes, setIncomeNotes] = useState('');
+  const [incomeFormError, setIncomeFormError] = useState('');
 
   // Annual Budget Proposal Modal
   const [isAnnualModalOpen, setIsAnnualModalOpen] = useState(false);
@@ -143,6 +159,7 @@ export default function BudgetPage() {
       setEvents(getEvents());
       setReimbursements(getReimbursements());
       setTasks(getTasks());
+      setIncomeSources(getIncomeSources());
     };
     refresh();
     setUserHydrated(true);
@@ -161,6 +178,11 @@ export default function BudgetPage() {
   };
 
   const canSubmit = isCentreHead(user);
+
+  // Income Sources for currently selected Financial Year
+  const fyIncomeSources = incomeSources.filter((inc) => inc.financialYear === selectedFinancialYear);
+  const generalIncomeSources = fyIncomeSources.filter((inc) => !inc.eventId);
+  const totalGeneralIncome = generalIncomeSources.reduce((sum, inc) => sum + (Number(inc.amount) || 0), 0);
 
   // Annual Financial Year Budget Calculation
   const annualBudgetItem = budgets.find(
@@ -183,8 +205,7 @@ export default function BudgetPage() {
     return `${year}-${String(monthNum).padStart(2, '0')}`;
   };
 
-  // Total real-world spend on a line item's event: the sum of Approved
-  // reimbursements filed against it, before any sponsor offset.
+  // Total real-world spend on a line item's event: sum of Approved reimbursements
   const getLineItemTotalSpend = (li: BudgetLineItem) =>
     li.eventId
       ? reimbursements
@@ -192,23 +213,35 @@ export default function BudgetPage() {
           .reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
       : 0;
 
-  // How much of that spend an event's sponsor(s) cover — sponsor money is
-  // used up first, so this is capped at the total spend itself.
-  const getLineItemSponsorCovered = (li: BudgetLineItem) => {
+  // Total sponsor contribution for an event (direct event.sponsors + linked IncomeSourceItems)
+  const getLineItemSponsorTotal = (li: BudgetLineItem) => {
     if (!li.eventId) return 0;
     const event = events.find((e) => e.id === li.eventId);
-    if (!event) return 0;
-    return Math.min(getLineItemTotalSpend(li), getEventSponsorTotal(event));
+    return event ? getEventSponsorTotal(event) : 0;
   };
 
-  // Single source of truth for how much of a line item's spend counts
-  // against the CENTRE's budget: total spend minus whatever the event's
-  // sponsor(s) already covered. Used for the per-line-item table AND every
-  // monthly/annual rollup below, so a month's "actual" total always matches
-  // what its own line items show, and sponsor-funded events don't eat into
-  // the Centre's remaining budget until sponsor money runs out.
-  const getLineItemActual = (li: BudgetLineItem) =>
-    getLineItemTotalSpend(li) - getLineItemSponsorCovered(li);
+  // First money depleted is sponsor money
+  const getLineItemSponsorCovered = (li: BudgetLineItem) => {
+    const spend = getLineItemTotalSpend(li);
+    const sponsorTotal = getLineItemSponsorTotal(li);
+    return Math.min(spend, sponsorTotal);
+  };
+
+  // Additional cost beyond sponsor money comes from Centre budget
+  const getLineItemCentreCost = (li: BudgetLineItem) => {
+    const spend = getLineItemTotalSpend(li);
+    const sponsorTotal = getLineItemSponsorTotal(li);
+    return Math.max(0, spend - sponsorTotal);
+  };
+
+  // Leftover sponsor money returns to Centre main account
+  const getLineItemLeftoverSponsor = (li: BudgetLineItem) => {
+    const spend = getLineItemTotalSpend(li);
+    const sponsorTotal = getLineItemSponsorTotal(li);
+    return Math.max(0, sponsorTotal - spend);
+  };
+
+  const getLineItemActual = (li: BudgetLineItem) => getLineItemCentreCost(li);
 
   // Compute monthly calculations for all 12 months
   const monthlyCalculations = MONTH_NAMES.map((mName, mIdx) => {
@@ -242,7 +275,91 @@ export default function BudgetPage() {
 
   const totalAllocatedToMonths = monthlyCalculations.reduce((sum, m) => sum + m.proposed, 0);
   const totalActualSpent = monthlyCalculations.reduce((sum, m) => sum + m.actual, 0);
+
+  // Total Leftover Sponsor money returned to Centre main account across all events in FY
+  const totalLeftoverSponsorReturned = monthlyCalculations.reduce(
+    (sum, m) =>
+      sum +
+      m.budgets.reduce(
+        (bSum, b) =>
+          bSum +
+          (b.lineItems || []).reduce((liSum, li) => liSum + getLineItemLeftoverSponsor(li), 0),
+        0
+      ),
+    0
+  );
+
+  // Effective Total Centre Available Capital = Annual Approved Budget + General Income + Returned Sponsor Surplus
+  const effectiveTotalCentreCapital = (annualApprovedAmount || annualProposedAmount) + totalGeneralIncome + totalLeftoverSponsorReturned;
+  const netRemainingCentreBalance = effectiveTotalCentreCapital - totalActualSpent;
   const totalAnnualVariance = (annualApprovedAmount || annualProposedAmount) - totalActualSpent;
+
+  // Handlers for Income Sources & Sponsorships
+  const openIncomeModal = (item?: IncomeSourceItem) => {
+    if (item) {
+      setEditingIncomeSource(item);
+      setIncomeName(item.name);
+      setIncomeAmount(String(item.amount));
+      setIncomeType(item.type || 'sponsor');
+      setIncomeEventId(item.eventId || '');
+      setIncomeNotes(item.notes || '');
+    } else {
+      setEditingIncomeSource(null);
+      setIncomeName('');
+      setIncomeAmount('');
+      setIncomeType('sponsor');
+      setIncomeEventId('');
+      setIncomeNotes('');
+    }
+    setIncomeFormError('');
+    setIsIncomeModalOpen(true);
+  };
+
+  const handleSaveIncomeSource = (e: React.FormEvent) => {
+    e.preventDefault();
+    setIncomeFormError('');
+
+    const numAmount = Number(incomeAmount);
+    if (!incomeName.trim()) {
+      setIncomeFormError('Please enter a name or title for the income source.');
+      return;
+    }
+    if (!numAmount || numAmount <= 0) {
+      setIncomeFormError('Please enter a valid amount greater than 0.');
+      return;
+    }
+
+    const linkedEvent = events.find((ev) => ev.id === incomeEventId);
+    const payload = {
+      name: incomeName.trim(),
+      amount: numAmount,
+      type: incomeType,
+      eventId: incomeEventId || undefined,
+      eventName: linkedEvent ? linkedEvent.title : undefined,
+      financialYear: selectedFinancialYear,
+      notes: incomeNotes.trim(),
+      submittedBy: user?.name || 'Admin',
+    };
+
+    if (editingIncomeSource) {
+      updateIncomeSource(editingIncomeSource.id, payload, user?.name || 'Admin');
+      triggerToast(`Updated income source "${payload.name}".`);
+    } else {
+      addIncomeSource(payload);
+      triggerToast(`Added ${payload.type} "${payload.name}" of ₹${payload.amount.toLocaleString()}.`);
+    }
+
+    setIsIncomeModalOpen(false);
+    setIncomeSources(getIncomeSources());
+  };
+
+  const handleDeleteIncomeSourceItem = (id: string, name: string) => {
+    if (confirm(`Are you sure you want to remove income source "${name}"?`)) {
+      deleteIncomeSource(id, user?.name || 'Admin');
+      triggerToast(`Removed income source "${name}".`);
+      setIncomeSources(getIncomeSources());
+    }
+  };
 
   // Currently Selected Month Calculation
   const selectedMonthCalc = selectedMonthIndex !== null ? monthlyCalculations[selectedMonthIndex] : null;
@@ -530,27 +647,34 @@ export default function BudgetPage() {
             </span>
           </div>
           <p className="text-xs text-theme-text-secondary mt-1">
-            Financial Year Budgeting, Monthly Allocations, Event Tracking & Visual Analytics
+            Financial Year Budgeting, Income & Sponsorships, Monthly Allocations & Analytics
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Financial Year Picker */}
-          <div className="flex items-center gap-1 bg-theme-card border border-theme-card-border p-1 rounded-xl">
-            {FINANCIAL_YEARS.map((year) => (
-              <button
-                key={year}
-                onClick={() => setSelectedFinancialYear(year)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  selectedFinancialYear === year
-                    ? 'bg-accent text-white shadow-md'
-                    : 'text-theme-text-secondary hover:text-theme-text-primary'
-                }`}
-              >
-                {year}
-              </button>
-            ))}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Multi-Year Financial Year Select Dropdown */}
+          <div className="flex items-center gap-2 bg-theme-card border border-theme-card-border px-3 py-1.5 rounded-xl">
+            <CalendarIcon className="h-4 w-4 text-accent shrink-0" />
+            <select
+              value={selectedFinancialYear}
+              onChange={(e) => setSelectedFinancialYear(e.target.value)}
+              className="bg-transparent font-semibold text-xs text-theme-text-primary focus:outline-none cursor-pointer"
+            >
+              {FINANCIAL_YEARS.map((year) => (
+                <option key={year} value={year} className="bg-theme-card text-theme-text-primary">
+                  Financial Year {year}
+                </option>
+              ))}
+            </select>
           </div>
+
+          <button
+            onClick={() => openIncomeModal()}
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-md cursor-pointer shrink-0"
+          >
+            <Plus className="h-4 w-4" />
+            + Add Income / Sponsor
+          </button>
 
           {canSubmit && (
             <button
@@ -559,7 +683,7 @@ export default function BudgetPage() {
                 setAnnualNotesInput(annualBudgetItem?.notes || '');
                 setIsAnnualModalOpen(true);
               }}
-              className="px-4 py-2.5 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl text-xs flex items-center gap-2 transition-all shadow-md shadow-accent/20 cursor-pointer shrink-0"
+              className="px-4 py-2 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl text-xs flex items-center gap-2 transition-all shadow-md shadow-accent/20 cursor-pointer shrink-0"
             >
               <Landmark className="h-4 w-4" />
               Propose / Edit Annual Budget
@@ -659,47 +783,67 @@ export default function BudgetPage() {
           )}
         </div>
 
-        {/* 4 Financial Stat Metric Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-theme-background/50 border border-theme-card-border p-4 rounded-xl space-y-1">
-            <span className="text-[11px] font-semibold text-theme-text-secondary uppercase tracking-wider block">
+        {/* 6 Financial Stat Metric Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+          <div className="bg-theme-background/50 border border-theme-card-border p-3.5 rounded-xl space-y-1">
+            <span className="text-[10px] font-semibold text-theme-text-secondary uppercase tracking-wider block">
               Annual Approved Budget
             </span>
-            <div className="text-lg font-extrabold text-accent">
+            <div className="text-base font-extrabold text-accent">
               ₹{annualApprovedAmount > 0 ? annualApprovedAmount.toLocaleString() : (annualProposedAmount > 0 ? `${annualProposedAmount.toLocaleString()} (Pending)` : '0')}
             </div>
-            <span className="text-[10px] text-theme-text-secondary">Approved for {selectedFinancialYear}</span>
+            <span className="text-[10px] text-theme-text-secondary">Base allocation for {selectedFinancialYear}</span>
           </div>
 
-          <div className="bg-theme-background/50 border border-theme-card-border p-4 rounded-xl space-y-1">
-            <span className="text-[11px] font-semibold text-theme-text-secondary uppercase tracking-wider block">
-              Allocated to Months
+          <div className="bg-theme-background/50 border border-theme-card-border p-3.5 rounded-xl space-y-1">
+            <span className="text-[10px] font-semibold text-theme-text-secondary uppercase tracking-wider block">
+              General Income & Grants
             </span>
-            <div className="text-lg font-extrabold text-theme-text-primary">
-              ₹{totalAllocatedToMonths.toLocaleString()}
+            <div className="text-base font-extrabold text-blue-400">
+              +₹{totalGeneralIncome.toLocaleString()}
             </div>
-            <span className="text-[10px] text-theme-text-secondary">Sum of monthly line items</span>
+            <span className="text-[10px] text-theme-text-secondary">{generalIncomeSources.length} unlinked income items</span>
           </div>
 
-          <div className="bg-theme-background/50 border border-theme-card-border p-4 rounded-xl space-y-1">
-            <span className="text-[11px] font-semibold text-theme-text-secondary uppercase tracking-wider block">
-              Realized Actual Spent
+          <div className="bg-theme-background/50 border border-theme-card-border p-3.5 rounded-xl space-y-1">
+            <span className="text-[10px] font-semibold text-theme-text-secondary uppercase tracking-wider block">
+              Sponsor Surplus Returned
             </span>
-            <div className="text-lg font-extrabold text-emerald-400">
+            <div className="text-base font-extrabold text-emerald-400">
+              +₹{totalLeftoverSponsorReturned.toLocaleString()}
+            </div>
+            <span className="text-[10px] text-theme-text-secondary">Unused event sponsor funds</span>
+          </div>
+
+          <div className="bg-theme-background/50 border border-theme-card-border p-3.5 rounded-xl space-y-1">
+            <span className="text-[10px] font-semibold text-theme-text-secondary uppercase tracking-wider block">
+              Total Available Capital
+            </span>
+            <div className="text-base font-extrabold text-indigo-400">
+              ₹{effectiveTotalCentreCapital.toLocaleString()}
+            </div>
+            <span className="text-[10px] text-theme-text-secondary">Budget + Income + Returned Sponsor</span>
+          </div>
+
+          <div className="bg-theme-background/50 border border-theme-card-border p-3.5 rounded-xl space-y-1">
+            <span className="text-[10px] font-semibold text-theme-text-secondary uppercase tracking-wider block">
+              Realized Net Spent
+            </span>
+            <div className="text-base font-extrabold text-rose-400">
               ₹{totalActualSpent.toLocaleString()}
             </div>
-            <span className="text-[10px] text-theme-text-secondary">Approved reimbursements</span>
+            <span className="text-[10px] text-theme-text-secondary">Net cost to Centre</span>
           </div>
 
-          <div className="bg-theme-background/50 border border-theme-card-border p-4 rounded-xl space-y-1">
-            <span className="text-[11px] font-semibold text-theme-text-secondary uppercase tracking-wider block">
-              Net Annual Savings / Variance
+          <div className="bg-theme-background/50 border border-theme-card-border p-3.5 rounded-xl space-y-1">
+            <span className="text-[10px] font-semibold text-theme-text-secondary uppercase tracking-wider block">
+              Net Remaining Balance
             </span>
-            <div className={`text-lg font-extrabold ${totalAnnualVariance >= 0 ? 'text-emerald-400' : 'text-danger'}`}>
-              {totalAnnualVariance >= 0 ? `+₹${totalAnnualVariance.toLocaleString()}` : `-₹${Math.abs(totalAnnualVariance).toLocaleString()}`}
+            <div className={`text-base font-extrabold ${netRemainingCentreBalance >= 0 ? 'text-emerald-400' : 'text-danger'}`}>
+              {netRemainingCentreBalance >= 0 ? `₹${netRemainingCentreBalance.toLocaleString()}` : `-₹${Math.abs(netRemainingCentreBalance).toLocaleString()}`}
             </div>
             <span className="text-[10px] text-theme-text-secondary">
-              {totalAnnualVariance >= 0 ? 'Under budget (Savings)' : 'Over budget warning'}
+              {netRemainingCentreBalance >= 0 ? 'Surplus Available' : 'Deficit Alert'}
             </span>
           </div>
         </div>
@@ -832,6 +976,108 @@ export default function BudgetPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Income Sources & Sponsorships Management Section */}
+      <div className="glass-panel rounded-2xl p-5 border border-theme-card-border space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-theme-border/30 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="h-9 w-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+              <PiggyBank className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-theme-text-primary">
+                Income Sources & Sponsorships ({selectedFinancialYear})
+              </h3>
+              <p className="text-[11px] text-theme-text-secondary">
+                External Sponsors, Grants, & General Centre Capital Contributions
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => openIncomeModal()}
+            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-md cursor-pointer shrink-0"
+          >
+            <Plus className="h-3.5 w-3.5" /> + Add Income Source / Sponsor
+          </button>
+        </div>
+
+        {fyIncomeSources.length === 0 ? (
+          <div className="text-center py-6 border border-dashed border-theme-border/40 rounded-xl bg-theme-background/20 space-y-2">
+            <PiggyBank className="h-8 w-8 text-theme-text-secondary mx-auto opacity-50" />
+            <p className="text-xs text-theme-text-secondary font-medium">
+              No additional income sources or sponsorships recorded for {selectedFinancialYear}.
+            </p>
+            <button
+              onClick={() => openIncomeModal()}
+              className="text-xs text-accent hover:underline font-semibold cursor-pointer"
+            >
+              + Click to add a sponsor, grant, or donation
+            </button>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-theme-border/30 text-theme-text-secondary text-[11px]">
+                  <th className="py-2 font-semibold">Income / Sponsor Name</th>
+                  <th className="py-2 font-semibold">Category Type</th>
+                  <th className="py-2 font-semibold">Target / Scope</th>
+                  <th className="py-2 font-semibold text-right">Amount</th>
+                  <th className="py-2 font-semibold text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-theme-border/20">
+                {fyIncomeSources.map((item) => (
+                  <tr key={item.id} className="hover:bg-theme-background/30 transition-colors">
+                    <td className="py-2.5 font-medium text-theme-text-primary">
+                      {item.name}
+                      {item.notes && <div className="text-[10px] text-theme-text-secondary font-normal">{item.notes}</div>}
+                    </td>
+                    <td className="py-2.5">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-accent/15 text-accent border border-accent/30">
+                        {item.type || 'Sponsor'}
+                      </span>
+                    </td>
+                    <td className="py-2.5">
+                      {item.eventId ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
+                          🎯 Linked to: {item.eventName || 'Event'}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                          🏛️ General Centre Income
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2.5 text-right font-bold text-emerald-400 font-mono">
+                      +₹{item.amount.toLocaleString()}
+                    </td>
+                    <td className="py-2.5 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => openIncomeModal(item)}
+                          className="p-1 text-theme-text-secondary hover:text-accent rounded transition-all cursor-pointer"
+                          title="Edit"
+                        >
+                          <Edit2 className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteIncomeSourceItem(item.id, item.name)}
+                          className="p-1 text-theme-text-secondary hover:text-danger rounded transition-all cursor-pointer"
+                          title="Delete"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Event-Wise Spend Breakdown Chart */}
@@ -1073,6 +1319,7 @@ export default function BudgetPage() {
                             {b.lineItems.map((li, liIdx) => {
                               const liActual = getLineItemActual(li);
                               const liSponsorCovered = getLineItemSponsorCovered(li);
+                              const liLeftoverSponsor = getLineItemLeftoverSponsor(li);
                               const liVariance = (li.amount || li.proposedAmount || 0) - liActual;
                               const liClaims = li.eventId
                                 ? reimbursements.filter((r) => r.eventId === li.eventId)
@@ -1122,9 +1369,17 @@ export default function BudgetPage() {
                                           {liSponsorCovered > 0 && (
                                             <span
                                               className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-semibold whitespace-nowrap"
-                                              title="Amount covered by the event's sponsor(s) before the Centre budget"
+                                              title="Sponsor funds depleted first before Centre budget is touched"
                                             >
-                                              🤝 ₹{liSponsorCovered.toLocaleString()} sponsored
+                                              🤝 ₹{liSponsorCovered.toLocaleString()} Depleted
+                                            </span>
+                                          )}
+                                          {liLeftoverSponsor > 0 && (
+                                            <span
+                                              className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400 border border-blue-500/30 font-semibold whitespace-nowrap"
+                                              title="Unused sponsor funds returned to Centre main account"
+                                            >
+                                              🔄 ₹{liLeftoverSponsor.toLocaleString()} Returned to Centre
                                             </span>
                                           )}
                                           {liTasks.length > 0 && (
@@ -1594,6 +1849,139 @@ export default function BudgetPage() {
                 Confirm Rejection
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add / Edit Income Source & Sponsor Modal */}
+      {isIncomeModalOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-theme-card border border-theme-card-border rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
+            <button
+              onClick={() => setIsIncomeModalOpen(false)}
+              className="absolute top-4 right-4 text-theme-text-secondary hover:text-theme-text-primary"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <h2 className="text-base font-bold text-theme-text-primary">
+              {editingIncomeSource ? 'Edit Income Source / Sponsor' : 'Add Income Source / Sponsor'}
+            </h2>
+
+            {incomeFormError && (
+              <div className="p-3 bg-danger/10 border border-danger/25 text-danger rounded-xl text-xs">
+                {incomeFormError}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveIncomeSource} className="space-y-4 text-xs">
+              <div className="space-y-1.5">
+                <label className="block font-medium text-theme-text-secondary">
+                  Source / Sponsor Title *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={incomeName}
+                  onChange={(e) => setIncomeName(e.target.value)}
+                  placeholder="e.g. TCS Innovation Grant, Alumni Sponsor"
+                  className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">
+                    Contribution Amount (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    value={incomeAmount}
+                    onChange={(e) => setIncomeAmount(e.target.value)}
+                    placeholder="e.g. 50000"
+                    className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">Income Category</label>
+                  <select
+                    value={incomeType}
+                    onChange={(e) => setIncomeType(e.target.value as any)}
+                    className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  >
+                    <option value="sponsor">Sponsorship</option>
+                    <option value="grant">Grant</option>
+                    <option value="donation">Donation</option>
+                    <option value="other">Other Income</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block font-medium text-theme-text-secondary">
+                  Target Scope (Link to Event or General)
+                </label>
+                <select
+                  value={incomeEventId}
+                  onChange={(e) => setIncomeEventId(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                >
+                  <option value="">🏛️ General Centre Income (Unlinked)</option>
+                  {events.map((ev) => (
+                    <option key={ev.id} value={ev.id}>
+                      🎯 Event: {ev.title} ({ev.campus})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-theme-text-secondary italic">
+                  Note: Event sponsors deplete first when event expenses occur. Leftover sponsor money returns to Centre main account.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block font-medium text-theme-text-secondary">Financial Year</label>
+                <select
+                  value={selectedFinancialYear}
+                  onChange={(e) => setSelectedFinancialYear(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                >
+                  {FINANCIAL_YEARS.map((fy) => (
+                    <option key={fy} value={fy}>
+                      Financial Year {fy}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block font-medium text-theme-text-secondary">Notes / Particulars</label>
+                <textarea
+                  rows={2}
+                  value={incomeNotes}
+                  onChange={(e) => setIncomeNotes(e.target.value)}
+                  placeholder="Optional details, reference number, or conditions..."
+                  className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsIncomeModalOpen(false)}
+                  className="px-4 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary font-semibold rounded-xl text-xs cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-xs shadow-md cursor-pointer"
+                >
+                  Save Income Source
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

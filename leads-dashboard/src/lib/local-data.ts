@@ -269,6 +269,21 @@ export interface BudgetItem {
   decisionNotes?: string;
 }
 
+export interface IncomeSourceItem {
+  id: string;
+  name: string; // e.g. "TCS Sponsorship", "Alumni Innovation Grant"
+  amount: number;
+  type?: 'sponsor' | 'grant' | 'donation' | 'other';
+  eventId?: string; // Linked event ID (optional: if omitted, this is General Centre Income)
+  eventName?: string; // Linked event title
+  financialYear: string; // e.g. "2026-2027"
+  notes?: string;
+  receivedDate?: string;
+  submittedBy?: string;
+  createdAt: string;
+}
+
+
 export interface AnnouncementItem {
   id: string;
   title: string;
@@ -648,6 +663,9 @@ export const initialGuests: Guest[] = [];
 
 export const initialAccessLevelSettings: AccessLevelSettings[] = [DEFAULT_ACCESS_LEVEL_SETTINGS];
 
+export const initialIncomeSources: IncomeSourceItem[] = [];
+
+
 // -------------------------------------------------------------
 // Server Sync & Per-Collection API Helpers
 // -------------------------------------------------------------
@@ -731,6 +749,7 @@ export async function syncWithServer(): Promise<boolean> {
       hydrateIfStale('leads_system_settings', data.systemSettings, requestStartedAt);
       hydrateIfStale('leads_guests', data.guests, requestStartedAt);
       hydrateIfStale('leads_budgets', data.budgets, requestStartedAt);
+      hydrateIfStale('leads_income_sources', data.incomeSources, requestStartedAt);
       hydrateIfStale('leads_audit_logs', data.auditLogs, requestStartedAt);
       // Notify every open page in this tab to re-read localStorage and re-render.
       // The native 'storage' event only fires in OTHER tabs/windows — it never
@@ -1316,10 +1335,17 @@ export function rejectEvent(id: string, actorName: string, reason?: string): Eve
   return result;
 }
 
-/** Total confirmed sponsor contribution for an event (unset amounts count as 0). */
-export function getEventSponsorTotal(event: Pick<EventItem, 'sponsors'>): number {
-  return (event.sponsors || []).reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+/** Total confirmed sponsor contribution for an event (from event.sponsors & linked income sources). */
+export function getEventSponsorTotal(event: Pick<EventItem, 'id' | 'sponsors'>): number {
+  const directTotal = (event.sponsors || []).reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+  if (!event.id) return directTotal;
+  const incomeSources = getIncomeSources();
+  const linkedTotal = incomeSources
+    .filter(inc => inc.eventId === event.id)
+    .reduce((sum, inc) => sum + (Number(inc.amount) || 0), 0);
+  return directTotal + linkedTotal;
 }
+
 
 /** Human-readable date range for an event, honoring a "dates to be decided" placeholder. */
 export function formatEventDateRange(event: Pick<EventItem, 'startDate' | 'endDate' | 'datesTBD'>): string {
@@ -2218,6 +2244,69 @@ export function syncBudgetLineItemsForEvent(eventId: string): void {
     `Recalculated budget for "${event.title}": moved to ${targetMonth} (FY ${targetFY}) following its event date update.`
   );
 }
+
+// -------------------------------------------------------------
+// Income Sources & Sponsorships
+// -------------------------------------------------------------
+
+export function getIncomeSources(): IncomeSourceItem[] {
+  if (typeof window === 'undefined') return initialIncomeSources;
+  const saved = localStorage.getItem('leads_income_sources');
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return parsed;
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  return initialIncomeSources;
+}
+
+export function saveIncomeSources(items: IncomeSourceItem[]): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem('leads_income_sources', JSON.stringify(items));
+  markLocalWrite('leads_income_sources');
+}
+
+export function addIncomeSource(item: Omit<IncomeSourceItem, 'id' | 'createdAt'>): IncomeSourceItem {
+  const current = getIncomeSources();
+  const newIncome: IncomeSourceItem = {
+    ...item,
+    id: 'inc_' + Date.now(),
+    createdAt: new Date().toISOString().split('T')[0],
+  };
+  current.unshift(newIncome);
+  saveIncomeSources(current);
+  serverPost('/api/income-sources', newIncome);
+  logAuditEvent('INCOME_SOURCE_ADDED', item.submittedBy || 'Admin', `Added ${item.type || 'income source'} "${item.name}" of ₹${item.amount.toLocaleString()} for FY ${item.financialYear}${item.eventName ? ` (Linked to event "${item.eventName}")` : ' (General Centre Income)'}`);
+  return newIncome;
+}
+
+export function updateIncomeSource(id: string, updates: Partial<IncomeSourceItem>, actorName: string): IncomeSourceItem | null {
+  const current = getIncomeSources();
+  const idx = current.findIndex(i => i.id === id);
+  if (idx === -1) return null;
+
+  current[idx] = { ...current[idx], ...updates };
+  saveIncomeSources(current);
+  serverPatch('/api/income-sources', id, current[idx]);
+  logAuditEvent('INCOME_SOURCE_UPDATED', actorName, `Updated income source "${current[idx].name}"`);
+  return current[idx];
+}
+
+export function deleteIncomeSource(id: string, actorName: string): boolean {
+  const current = getIncomeSources();
+  const target = current.find(i => i.id === id);
+  if (!target) return false;
+
+  const updated = current.filter(i => i.id !== id);
+  saveIncomeSources(updated);
+  serverDelete('/api/income-sources', id);
+  logAuditEvent('INCOME_SOURCE_DELETED', actorName, `Deleted income source "${target.name}" (₹${target.amount.toLocaleString()})`);
+  return true;
+}
+
 
 export function verifyReimbursementByCentreHead(id: string, reviewerName: string): ReimbursementItem | null {
   const current = getReimbursements();
