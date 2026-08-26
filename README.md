@@ -80,6 +80,26 @@ For the complete roster of all 35 accounts, see [docs/login_creds.md](docs/login
 
 ---
 
+## 📐 System Architecture & Engineering Diagrams
+
+The LEADS ERP platform features modular data flow pipelines and encrypted persistence layers:
+
+### 1. Database Entity-Relationship (ER) Schema
+![Database Entity-Relationship ER Diagram](docs/database_er_diagram.png)
+
+### 2. Module-to-Module Data Flow Architecture
+![Module Data Flow Diagram](docs/module_data_flow_diagram.png)
+
+### 3. Individual Subsystem Architectural Flowcharts
+
+| Subsystem Area | Structural Flowchart Diagram | Core Module Connections |
+| :--- | :--- | :--- |
+| **Events & Tasks Subsystem** | ![Events & Tasks Diagram](docs/modules/events_and_tasks_module_structure.png) | Draft validation → Approval queues → Sub-committee rosters → Sponsor merge → Deliverable tracking → Automatic completion triggers. |
+| **Finance & Budget Subsystem** | ![Finance & Budget Diagram](docs/modules/finance_and_budget_module_structure.png) | Annual budget → Income/Sponsorship ingestion → Claim validation → 2-Stage audit → Sponsor depletion first → Net Centre cost & surplus return engine. |
+| **Design & Forms Subsystem** | ![Design & Forms Diagram](docs/modules/designs_and_forms_module_structure.png) | Asset upload → AI OCR scan → Gate 1 Style & Gate 2 Proofread clearances → Task auto-completion → Dynamic form creation → Public sign-ups → Word DOCX template exports. |
+
+---
+
 ## 📄 Documentation Index
 
 For detailed requirements and specs, see the `PROJECT DOCS/files/` directory:

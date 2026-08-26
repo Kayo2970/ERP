@@ -153,6 +153,26 @@ The system enforces a multi-tiered permission model backed by dynamic policy gra
 
 ---
 
+## 📐 System Architecture & Engineering Diagrams
+
+The LEADS ERP platform is designed with a decoupled modular architecture, encrypted persistent JSON data stores, and cross-module data integration pipelines.
+
+### 1. Database Entity-Relationship (ER) Schema
+![Database Entity-Relationship ER Diagram](docs/database_er_diagram.png)
+
+### 2. Module-to-Module Data Flow Architecture
+![Module Data Flow Diagram](docs/module_data_flow_diagram.png)
+
+### 3. Individual Subsystem Architectural Flowcharts
+
+| Subsystem Area | Structural Flowchart Diagram | Core Module Connections |
+| :--- | :--- | :--- |
+| **Events & Tasks Subsystem** | ![Events & Tasks Diagram](docs/modules/events_and_tasks_module_structure.png) | Draft validation → Approval queues → Sub-committee rosters → Sponsor merge → Deliverable tracking → Automatic completion triggers. |
+| **Finance & Budget Subsystem** | ![Finance & Budget Diagram](docs/modules/finance_and_budget_module_structure.png) | Annual budget → Income/Sponsorship ingestion → Claim validation → 2-Stage audit → Sponsor depletion first → Net Centre cost & surplus return engine. |
+| **Design & Forms Subsystem** | ![Design & Forms Diagram](docs/modules/designs_and_forms_module_structure.png) | Asset upload → AI OCR scan → Gate 1 Style & Gate 2 Proofread clearances → Task auto-completion → Dynamic form creation → Public sign-ups → Word DOCX template exports. |
+
+---
+
 ## 🎨 UI Aesthetics & Light Mode Styling
 
 - **Dynamic Inspirational Quotes Carousel**: Auto-rotating hero banner on the login screen (`src/app/page.tsx`) cycling through 20 quotes on leadership and inspiring young minds — global and Indian leaders, education advocates, and business leaders — every ~3.5 seconds, with smooth cross-fade transitions (no manual prev/next controls; the dot indicators still allow jumping to a specific quote).
