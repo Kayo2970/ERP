@@ -96,6 +96,11 @@ export interface EventItem {
   location?: string;
   campus?: 'GG Campus' | 'RTC Campus' | 'Both Campuses';
   committees: EventCommittee[];
+  // True for an auto-synced Indian public holiday / festival (see
+  // src/lib/holiday-scheduler.ts) rather than a real LEADS event — the
+  // Calendar page badges these differently and they're excluded from
+  // event-approval/committee/sponsor workflows.
+  isHoliday?: boolean;
   // External sponsor contributions. In the Budget module, sponsor money is
   // drawn down against an event's actual spend before the Centre's own
   // budget is counted as used — see getEventSponsorTotal() and the Budget
@@ -148,7 +153,8 @@ export interface TaskItem {
   // Design Heads evaluation rights on it (see permissions.ts) without
   // relying on a fragile title-string match.
   isDesignDeliverable?: boolean;
-  workflowType?: 'design_caption_draft' | 'design_caption_review' | 'design_social_posting';
+  workflowType?: 'design_caption_draft' | 'design_caption_review' | 'design_social_posting'
+    | 'holiday_social_approval' | 'holiday_design_social';
   // Only set on workflowType 'design_social_posting' tasks — distinguishes
   // the two separate posting tasks (one per platform) created once captions
   // are approved, so each can be assigned, viewed, and marked complete
@@ -1545,6 +1551,52 @@ export function updateTaskStatus(id: string, status: TaskItem['status'], actorNa
   return updateTask(id, { status }, actorName || 'User');
 }
 
+/**
+ * Centre Head / Events Head answering the weekly holiday-scheduler's "is a
+ * social media post needed for this festival?" task (see
+ * src/lib/holiday-scheduler.ts, which creates the workflowType
+ * 'holiday_social_approval' task this responds to). A "yes" fans out a new
+ * group task to every member whose role contains "Design Head" or "Social
+ * Media Head" (both the senior and non-senior title-holders match the same
+ * substring, so both get it) — falling back to tier <= 2 leadership if no
+ * one on the roster currently holds either title, so the task is never left
+ * orphaned with no one able to see it.
+ */
+export function respondToHolidayApproval(taskId: string, approved: boolean, actorName: string): TaskItem | null {
+  const task = getTasks().find(t => t.id === taskId);
+  if (!task) return null;
+
+  updateTask(taskId, { status: 'Completed', decidedBy: actorName, decidedAt: new Date().toISOString() }, actorName);
+  logAuditEvent(
+    'HOLIDAY_SOCIAL_APPROVAL_DECIDED',
+    actorName,
+    `${approved ? 'Approved' : 'Declined'} a social media post for "${task.event || task.title}"`
+  );
+
+  if (approved) {
+    const members = getMembers().filter(m => m.status !== 'Terminated');
+    const matches = members.filter(m => {
+      const role = (m.role || '').toLowerCase();
+      return role.includes('design head') || role.includes('social media head');
+    });
+    const pool = matches.length > 0 ? matches : members.filter(m => m.tier <= 2);
+
+    addTask({
+      title: `Design & post content for "${task.event || task.title}"`,
+      event: task.event,
+      eventId: task.eventId,
+      assignee: pool.map(m => m.name).join(', ') || 'Design Head',
+      assigneeType: 'group',
+      assigneeIds: pool.map(m => m.id),
+      dueDate: task.dueDate,
+      creatorName: actorName,
+      workflowType: 'holiday_design_social',
+    });
+  }
+
+  return getTasks().find(t => t.id === taskId) || null;
+}
+
 export function deleteTask(id: string, actorName: string): boolean {
   const tasks = getTasks();
   const target = tasks.find(t => t.id === id);
@@ -1665,11 +1717,14 @@ export function canViewTask(
     return false;
   }
 
-  // Tier 5-6 (Core Committee, Training Associate): see their assigned individual tasks
+  // Tier 5-6 (Core Committee, Training Associate): see their assigned individual
+  // tasks, or a group task (assigneeType 'group') they're one of the members of.
+  const memberId = user.id || getMembers().find(m => m.email.toLowerCase() === user.email.toLowerCase())?.id;
   return Boolean(
     (task.assignee && task.assignee.toLowerCase() === user.name.toLowerCase()) ||
     (task.assigneeEmail && task.assigneeEmail.toLowerCase() === user.email.toLowerCase()) ||
-    (task.assigneeId && task.assigneeId === (user as any).id)
+    (task.assigneeId && task.assigneeId === (user as any).id) ||
+    (memberId && task.assigneeIds && task.assigneeIds.includes(memberId))
   );
 }
 
