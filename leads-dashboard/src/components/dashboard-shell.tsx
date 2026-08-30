@@ -317,10 +317,16 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       setNotifications(buildNotifications(parsedUser));
       setSeenActionIds(loadSeenActionIds());
 
-      // Auto-launch role-tailored Onboarding Tour on first login
-      const tourKey = `leads_tour_completed_${parsedUser.email || parsedUser.name}`;
-      if (!localStorage.getItem(tourKey)) {
-        setTimeout(() => setIsTourOpen(true), 750);
+      // Auto-launch role-tailored Onboarding Tour ONLY on first login ever per account
+      const hasCompletedTour =
+        (parsedUser.id && localStorage.getItem(`leads_tour_completed_${parsedUser.id}`)) ||
+        (parsedUser.email && localStorage.getItem(`leads_tour_completed_${parsedUser.email}`)) ||
+        (parsedUser.name && localStorage.getItem(`leads_tour_completed_${parsedUser.name}`));
+
+      const isImpersonatingSession = typeof window !== 'undefined' && sessionStorage.getItem('impersonator_original_user');
+
+      if (!hasCompletedTour && !isImpersonatingSession) {
+        setTimeout(() => setIsTourOpen(true), 800);
       }
 
       return () => clearInterval(pollInterval);
@@ -726,11 +732,11 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
   return (
     <div className="min-h-screen bg-space-theme flex flex-col md:flex-row transition-all duration-300 relative">
-      {/* Background Animated GhostFibers WebGL Canvas — Dark Mode (Navy/Blue) & Light Mode (Clean Ice-White) */}
+      {/* Background Animated GhostFibers WebGL Canvas — Dark Mode (Navy/Blue) & Light Mode (Clean Porcelain White & Blue Lines) */}
       <div className="fixed inset-0 pointer-events-none z-0 opacity-40 dark:opacity-65 transition-opacity duration-500 overflow-hidden">
         <GhostFibers
-          lineColor={isDarkTheme ? '#0F2A47' : '#7BA4D0'}
-          glowColor="#2E75B6"
+          lineColor={isDarkTheme ? '#0F2A47' : '#1E4D7B'}
+          glowColor={isDarkTheme ? '#2E75B6' : '#3B82F6'}
           lightMode={!isDarkTheme}
           speed={0.14}
           scale={2.4}
@@ -748,11 +754,11 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           lineSpacing={2}
           lineSharpness={18}
           glowFalloff={9}
-          glowIntensity={isDarkTheme ? 1.7 : 1.2}
+          glowIntensity={isDarkTheme ? 1.7 : 1.4}
           brightness={isDarkTheme ? 1.8 : 1.1}
-          blueBoost={isDarkTheme ? 1.35 : 1.0}
-          vignette={isDarkTheme ? 0.75 : 0.25}
-          grain={0.03}
+          blueBoost={isDarkTheme ? 1.35 : 1.05}
+          vignette={isDarkTheme ? 0.75 : 0.2}
+          grain={0.02}
           dpr={1}
         />
       </div>
@@ -777,34 +783,40 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           {/* Brand Logo Link to Dashboard Home */}
           <Link
             href="/dashboard/home"
-            className={`h-16 flex items-center border-b border-theme-border/30 gap-3 hover:opacity-90 transition-all cursor-pointer select-none shrink-0 ${showSidebarLabels ? 'px-6' : 'justify-center px-0'}`}
-            title="Return to Dashboard Home"
+            title="LEADS Next Gen Centre"
+            className={`flex items-center gap-3 p-4 border-b border-theme-border/40 hover:bg-theme-border/10 transition-colors cursor-pointer select-none ${
+              showSidebarLabels ? 'px-4' : 'justify-center px-0'
+            }`}
           >
-            <div className="h-8 w-8 flex items-center justify-center shrink-0">
+            <div className="h-9 w-9 flex items-center justify-center shrink-0">
               <img
                 src="/images/leads-short-logo.png"
                 alt="LEADS Logo"
-                className="h-full w-full object-contain"
+                className="h-full w-full object-contain filter drop-shadow-[0_2px_8px_rgba(46,117,182,0.3)]"
               />
             </div>
             {showSidebarLabels && (
-              <div className="whitespace-nowrap">
-                <h1 className="font-bold text-theme-text-primary text-xs tracking-wider uppercase">LEADS NEXT GEN CENTRE</h1>
-                <p className="text-[10px] text-theme-text-secondary font-medium tracking-wider uppercase">MSRUAS Portal</p>
+              <div className="flex flex-col">
+                <span className="font-extrabold text-xs tracking-wider uppercase text-theme-text-primary">
+                  LEADS CENTRE
+                </span>
+                <span className="text-[10px] text-theme-text-secondary font-medium">
+                  Next Gen ERP
+                </span>
               </div>
             )}
           </Link>
 
-          {/* Sidebar Nav links grouped by section */}
-          <nav className="flex-1 px-4 py-5 space-y-5 overflow-y-auto overflow-x-hidden">
+          {/* Navigation Links */}
+          <nav className="flex-1 overflow-y-auto p-3 space-y-6">
             {navSections.map((section) => (
               <div key={section.title} className="space-y-1">
                 {showSidebarLabels && (
-                  <h3 className="px-3 text-[11px] font-bold text-theme-text-secondary uppercase tracking-wider whitespace-nowrap">
+                  <h4 className="px-3 text-[10px] font-bold text-theme-text-secondary uppercase tracking-wider mb-2">
                     {section.title}
-                  </h3>
+                  </h4>
                 )}
-                <div className="space-y-1 pt-1">
+                <div className="space-y-1">
                   {section.items.filter(item => (!item.superUserOnly || user.tier === 1) && (!item.centreHeadOnly || isCentreHead(user)) && (!item.guestDirectoryOnly || canAccessGuestDirectory(user)) && (!item.budgetAccessOnly || isCentreHead(user) || isFinanceHead(user))).map((item) => {
                     const Icon = item.icon;
                     const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
@@ -869,26 +881,27 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       </aside>
 
       {/* Mobile Header / Nav */}
-      <header className="md:hidden flex items-center justify-between h-16 px-4 glass-panel bg-theme-sidebar/80 border-b border-theme-sidebar-border sticky top-0 z-40 w-full">
+      <header className="md:hidden flex items-center justify-between h-16 px-3 sm:px-4 glass-panel bg-theme-sidebar/95 border-b border-theme-sidebar-border sticky top-0 z-40 w-full gap-2">
         <Link 
           href="/dashboard/home" 
-          className="flex items-center gap-2.5 hover:opacity-90 transition-all cursor-pointer select-none"
+          className="flex items-center gap-2 hover:opacity-90 transition-all cursor-pointer select-none min-w-0 max-w-[65%]"
           title="Return to Dashboard Home"
         >
-          <div className="h-7 w-7 flex items-center justify-center">
+          <div className="h-7 w-7 flex items-center justify-center shrink-0">
             <img 
               src="/images/leads-short-logo.png" 
               alt="LEADS Logo" 
               className="h-full w-full object-contain"
             />
           </div>
-          <span className="font-bold text-xs tracking-wider uppercase text-theme-text-primary">LEADS NEXT GEN CENTRE</span>
+          <span className="font-bold text-xs tracking-wider uppercase text-theme-text-primary truncate">LEADS NEXT GEN CENTRE</span>
         </Link>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 shrink-0">
           <button
             onClick={toggleTheme}
-            className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-lg hover:bg-theme-border/20 transition-all"
+            className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-lg hover:bg-theme-border/20 transition-all cursor-pointer"
+            title="Toggle Theme"
           >
             {isDarkTheme ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </button>
@@ -897,7 +910,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-lg hover:bg-theme-border/20 transition-all"
+            className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-lg hover:bg-theme-border/20 transition-all cursor-pointer"
           >
             {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>

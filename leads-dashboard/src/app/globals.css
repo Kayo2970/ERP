@@ -3,25 +3,25 @@
 :root {
   --background: #F8FAFC;
   --foreground: #0F172A;
-  --card-bg: rgba(255, 255, 255, 0.88);
-  --card-border: rgba(15, 23, 42, 0.10);
+  --card-bg: rgba(255, 255, 255, 0.94);
+  --card-border: rgba(15, 23, 42, 0.12);
   --text-primary: #0F172A;
-  --text-secondary: #4B5563;
+  --text-secondary: #334155;
   --border-color: rgba(15, 23, 42, 0.12);
-  --sidebar-bg: rgba(255, 255, 255, 0.90);
+  --sidebar-bg: rgba(255, 255, 255, 0.96);
   --sidebar-border: rgba(15, 23, 42, 0.10);
-  --page-gradient: url('/images/light-bg.jpg') center / cover no-repeat fixed;
+  --page-gradient: linear-gradient(135deg, #F8FAFC 0%, #EEF2F6 40%, #E2E8F0 100%);
 }
 
 .dark {
   --background: #0B1B2E;
   --foreground: #E8ECF1;
-  --card-bg: rgba(20, 36, 58, 0.65);
+  --card-bg: rgba(15, 30, 50, 0.75);
   --card-border: rgba(255, 255, 255, 0.08);
   --text-primary: #E8ECF1;
   --text-secondary: #9CA3AF;
   --border-color: rgba(255, 255, 255, 0.08);
-  --sidebar-bg: rgba(11, 27, 46, 0.75);
+  --sidebar-bg: rgba(11, 23, 39, 0.88);
   --sidebar-border: rgba(255, 255, 255, 0.05);
   --page-gradient: linear-gradient(90deg, #020617 0%, #081528 25%, #0F284B 50%, #081528 75%, #020617 100%);
 }
@@ -111,21 +111,20 @@ body {
    top/left edge to suggest light catching a glass edge, instead of a plain
    backdrop-blur box. */
 .glass-panel {
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   background-color: var(--card-bg);
   border: 1px solid var(--card-border);
   box-shadow:
-    0 8px 32px 0 rgba(15, 23, 42, 0.06),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.15),
-    inset 1px 0 0 0 rgba(255, 255, 255, 0.05);
+    0 4px 20px 0 rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.8);
 }
 
 .dark .glass-panel {
   box-shadow:
-    0 8px 32px 0 rgba(0, 0, 0, 0.25),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.06),
-    inset 1px 0 0 0 rgba(255, 255, 255, 0.03);
+    0 8px 32px 0 rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.08),
+    inset 1px 0 0 0 rgba(255, 255, 255, 0.04);
 }
 
 /* Background Theme Layout — side-to-side gradient, themed via --page-gradient

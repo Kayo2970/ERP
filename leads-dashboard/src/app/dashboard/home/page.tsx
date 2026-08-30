@@ -156,16 +156,16 @@ export default function DashboardHome() {
 
       {/* Banner: Task awaiting acknowledgment */}
       {pendingAckCount > 0 && (
-        <div className="flex items-center justify-between p-4 bg-warning/10 border border-warning/20 rounded-2xl text-theme-text-primary animate-in fade-in duration-300">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 bg-amber-500/15 border border-amber-500/30 rounded-2xl text-amber-950 dark:text-amber-200 shadow-sm backdrop-blur-md animate-in fade-in duration-300">
           <div className="flex items-center gap-3">
-            <AlertCircle className="h-5 w-5 text-warning shrink-0" />
-            <span className="text-xs font-semibold">
+            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span className="text-xs font-bold">
               You have {pendingAckCount} task(s) awaiting your acknowledgment.
             </span>
           </div>
           <Link 
             href="/dashboard/tasks"
-            className="text-xs font-semibold text-warning uppercase tracking-wider bg-warning/15 px-2.5 py-1 rounded-lg hover:bg-warning/25 transition-all"
+            className="text-xs font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wider bg-amber-500/20 px-3 py-1.5 rounded-xl hover:bg-amber-500/30 transition-all shrink-0"
           >
             Review Tasks
           </Link>

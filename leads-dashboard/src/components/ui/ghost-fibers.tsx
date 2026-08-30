@@ -167,13 +167,13 @@ void main() {
   vec3 outputColor;
   if (uLightMode > 0.5) {
     float edgeFade = mix(1.0 - uVignette, 1.0, vignette);
-    float fibers = pow(smoothstep(0.12, 1.05, fiberField) * edgeFade, 1.5);
-    float atmosphere = (center * 0.025 + cloud * 0.015) * edgeFade;
-    vec3 fiberInk = mix(backdrop, uLineColor, 0.52);
-    vec3 airColor = mix(backdrop, uGlowColor, 0.16);
+    float fibers = pow(smoothstep(0.08, 0.95, fiberField) * edgeFade, 1.2);
+    float atmosphere = (center * 0.03 + cloud * 0.02) * edgeFade;
+    vec3 fiberInk = mix(backdrop, uLineColor, 0.65);
+    vec3 airColor = mix(backdrop, uGlowColor, 0.22);
 
     outputColor = mix(backdrop, airColor, atmosphere);
-    outputColor = mix(outputColor, fiberInk, fibers * 0.3);
+    outputColor = mix(outputColor, fiberInk, fibers * 0.4);
   } else {
     outputColor = backdrop + color;
   }
