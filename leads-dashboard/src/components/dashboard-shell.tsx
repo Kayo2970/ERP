@@ -46,6 +46,7 @@ import { LoadingScreen } from '@/components/loading-screen';
 import { OnboardingTour } from '@/components/onboarding-tour';
 import { SyncStatusPill } from '@/components/ui/sync-status-pill';
 import { Avatar } from '@/components/ui/avatar';
+import { GhostFibers } from '@/components/ui/ghost-fibers';
 
 interface SidebarItem {
   name: string;
@@ -724,7 +725,38 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   }
 
   return (
-    <div className="min-h-screen bg-space-theme flex flex-col md:flex-row transition-all duration-300">
+    <div className="min-h-screen bg-space-theme flex flex-col md:flex-row transition-all duration-300 relative">
+      {/* Background Animated GhostFibers WebGL Canvas — Dark Mode (Navy/Blue) & Light Mode (Clean Ice-White) */}
+      <div className="fixed inset-0 pointer-events-none z-0 opacity-40 dark:opacity-65 transition-opacity duration-500 overflow-hidden">
+        <GhostFibers
+          lineColor={isDarkTheme ? '#0F2A47' : '#7BA4D0'}
+          glowColor="#2E75B6"
+          lightMode={!isDarkTheme}
+          speed={0.14}
+          scale={2.4}
+          rotation={20}
+          rotationSpeed={0.12}
+          layers={5}
+          waveAmplitude={0.015}
+          waveFrequency={3.0}
+          waveSpeed={0.12}
+          layerSpeed={0.06}
+          twist={0.1}
+          twistFrequency={4.0}
+          twistSpeed={0.8}
+          lineFrequency={5.0}
+          lineSpacing={2}
+          lineSharpness={18}
+          glowFalloff={9}
+          glowIntensity={isDarkTheme ? 1.7 : 1.2}
+          brightness={isDarkTheme ? 1.8 : 1.1}
+          blueBoost={isDarkTheme ? 1.35 : 1.0}
+          vignette={isDarkTheme ? 0.75 : 0.25}
+          grain={0.03}
+          dpr={1}
+        />
+      </div>
+
       {isModuleTransitioning && (
         <LoadingScreen
           duration={2000}
