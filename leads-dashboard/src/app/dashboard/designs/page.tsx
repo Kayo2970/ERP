@@ -24,7 +24,8 @@ import {
   CheckSquare,
   Star,
   Plus,
-  Edit2
+  Edit2,
+  RefreshCw
 } from 'lucide-react';
 import { FileDropzone, FilePreviewRow, createProgressTracker } from '@/components/ui/file-dropzone';
 import {
@@ -726,21 +727,21 @@ export default function DesignPortalPage() {
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-card border border-border p-6 rounded-xl shadow-sm">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 glass-panel border border-white/30 p-6 md:p-8 rounded-3xl shadow-xl bg-gradient-to-r from-accent/15 via-primary/10 to-transparent">
         <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-lg bg-accent/10 text-accent">
-              <Palette className="h-5 w-5" />
+          <div className="flex items-center gap-2.5">
+            <div className="p-2.5 rounded-2xl bg-accent/20 border border-accent/30 text-accent">
+              <Palette className="h-6 w-6" />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight">Design Portal & Proofreading Hub</h1>
+            <h1 className="text-2xl font-black tracking-tight text-theme-text-primary">Design Portal & Proofreading Hub</h1>
           </div>
-          <p className="text-sm text-muted-foreground">
-            Submit event artwork, posters & media assets (Max <span className="font-semibold text-foreground">25 MB</span>). Automatic <span className="font-semibold text-foreground">30-day server retention policy</span>. Request peer & faculty proofreading.
+          <p className="text-xs text-theme-text-secondary">
+            Submit event artwork, posters & media assets (Max <span className="font-bold text-theme-text-primary">25 MB</span>). Automatic <span className="font-bold text-theme-text-primary">30-day server retention policy</span>. Request peer & faculty proofreading.
           </p>
         </div>
         <button
           onClick={() => { setSubmitError(''); setShowUploadModal(true); }}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-accent text-accent-foreground font-medium text-sm hover:opacity-90 transition-opacity shadow-sm whitespace-nowrap"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-accent hover:bg-primary-light text-white font-bold text-xs transition-all shadow-md shadow-accent/20 whitespace-nowrap cursor-pointer"
         >
           <UploadCloud className="h-4 w-4" />
           Submit Design Asset
@@ -749,53 +750,53 @@ export default function DesignPortalPage() {
 
       {/* Metrics Bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-card border border-border p-4 rounded-xl space-y-1">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>Total Submissions</span>
+        <div className="glass-panel p-4 rounded-2xl space-y-1 border border-white/20">
+          <div className="flex items-center justify-between text-xs text-theme-text-secondary">
+            <span className="font-semibold">Total Submissions</span>
             <FileText className="h-4 w-4 text-accent" />
           </div>
-          <p className="text-2xl font-bold">{totalSubmissions}</p>
-          <p className="text-[11px] text-muted-foreground">Active in portal</p>
+          <p className="text-2xl font-black text-theme-text-primary">{totalSubmissions}</p>
+          <p className="text-[11px] text-theme-text-secondary">Active in portal</p>
         </div>
 
-        <div className="bg-card border border-border p-4 rounded-xl space-y-1">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>Pending Proofread</span>
+        <div className="glass-panel p-4 rounded-2xl space-y-1 border border-white/20">
+          <div className="flex items-center justify-between text-xs text-theme-text-secondary">
+            <span className="font-semibold">Pending Proofread</span>
             <Clock className="h-4 w-4 text-amber-500" />
           </div>
-          <p className="text-2xl font-bold text-amber-500">{pendingProofreads}</p>
-          <p className="text-[11px] text-muted-foreground">{assignedToMeCount} assigned to you</p>
+          <p className="text-2xl font-black text-amber-600 dark:text-amber-400">{pendingProofreads}</p>
+          <p className="text-[11px] text-theme-text-secondary">{assignedToMeCount} assigned to you</p>
         </div>
 
-        <div className="bg-card border border-border p-4 rounded-xl space-y-1">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>Proofread Approved</span>
+        <div className="glass-panel p-4 rounded-2xl space-y-1 border border-white/20">
+          <div className="flex items-center justify-between text-xs text-theme-text-secondary">
+            <span className="font-semibold">Proofread Approved</span>
             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
           </div>
-          <p className="text-2xl font-bold text-emerald-500">{approvedDesigns}</p>
-          <p className="text-[11px] text-muted-foreground">Ready for print & pub</p>
+          <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{approvedDesigns}</p>
+          <p className="text-[11px] text-theme-text-secondary">Ready for print & pub</p>
         </div>
 
-        <div className="bg-card border border-border p-4 rounded-xl space-y-1">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>30-Day Retention Policy</span>
+        <div className="glass-panel p-4 rounded-2xl space-y-1 border border-white/20">
+          <div className="flex items-center justify-between text-xs text-theme-text-secondary">
+            <span className="font-semibold">30-Day Retention Policy</span>
             <ShieldAlert className="h-4 w-4 text-rose-500" />
           </div>
-          <p className="text-2xl font-bold text-muted-foreground">{expiredCount}</p>
-          <p className="text-[11px] text-muted-foreground">Files purged & archived</p>
+          <p className="text-2xl font-black text-theme-text-secondary">{expiredCount}</p>
+          <p className="text-[11px] text-theme-text-secondary">Files purged & archived</p>
         </div>
       </div>
 
       {/* Filter Tabs & Search Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-card border border-border p-3 rounded-xl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 glass-panel p-3 rounded-2xl border border-white/20">
         {/* Tabs */}
         <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0">
           <button
             onClick={() => setActiveTab('all')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
               activeTab === 'all'
-                ? 'bg-accent text-accent-foreground shadow-sm'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                ? 'bg-accent text-white shadow-md shadow-accent/20'
+                : 'text-theme-text-secondary hover:bg-white/40 dark:hover:bg-white/5 hover:text-theme-text-primary'
             }`}
           >
             All Submissions
@@ -803,10 +804,10 @@ export default function DesignPortalPage() {
 
           <button
             onClick={() => setActiveTab('mine')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
               activeTab === 'mine'
-                ? 'bg-accent text-accent-foreground shadow-sm'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                ? 'bg-accent text-white shadow-md shadow-accent/20'
+                : 'text-theme-text-secondary hover:bg-white/40 dark:hover:bg-white/5 hover:text-theme-text-primary'
             }`}
           >
             My Submissions
@@ -814,15 +815,15 @@ export default function DesignPortalPage() {
 
           <button
             onClick={() => setActiveTab('proofread')}
-            className={`relative px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+            className={`relative px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
               activeTab === 'proofread'
-                ? 'bg-accent text-accent-foreground shadow-sm'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                ? 'bg-accent text-white shadow-md shadow-accent/20'
+                : 'text-theme-text-secondary hover:bg-white/40 dark:hover:bg-white/5 hover:text-theme-text-primary'
             }`}
           >
             Proofreading Desk
             {assignedToMeCount > 0 && (
-              <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500 text-black font-bold">
+              <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500 text-slate-950 font-black">
                 {assignedToMeCount}
               </span>
             )}
@@ -830,10 +831,10 @@ export default function DesignPortalPage() {
 
           <button
             onClick={() => setActiveTab('expired')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
               activeTab === 'expired'
-                ? 'bg-accent text-accent-foreground shadow-sm'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                ? 'bg-accent text-white shadow-md shadow-accent/20'
+                : 'text-theme-text-secondary hover:bg-white/40 dark:hover:bg-white/5 hover:text-theme-text-primary'
             }`}
           >
             30d Expired ({expiredCount})
@@ -843,49 +844,47 @@ export default function DesignPortalPage() {
         {/* Search & Category Filter */}
         <div className="flex items-center gap-2">
           <div className="relative flex-1 sm:w-48">
-            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-theme-text-secondary" />
             <input
               type="text"
               placeholder="Search design title..."
               value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="w-full bg-background border border-border rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-accent"
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl bg-white/40 dark:bg-white/5 border border-theme-border/30 text-theme-text-primary placeholder:text-theme-text-secondary focus:outline-none focus:border-accent"
             />
           </div>
 
           <select
             value={categoryFilter}
-            onChange={e => setCategoryFilter(e.target.value)}
-            className="bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-accent"
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="px-3 py-1.5 text-xs rounded-xl bg-white/40 dark:bg-white/5 border border-theme-border/30 text-theme-text-primary focus:outline-none focus:border-accent cursor-pointer"
           >
-            <option value="all">All Categories</option>
+            <option value="ALL">All Categories</option>
             <option value="Poster">Poster</option>
             <option value="Banner">Banner</option>
-            <option value="Social Media">Social Media</option>
+            <option value="Social Media Post">Social Media Post</option>
+            <option value="ID Card / Certificate">ID Card / Certificate</option>
             <option value="Brochure">Brochure</option>
-            <option value="Certificates">Certificates</option>
             <option value="Other">Other</option>
           </select>
         </div>
       </div>
 
-      {/* Design Submissions Grid */}
+      {/* Design Grid & Empty State */}
       {filteredDesigns.length === 0 ? (
-        <div className="bg-card border border-border rounded-xl p-12 text-center space-y-3">
-          <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
+        <div className="glass-panel rounded-3xl p-12 text-center space-y-4 border border-white/20">
+          <div className="mx-auto w-12 h-12 rounded-full bg-accent/15 flex items-center justify-center text-accent">
             <Palette className="h-6 w-6" />
           </div>
-          <h3 className="text-base font-semibold">No design submissions found</h3>
-          <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-            {searchQuery || categoryFilter !== 'all' || activeTab !== 'all'
-              ? 'Try adjusting your filters or search criteria.'
-              : 'Be the first to submit a design asset for proofreading and approval!'}
+          <h3 className="text-base font-bold text-theme-text-primary">No design submissions found</h3>
+          <p className="text-xs text-theme-text-secondary max-w-sm mx-auto">
+            Be the first to submit a design asset for proofreading and approval!
           </p>
           <button
             onClick={() => { setSubmitError(''); setShowUploadModal(true); }}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-accent text-accent-foreground text-xs font-medium hover:opacity-90"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-accent hover:bg-primary-light text-white text-xs font-bold transition-all shadow-md shadow-accent/20 cursor-pointer"
           >
-            <UploadCloud className="h-3.5 w-3.5" />
+            <UploadCloud className="h-4 w-4" />
             Upload Design
           </button>
         </div>
@@ -898,11 +897,11 @@ export default function DesignPortalPage() {
             return (
               <div
                 key={design.id}
-                className="group bg-card border border-border rounded-xl overflow-hidden hover:border-accent/50 transition-all shadow-sm flex flex-col justify-between"
+                className="group glass-panel rounded-2xl overflow-hidden hover:border-accent/50 transition-all shadow-md flex flex-col justify-between border border-white/20"
               >
                 <div>
                   {/* Top Asset Preview Header */}
-                  <div className="relative h-44 bg-muted/60 border-b border-border flex items-center justify-center overflow-hidden">
+                  <div className="relative h-44 bg-white/40 dark:bg-white/5 border-b border-theme-border/20 flex items-center justify-center overflow-hidden">
                     {(design.fileUrl || design.fileData) && design.fileType.startsWith('image/') ? (
                       <img
                         src={design.fileUrl || design.fileData}
@@ -910,7 +909,7 @@ export default function DesignPortalPage() {
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
                     ) : (
-                      <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                      <div className="flex flex-col items-center gap-2 text-theme-text-secondary">
                         <FileText className="h-10 w-10 text-accent/80" />
                         <span className="text-xs font-mono font-medium max-w-[200px] truncate px-2 text-center">
                           {design.fileName}
@@ -919,18 +918,18 @@ export default function DesignPortalPage() {
                     )}
 
                     {/* Category Pill */}
-                    <span className="absolute top-3 left-3 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-background/90 backdrop-blur border border-border text-foreground">
+                    <span className="absolute top-3 left-3 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-theme-border/30 text-theme-text-primary">
                       {design.category}
                     </span>
 
                     {/* 30-Day Retention Badge */}
                     <span
-                      className={`absolute top-3 right-3 px-2.5 py-0.5 rounded-full text-[10px] font-semibold backdrop-blur border ${
+                      className={`absolute top-3 right-3 px-2.5 py-0.5 rounded-full text-[10px] font-bold backdrop-blur border ${
                         design.isExpired || daysRemaining <= 0
-                          ? 'bg-rose-500/20 text-rose-400 border-rose-500/40'
+                          ? 'bg-rose-500/20 text-rose-600 dark:text-rose-400 border-rose-500/40'
                           : daysRemaining <= 5
-                          ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
-                          : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+                          ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/40'
+                          : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/40'
                       }`}
                     >
                       {design.isExpired || daysRemaining <= 0
@@ -942,24 +941,24 @@ export default function DesignPortalPage() {
                   {/* Body Content */}
                   <div className="p-4 space-y-3">
                     <div className="space-y-1">
-                      <h3 className="font-semibold text-sm line-clamp-1 group-hover:text-accent transition-colors">
+                      <h3 className="font-bold text-sm text-theme-text-primary line-clamp-1 group-hover:text-accent transition-colors">
                         {design.title}
                       </h3>
                       {design.description && (
-                        <p className="text-xs text-muted-foreground line-clamp-2">
+                        <p className="text-xs text-theme-text-secondary line-clamp-2">
                           {design.description}
                         </p>
                       )}
                     </div>
 
                     {/* Metadata Specs */}
-                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                      <span className="font-mono bg-muted px-2 py-0.5 rounded border border-border">
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-theme-text-secondary">
+                      <span className="font-mono bg-white/50 dark:bg-white/5 px-2 py-0.5 rounded border border-theme-border/30 font-semibold">
                         {(design.fileSize / (1024 * 1024)).toFixed(2)} MB / 25 MB
                       </span>
 
                       {design.eventName && (
-                        <span className="flex items-center gap-1 text-accent truncate max-w-[160px]">
+                        <span className="flex items-center gap-1 text-accent truncate max-w-[160px] font-semibold">
                           <Calendar className="h-3 w-3 shrink-0" />
                           {design.eventName}
                         </span>
@@ -967,26 +966,26 @@ export default function DesignPortalPage() {
                     </div>
 
                     {/* Proofreading Status Box */}
-                    <div className="pt-2 border-t border-border/60">
+                    <div className="pt-2 border-t border-theme-border/30">
                       {design.proofreadRequested ? (
                         <div className="flex items-start justify-between gap-2">
                           <div className="space-y-0.5">
-                            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground block">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-theme-text-secondary block">
                               Proofreading Status
                             </span>
 
                             {design.review?.status === 'Proofread Approved' ? (
-                              <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-500">
+                              <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
                                 <CheckCircle2 className="h-3.5 w-3.5" />
                                 Approved
                               </span>
                             ) : design.review?.status === 'Changes Requested' ? (
-                              <span className="inline-flex items-center gap-1 text-xs font-semibold text-rose-500">
+                              <span className="inline-flex items-center gap-1 text-xs font-bold text-rose-600 dark:text-rose-400">
                                 <AlertCircle className="h-3.5 w-3.5" />
                                 Changes Requested
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-500">
+                              <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-600 dark:text-amber-400">
                                 <Clock className="h-3.5 w-3.5" />
                                 Pending Proofread
                               </span>
@@ -994,14 +993,14 @@ export default function DesignPortalPage() {
                           </div>
 
                           <div className="text-right">
-                            <span className="text-[10px] text-muted-foreground block">Assigned Proofreader</span>
-                            <span className="text-xs font-medium text-foreground truncate max-w-[120px] block">
+                            <span className="text-[10px] font-semibold text-theme-text-secondary block">Assigned Proofreader</span>
+                            <span className="text-xs font-bold text-theme-text-primary truncate max-w-[120px] block">
                               {design.assignedProofreaderName || 'Unassigned'}
                             </span>
                           </div>
                         </div>
                       ) : (
-                        <span className="text-xs text-muted-foreground italic flex items-center gap-1">
+                        <span className="text-xs text-theme-text-secondary italic flex items-center gap-1">
                           <FileCheck className="h-3 w-3" /> No Proofreading Requested
                         </span>
                       )}
@@ -1010,21 +1009,21 @@ export default function DesignPortalPage() {
                 </div>
 
                 {/* Footer Buttons */}
-                <div className="p-4 pt-0 flex items-center justify-between gap-2">
-                  <div className="text-[11px] text-muted-foreground">
-                    By <span className="font-medium text-foreground">{design.designerName}</span>
+                <div className="p-4 pt-0 flex items-center justify-between gap-2 border-t border-theme-border/20 mt-2">
+                  <div className="text-[11px] text-theme-text-secondary">
+                    By <span className="font-bold text-theme-text-primary">{design.designerName}</span>
                   </div>
 
                   <div className="flex items-center gap-1.5">
                     {isAssignedToMe && design.review?.status === 'Pending Proofread' && (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-black animate-pulse">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-500 text-slate-950 animate-pulse">
                         Action Required
                       </span>
                     )}
 
                     <button
                       onClick={() => openInspector(design)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-muted hover:bg-muted/80 text-foreground text-xs font-medium transition-colors border border-border"
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-accent text-white hover:bg-primary-light text-xs font-bold transition-all shadow-sm cursor-pointer"
                     >
                       <Eye className="h-3.5 w-3.5" />
                       Inspect & Review
@@ -1033,7 +1032,7 @@ export default function DesignPortalPage() {
                     {(design.designerEmail === user?.email || user?.tier <= 3 || hasCapability(user, 'DESIGN_DELETE')) && (
                       <button
                         onClick={() => handleDelete(design.id, design.title)}
-                        className="p-1.5 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
+                        className="p-1.5 rounded-xl text-theme-text-secondary hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
                         title="Delete design"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -1242,7 +1241,7 @@ export default function DesignPortalPage() {
                 <button
                   type="submit"
                   disabled={isSubmitting || isReadingFile}
-                  className="px-4 py-2 rounded-lg bg-accent text-accent-foreground font-medium hover:opacity-90 disabled:opacity-50"
+                  className="px-4 py-2 rounded-xl bg-accent text-white font-bold hover:bg-primary-light transition-all shadow-md shadow-accent/20 disabled:opacity-50 cursor-pointer"
                 >
                   {isSubmitting ? 'Uploading...' : isReadingFile ? 'Preparing file...' : submitError ? 'Retry Submit' : 'Submit Design'}
                 </button>
@@ -1370,7 +1369,7 @@ export default function DesignPortalPage() {
                 <button
                   type="submit"
                   disabled={isCreatingEvent}
-                  className="px-4 py-1.5 rounded-lg bg-accent text-accent-foreground font-semibold hover:opacity-90 text-xs flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-accent text-white font-bold hover:bg-primary-light text-xs flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-md shadow-accent/20 transition-all"
                 >
                   <Sparkles className="h-3.5 w-3.5" />
                   {isCreatingEvent ? 'Creating...' : 'Create & Tag Event'}
@@ -1501,10 +1500,10 @@ export default function DesignPortalPage() {
                 <button
                   type="submit"
                   disabled={isReplacingFile || isReadingReplaceFile || !replaceFile}
-                  className="w-full px-4 py-2 rounded-lg bg-accent text-accent-foreground font-medium hover:opacity-90 text-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                  className="w-full px-4 py-2.5 rounded-xl bg-accent text-white font-bold hover:bg-primary-light text-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap shadow-md shadow-accent/20 transition-all"
                 >
-                  <UploadCloud className="h-3.5 w-3.5" />
-                  {isReplacingFile ? 'Uploading...' : isReadingReplaceFile ? 'Preparing file...' : replaceFileError ? 'Retry Replace' : 'Replace File'}
+                  <RefreshCw className={`h-3.5 w-3.5 ${isReplacingFile || isReadingReplaceFile ? 'animate-spin' : ''}`} />
+                  {isReplacingFile ? 'Uploading New File...' : isReadingReplaceFile ? 'Reading file...' : 'Upload Revised File'}
                 </button>
                 {isReadingReplaceFile && (
                   <div className="space-y-1">
@@ -1913,7 +1912,7 @@ export default function DesignPortalPage() {
 
                   <button
                     type="submit"
-                    className="w-full py-2 rounded-lg bg-accent text-accent-foreground font-medium hover:opacity-90 text-xs flex items-center justify-center gap-1.5"
+                    className="w-full py-2.5 rounded-xl bg-accent text-white font-bold hover:bg-primary-light text-xs flex items-center justify-center gap-1.5 shadow-md shadow-accent/20 cursor-pointer transition-all"
                   >
                     <Send className="h-3.5 w-3.5" />
                     Submit Proofreading Decision
@@ -2005,7 +2004,7 @@ export default function DesignPortalPage() {
 
                   <button
                     type="submit"
-                    className="w-full py-2 rounded-lg bg-accent text-accent-foreground font-medium hover:opacity-90 text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="w-full py-2.5 rounded-xl bg-accent text-white font-bold hover:bg-primary-light text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-accent/20 transition-all"
                   >
                     <Sparkles className="h-3.5 w-3.5" />
                     Save Style Decision

@@ -1,29 +1,43 @@
 @import "tailwindcss";
 
 :root {
-  --background: #F1F5F9;
+  --background: #E8EFF7;
   --foreground: #0F172A;
-  --card-bg: rgba(255, 255, 255, 0.72);
-  --card-border: rgba(255, 255, 255, 0.85);
+  --card: rgba(255, 255, 255, 0.82);
+  --card-foreground: #0F172A;
+  --card-bg: rgba(255, 255, 255, 0.82);
+  --card-border: rgba(255, 255, 255, 0.95);
   --text-primary: #0F172A;
   --text-secondary: #334155;
-  --border-color: rgba(15, 23, 42, 0.10);
-  --sidebar-bg: rgba(255, 255, 255, 0.82);
-  --sidebar-border: rgba(255, 255, 255, 0.80);
-  --page-gradient: linear-gradient(135deg, #EEF2F6 0%, #E2E8F0 50%, #CBD5E1 100%);
+  --muted: rgba(15, 23, 42, 0.06);
+  --muted-foreground: #334155;
+  --border: rgba(15, 23, 42, 0.15);
+  --border-color: rgba(15, 23, 42, 0.15);
+  --sidebar-bg: rgba(255, 255, 255, 0.88);
+  --sidebar-border: rgba(255, 255, 255, 0.90);
+  --page-gradient: linear-gradient(135deg, #E2E8F0 0%, #DCE5EF 40%, #CFDDEE 100%);
+  --accent: #1D64B2;
+  --accent-foreground: #FFFFFF;
 }
 
 .dark {
   --background: #0B1B2E;
-  --foreground: #E8ECF1;
+  --foreground: #F8FAFC;
+  --card: rgba(15, 30, 50, 0.65);
+  --card-foreground: #F8FAFC;
   --card-bg: rgba(15, 30, 50, 0.65);
   --card-border: rgba(255, 255, 255, 0.08);
-  --text-primary: #E8ECF1;
-  --text-secondary: #9CA3AF;
+  --text-primary: #F8FAFC;
+  --text-secondary: #94A3B8;
+  --muted: rgba(255, 255, 255, 0.08);
+  --muted-foreground: #94A3B8;
+  --border: rgba(255, 255, 255, 0.08);
   --border-color: rgba(255, 255, 255, 0.08);
   --sidebar-bg: rgba(11, 23, 39, 0.80);
   --sidebar-border: rgba(255, 255, 255, 0.06);
   --page-gradient: linear-gradient(90deg, #020617 0%, #081528 25%, #0F284B 50%, #081528 75%, #020617 100%);
+  --accent: #2E75B6;
+  --accent-foreground: #FFFFFF;
 }
 
 @theme {
@@ -32,10 +46,10 @@
 
   --color-primary: #0F2A47;
   --color-primary-light: #1E4D7B;
-  --color-accent: #2E75B6;
-  --color-success: #2E8B57;
-  --color-warning: #D9A441;
-  --color-danger: #C0392B;
+  --color-accent: #1D64B2;
+  --color-success: #15803D;
+  --color-warning: #B45309;
+  --color-danger: #BE123C;
 
   --color-theme-background: var(--background);
   --color-theme-foreground: var(--foreground);
