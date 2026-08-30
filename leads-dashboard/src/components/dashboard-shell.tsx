@@ -34,7 +34,8 @@ import {
   Contact,
   Wallet,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ArrowRight
 } from 'lucide-react';
 import { getAnnouncements, getTasks, getDesigns, getMembers, getBudgets, getReimbursements, getEvents, logAuditEvent, Member, syncWithServer, getSystemSettings } from '@/lib/local-data';
 import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isFinanceHead, canAccessGuestDirectory, canVerifyBudgetCentreHead, canDecideBudget, canVerifyReimbursementCentreHead, canApproveAsSectorHead, canApproveAsFinanceHead } from '@/lib/permissions';
@@ -938,46 +939,159 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                 </button>
 
                 {isQuickSwitchOpen && (
-                  <div className="absolute right-0 mt-2 w-80 glass-panel rounded-2xl p-3 shadow-2xl border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150">
-                    <div className="flex items-center justify-between pb-2 border-b border-theme-border/30 mb-2">
-                      <h4 className="text-xs font-bold text-theme-text-primary">Quick Switch</h4>
-                      <span className="text-[10px] text-theme-text-secondary">Super User only</span>
+                  <div className="absolute right-0 mt-3 w-88 md:w-96 glass-panel rounded-3xl p-3.5 shadow-2xl border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-2xl bg-space-theme/95">
+                    {/* ListBox Header */}
+                    <div className="flex items-center justify-between px-1.5 pt-1 pb-2.5 border-b border-theme-border/40 mb-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 rounded-xl bg-accent/20 text-accent">
+                          <UserCog className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-theme-text-primary flex items-center gap-1.5">
+                            Account Switcher
+                            <span className="text-[9px] font-semibold uppercase tracking-wider text-accent bg-accent/15 px-1.5 py-0.2 rounded-full border border-accent/20">
+                              Super User
+                            </span>
+                          </h4>
+                          <p className="text-[10px] text-theme-text-secondary">
+                            Instantly switch view & permissions
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setIsQuickSwitchOpen(false)}
+                        className="text-theme-text-secondary hover:text-theme-text-primary p-1 rounded-lg hover:bg-white/10 transition-all cursor-pointer text-xs"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
                     </div>
-                    <div className="flex items-center gap-2 px-2.5 py-1.5 bg-theme-background/40 border border-theme-border/40 rounded-lg mb-2">
-                      <Search className="h-3.5 w-3.5 text-theme-text-secondary shrink-0" />
-                      <input
-                        type="text"
-                        autoFocus
-                        value={quickSwitchSearch}
-                        onChange={(e) => setQuickSwitchSearch(e.target.value)}
-                        placeholder="Search by name, email, or role..."
-                        className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-xs text-theme-text-primary placeholder-theme-text-secondary"
-                      />
-                    </div>
-                    <div className="max-h-64 overflow-y-auto divide-y divide-theme-border/20">
-                      {quickSwitchResults.length === 0 ? (
-                        <div className="text-center py-6 text-theme-text-secondary text-xs">No matching members.</div>
-                      ) : (
-                        quickSwitchResults.map(m => (
+
+                    {/* Search Input Box */}
+                    <div className="relative mb-2.5">
+                      <div className="flex items-center gap-2 px-3 py-2 bg-theme-background/50 border border-theme-border/50 rounded-xl focus-within:border-accent focus-within:ring-1 focus-within:ring-accent/30 transition-all">
+                        <Search className="h-3.5 w-3.5 text-theme-text-secondary shrink-0" />
+                        <input
+                          type="text"
+                          autoFocus
+                          value={quickSwitchSearch}
+                          onChange={(e) => setQuickSwitchSearch(e.target.value)}
+                          placeholder="Search by name, email, or role..."
+                          className="w-full bg-transparent border-0 focus:outline-none text-xs text-theme-text-primary placeholder-theme-text-secondary"
+                        />
+                        {quickSwitchSearch && (
                           <button
-                            key={m.id}
-                            onClick={() => handleQuickSwitch(m)}
-                            className="w-full flex items-center gap-2.5 py-2 px-1 hover:bg-theme-border/20 rounded-lg transition-all cursor-pointer text-left"
+                            onClick={() => setQuickSwitchSearch('')}
+                            className="text-theme-text-secondary hover:text-theme-text-primary text-[10px] p-0.5 rounded cursor-pointer"
                           >
-                            <div className="h-7 w-7 bg-accent/15 rounded-lg flex items-center justify-center border border-accent/20 shrink-0">
-                              <span className="text-[10px] font-bold text-accent">
-                                {m.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                              </span>
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-xs font-semibold text-theme-text-primary truncate">
-                                {m.name}{m.email === user.email && ' (current)'}
-                              </p>
-                              <p className="text-[10px] text-theme-text-secondary truncate">{m.role}{m.division ? ` · ${m.division}` : ''}</p>
-                            </div>
+                            <X className="h-3 w-3" />
                           </button>
-                        ))
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Return to self banner if impersonating */}
+                    {isImpersonating && originalUser && (
+                      <div className="mb-2.5 p-2.5 rounded-2xl bg-accent/15 border border-accent/30 flex items-center justify-between">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Undo2 className="h-3.5 w-3.5 text-accent shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-[11px] font-semibold text-theme-text-primary truncate">Currently Impersonating</p>
+                            <p className="text-[10px] text-theme-text-secondary truncate">Original: {originalUser.name}</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={handleReturnToSelf}
+                          className="px-2.5 py-1 bg-accent text-white rounded-lg text-[10px] font-bold hover:bg-primary-light transition-all shrink-0 cursor-pointer shadow-sm"
+                        >
+                          Return
+                        </button>
+                      </div>
+                    )}
+
+                    {/* HeroUI ListBox Items */}
+                    <div className="max-h-64 overflow-y-auto space-y-1.5 pr-0.5">
+                      {quickSwitchResults.length === 0 ? (
+                        <div className="text-center py-8 text-theme-text-secondary space-y-1">
+                          <p className="text-xs font-semibold">No matching members found</p>
+                          <p className="text-[10px]">Try searching by name, role, or division</p>
+                        </div>
+                      ) : (
+                        quickSwitchResults.map(m => {
+                          const isSelected = m.email.toLowerCase() === user.email.toLowerCase();
+                          const initials = m.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
+                          
+                          return (
+                            <button
+                              key={m.id}
+                              onClick={() => handleQuickSwitch(m)}
+                              className={`w-full group flex items-center justify-between p-2.5 rounded-2xl transition-all duration-150 cursor-pointer text-left border ${
+                                isSelected
+                                  ? 'bg-accent/15 border-accent/40 shadow-sm shadow-accent/10'
+                                  : 'bg-theme-background/30 border-transparent hover:bg-white/10 dark:hover:bg-white/5 hover:border-theme-border/50'
+                              }`}
+                            >
+                              {/* Left: Avatar + Label & Description */}
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                {/* Avatar */}
+                                <div className="relative shrink-0">
+                                  {m.avatarUrl ? (
+                                    <img
+                                      src={m.avatarUrl}
+                                      alt={m.name}
+                                      className="h-9 w-9 rounded-xl object-cover border border-white/20 shadow-sm"
+                                    />
+                                  ) : (
+                                    <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-accent/25 via-accent/15 to-primary/20 flex items-center justify-center border border-accent/25 text-accent font-bold text-xs shadow-sm">
+                                      {initials}
+                                    </div>
+                                  )}
+                                  {isSelected && (
+                                    <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 border-2 border-theme-background" />
+                                  )}
+                                </div>
+
+                                {/* Label + Description */}
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs font-bold text-theme-text-primary group-hover:text-accent transition-colors truncate">
+                                      {m.name}
+                                    </span>
+                                    {isSelected && (
+                                      <span className="text-[9px] font-semibold text-accent bg-accent/10 px-1.5 py-0.2 rounded-md border border-accent/20 shrink-0">
+                                        Active
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1.5 text-[10px] text-theme-text-secondary mt-0.5 truncate">
+                                    <span className="truncate">{m.email}</span>
+                                    <span className="shrink-0">•</span>
+                                    <span className="font-medium text-theme-text-secondary/80 shrink-0">{m.role}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Right: Item Indicator */}
+                              <div className="shrink-0 ml-2">
+                                {isSelected ? (
+                                  <div className="h-6 w-6 rounded-full bg-accent text-white flex items-center justify-center shadow-sm">
+                                    <Check className="h-3.5 w-3.5" />
+                                  </div>
+                                ) : (
+                                  <div className="h-6 w-6 rounded-full bg-transparent flex items-center justify-center opacity-0 group-hover:opacity-100 group-hover:bg-white/10 transition-all text-theme-text-secondary group-hover:text-theme-text-primary">
+                                    <ArrowRight className="h-3.5 w-3.5" />
+                                  </div>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })
                       )}
+                    </div>
+
+                    {/* ListBox Footer Info */}
+                    <div className="pt-2 mt-2 border-t border-theme-border/30 flex items-center justify-between text-[10px] text-theme-text-secondary px-1">
+                      <span>{allMembers.length} Available {allMembers.length === 1 ? 'Account' : 'Accounts'}</span>
+                      <span className="text-[9px] opacity-75">Click to switch</span>
                     </div>
                   </div>
                 )}
