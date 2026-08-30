@@ -179,27 +179,27 @@ export default function FestivalsPage() {
       )}
 
       {/* Filter and Search Bar */}
-      <div className="glass-panel rounded-3xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 border border-white/40 dark:border-white/20 shadow-xl bg-white/90 dark:bg-[#0D1F38]/90 backdrop-blur-2xl">
+      <div className="glass-panel rounded-3xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 border border-slate-200/90 dark:border-white/20 shadow-xl bg-white/95 dark:bg-[#0D1F38]/95 backdrop-blur-2xl">
         <div className="relative w-full md:w-80">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-theme-text-secondary" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 dark:text-slate-400" />
           <input
             type="text"
             placeholder="Search festivals or observances..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 text-xs rounded-xl bg-white/60 dark:bg-white/10 border border-theme-border/40 text-theme-text-primary placeholder:text-theme-text-secondary focus:outline-none focus:border-accent font-medium shadow-inner"
+            className="w-full pl-10 pr-4 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-white/10 border border-slate-300 dark:border-white/20 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-accent font-medium shadow-inner"
           />
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap w-full md:w-auto justify-end">
           {/* Time Filter Pills: This Week -> Next 30 Days -> All */}
-          <div className="flex items-center gap-1.5 bg-white/50 dark:bg-slate-900/70 p-1.5 rounded-2xl border border-theme-border/40 dark:border-white/15 shadow-sm">
+          <div className="flex items-center gap-1.5 bg-slate-100/90 dark:bg-slate-900/80 p-1.5 rounded-2xl border border-slate-200/90 dark:border-white/15 shadow-sm">
             <button
               onClick={() => setTimeFilter('upcoming_7')}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 timeFilter === 'upcoming_7'
                   ? 'bg-accent text-white shadow-md shadow-accent/30 scale-105'
-                  : 'text-theme-text-secondary hover:text-theme-text-primary hover:bg-white/50 dark:hover:bg-white/10'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/80 dark:hover:bg-white/10'
               }`}
             >
               This Week ({thisWeekCount})
@@ -209,7 +209,7 @@ export default function FestivalsPage() {
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 timeFilter === 'upcoming_30'
                   ? 'bg-accent text-white shadow-md shadow-accent/30 scale-105'
-                  : 'text-theme-text-secondary hover:text-theme-text-primary hover:bg-white/50 dark:hover:bg-white/10'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/80 dark:hover:bg-white/10'
               }`}
             >
               Next 30 Days ({next30DaysCount})
@@ -219,7 +219,7 @@ export default function FestivalsPage() {
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 timeFilter === 'all'
                   ? 'bg-accent text-white shadow-md shadow-accent/30 scale-105'
-                  : 'text-theme-text-secondary hover:text-theme-text-primary hover:bg-white/50 dark:hover:bg-white/10'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/80 dark:hover:bg-white/10'
               }`}
             >
               All ({festivals.length})
@@ -230,7 +230,7 @@ export default function FestivalsPage() {
           <select
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
-            className="px-3.5 py-2 text-xs font-semibold rounded-xl bg-white/60 dark:bg-white/10 border border-theme-border/40 text-theme-text-primary focus:outline-none focus:border-accent cursor-pointer shadow-sm"
+            className="px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-50 dark:bg-white/10 border border-slate-300 dark:border-white/20 text-slate-900 dark:text-white focus:outline-none focus:border-accent cursor-pointer shadow-sm"
           >
             <option value="all">All Months</option>
             <option value="01">January</option>
@@ -251,10 +251,10 @@ export default function FestivalsPage() {
 
       {/* Festivals Grid */}
       {filteredFestivals.length === 0 ? (
-        <div className="glass-panel rounded-3xl p-12 text-center space-y-3 border border-white/40 dark:border-white/20 shadow-xl bg-white/90 dark:bg-[#0D1F38]/90">
-          <Sparkles className="h-10 w-10 text-theme-text-secondary mx-auto opacity-60" />
-          <h3 className="text-base font-bold text-theme-text-primary">No festivals match the selected timeframe</h3>
-          <p className="text-xs text-theme-text-secondary max-w-sm mx-auto">
+        <div className="glass-panel rounded-3xl p-12 text-center space-y-3 border border-slate-200/90 dark:border-white/20 shadow-xl bg-white/95 dark:bg-[#0D1F38]/95">
+          <Sparkles className="h-10 w-10 text-slate-400 mx-auto" />
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">No festivals match the selected timeframe</h3>
+          <p className="text-xs text-slate-600 dark:text-slate-300 max-w-sm mx-auto font-medium">
             Try switching to <strong>Next 30 Days</strong> or <strong>All ({festivals.length})</strong> to view upcoming observances.
           </p>
         </div>
@@ -276,10 +276,10 @@ export default function FestivalsPage() {
             return (
               <div
                 key={festival.id}
-                className={`glass-panel rounded-3xl p-5 md:p-6 flex flex-col justify-between transition-all duration-300 border shadow-xl bg-white/90 dark:bg-[#0D1F38]/90 backdrop-blur-2xl ${
+                className={`glass-panel rounded-3xl p-5 md:p-6 flex flex-col justify-between transition-all duration-300 border shadow-lg shadow-slate-200/60 dark:shadow-black/40 bg-white/95 dark:bg-[#0D1F38]/95 backdrop-blur-2xl ${
                   isUpcoming
-                    ? 'border-accent/40 hover:border-accent hover:shadow-2xl'
-                    : 'border-white/30 dark:border-white/10 opacity-75'
+                    ? 'border-slate-300 dark:border-accent/40 hover:border-accent hover:shadow-2xl'
+                    : 'border-slate-200 dark:border-white/10 opacity-80'
                 }`}
               >
                 {/* Card Header */}
@@ -288,26 +288,26 @@ export default function FestivalsPage() {
                     <Chip variant="flat" color={isUpcoming ? 'accent' : 'default'} size="sm">
                       {isUpcoming ? 'Upcoming' : 'Past Observance'}
                     </Chip>
-                    <span className="text-[11px] font-bold text-theme-text-secondary flex items-center gap-1.5 bg-black/5 dark:bg-white/5 px-2.5 py-1 rounded-xl border border-theme-border/30">
+                    <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 bg-slate-100 dark:bg-white/10 px-2.5 py-1 rounded-xl border border-slate-200 dark:border-white/15">
                       <Clock className="h-3.5 w-3.5 text-accent" />
                       {formattedDate}
                     </span>
                   </div>
 
-                  <h3 className="text-lg font-black text-theme-text-primary leading-tight">
+                  <h3 className="text-lg font-black text-slate-900 dark:text-white leading-tight">
                     {festival.title}
                   </h3>
 
-                  <p className="text-xs text-theme-text-secondary leading-relaxed font-medium">
+                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
                     {festival.description || 'Indian public holiday / festival (auto-synced weekly).'}
                   </p>
                 </div>
 
                 {/* Social Media Status Block */}
                 <div className="space-y-4 pt-2">
-                  <div className="p-3.5 rounded-2xl bg-white/60 dark:bg-slate-900/60 border border-theme-border/40 dark:border-white/15 space-y-2.5 shadow-sm">
+                  <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-white/15 space-y-2.5 shadow-sm">
                     <div className="flex items-center justify-between text-xs gap-2">
-                      <span className="font-bold text-theme-text-primary flex items-center gap-1.5">
+                      <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                         <Share2 className="h-4 w-4 text-accent" />
                         Social Media Post:
                       </span>
@@ -327,14 +327,14 @@ export default function FestivalsPage() {
                     </div>
 
                     {socialTask && (
-                      <p className="text-[11px] text-theme-text-secondary truncate pt-1 border-t border-theme-border/20">
-                        Assigned to: <strong className="text-theme-text-primary">{socialTask.assignee}</strong> ({socialTask.status})
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300 truncate pt-1 border-t border-slate-200 dark:border-white/10">
+                        Assigned to: <strong className="text-slate-900 dark:text-white">{socialTask.assignee}</strong> ({socialTask.status})
                       </p>
                     )}
                   </div>
 
                   {/* Card Actions Footer */}
-                  <div className="pt-3 border-t border-theme-border/30 flex items-center justify-between gap-2">
+                  <div className="pt-3 border-t border-slate-200 dark:border-white/15 flex items-center justify-between gap-2">
                     {socialTask ? (
                       <Link
                         href={`/dashboard/tasks?highlight=${socialTask.id}`}
