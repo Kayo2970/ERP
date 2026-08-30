@@ -529,6 +529,39 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     localStorage.setItem('sidebarCollapsed', String(next));
   };
 
+  // MagicBento Global Dynamic Cursor Tracker for all module cards and boxes
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      const cards = document.querySelectorAll<HTMLElement>(
+        '.glass-panel:not(header):not(aside):not(.no-magic), .magic-bento-card, .dashboard-card'
+      );
+      const mouseX = e.clientX;
+      const mouseY = e.clientY;
+
+      cards.forEach((card) => {
+        const rect = card.getBoundingClientRect();
+        const isInside =
+          mouseX >= rect.left &&
+          mouseX <= rect.right &&
+          mouseY >= rect.top &&
+          mouseY <= rect.bottom;
+
+        if (isInside) {
+          const relativeX = ((mouseX - rect.left) / rect.width) * 100;
+          const relativeY = ((mouseY - rect.top) / rect.height) * 100;
+          card.style.setProperty('--glow-x', `${relativeX}%`);
+          card.style.setProperty('--glow-y', `${relativeY}%`);
+          card.style.setProperty('--glow-intensity', '1');
+        } else {
+          card.style.setProperty('--glow-intensity', '0');
+        }
+      });
+    };
+
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, [pathname]);
+
   const toggleTheme = () => {
     const newTheme = !isDarkTheme;
     setIsDarkTheme(newTheme);
