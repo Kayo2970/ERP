@@ -36,7 +36,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowRight,
-  Compass
+  Compass,
+  Trash2
 } from 'lucide-react';
 import { getAnnouncements, getTasks, getDesigns, getMembers, getBudgets, getReimbursements, getEvents, logAuditEvent, Member, syncWithServer, getSystemSettings } from '@/lib/local-data';
 import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isFinanceHead, canAccessGuestDirectory, canVerifyBudgetCentreHead, canDecideBudget, canVerifyReimbursementCentreHead, canApproveAsSectorHead, canApproveAsFinanceHead } from '@/lib/permissions';
@@ -263,11 +264,33 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         link: `/dashboard/events`,
       }));
 
-    return [...budgetNotifs, ...reimbursementNotifs, ...eventApprovalNotifs, ...proofreadNotifs, ...recentAnnounce, ...recentTasks];
+    const dismissed = loadDismissedNotifIds();
+    return [...budgetNotifs, ...reimbursementNotifs, ...eventApprovalNotifs, ...proofreadNotifs, ...recentAnnounce, ...recentTasks]
+      .filter(n => !dismissed.has(n.id));
   };
+
+  const loadDismissedNotifIds = (): Set<string> => {
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('leads_dismissed_notif_ids') : null;
+      if (!raw) return new Set();
+      const parsed = JSON.parse(raw);
+      return new Set(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      return new Set();
+    }
+  };
+
+  const saveDismissedNotifIds = (ids: Set<string>) => {
+    try {
+      localStorage.setItem('leads_dismissed_notif_ids', JSON.stringify(Array.from(ids)));
+    } catch {}
+  };
+
+  const [dismissedNotifIds, setDismissedNotifIds] = useState<Set<string>>(new Set());
 
   // Initialize theme, user session, notifications, and server sync
   useEffect(() => {
+    setDismissedNotifIds(loadDismissedNotifIds());
     const theme = localStorage.getItem('theme');
     const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     
@@ -626,6 +649,24 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     markActionNotifsSeen();
   };
 
+  const clearAllNotifications = () => {
+    const currentIds = notifications.map(n => n.id);
+    const next = new Set(dismissedNotifIds);
+    currentIds.forEach(id => next.add(id));
+    setDismissedNotifIds(next);
+    saveDismissedNotifIds(next);
+    setNotifications([]);
+  };
+
+  const handleDismissNotification = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const next = new Set(dismissedNotifIds);
+    next.add(id);
+    setDismissedNotifIds(next);
+    saveDismissedNotifIds(next);
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
   const handleNotifClick = (notif: { id: string; link: string }) => {
     setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
     setIsNotificationsOpen(false);
@@ -670,18 +711,40 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             onClick={() => setIsNotificationsOpen(false)}
           />
 
-          <div className="fixed top-16 right-3 left-3 md:static md:left-auto md:right-0 md:absolute md:top-full md:mt-2 md:w-80 glass-panel rounded-2xl p-4 shadow-2xl border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-2.5 border-b border-theme-border/30">
-              <h4 className="text-xs font-bold text-theme-text-primary">Notifications</h4>
-              {notifications.some(n => !n.read) && (
-                <button
-                  onClick={markAllNotificationsAsRead}
-                  className="text-[10px] text-accent hover:underline font-semibold flex items-center gap-1 cursor-pointer"
-                >
-                  <Check className="h-3 w-3" />
-                  Mark all read
-                </button>
-              )}
+          <div className="fixed top-16 right-3 left-3 md:static md:left-auto md:right-0 md:absolute md:top-full md:mt-2 md:w-88 glass-panel rounded-3xl p-4 shadow-2xl border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-2xl bg-space-theme/95">
+            <div className="flex items-center justify-between pb-2.5 border-b border-theme-border/30 gap-2">
+              <div className="flex items-center gap-1.5">
+                <h4 className="text-xs font-bold text-theme-text-primary">Notifications</h4>
+                {notifications.length > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/10 text-theme-text-secondary font-mono">
+                    {notifications.length}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                {notifications.some(n => !n.read) && (
+                  <button
+                    onClick={markAllNotificationsAsRead}
+                    className="text-[10px] text-accent hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+                    title="Mark all notifications as read"
+                  >
+                    <Check className="h-3 w-3" />
+                    Mark read
+                  </button>
+                )}
+
+                {notifications.length > 0 && (
+                  <button
+                    onClick={clearAllNotifications}
+                    className="text-[10px] text-danger hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+                    title="Clear all received notifications"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Clear all
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="divide-y divide-theme-border/20 max-h-64 overflow-y-auto pt-1 space-y-1">
@@ -691,20 +754,31 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                 </div>
               ) : (
                 notifications.map(notif => (
-                  <button
+                  <div
                     key={notif.id}
-                    type="button"
-                    onClick={() => handleNotifClick(notif)}
-                    className={`w-full text-left py-2.5 px-2 rounded-lg text-xs transition-all cursor-pointer hover:bg-accent/10 ${notif.read ? 'opacity-60' : 'bg-accent/5'}`}
+                    className={`group relative flex items-start justify-between gap-2 p-2.5 rounded-xl text-xs transition-all hover:bg-accent/10 ${notif.read ? 'opacity-60' : 'bg-accent/5'}`}
                   >
-                    <div className="flex items-start gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleNotifClick(notif)}
+                      className="flex-1 text-left flex items-start gap-2.5 cursor-pointer min-w-0"
+                    >
                       <Info className={`h-3.5 w-3.5 shrink-0 mt-0.5 ${notif.actionNeeded ? 'text-danger' : 'text-accent'}`} />
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <p className="font-medium text-theme-text-primary text-xs leading-snug">{notif.title}</p>
                         <p className="text-[10px] text-theme-text-secondary mt-0.5">{notif.time}</p>
                       </div>
-                    </div>
-                  </button>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => handleDismissNotification(notif.id, e)}
+                      className="opacity-0 group-hover:opacity-100 p-1 text-theme-text-secondary hover:text-danger hover:bg-danger/10 rounded-lg transition-all cursor-pointer shrink-0"
+                      title="Clear this notification"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
                 ))
               )}
             </div>
