@@ -233,6 +233,94 @@ body {
   }
 }
 
+/* ------------------------------------------------------------- */
+/* HeroUI Avatar Component Specifications                        */
+/* ------------------------------------------------------------- */
+.avatar {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  overflow: hidden;
+  user-select: none;
+  background-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+}
+
+.avatar--sm {
+  width: 2rem;
+  height: 2rem;
+  font-size: 0.75rem;
+}
+
+.avatar--md {
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: 0.875rem;
+}
+
+.avatar--lg {
+  width: 3rem;
+  height: 3rem;
+  font-size: 1rem;
+}
+
+.avatar--xl {
+  width: 4rem;
+  height: 4rem;
+  font-size: 1.25rem;
+}
+
+.avatar__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+.avatar__fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  border-radius: inherit;
+}
+
+.avatar__fallback--default {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
+}
+
+.avatar__fallback--accent {
+  background: linear-gradient(135deg, rgba(46, 117, 182, 0.28) 0%, rgba(15, 42, 71, 0.35) 100%);
+  color: var(--color-accent);
+  border: 1px solid rgba(46, 117, 182, 0.35);
+}
+
+.avatar__fallback--success {
+  background: linear-gradient(135deg, rgba(46, 139, 87, 0.28) 0%, rgba(20, 80, 50, 0.35) 100%);
+  color: #2E8B57;
+  border: 1px solid rgba(46, 139, 87, 0.35);
+}
+
+.avatar__fallback--warning {
+  background: linear-gradient(135deg, rgba(217, 164, 65, 0.28) 0%, rgba(120, 90, 30, 0.35) 100%);
+  color: #D9A441;
+  border: 1px solid rgba(217, 164, 65, 0.35);
+}
+
+.avatar__fallback--danger {
+  background: linear-gradient(135deg, rgba(192, 57, 43, 0.28) 0%, rgba(100, 30, 20, 0.35) 100%);
+  color: #C0392B;
+  border: 1px solid rgba(192, 57, 43, 0.35);
+}
+
+
 
 
 

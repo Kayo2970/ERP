@@ -43,6 +43,7 @@ import { TermsModal } from '@/components/terms-modal';
 import { NotFoundScreen } from '@/components/not-found-screen';
 import { LoadingScreen } from '@/components/loading-screen';
 import { SyncStatusPill } from '@/components/ui/sync-status-pill';
+import { Avatar } from '@/components/ui/avatar';
 
 interface SidebarItem {
   name: string;
@@ -1034,19 +1035,15 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                               <div className="flex items-center gap-3 min-w-0 flex-1">
                                 {/* Avatar */}
                                 <div className="relative shrink-0">
-                                  {m.avatarUrl ? (
-                                    <img
-                                      src={m.avatarUrl}
-                                      alt={m.name}
-                                      className="h-9 w-9 rounded-xl object-cover border border-white/20 shadow-sm"
-                                    />
-                                  ) : (
-                                    <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-accent/25 via-accent/15 to-primary/20 flex items-center justify-center border border-accent/25 text-accent font-bold text-xs shadow-sm">
-                                      {initials}
-                                    </div>
-                                  )}
+                                  <Avatar
+                                    size="sm"
+                                    src={m.avatarUrl}
+                                    name={m.name}
+                                    color={isSelected ? 'accent' : 'default'}
+                                    className="rounded-xl shadow-sm"
+                                  />
                                   {isSelected && (
-                                    <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 border-2 border-theme-background" />
+                                    <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 border-2 border-theme-background z-10" />
                                   )}
                                 </div>
 
@@ -1108,15 +1105,13 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                   <h4 className="font-bold text-xs text-theme-text-primary truncate" title={user.name}>{user.name}</h4>
                   <p className="text-[10px] text-theme-text-secondary font-medium tracking-wide truncate" title={user.role}>{user.role}</p>
                 </div>
-                <div className="h-8.5 w-8.5 shrink-0 bg-accent rounded-xl flex items-center justify-center shadow-md shadow-accent/20 overflow-hidden">
-                  {user.avatarUrl ? (
-                    <img src={user.avatarUrl} alt={user.name} className="h-full w-full object-cover" />
-                  ) : (
-                    <span className="text-white font-bold text-xs">
-                      {user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                    </span>
-                  )}
-                </div>
+                <Avatar
+                  size="sm"
+                  src={user.avatarUrl}
+                  name={user.name}
+                  color="accent"
+                  className="rounded-xl shadow-md shadow-accent/20"
+                />
               </button>
 
               {isUserMenuOpen && (
