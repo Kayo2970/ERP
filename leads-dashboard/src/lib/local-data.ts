@@ -1,3 +1,5 @@
+import { trackSync } from './sync-status';
+
 export type MemberDivision = 'Advisory Board' | 'Core Committee' | 'Training Associate' | 'Alumni' | 'Faculty';
 
 export interface Member {
@@ -774,48 +776,116 @@ export async function syncWithServer(): Promise<boolean> {
  * Fire-and-forget helper for targeted per-collection server calls.
  * Does NOT send the entire database — only touches the one record that changed.
  */
-async function serverPost(endpoint: string, body: any): Promise<any> {
-  if (typeof window === 'undefined') return null;
-  try {
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) console.warn(`[api] POST ${endpoint} failed:`, res.status);
-    return res.ok ? res.json() : null;
-  } catch (err) {
-    console.warn(`[api] POST ${endpoint} error:`, err);
-    return null;
-  }
+export type UploadProgressCallback = (loaded: number, total: number) => void;
+
+/**
+ * XMLHttpRequest, not fetch — fetch() gives no way to observe request-body
+ * upload progress. Used only when a caller passes onProgress (i.e. the body
+ * carries a file), so every other call site keeps the plain fetch() path.
+ */
+function xhrJson(method: 'POST' | 'PATCH', url: string, body: any, onProgress: UploadProgressCallback): Promise<any> {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, url);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.upload.onprogress = (ev) => {
+      if (ev.lengthComputable) onProgress(ev.loaded, ev.total);
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch {
+          resolve(null);
+        }
+      } else {
+        console.warn(`[api] ${method} ${url} failed:`, xhr.status);
+        resolve(null);
+      }
+    };
+    xhr.onerror = () => {
+      console.warn(`[api] ${method} ${url} error`);
+      resolve(null);
+    };
+    xhr.send(JSON.stringify(body));
+  });
 }
 
-async function serverPatch(endpoint: string, id: string, updates: any): Promise<any> {
+// Friendly noun for the sync-status pill, keyed by the collection segment of
+// the endpoint (e.g. '/api/reimbursements' -> 'reimbursements'). Falls back
+// to a generic "changes" for anything not worth naming individually.
+const SYNC_LABELS: Record<string, string> = {
+  members: 'member details',
+  reimbursements: 'reimbursement claim',
+  guests: 'guest record',
+  designs: 'design',
+  events: 'event',
+  budgets: 'budget request',
+  tasks: 'task',
+  announcements: 'announcement',
+  forms: 'form',
+  submissions: 'form response',
+  ratings: 'rating',
+  'group-policies': 'group policy',
+};
+function syncLabelFor(endpoint: string): string {
+  const collection = endpoint.replace(/^\/api\//, '').split('/')[0];
+  return SYNC_LABELS[collection] || 'changes';
+}
+
+async function serverPost(endpoint: string, body: any, onProgress?: UploadProgressCallback): Promise<any> {
   if (typeof window === 'undefined') return null;
-  try {
-    const res = await fetch(`${endpoint}/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates),
-    });
-    if (!res.ok) console.warn(`[api] PATCH ${endpoint}/${id} failed:`, res.status);
-    return res.ok ? res.json() : null;
-  } catch (err) {
-    console.warn(`[api] PATCH ${endpoint}/${id} error:`, err);
-    return null;
-  }
+  if (onProgress) return xhrJson('POST', endpoint, body, onProgress);
+  // File uploads (above) already get their own FileDropzone progress UI —
+  // only plain background writes get the global sync-status pill, so the
+  // same action is never narrated by two different pieces of UI at once.
+  return trackSync(syncLabelFor(endpoint), 'Saving', async () => {
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) console.warn(`[api] POST ${endpoint} failed:`, res.status);
+      return res.ok ? res.json() : null;
+    } catch (err) {
+      console.warn(`[api] POST ${endpoint} error:`, err);
+      return null;
+    }
+  }, (result) => result !== null);
+}
+
+async function serverPatch(endpoint: string, id: string, updates: any, onProgress?: UploadProgressCallback): Promise<any> {
+  if (typeof window === 'undefined') return null;
+  if (onProgress) return xhrJson('PATCH', `${endpoint}/${id}`, updates, onProgress);
+  return trackSync(syncLabelFor(endpoint), 'Updating', async () => {
+    try {
+      const res = await fetch(`${endpoint}/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      if (!res.ok) console.warn(`[api] PATCH ${endpoint}/${id} failed:`, res.status);
+      return res.ok ? res.json() : null;
+    } catch (err) {
+      console.warn(`[api] PATCH ${endpoint}/${id} error:`, err);
+      return null;
+    }
+  }, (result) => result !== null);
 }
 
 async function serverDelete(endpoint: string, id: string): Promise<boolean> {
   if (typeof window === 'undefined') return false;
-  try {
-    const res = await fetch(`${endpoint}/${id}`, { method: 'DELETE' });
-    if (!res.ok) console.warn(`[api] DELETE ${endpoint}/${id} failed:`, res.status);
-    return res.ok;
-  } catch (err) {
-    console.warn(`[api] DELETE ${endpoint}/${id} error:`, err);
-    return false;
-  }
+  return trackSync(syncLabelFor(endpoint), 'Removing', async () => {
+    try {
+      const res = await fetch(`${endpoint}/${id}`, { method: 'DELETE' });
+      if (!res.ok) console.warn(`[api] DELETE ${endpoint}/${id} failed:`, res.status);
+      return res.ok;
+    } catch (err) {
+      console.warn(`[api] DELETE ${endpoint}/${id} error:`, err);
+      return false;
+    }
+  }, (result) => result === true);
 }
 
 // -------------------------------------------------------------
@@ -1035,6 +1105,20 @@ export function updateMember(id: string, updates: Partial<Member>, actorName: st
 }
 
 /**
+ * Dedicated avatar-upload path (distinct from the general updateMember) so the
+ * settings page gets an awaited, real-failure-reporting call with upload
+ * progress — a photo that fails to reach the server must be reported as a
+ * failure, never silently treated as "saved."
+ */
+export async function updateMemberAvatar(id: string, avatarData: string, avatarFileName: string, onProgress?: UploadProgressCallback): Promise<{ avatarUrl: string; avatarStorageKey?: string }> {
+  const serverResult = await serverPatch('/api/members', id, { avatarData, avatarFileName }, onProgress);
+  if (!serverResult || !serverResult.avatarUrl) {
+    throw new Error('The photo failed to upload to the server. Please check your connection and try again.');
+  }
+  return { avatarUrl: serverResult.avatarUrl, avatarStorageKey: serverResult.avatarStorageKey };
+}
+
+/**
  * Revoke a member's dashboard access without deleting them — every historical
  * record (tasks, ratings, reimbursements, event committees, audit log) keeps
  * referencing this member by id/name/email exactly as before, since none of
@@ -1111,31 +1195,43 @@ export function saveGuests(guests: Guest[]): void {
   markLocalWrite('leads_guests');
 }
 
-export function addGuest(guest: Omit<Guest, 'id' | 'createdAt'>, actorName: string): Guest {
-  const current = getGuests();
+export async function addGuest(guest: Omit<Guest, 'id' | 'createdAt'>, actorName: string, onProgress?: UploadProgressCallback): Promise<Guest> {
   const newGuest: Guest = {
     ...guest,
     id: 'guest_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
     createdAt: new Date().toISOString(),
   };
-  current.unshift(newGuest);
-  saveGuests(current);
+
   // The server converts visitingCardData (base64) to a real file on disk and
-  // returns storageKey/visitingCardUrl — the next syncWithServer() poll picks
-  // that up, same fire-and-forget pattern as designs/addDesign.
-  serverPost('/api/guests', newGuest);
-  logAuditEvent('GUEST_ADDED', actorName, `Added guest "${newGuest.name}"${newGuest.organization ? ` (${newGuest.organization})` : ''} to the Guest Directory`);
-  return newGuest;
+  // returns storageKey/visitingCardUrl — awaited so a failed card upload is
+  // reported as a real failure instead of silently "succeeding" locally.
+  const serverResult = await serverPost('/api/guests', newGuest, onProgress);
+  if (!serverResult) {
+    throw new Error('The guest record failed to reach the server. Please check your connection and try again.');
+  }
+
+  const createdGuest: Guest = { ...newGuest, ...serverResult };
+
+  const current = getGuests();
+  current.unshift(createdGuest);
+  saveGuests(current);
+  logAuditEvent('GUEST_ADDED', actorName, `Added guest "${createdGuest.name}"${createdGuest.organization ? ` (${createdGuest.organization})` : ''} to the Guest Directory`);
+  return createdGuest;
 }
 
-export function updateGuest(id: string, updates: Partial<Guest>, actorName: string): Guest | null {
+export async function updateGuest(id: string, updates: Partial<Guest>, actorName: string, onProgress?: UploadProgressCallback): Promise<Guest | null> {
   const current = getGuests();
   const idx = current.findIndex(g => g.id === id);
   if (idx === -1) return null;
 
-  current[idx] = { ...current[idx], ...updates };
+  const updatedGuest = { ...current[idx], ...updates };
+  const serverResult = await serverPatch('/api/guests', id, updatedGuest, onProgress);
+  if (!serverResult) {
+    throw new Error('The update failed to reach the server. Please check your connection and try again.');
+  }
+
+  current[idx] = { ...updatedGuest, ...serverResult };
   saveGuests(current);
-  serverPatch('/api/guests', id, current[idx]);
   logAuditEvent('GUEST_UPDATED', actorName, `Updated guest record for "${current[idx].name}"`);
   return current[idx];
 }
@@ -2067,19 +2163,28 @@ export function saveReimbursements(reimbursements: ReimbursementItem[]): void {
   markLocalWrite('leads_reimbursements');
 }
 
-export function addReimbursement(item: Omit<ReimbursementItem, 'id' | 'status' | 'submittedAt'>): ReimbursementItem {
-  const current = getReimbursements();
+export async function addReimbursement(item: Omit<ReimbursementItem, 'id' | 'status' | 'submittedAt'>, onProgress?: UploadProgressCallback): Promise<ReimbursementItem> {
   const newClaim: ReimbursementItem = {
     ...item,
     id: 'rem_' + Date.now(),
     status: 'Pending',
     submittedAt: new Date().toISOString().split('T')[0]
   };
-  current.unshift(newClaim);
+
+  // POST to server first so receipt files are written to disk and receiptFiles
+  // gets real storageKey/url values, before this claim ever touches localStorage.
+  const serverResult = await serverPost('/api/reimbursements', newClaim, onProgress);
+  if (!serverResult) {
+    throw new Error('The claim failed to reach the server. Please check your connection and try again.');
+  }
+
+  const createdClaim: ReimbursementItem = { ...newClaim, ...serverResult };
+
+  const current = getReimbursements();
+  current.unshift(createdClaim);
   saveReimbursements(current);
-  serverPost('/api/reimbursements', newClaim);
   logAuditEvent('REIMBURSEMENT_CLAIMED', item.memberName, `Submitted expense claim of ₹${item.amount} under ${item.category}`);
-  return newClaim;
+  return createdClaim;
 }
 
 export function updateReimbursementStatus(
@@ -2915,7 +3020,7 @@ export function resolveDesignReviewer(): { id: string; name: string; email: stri
   return undefined;
 }
 
-export async function addDesign(design: Omit<DesignSubmissionItem, 'id' | 'submittedAt' | 'expiresAt' | 'isExpired'>): Promise<DesignSubmissionItem> {
+export async function addDesign(design: Omit<DesignSubmissionItem, 'id' | 'submittedAt' | 'expiresAt' | 'isExpired'>, onProgress?: UploadProgressCallback): Promise<DesignSubmissionItem> {
   if (design.fileSize > 25 * 1024 * 1024) {
     throw new Error('File size exceeds the 25 MB limit.');
   }
@@ -2946,7 +3051,7 @@ export async function addDesign(design: Omit<DesignSubmissionItem, 'id' | 'submi
   };
 
   // POST to server first so the file is written to disk and fileUrl/storageKey is generated without polluting localStorage with base64 data
-  const serverResult = await serverPost('/api/designs', newDesign);
+  const serverResult = await serverPost('/api/designs', newDesign, onProgress);
   if (!serverResult) {
     throw new Error('The design failed to upload to the server. Please check your connection and try again.');
   }
@@ -3317,7 +3422,8 @@ export async function updateDesignFile(
   fileSize: number,
   fileType: string,
   actorName: string,
-  ocrScan?: OcrScanResult
+  ocrScan?: OcrScanResult,
+  onProgress?: UploadProgressCallback
 ): Promise<DesignSubmissionItem | null> {
   if (fileSize > 25 * 1024 * 1024) {
     throw new Error('File size exceeds the 25 MB limit.');
@@ -3345,7 +3451,7 @@ export async function updateDesignFile(
   updated = syncDesignTask(updated, actorName);
 
   // PATCH to server first so fileData base64 is saved on disk and fileUrl is updated
-  const serverResult = await serverPatch('/api/designs', id, updated);
+  const serverResult = await serverPatch('/api/designs', id, updated, onProgress);
   if (!serverResult) {
     throw new Error('The replacement file failed to upload to the server. Please check your connection and try again.');
   }

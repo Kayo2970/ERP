@@ -10,7 +10,6 @@ import {
   CheckCircle,
   Eye,
   EyeOff,
-  Upload,
   Clock,
   CheckCircle2,
   BarChart3,
@@ -20,9 +19,9 @@ import {
   Building2,
   CreditCard,
   Hash,
-  Paperclip,
-  Trash2
+  Paperclip
 } from 'lucide-react';
+import { FileDropzone, FilePreviewRow, createProgressTracker } from '@/components/ui/file-dropzone';
 import {
   getReimbursements,
   addReimbursement,
@@ -58,8 +57,14 @@ export default function ReimbursementsPage() {
   const [accountNumber, setAccountNumber] = useState('');
   const [ifscCode, setIfscCode] = useState('');
 
-  // Multiple Receipt Files (Up to 3: Bill, Proof, Supporting Docs)
-  const [attachedFiles, setAttachedFiles] = useState<ReceiptFile[]>([]);
+  // Multiple Receipt Files (Up to 3: Bill, Proof, Supporting Docs). Kept as raw
+  // File objects (not pre-converted to base64) so each row can show a real
+  // thumbnail/type/size and survive a failed claim submission for retry.
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [isSubmittingClaim, setIsSubmittingClaim] = useState(false);
+  const [claimSubmitError, setClaimSubmitError] = useState('');
+  const [claimUploadProgress, setClaimUploadProgress] = useState(0);
+  const [claimUploadEtaSeconds, setClaimUploadEtaSeconds] = useState<number | null>(null);
 
   // Filtering & Event Chart Modal State
   const [selectedEventFilter, setSelectedEventFilter] = useState<string>('ALL');
@@ -114,39 +119,28 @@ export default function ReimbursementsPage() {
     setTimeout(() => setAlertMsg(''), 4000);
   };
 
-  const handleMultipleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
+  const handleFilesSelected = (files: File[]) => {
     if (attachedFiles.length + files.length > 3) {
       setFormError('Maximum 3 documentation files (bill, payment proof, supporting note) allowed per claim.');
       return;
     }
-
     setFormError('');
-    const newFiles: ReceiptFile[] = [...attachedFiles];
-
-    Array.from(files).forEach(file => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const result = event.target?.result as string;
-        newFiles.push({
-          name: file.name,
-          dataUrl: result,
-          type: file.type || (file.name.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg')
-        });
-        setAttachedFiles([...newFiles]);
-      };
-      reader.readAsDataURL(file);
-    });
+    setAttachedFiles(prev => [...prev, ...files]);
   };
 
   const removeAttachedFile = (index: number) => {
     setAttachedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleSubmitClaim = (e: React.FormEvent) => {
-    e.preventDefault();
+  const readFileAsDataUrl = (file: File): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => (typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Could not read that file.')));
+    reader.onerror = () => reject(new Error(`Could not read "${file.name}". Please try selecting it again.`));
+    reader.readAsDataURL(file);
+  });
+
+  const handleSubmitClaim = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     setFormError('');
 
     const parsedAmount = parseFloat(amount);
@@ -163,36 +157,56 @@ export default function ReimbursementsPage() {
     const selectedEv = events.find(ev => ev.id === selectedEventId);
     const summaryBankStr = `${bankName.trim()} - A/C ${accountNumber.trim()} - IFSC ${ifscCode.trim().toUpperCase()}`;
 
-    addReimbursement({
-      memberName: user.name,
-      memberEmail: user.email,
-      amount: parsedAmount,
-      category,
-      description,
-      receiptUrl: attachedFiles[0]?.name || 'receipt.pdf',
-      receiptData: attachedFiles[0]?.dataUrl || undefined,
-      receiptFiles: attachedFiles,
-      bankDetails: summaryBankStr,
-      bankName: bankName.trim(),
-      accountNumber: accountNumber.trim(),
-      ifscCode: ifscCode.trim().toUpperCase(),
-      eventId: selectedEventId || undefined,
-      eventName: selectedEv ? selectedEv.title : undefined
-    });
+    setIsSubmittingClaim(true);
+    setClaimSubmitError('');
+    setClaimUploadProgress(0);
+    setClaimUploadEtaSeconds(null);
+    try {
+      const receiptFiles: ReceiptFile[] = await Promise.all(
+        attachedFiles.map(async (file) => ({
+          name: file.name,
+          dataUrl: await readFileAsDataUrl(file),
+          type: file.type || (file.name.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg'),
+        }))
+      );
 
-    // Reset Form
-    setAmount('');
-    setDescription('');
-    setBankName('');
-    setAccountNumber('');
-    setIfscCode('');
-    setSelectedEventId('');
-    setAttachedFiles([]);
-    setFormError('');
+      const tracker = createProgressTracker((pct, eta) => { setClaimUploadProgress(pct); setClaimUploadEtaSeconds(eta); });
+      await addReimbursement({
+        memberName: user.name,
+        memberEmail: user.email,
+        amount: parsedAmount,
+        category,
+        description,
+        receiptUrl: receiptFiles[0]?.name || 'receipt.pdf',
+        receiptData: receiptFiles[0]?.dataUrl || undefined,
+        receiptFiles,
+        bankDetails: summaryBankStr,
+        bankName: bankName.trim(),
+        accountNumber: accountNumber.trim(),
+        ifscCode: ifscCode.trim().toUpperCase(),
+        eventId: selectedEventId || undefined,
+        eventName: selectedEv ? selectedEv.title : undefined
+      }, tracker);
 
-    // Refresh & Notify
-    setReimbursements(getReimbursements());
-    triggerSuccess(`Reimbursement claim ${selectedEv ? `attached to "${selectedEv.title}"` : ''} submitted successfully with ${attachedFiles.length} file(s).`);
+      // Reset Form — only on confirmed success; a failed submit keeps every
+      // field (including the attached files) exactly as the claimant left it.
+      setAmount('');
+      setDescription('');
+      setBankName('');
+      setAccountNumber('');
+      setIfscCode('');
+      setSelectedEventId('');
+      setAttachedFiles([]);
+      setClaimUploadProgress(0);
+      setClaimUploadEtaSeconds(null);
+
+      setReimbursements(getReimbursements());
+      triggerSuccess(`Reimbursement claim ${selectedEv ? `attached to "${selectedEv.title}"` : ''} submitted successfully with ${receiptFiles.length} file(s).`);
+    } catch (err: any) {
+      setClaimSubmitError(err.message || 'Failed to submit the claim. Please try again.');
+    } finally {
+      setIsSubmittingClaim(false);
+    }
   };
 
   // Two-Stage Approval Handlers (Centre Head Verification Stage 1 -> Finance Head Approval Stage 2)
@@ -524,37 +538,27 @@ export default function ReimbursementsPage() {
               </div>
 
               {attachedFiles.length < 3 && (
-                <label className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border border-dashed rounded-xl text-theme-text-secondary hover:text-theme-text-primary hover:border-accent transition-all cursor-pointer flex items-center justify-center gap-2">
-                  <Upload className="h-4 w-4" />
-                  <span className="truncate text-xs">Upload Bill, Payment Receipt, or Approval Note</span>
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*,.pdf"
-                    onChange={handleMultipleFileUpload}
-                    className="hidden"
-                  />
-                </label>
+                <FileDropzone
+                  onFilesSelected={handleFilesSelected}
+                  accept="image/*,.pdf"
+                  multiple
+                  disabled={isSubmittingClaim}
+                  label="Upload Bill, Payment Receipt, or Approval Note"
+                  hint="Drag and drop, or click to browse — up to 3 files"
+                  compact
+                />
               )}
 
-              {/* Display list of attached files */}
+              {/* Each attached file gets its own thumbnail/type/size proof and
+                  its own remove control — one file never affects another. */}
               {attachedFiles.length > 0 && (
                 <div className="space-y-1.5 pt-1">
                   {attachedFiles.map((file, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-2 bg-theme-border/10 border border-theme-border/20 rounded-lg text-xs">
-                      <div className="flex items-center gap-2 truncate pr-2">
-                        <FileText className="h-3.5 w-3.5 text-accent shrink-0" />
-                        <span className="truncate text-theme-text-primary font-medium">{file.name}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeAttachedFile(idx)}
-                        className="text-theme-text-secondary hover:text-danger p-0.5 transition-all cursor-pointer shrink-0"
-                        title="Remove file"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
+                    <FilePreviewRow
+                      key={`${file.name}-${idx}`}
+                      file={file}
+                      onRemove={!isSubmittingClaim ? () => removeAttachedFile(idx) : undefined}
+                    />
                   ))}
                 </div>
               )}
@@ -626,11 +630,31 @@ export default function ReimbursementsPage() {
               </span>
             </div>
 
+            {isSubmittingClaim && attachedFiles.length > 0 && (
+              <div className="space-y-0.5 pt-1">
+                <div className="h-1.5 rounded-full bg-theme-border/30 overflow-hidden">
+                  <div className="h-full bg-accent rounded-full transition-all duration-200" style={{ width: `${claimUploadProgress}%` }} />
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-theme-text-secondary">
+                  <span>Uploading claim & {attachedFiles.length} file(s)... {claimUploadProgress}%</span>
+                  {claimUploadEtaSeconds !== null && <span>{claimUploadEtaSeconds <= 0 ? 'almost done' : `${Math.ceil(claimUploadEtaSeconds)}s left`}</span>}
+                </div>
+              </div>
+            )}
+
+            {claimSubmitError && (
+              <div className="p-3 bg-danger/10 border border-danger/25 rounded-xl text-danger text-xs flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4 shrink-0" />
+                <span>{claimSubmitError} Your details and attached files are still here — just submit again.</span>
+              </div>
+            )}
+
             <button
               type="submit"
-              className="w-full py-3 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer mt-2"
+              disabled={isSubmittingClaim}
+              className="w-full py-3 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer mt-2 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              Submit Expense Claim
+              {isSubmittingClaim ? 'Submitting...' : claimSubmitError ? 'Retry Submit Claim' : 'Submit Expense Claim'}
             </button>
           </form>
         </div>

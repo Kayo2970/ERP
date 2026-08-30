@@ -41,6 +41,7 @@ import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isFinance
 import { TermsModal } from '@/components/terms-modal';
 import { NotFoundScreen } from '@/components/not-found-screen';
 import { LoadingScreen } from '@/components/loading-screen';
+import { SyncStatusPill } from '@/components/ui/sync-status-pill';
 
 interface SidebarItem {
   name: string;
@@ -92,13 +93,37 @@ const allSidebarItems = navSections.flatMap(s => s.items);
 
 const INACTIVITY_LOGOUT_MS = 30 * 60 * 1000; // 30 minutes
 
+const SEEN_ACTION_IDS_KEY = 'leads_notif_seen_action_ids';
+
+function loadSeenActionIds(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(SEEN_ACTION_IDS_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function saveSeenActionIds(ids: Set<string>) {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(SEEN_ACTION_IDS_KEY, JSON.stringify(Array.from(ids)));
+}
+
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDarkTheme, setIsDarkTheme] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [notifications, setNotifications] = useState<{ id: string; title: string; time: string; read: boolean; link: string }[]>([]);
+  const [notifications, setNotifications] = useState<{ id: string; title: string; time: string; read: boolean; link: string; actionNeeded: boolean }[]>([]);
+  // Ids of action-needed notifications the user has already had the dropdown
+  // open for — distinct from the per-row `read` flag above. The badge count
+  // is driven by this, not by `read`, specifically so it can never flash back
+  // to 0 and jump again on a background poll: it only ever grows (a newly
+  // appearing action item is unseen) and only ever shrinks by the user
+  // actually opening the panel, never by a rebuild of the underlying list.
+  const [seenActionIds, setSeenActionIds] = useState<Set<string>>(new Set());
   const [isTermsOpen, setIsTermsOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const notifRefMobile = useRef<HTMLDivElement>(null);
@@ -157,9 +182,12 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         title: `Proofreading Request: ${d.title}`,
         time: `From ${d.designerName}`,
         read: false,
+        actionNeeded: true,
         link: `/dashboard/designs?highlight=${d.id}`,
       }));
 
+    // FYI-only — recency windows, not real unread tracking, so these never
+    // contribute to the badge count (only genuine decisions do).
     const recentAnnounce = getAnnouncements()
       .filter(a => getAnnouncementScopeMatch(a.scope, currentUser))
       .slice(0, 3)
@@ -168,6 +196,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         title: `Announcement: ${a.title}`,
         time: a.publishedAt,
         read: false,
+        actionNeeded: false,
         link: `/dashboard/announcements?highlight=${a.id}`,
       }));
 
@@ -179,6 +208,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         title: `Task assigned: ${t.title}`,
         time: `Due ${t.dueDate}`,
         read: false,
+        actionNeeded: false,
         link: `/dashboard/tasks?highlight=${t.id}`,
       }));
 
@@ -194,6 +224,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           : `Budget awaiting your verification: ${b.eventName || b.month || b.financialYear || 'Request'}`,
         time: `From ${b.submittedBy}`,
         read: false,
+        actionNeeded: true,
         link: `/dashboard/budget`,
       }));
 
@@ -209,6 +240,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         title: `Reimbursement awaiting your review: ${r.memberName} — ₹${Number(r.amount).toLocaleString()}`,
         time: r.category,
         read: false,
+        actionNeeded: true,
         link: `/dashboard/reimbursements`,
       }));
 
@@ -221,6 +253,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         title: `Event ${e.approvalStatus === 'pending_create' ? 'creation' : 'edit'} awaiting approval: ${e.title}`,
         time: `From ${e.submittedBy || 'a member'}`,
         read: false,
+        actionNeeded: true,
         link: `/dashboard/events`,
       }));
 
@@ -276,6 +309,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
       // Load dynamic notifications from recent announcements, tasks, and proofread requests
       setNotifications(buildNotifications(parsedUser));
+      setSeenActionIds(loadSeenActionIds());
 
       return () => clearInterval(pollInterval);
     } catch (e) {
@@ -355,7 +389,19 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
       setNotifications(prev => {
         const readIds = new Set(prev.filter(n => n.read).map(n => n.id));
-        return buildNotifications(currentUser).map(n => readIds.has(n.id) ? { ...n, read: true } : n);
+        const rebuilt = buildNotifications(currentUser);
+
+        // Prune seenActionIds down to only ids still present as action-needed
+        // — bounds its storage size and lets an id become "new" again if the
+        // same underlying record somehow reappears as actionable later.
+        setSeenActionIds(prevSeen => {
+          const stillActionable = new Set(rebuilt.filter(n => n.actionNeeded).map(n => n.id));
+          const pruned = new Set([...prevSeen].filter(id => stillActionable.has(id)));
+          if (pruned.size !== prevSeen.size) saveSeenActionIds(pruned);
+          return pruned.size !== prevSeen.size ? pruned : prevSeen;
+        });
+
+        return rebuilt.map(n => readIds.has(n.id) ? { ...n, read: true } : n);
       });
     };
     window.addEventListener('leads-data-sync', handleSync);
@@ -502,8 +548,30 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     router.replace('/');
   };
 
+  // Marks every currently-actionable notification as seen — this is the one
+  // and only way the badge count clears, and it fires the instant the panel
+  // opens rather than waiting for an explicit "Mark all read" click.
+  const markActionNotifsSeen = () => {
+    setSeenActionIds(prev => {
+      const actionableIds = notifications.filter(n => n.actionNeeded).map(n => n.id);
+      if (actionableIds.every(id => prev.has(id))) return prev;
+      const next = new Set(prev);
+      actionableIds.forEach(id => next.add(id));
+      saveSeenActionIds(next);
+      return next;
+    });
+  };
+
+  const handleToggleNotifications = () => {
+    setIsNotificationsOpen(open => {
+      if (!open) markActionNotifsSeen();
+      return !open;
+    });
+  };
+
   const markAllNotificationsAsRead = () => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    markActionNotifsSeen();
   };
 
   const handleNotifClick = (notif: { id: string; link: string }) => {
@@ -513,7 +581,12 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     router.push(notif.link);
   };
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  // Badge only counts items that need a decision (proofread/budget/reimbursement/
+  // event approvals) — recent announcements and tasks stay in the list below for
+  // visibility but never inflate this number. A dot at 1, a number from 2-99, and
+  // a 99+ cap above that, so the badge's own shape never destabilizes the bell.
+  const unseenActionNotifs = notifications.filter(n => n.actionNeeded && !seenActionIds.has(n.id));
+  const unseenActionCount = unseenActionNotifs.length;
 
   // Rendered twice — once in the desktop navbar, once in the mobile header — since
   // only one is ever visible at a time (the other's ancestor is `hidden` via CSS),
@@ -521,13 +594,19 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const renderNotificationBell = (wrapperRef: React.RefObject<HTMLDivElement | null>) => (
     <div className="relative" ref={wrapperRef}>
       <button
-        onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+        onClick={handleToggleNotifications}
         className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-xl hover:bg-theme-border/20 transition-all cursor-pointer relative"
         title="Notifications"
       >
         <Bell className="h-4.5 w-4.5" />
-        {unreadCount > 0 && (
-          <span className="absolute top-2 right-2 h-2 w-2 bg-danger rounded-full ring-2 ring-theme-sidebar"></span>
+        {unseenActionCount > 0 && (
+          unseenActionCount === 1 ? (
+            <span className="absolute -top-1 -right-1 h-2.5 w-2.5 bg-danger rounded-full ring-2 ring-theme-sidebar" />
+          ) : (
+            <span className="absolute -top-1.5 -right-1.5 h-[18px] min-w-[18px] px-1 flex items-center justify-center rounded-full bg-danger text-white text-[9px] font-bold leading-none ring-2 ring-theme-sidebar">
+              {unseenActionCount > 99 ? '99+' : unseenActionCount}
+            </span>
+          )
         )}
       </button>
 
@@ -542,7 +621,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           <div className="fixed top-16 right-3 left-3 md:static md:left-auto md:right-0 md:absolute md:top-full md:mt-2 md:w-80 glass-panel rounded-2xl p-4 shadow-2xl border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-2.5 border-b border-theme-border/30">
               <h4 className="text-xs font-bold text-theme-text-primary">Notifications</h4>
-              {unreadCount > 0 && (
+              {notifications.some(n => !n.read) && (
                 <button
                   onClick={markAllNotificationsAsRead}
                   className="text-[10px] text-accent hover:underline font-semibold flex items-center gap-1 cursor-pointer"
@@ -567,7 +646,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                     className={`w-full text-left py-2.5 px-2 rounded-lg text-xs transition-all cursor-pointer hover:bg-accent/10 ${notif.read ? 'opacity-60' : 'bg-accent/5'}`}
                   >
                     <div className="flex items-start gap-2">
-                      <Info className="h-3.5 w-3.5 text-accent shrink-0 mt-0.5" />
+                      <Info className={`h-3.5 w-3.5 shrink-0 mt-0.5 ${notif.actionNeeded ? 'text-danger' : 'text-accent'}`} />
                       <div>
                         <p className="font-medium text-theme-text-primary text-xs leading-snug">{notif.title}</p>
                         <p className="text-[10px] text-theme-text-secondary mt-0.5">{notif.time}</p>
@@ -972,6 +1051,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         {/* Terms & Conditions Modal */}
         <TermsModal isOpen={isTermsOpen} onClose={() => setIsTermsOpen(false)} />
       </div>
+
+      {/* Global save/sync feedback for every background write app-wide */}
+      <SyncStatusPill />
     </div>
   );
 }

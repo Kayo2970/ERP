@@ -24,6 +24,7 @@ import { getEvents, addEvent, updateEvent, deleteEvent, approveEvent, rejectEven
 import { canCreateEvent, canEditEvent, canDeleteEvent, canManageEvents, canViewEvent, canApprovePendingEvent, getEventApprovalRequirement } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
+import { useDropTarget } from '@/components/ui/file-dropzone';
 
 type EventStatusFilter = 'ALL' | 'ONGOING' | 'COMPLETED' | 'ARCHIVED';
 
@@ -53,6 +54,7 @@ export default function EventsPage() {
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { isDragOver: isCsvDragOver, dragHandlers: csvDragHandlers } = useDropTarget((files) => handleCsvFile(files[0]));
 
   useEffect(() => {
     const refreshData = () => {
@@ -110,7 +112,11 @@ export default function EventsPage() {
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    handleCsvFile(e.target.files?.[0]);
+    e.target.value = '';
+  };
+
+  const handleCsvFile = (file: File | undefined) => {
     if (!file) return;
 
     const reader = new FileReader();
@@ -192,7 +198,6 @@ export default function EventsPage() {
       }
     };
     reader.readAsText(file);
-    e.target.value = '';
   };
 
   const handleOpenCreate = () => {
@@ -447,11 +452,16 @@ export default function EventsPage() {
 
             <button
               onClick={handleUploadClick}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-border/40"
-              title="Upload Filled CSV File"
+              {...csvDragHandlers}
+              className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer border ${
+                isCsvDragOver
+                  ? 'border-accent bg-accent/10 shadow-md shadow-accent/20 ring-2 ring-accent/20 text-accent'
+                  : 'border-theme-border/40 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary'
+              }`}
+              title="Upload Filled CSV File — click or drag and drop"
             >
               <Upload className="h-4 w-4" />
-              Upload Events (CSV)
+              {isCsvDragOver ? 'Drop CSV here' : 'Upload Events (CSV)'}
             </button>
             <input
               type="file"

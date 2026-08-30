@@ -26,6 +26,7 @@ import {
   Plus,
   Edit2
 } from 'lucide-react';
+import { FileDropzone, FilePreviewRow, createProgressTracker } from '@/components/ui/file-dropzone';
 import {
   getDesigns,
   addDesign,
@@ -266,6 +267,11 @@ export default function DesignPortalPage() {
   const [isReadingFile, setIsReadingFile] = useState<boolean>(false);
   const [readProgress, setReadProgress] = useState<number>(0);
   const [submitError, setSubmitError] = useState<string>('');
+  // Real percent + time-remaining for the actual server upload, driven by
+  // addDesign()'s onProgress callback — replaces the old indeterminate bar,
+  // which could only say "something is happening," never how long it'd take.
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [uploadEtaSeconds, setUploadEtaSeconds] = useState<number | null>(null);
 
   // OCR + spell-check scan (advisory only — never blocks submission)
   const [ocrScanResult, setOcrScanResult] = useState<OcrScanResult | null>(null);
@@ -288,6 +294,8 @@ export default function DesignPortalPage() {
   const [isReplacingFile, setIsReplacingFile] = useState<boolean>(false);
   const [isReadingReplaceFile, setIsReadingReplaceFile] = useState<boolean>(false);
   const [replaceReadProgress, setReplaceReadProgress] = useState<number>(0);
+  const [replaceUploadProgress, setReplaceUploadProgress] = useState<number>(0);
+  const [replaceUploadEtaSeconds, setReplaceUploadEtaSeconds] = useState<number | null>(null);
   const [replaceOcrScanResult, setReplaceOcrScanResult] = useState<OcrScanResult | null>(null);
   const [isScanningReplace, setIsScanningReplace] = useState<boolean>(false);
   const [replaceScanError, setReplaceScanError] = useState<string>('');
@@ -360,8 +368,7 @@ export default function DesignPortalPage() {
     }
   };
 
-  const handleReplaceFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0];
+  const handleReplaceFile = (selected: File | undefined) => {
     setReplaceFileError('');
     if (!selected) {
       setReplaceFile(null);
@@ -383,6 +390,8 @@ export default function DesignPortalPage() {
     setReplaceReadProgress(0);
     setReplaceOcrScanResult(null);
     setReplaceScanError('');
+    setReplaceUploadProgress(0);
+    setReplaceUploadEtaSeconds(null);
     const reader = new FileReader();
     reader.onprogress = (ev) => {
       if (ev.lengthComputable) setReplaceReadProgress(Math.round((ev.loaded / ev.total) * 100));
@@ -401,8 +410,8 @@ export default function DesignPortalPage() {
     reader.readAsDataURL(selected);
   };
 
-  const handleReplaceFileSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleReplaceFileSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!selectedDesign || !user) return;
     if (isReadingReplaceFile) {
       setReplaceFileError('Still preparing the file — please wait a moment and try again.');
@@ -415,7 +424,10 @@ export default function DesignPortalPage() {
 
     setIsReplacingFile(true);
     setReplaceFileError('');
+    setReplaceUploadProgress(0);
+    setReplaceUploadEtaSeconds(null);
     try {
+      const tracker = createProgressTracker((pct, eta) => { setReplaceUploadProgress(pct); setReplaceUploadEtaSeconds(eta); });
       const updated = await updateDesignFile(
         selectedDesign.id,
         replaceFileData,
@@ -423,7 +435,8 @@ export default function DesignPortalPage() {
         replaceFile.size,
         replaceFile.type || 'application/octet-stream',
         user.name,
-        replaceOcrScanResult || undefined
+        replaceOcrScanResult || undefined,
+        tracker
       );
       if (updated) {
         setSelectedDesign(updated);
@@ -432,6 +445,8 @@ export default function DesignPortalPage() {
         setReplaceFileData('');
         setReplaceOcrScanResult(null);
         setReplaceScanError('');
+        setReplaceUploadProgress(0);
+        setReplaceUploadEtaSeconds(null);
       }
     } catch (err: any) {
       setReplaceFileError(err.message || 'Failed to replace file.');
@@ -477,9 +492,9 @@ export default function DesignPortalPage() {
     }
   }, [designs, highlightDesignId, hasOpenedHighlight]);
 
-  // Handle file selection with 25 MB limit check
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0];
+  // Handle file selection (from either the dropzone's click-browse or an
+  // actual drag-and-drop) with a 25 MB limit check
+  const handleFile = (selected: File | undefined) => {
     setFileError('');
     if (!selected) {
       setFile(null);
@@ -501,6 +516,9 @@ export default function DesignPortalPage() {
     setReadProgress(0);
     setOcrScanResult(null);
     setScanError('');
+    setSubmitError('');
+    setUploadProgress(0);
+    setUploadEtaSeconds(null);
 
     // Convert file to base64 DataURL for storage & preview. This can take a
     // moment for a large PNG/PDF, so it's tracked as its own progress step —
@@ -563,8 +581,8 @@ export default function DesignPortalPage() {
     runOcrScan(replaceFileData, replaceFile.type || 'application/octet-stream', setReplaceOcrScanResult, setIsScanningReplace, setReplaceScanError);
   };
 
-  const handleUploadSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleUploadSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!title.trim()) return;
     if (!file) {
       setFileError('Please select a design asset to upload.');
@@ -581,8 +599,11 @@ export default function DesignPortalPage() {
 
     setIsSubmitting(true);
     setSubmitError('');
+    setUploadProgress(0);
+    setUploadEtaSeconds(null);
     try {
       const selectedEvent = events.find(ev => ev.id === eventId);
+      const tracker = createProgressTracker((pct, eta) => { setUploadProgress(pct); setUploadEtaSeconds(eta); });
 
       await addDesign({
         title: title.trim(),
@@ -602,7 +623,7 @@ export default function DesignPortalPage() {
         eventId: selectedEvent?.id,
         eventName: selectedEvent?.title,
         ocrScan: ocrScanResult || undefined,
-      });
+      }, tracker);
 
       refreshData();
       setShowUploadModal(false);
@@ -617,6 +638,8 @@ export default function DesignPortalPage() {
       setFileError('');
       setOcrScanResult(null);
       setScanError('');
+      setUploadProgress(0);
+      setUploadEtaSeconds(null);
     } catch (err: any) {
       // Deliberately doesn't close the modal or reset the form on failure —
       // the file is still selected, so the designer can just hit Submit again.
@@ -1121,33 +1144,28 @@ export default function DesignPortalPage() {
               <div className="space-y-1">
                 <label className="font-medium text-foreground flex items-center justify-between">
                   <span>File Asset (<span className="text-amber-500 font-bold">&lt; 25 MB</span>) *</span>
-                  {file && (
-                    <span className="font-mono text-muted-foreground text-[10px]">
-                      {(file.size / (1024 * 1024)).toFixed(2)} MB
-                    </span>
-                  )}
                 </label>
 
-                <div className="border-2 border-dashed border-border rounded-xl p-4 text-center hover:border-accent/60 transition-colors bg-muted/20">
-                  <input
-                    type="file"
-                    id="design-file-input"
-                    accept="image/*,video/*,application/pdf,.psd,.ai,.eps,.svg,.indd,.cdr,.ppt,.pptx,.doc,.docx,.zip"
-                    onChange={handleFileChange}
-                    className="hidden"
-                  />
-                  <label htmlFor="design-file-input" className="cursor-pointer space-y-2 block">
-                    <UploadCloud className="h-8 w-8 mx-auto text-accent/80" />
-                    <div className="space-y-0.5">
-                      <p className="font-medium text-foreground">
-                        {file ? file.name : 'Click to select design file'}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground">
-                        Images, video, PDF, PSD, AI, PPTX, DOCX & more — up to 25 MB
-                      </p>
-                    </div>
-                  </label>
-                </div>
+                <FileDropzone
+                  onFilesSelected={(files) => handleFile(files[0])}
+                  accept="image/*,video/*,application/pdf,.psd,.ai,.eps,.svg,.indd,.cdr,.ppt,.pptx,.doc,.docx,.zip"
+                  label="Click to select design file"
+                  hint="Images, video, PDF, PSD, AI, PPTX, DOCX & more — up to 25 MB"
+                  disabled={isSubmitting}
+                />
+
+                {file && (
+                  <div className="pt-1">
+                    <FilePreviewRow
+                      file={file}
+                      status={isSubmitting ? 'uploading' : submitError ? 'error' : 'idle'}
+                      progress={uploadProgress}
+                      etaSeconds={uploadEtaSeconds}
+                      error={submitError}
+                      onRetry={submitError ? () => handleUploadSubmit() : undefined}
+                    />
+                  </div>
+                )}
 
                 {isReadingFile && (
                   <div className="space-y-1 pt-1">
@@ -1209,21 +1227,9 @@ export default function DesignPortalPage() {
                 </p>
               </div>
 
-              {isSubmitting && (
-                <div className="space-y-1">
-                  <p className="text-[11px] text-muted-foreground">Uploading to server...</p>
-                  <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                    <div className="h-full w-full bg-accent rounded-full animate-pulse" />
-                  </div>
-                </div>
-              )}
-
-              {submitError && (
-                <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-500 text-[11px] flex items-start gap-2">
-                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>{submitError} The file is still selected — you can try submitting again.</span>
-                </div>
-              )}
+              {/* Real upload percent + ETA and retry now live inline on the
+                  FilePreviewRow above — no separate indeterminate bar or
+                  duplicate error banner needed here. */}
 
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
                 <button
@@ -1472,24 +1478,34 @@ export default function DesignPortalPage() {
                 <p className="text-xs text-muted-foreground">
                   Uploading a new file resets any proofread or style decision back to pending, since the reviewed asset no longer exists.
                 </p>
-                {replaceFileError && (
-                  <p className="text-xs text-rose-500">{replaceFileError} The file selection is kept — you can try again.</p>
-                )}
-                <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
-                  <input
-                    type="file"
-                    onChange={handleReplaceFileChange}
-                    className="flex-1 text-xs file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-accent file:text-white file:text-xs file:font-medium file:cursor-pointer cursor-pointer"
+                <FileDropzone
+                  onFilesSelected={(files) => handleReplaceFile(files[0])}
+                  label="Click to select replacement file"
+                  hint="Up to 25 MB"
+                  disabled={isReplacingFile}
+                  compact
+                />
+
+                {replaceFile && (
+                  <FilePreviewRow
+                    file={replaceFile}
+                    status={isReplacingFile ? 'uploading' : replaceFileError ? 'error' : 'idle'}
+                    progress={replaceUploadProgress}
+                    etaSeconds={replaceUploadEtaSeconds}
+                    error={replaceFileError}
+                    onRetry={replaceFileError ? () => handleReplaceFileSubmit() : undefined}
+                    onRemove={!isReplacingFile ? () => handleReplaceFile(undefined) : undefined}
                   />
-                  <button
-                    type="submit"
-                    disabled={isReplacingFile || isReadingReplaceFile || !replaceFile}
-                    className="px-4 py-2 rounded-lg bg-accent text-accent-foreground font-medium hover:opacity-90 text-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                  >
-                    <UploadCloud className="h-3.5 w-3.5" />
-                    {isReplacingFile ? 'Uploading...' : isReadingReplaceFile ? 'Preparing file...' : 'Replace File'}
-                  </button>
-                </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isReplacingFile || isReadingReplaceFile || !replaceFile}
+                  className="w-full px-4 py-2 rounded-lg bg-accent text-accent-foreground font-medium hover:opacity-90 text-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                >
+                  <UploadCloud className="h-3.5 w-3.5" />
+                  {isReplacingFile ? 'Uploading...' : isReadingReplaceFile ? 'Preparing file...' : replaceFileError ? 'Retry Replace' : 'Replace File'}
+                </button>
                 {isReadingReplaceFile && (
                   <div className="space-y-1">
                     <div className="flex items-center justify-between text-[10px] text-muted-foreground">
@@ -1521,11 +1537,6 @@ export default function DesignPortalPage() {
                       showExtractedText={showExtractedText}
                       onToggleExtractedText={() => setShowExtractedText(v => !v)}
                     />
-                  </div>
-                )}
-                {isReplacingFile && (
-                  <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                    <div className="h-full w-full bg-accent rounded-full animate-pulse" />
                   </div>
                 )}
               </form>
