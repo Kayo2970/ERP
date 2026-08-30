@@ -54,7 +54,7 @@ This app runs as **one long-lived instance** — `next start` under PM2 — on a
 
 ## 🔐 Authentication & Access Level Tiers
 
-Sign-ins are validated server-side (`/api/auth/login`) against the registered members database, with real scrypt-hashed passwords — there is no shared bypass password anymore. Every account starts on a shared temporary password (`Kayo29`) and should be changed from Settings → Account (or via "Forgot Password?" on the login screen) as soon as its owner first logs in.
+Sign-ins are validated server-side (`/api/auth/login`) against the registered members database, with real scrypt-hashed passwords — there is no shared bypass password. A fresh deploy no longer pre-seeds a faculty roster with a shared default password either: `npm run setup` (`scripts/setup-superuser.js`) runs once, interactively, before the app's first start and creates exactly one real Super User account with the email and password you choose right there. Every account added after that (via the Directory, or a new member's own activation link) sets its own real password from day one.
 
 | Role / Rank | Representative Email | Access Level Tier |
 | :--- | :--- | :--- |

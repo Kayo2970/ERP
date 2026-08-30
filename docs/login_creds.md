@@ -1,29 +1,17 @@
-# LEADS Dashboard — Production Roster Login Credentials (Faculty & Super User)
+# LEADS Dashboard — Super User Setup
 
-Only production Faculty Leadership and Developer/Administrator accounts are retained for live deployment. New members can be added on demand through the Directory.
+A fresh deploy no longer ships with any pre-seeded accounts or a shared
+default password. On first install, `npm run setup`
+(`scripts/setup-superuser.js`) runs once, interactively, and prompts for the
+Super User's name, email, and a password you choose on the spot — that
+becomes the *only* account on the instance. It's wired into
+`docs/vps-setup.sh` right before the production build, and is a no-op if
+`data/members.json` already has accounts in it (safe to leave in place
+across redeploys).
 
-**Shared starting password for every account:** `Kayo29` — real authentication requires this exact password (or whatever a member has changed it to from Settings).
+See `docs/vps-deployment-guide.html`, Step 2, for the full walkthrough.
 
----
-
-## 1. Developer / Administrator Account (Tier 1)
-| Name | Designation | Email Address | Access Level |
-| :--- | :--- | :--- | :--- |
-| Kayomarz Pavri | Developer / Super User | `kayo2970@gmail.com` | **Tier 1 — Full System Control** |
-
----
-
-## 2. Faculty & Institutional Leadership (Tiers 2 to 3)
-| Name | Role at LEADS | Email Address | Access Level |
-| :--- | :--- | :--- | :--- |
-| Dr. Subhadeep Mukherjee | Centre Head | `subhadeepmukherjee.ms.mc@msruas.ac.in` | **Tier 2 — Centre Head Control** |
-| Dr. Pallabi Mund | Head Events — GG Campus | `pallabimund.ms.mc@msruas.ac.in` | **Tier 2.5 — Events Head Control** |
-| Dr. Kiran Kumar B M | Head Events — RTC Campus | `kiran.kumar@msruas.ac.in` | **Tier 3 — Events Head Control** |
-| Dr. Ajay R | Finance Head & Auditor | `ajay.ca.mc@msruas.ac.in` | **Tier 3 — Events Head Control** |
-| Ms. Sujata Bijwe | Faculty Advisor | `sujata.bijwe@msruas.ac.in` | **Tier 3 — Faculty Advisory** |
-| Dr. K. M. Sharath Kumar | Faculty Advisory Member | `sharath.kumar@msruas.ac.in` | **Tier 3 — Faculty Advisory** |
-| Dr. Hari Krishna S | Faculty Advisor | `hari.krishna@msruas.ac.in` | **Tier 3 — Faculty Advisory** |
-
----
-
-*Note: passwords are real — the login screen accepts the shared starting password `Kayo29` (or a member's own updated password).*
+Every other account (Centre Head, Events Heads, Faculty Advisors, etc.) is
+added afterward from **Members Directory** by that Super User, each with
+their own real password set via their account-activation email — never a
+shared or hardcoded one.

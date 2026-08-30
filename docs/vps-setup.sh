@@ -78,6 +78,11 @@ else
   echo "Generated a new DATA_ENCRYPTION_KEY and wrote it to .env."
 fi
 
+log "Setting up the Super User account"
+# No-op if data/members.json already has accounts in it (e.g. a redeploy of
+# an existing instance) — only prompts on a genuinely fresh install.
+node scripts/setup-superuser.js
+
 log "Building the app for production"
 npm run build
 

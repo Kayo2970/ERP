@@ -131,6 +131,7 @@
   <div class="step" id="step2">
     <div class="step-header"><div class="step-num">2</div><h2>SSH in as root and run the setup script</h2></div>
     <p>This one script does everything: installs Node.js 22, PM2, Nginx, and Certbot; clones the app to <code>/ERP</code>; installs dependencies; generates a fresh <code>DATA_ENCRYPTION_KEY</code>; builds the app; starts it under PM2 (auto-restarts on reboot); configures Nginx as a reverse proxy for <code>leadsnextgencentre.online</code>; and opens the firewall.</p>
+    <div class="callout">Partway through, on a fresh install, it will pause and interactively prompt you right there in the terminal for the Super User's name, email, and a password — that becomes the one and only account on the instance (no pre-loaded roster, no shared default password). On a redeploy of an existing instance it silently skips this and moves on.</div>
     <pre><code id="s2a">ssh root@YOUR_VPS_IP</code><button class="copy-btn" onclick="copyBlock('s2a', this)">Copy</button></pre>
     <p>Download the script and open it to fill in one optional value before running:</p>
     <pre><code id="s2b">curl -fsSL https://raw.githubusercontent.com/Kayo2970/ERP/main/docs/vps-setup.sh -o vps-setup.sh
@@ -226,6 +227,11 @@ else
   echo "DATA_ENCRYPTION_KEY=$GENERATED_KEY" &gt;&gt; .env
   echo "Generated a new DATA_ENCRYPTION_KEY and wrote it to .env."
 fi
+
+log "Setting up the Super User account"
+# No-op if data/members.json already has accounts in it (e.g. a redeploy of
+# an existing instance) — only prompts on a genuinely fresh install.
+node scripts/setup-superuser.js
 
 log "Building the app for production"
 npm run build
@@ -327,7 +333,7 @@ curl -I http://localhost:3000</code><button class="copy-btn" onclick="copyBlock(
 
   <div class="step" id="step5">
     <div class="step-header"><div class="step-num">5</div><h2>First login &amp; re-configuring email</h2></div>
-    <p>Sign in with the Super User account, then immediately go to <strong>Settings</strong> and change the password — a fresh install re-seeds the default credentials.</p>
+    <p>Sign in with the Super User email and password you set interactively during Step 2's <code>node scripts/setup-superuser.js</code> prompt — a fresh install starts with that one account and nothing else; everyone else is added afterward from <strong>Members Directory</strong>.</p>
     <p>Go to <strong>Dashboard &rarr; Email Management</strong> and redo the SMTP setup — this is the one thing genuinely lost by the reformat, since it lived in the app's own (now-wiped) database, not in DNS. You have two options:</p>
     <table>
       <tr><th>If you still have the old DKIM private key</th><th>If you don't</th></tr>

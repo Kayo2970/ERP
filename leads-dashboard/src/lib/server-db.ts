@@ -21,7 +21,6 @@ import path from 'path';
 import { deleteStoredFile, saveBase64File } from './file-storage';
 import { encryptData, decryptData, isEncryptedPayload } from './encryption';
 import {
-  initialMembers,
   initialEvents,
   initialTasks,
   initialRatings,
@@ -103,7 +102,13 @@ const EMPTY_DB: DbSchema = {
 };
 
 const SEED_DB: DbSchema = {
-  members: initialMembers,
+  // Deliberately NOT seeded from local-data.ts's initialMembers — that fake
+  // faculty roster shared one known default password across every account.
+  // A fresh deploy now starts with zero members; run `npm run setup`
+  // (scripts/setup-superuser.mjs) once before first start to create the one
+  // real Super User account interactively (email + a password you choose).
+  // Everyone else gets added through the app afterward.
+  members: [],
   events: initialEvents,
   tasks: initialTasks,
   ratings: initialRatings,
