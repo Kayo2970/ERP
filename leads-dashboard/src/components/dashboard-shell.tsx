@@ -46,6 +46,7 @@ import { TermsModal } from '@/components/terms-modal';
 import { NotFoundScreen } from '@/components/not-found-screen';
 import { LoadingScreen } from '@/components/loading-screen';
 import { OnboardingTour } from '@/components/onboarding-tour';
+import { PromotionModal, PromotionData } from '@/components/promotion-modal';
 import { SyncStatusPill } from '@/components/ui/sync-status-pill';
 import { Avatar } from '@/components/ui/avatar';
 import { GhostFibers } from '@/components/ui/ghost-fibers';
@@ -177,6 +178,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [lockdownEnabled, setLockdownEnabled] = useState(false);
   const [isTourOpen, setIsTourOpen] = useState(false);
+  const [isPromotionModalOpen, setIsPromotionModalOpen] = useState(false);
+  const [promotionData, setPromotionData] = useState<PromotionData | null>(null);
   // Tracks the current user for the 'leads-data-sync' handler below, which is
   // registered once on mount and would otherwise only ever see this initial
   // (pre-login) placeholder user via a stale closure.
@@ -342,17 +345,52 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       setNotifications(buildNotifications(parsedUser));
       setSeenActionIds(loadSeenActionIds());
 
-      // Auto-launch role-tailored Onboarding Tour ONLY on first login ever per account
+      // Auto-launch role-tailored Onboarding Tour ONLY on first-time initial account setup ever
+      const isInitialSetup = parsedUser.isFirstLogin === true || (parsedUser as any).isNewAccount === true;
       const hasCompletedTour =
         (parsedUser.id && localStorage.getItem(`leads_tour_completed_${parsedUser.id}`)) ||
         (parsedUser.email && localStorage.getItem(`leads_tour_completed_${parsedUser.email}`)) ||
-        (parsedUser.name && localStorage.getItem(`leads_tour_completed_${parsedUser.name}`));
+        (parsedUser.name && localStorage.getItem(`leads_tour_completed_${parsedUser.name}`)) ||
+        (parsedUser.email && localStorage.getItem(`leads_has_logged_in_${parsedUser.email}`));
 
       const isImpersonatingSession = typeof window !== 'undefined' && sessionStorage.getItem('impersonator_original_user');
 
-      if (!hasCompletedTour && !isImpersonatingSession) {
+      if (isInitialSetup && !hasCompletedTour && !isImpersonatingSession) {
         setTimeout(() => setIsTourOpen(true), 800);
       }
+
+      // Mark that account has logged in so tutorial is not auto-shown repeatedly
+      if (parsedUser.email) {
+        localStorage.setItem(`leads_has_logged_in_${parsedUser.email}`, 'true');
+        if (parsedUser.id) localStorage.setItem(`leads_has_logged_in_${parsedUser.id}`, 'true');
+      }
+
+      // Detect Promotion / Role Elevation on session load
+      const userKey = parsedUser.email || parsedUser.id || parsedUser.name;
+      const storedLastTier = localStorage.getItem(`leads_seen_tier_${userKey}`);
+      const storedLastRole = localStorage.getItem(`leads_seen_role_${userKey}`);
+
+      if (storedLastTier !== null && storedLastRole !== null) {
+        const lastTierNum = parseInt(storedLastTier, 10);
+        // In LEADS ERP, lower tier number indicates higher rank (Tier 1 = Super User, Tier 2 = Leadership, Tier 3 = Core)
+        const isTierElevated = !isNaN(lastTierNum) && parsedUser.tier < lastTierNum;
+        const isRolePromoted = isTierElevated || (storedLastRole !== (parsedUser.role || '') && parsedUser.tier <= lastTierNum);
+
+        if (isRolePromoted && !isImpersonatingSession) {
+          setPromotionData({
+            previousTier: lastTierNum,
+            previousRole: storedLastRole,
+            newTier: parsedUser.tier,
+            newRole: parsedUser.role || 'Elevated Member',
+            newDivision: parsedUser.division,
+          });
+          setTimeout(() => setIsPromotionModalOpen(true), 600);
+        }
+      }
+
+      // Record baseline seen role & tier
+      localStorage.setItem(`leads_seen_tier_${userKey}`, String(parsedUser.tier));
+      localStorage.setItem(`leads_seen_role_${userKey}`, parsedUser.role || '');
 
       return () => clearInterval(pollInterval);
     } catch (e) {
@@ -408,6 +446,30 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           liveRecord.ifscCode !== (currentUser as any).ifscCode;
 
         if (hasProfileChanges) {
+          const userKey = liveRecord.email || liveRecord.id || liveRecord.name;
+          const storedLastTier = localStorage.getItem(`leads_seen_tier_${userKey}`);
+          const storedLastRole = localStorage.getItem(`leads_seen_role_${userKey}`);
+
+          if (storedLastTier !== null && storedLastRole !== null) {
+            const lastTierNum = parseInt(storedLastTier, 10);
+            const isTierElevated = !isNaN(lastTierNum) && liveRecord.tier < lastTierNum;
+            const isRolePromoted = isTierElevated || (storedLastRole !== (liveRecord.role || '') && liveRecord.tier <= lastTierNum);
+
+            if (isRolePromoted) {
+              setPromotionData({
+                previousTier: lastTierNum,
+                previousRole: storedLastRole,
+                newTier: liveRecord.tier,
+                newRole: liveRecord.role || 'Elevated Member',
+                newDivision: liveRecord.division,
+              });
+              setIsPromotionModalOpen(true);
+            }
+          }
+
+          localStorage.setItem(`leads_seen_tier_${userKey}`, String(liveRecord.tier));
+          localStorage.setItem(`leads_seen_role_${userKey}`, liveRecord.role || '');
+
           const updatedSessionUser = {
             ...currentUser,
             id: liveRecord.id,
@@ -1347,6 +1409,13 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
         {/* Interactive Role-Tailored Onboarding Tour */}
         <OnboardingTour user={user} isOpen={isTourOpen} onClose={() => setIsTourOpen(false)} />
+
+        {/* Role Elevation & Promotion Celebration Modal */}
+        <PromotionModal
+          data={promotionData}
+          isOpen={isPromotionModalOpen}
+          onClose={() => setIsPromotionModalOpen(false)}
+        />
       </div>
 
       {/* Global save/sync feedback for every background write app-wide */}

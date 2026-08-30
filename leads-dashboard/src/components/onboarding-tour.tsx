@@ -422,8 +422,8 @@ export function OnboardingTour({ user, isOpen, onClose }: OnboardingTourProps) {
                 <span className="text-[11px] font-bold uppercase tracking-wider text-accent">
                   Interactive Guided Tour
                 </span>
-                <span className="text-white/30 text-xs">•</span>
-                <span className="text-[11px] font-medium text-theme-text-secondary">
+                <span className="text-white/30 text-xs hidden sm:inline">•</span>
+                <span className="text-[11px] font-medium text-theme-text-secondary hidden sm:inline">
                   Step {currentStepIndex + 1} of {steps.length}
                 </span>
               </div>
