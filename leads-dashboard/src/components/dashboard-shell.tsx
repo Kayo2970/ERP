@@ -687,10 +687,10 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   // only one is ever visible at a time (the other's ancestor is `hidden` via CSS),
   // this keeps the bell available on phones without duplicating ~50 lines of JSX.
   const renderNotificationBell = (wrapperRef: React.RefObject<HTMLDivElement | null>) => (
-    <div className="relative" ref={wrapperRef}>
+    <div className="relative inline-flex items-center justify-center shrink-0" ref={wrapperRef}>
       <button
         onClick={handleToggleNotifications}
-        className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-xl hover:bg-theme-border/20 transition-all cursor-pointer relative"
+        className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-xl hover:bg-theme-border/20 transition-all cursor-pointer relative shrink-0"
         title="Notifications"
       >
         <Bell className="h-4.5 w-4.5" />
@@ -707,13 +707,14 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
       {isNotificationsOpen && (
         <>
-          {/* Mobile backdrop dim overlay to prevent bleed-through and dismiss on backdrop click */}
+          {/* Mobile backdrop dim overlay */}
           <div
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
             onClick={() => setIsNotificationsOpen(false)}
           />
 
-          <div className="fixed top-16 right-3 left-3 md:static md:left-auto md:right-0 md:absolute md:top-full md:mt-2 md:w-88 glass-panel rounded-3xl p-4 shadow-2xl border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-2xl bg-space-theme/95">
+          {/* Floating Dropdown Popover */}
+          <div className="fixed md:absolute top-16 md:top-full right-3 md:right-0 left-3 md:left-auto mt-0 md:mt-2 w-[calc(100vw-24px)] md:w-96 glass-panel rounded-3xl p-4 shadow-2xl border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-2xl bg-white/95 dark:bg-[#0B1B2E]/95 text-theme-text-primary">
             <div className="flex items-center justify-between pb-2.5 border-b border-theme-border/30 gap-2">
               <div className="flex items-center gap-1.5">
                 <h4 className="text-xs font-bold text-theme-text-primary">Notifications</h4>
@@ -1058,12 +1059,12 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Desktop Navbar */}
-        <header className="hidden md:flex items-center justify-between min-h-16 py-2 px-8 gap-4 glass-panel bg-theme-sidebar/50 border-b border-theme-sidebar-border sticky top-0 z-30">
+        <header className="hidden md:flex items-center justify-between h-16 px-8 gap-4 glass-panel bg-theme-sidebar/50 border-b border-theme-sidebar-border sticky top-0 z-30">
           <div className="flex items-center gap-3 shrink-0">
             <h2 className="text-base font-bold text-theme-text-primary">{activeItem.name}</h2>
           </div>
 
-          <div className="flex items-center gap-3 flex-wrap justify-end">
+          <div className="flex items-center gap-3 justify-end shrink-0">
             {/* Interactive Guided Tour button */}
             <button
               onClick={() => setIsTourOpen(true)}
