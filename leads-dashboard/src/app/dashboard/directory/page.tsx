@@ -35,6 +35,7 @@ import {
   Key,
   CheckCircle2
 } from 'lucide-react';
+import { useDropTarget } from '@/components/ui/file-dropzone';
 import {
   getMembers,
   addMember,
@@ -75,6 +76,7 @@ export default function DirectoryPage() {
   const [setPasswordError, setSetPasswordError] = useState('');
   const [selectedStudentForProfile, setSelectedStudentForProfile] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { isDragOver: isCsvDragOver, dragHandlers: csvDragHandlers } = useDropTarget((files) => handleCsvFile(files[0]));
 
   // Pagination & Sorting State
   const [currentPage, setCurrentPage] = useState(1);
@@ -537,10 +539,15 @@ export default function DirectoryPage() {
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    handleCsvFile(file);
+    e.target.value = '';
+  };
+
+  const handleCsvFile = (file: File | undefined) => {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const text = event.target?.result as string;
       if (!text) return;
 
@@ -620,8 +627,12 @@ export default function DirectoryPage() {
 
           const mTier = deriveMemberRoleAndDepartment(mDivision, { customRole: mRole, departmentSelect: mDept }).tier;
 
+          // Awaited — addMember is async (it reaches the server before
+          // resolving), so an unawaited call here would let a real failure
+          // slip past this try/catch as an unhandled rejection instead of
+          // being counted as skipped.
           try {
-            addMember({
+            await addMember({
               name: mName,
               email: mEmail,
               role: mRole || mDivision,
@@ -651,7 +662,6 @@ export default function DirectoryPage() {
       }
     };
     reader.readAsText(file);
-    e.target.value = '';
   };
 
   const handleConfirmDelete = () => {
@@ -987,11 +997,16 @@ export default function DirectoryPage() {
             
             <button
               onClick={handleUploadClick}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-border/40"
-              title="Upload Filled CSV File"
+              {...csvDragHandlers}
+              className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer border ${
+                isCsvDragOver
+                  ? 'border-accent bg-accent/10 shadow-md shadow-accent/20 ring-2 ring-accent/20 text-accent'
+                  : 'border-theme-border/40 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary'
+              }`}
+              title="Upload Filled CSV File — click or drag and drop"
             >
               <Upload className="h-4 w-4" />
-              Upload Roster (CSV)
+              {isCsvDragOver ? 'Drop CSV here' : 'Upload Roster (CSV)'}
             </button>
             <input 
               type="file" 

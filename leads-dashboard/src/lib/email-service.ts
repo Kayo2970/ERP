@@ -218,6 +218,17 @@ async function buildTransporter(): Promise<{ transporter: Transporter; settings:
   return { transporter: t, settings, effectiveHost: host, effectivePort: port };
 }
 
+// Subjects land in <title> verbatim below and can carry user-supplied text
+// (an event/task/announcement title) — escape it so that text can't break
+// out of the tag and corrupt the rest of the <head>.
+function escapeHtmlForTitle(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 /**
  * Master Institutional Email Wrapper Template
  * Clean, standard corporate email layout (inspired by PayPal/Stripe transactional notices) with:
@@ -227,6 +238,11 @@ async function buildTransporter(): Promise<{ transporter: Transporter; settings:
  * 4. Standardized Institutional Footer with Copyright & IP Licensing Notice for Kayomarz Pavri
  */
 export function wrapInMasterEmailTemplate(options: {
+  // The HTML <title> — spam filters (SpamAssassin's HTML_TITLE_SUBJ_DIFF rule)
+  // penalize a <title> that doesn't match the email's Subject header, since
+  // that mismatch is a common bulk-mail template fingerprint. Every caller
+  // should pass its actual subject line here.
+  pageTitle: string;
   headerTitle?: string;
   headerSubtitle?: string;
   badgeText?: string;
@@ -245,7 +261,7 @@ export function wrapInMasterEmailTemplate(options: {
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>LEADS Next Gen Centre Notification</title>
+      <title>${escapeHtmlForTitle(options.pageTitle)}</title>
     </head>
     <body style="background-color: #f8fafc; margin: 0; padding: 24px 12px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; width: 100%; box-sizing: border-box;">
       <div style="max-width: 580px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);">
@@ -292,6 +308,7 @@ export async function testEmailConnection(testRecipient: string): Promise<{ succ
     const from = `${settings.fromName || 'LEADS Next Gen Centre'} <${settings.fromEmail || 'leads@msruas.ac.in'}>`;
 
     const bodyHtml = wrapInMasterEmailTemplate({
+      pageTitle: `[LEADS Test Email] SMTP Client Verification`,
       headerTitle: `SMTP Connection Verified`,
       headerSubtitle: `Diagnostic Health Check Successful`,
       badgeText: `SMTP Operational`,
@@ -345,6 +362,7 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
   }
 
   const defaultFormattedHtml = wrapInMasterEmailTemplate({
+    pageTitle: payload.subject,
     headerTitle: payload.subject,
     badgeText: badgeTextToUse,
     badgeColor: payload.badgeColor,
@@ -440,6 +458,7 @@ export function generateOtpEmailTemplate(name: string, otp: string): { subject: 
     `Regards,\nLEADS Next Gen Centre, MSRUAS`;
 
   const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
     headerTitle: `Password Reset Request`,
     headerSubtitle: `Security Verification Code`,
     badgeText: `Security Verification`,
@@ -479,6 +498,7 @@ export function generateWelcomeActivationEmailTemplate(name: string, activationL
     `Regards,\nLEADS Next Gen Centre, MSRUAS`;
 
   const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
     headerTitle: `Account Activation`,
     headerSubtitle: `LEADS Operations Portal`,
     badgeText: `Account Setup`,
@@ -526,6 +546,7 @@ export function generateNewMemberWelcomeTemplate(member: {
     `Regards,\nLEADS Next Gen Centre, MSRUAS`;
 
   const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
     headerTitle: `Welcome to LEADS Next Gen Centre`,
     headerSubtitle: `Member Registration Notice`,
     badgeText: `Official Notice`,
@@ -570,6 +591,7 @@ export function generateEmailChangeOtpTemplate(name: string, otp: string, newEma
     `Regards,\nLEADS Next Gen Centre, MSRUAS`;
 
   const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
     headerTitle: `Email Address Update`,
     headerSubtitle: `Security Verification Code`,
     badgeText: `Security Verification`,
@@ -608,6 +630,7 @@ export function generateNewEmailConfirmationOtpTemplate(name: string, otp: strin
     `Regards,\nLEADS Next Gen Centre, MSRUAS`;
 
   const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
     headerTitle: `Confirm Your New Email`,
     headerSubtitle: `Final Step — Security Verification Code`,
     badgeText: `Security Verification`,
@@ -641,6 +664,7 @@ export function generateAnnouncementEmailTemplate(memberName: string, title: str
     `Regards,\nLEADS Next Gen Centre`;
 
   const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
     headerTitle: title,
     headerSubtitle: `Published by ${author}`,
     badgeText: `Official Announcement`,
@@ -670,6 +694,7 @@ export function generateTaskEmailTemplate(memberName: string, taskTitle: string,
     `Please log in to your dashboard to view details and update progress.`;
 
   const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
     headerTitle: taskTitle,
     headerSubtitle: `Assigned by ${creatorName || 'Committee Admin'}`,
     badgeText: `Task Assignment`,
@@ -708,6 +733,7 @@ export function generateEventRosterEmailTemplate(memberName: string, eventTitle:
     `Check the LEADS Dashboard for details.`;
 
   const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
     headerTitle: eventTitle,
     headerSubtitle: `Committee Assignment`,
     badgeText: `Event Assignment`,
@@ -740,6 +766,7 @@ export function generateBirthdayEmailTemplate(memberName: string): { subject: st
     `Warm regards,\nLEADS Next Gen Centre, MSRUAS`;
 
   const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
     headerTitle: `Happy Birthday, ${firstName}!`,
     headerSubtitle: `From everyone at LEADS Next Gen Centre`,
     badgeText: `Greetings`,

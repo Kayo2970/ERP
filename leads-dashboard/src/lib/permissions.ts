@@ -439,6 +439,9 @@ export function canManageEvents(user: SessionUser): boolean {
  */
 export function canViewEvent(event: EventItem, user: SessionUser): boolean {
   if (!user) return false;
+  // Auto-synced public holidays aren't sensitive LEADS event data — they're
+  // always visible, regardless of a restrictive OWN_ONLY event-visibility policy.
+  if (event.isHoliday) return true;
 
   const isRtcHead = isEventsHeadRtcCampus(user);
   const isGgHead = isEventsHeadGgCampus(user) || user.tier === 2.5;
@@ -549,6 +552,16 @@ export function canApprovePendingTask(task: TaskItem, user: SessionUser): boolea
     return !!tagPolicy && memberMatchesPolicy(member, tagPolicy);
   }
   return isCentreHead(user) || isEventsHeadGgCampus(user); // CENTER_HEAD (default): Centre Head or GG Campus Events Head
+}
+
+/** Who can answer the weekly holiday-scheduler's "is a social media post
+ *  needed for this festival?" task (workflowType 'holiday_social_approval',
+ *  see src/lib/holiday-scheduler.ts + local-data.ts's respondToHolidayApproval) —
+ *  Centre Head or any Events Head, matching who the task is auto-assigned to. */
+export function canRespondToHolidayApproval(task: TaskItem, user: SessionUser): boolean {
+  if (!user) return false;
+  if (task.workflowType !== 'holiday_social_approval') return false;
+  return isCentreHead(user) || isHeadOfEvents(user) || isEventsHeadGgCampus(user) || isEventsHeadRtcCampus(user);
 }
 
 /** Task creation — leadership, Core Committee, any Head, or a TASKS_CREATE grant. */

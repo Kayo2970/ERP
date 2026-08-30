@@ -31,6 +31,7 @@ import { getGuests, addGuest, updateGuest, deleteGuest, Guest } from '@/lib/loca
 import { canAccessGuestDirectory } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
+import { FileDropzone, FilePreviewRow, createProgressTracker, useDropTarget } from '@/components/ui/file-dropzone';
 
 const MAX_CARD_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -103,9 +104,10 @@ export default function GuestDirectoryPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   const [deletingGuest, setDeletingGuest] = useState<Guest | null>(null);
-  const frontInputRef = useRef<HTMLInputElement>(null);
-  const backInputRef = useRef<HTMLInputElement>(null);
   const csvFileInputRef = useRef<HTMLInputElement>(null);
+  const { isDragOver: isCsvDragOver, dragHandlers: csvDragHandlers } = useDropTarget((files) => handleCsvFile(files[0]));
+  const [guestUploadProgress, setGuestUploadProgress] = useState(0);
+  const [guestUploadEtaSeconds, setGuestUploadEtaSeconds] = useState<number | null>(null);
 
   const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -147,6 +149,8 @@ export default function GuestDirectoryPage() {
     setIsOcrScanning(false);
     setOcrStatus(null);
     setEditingGuest(null);
+    setGuestUploadProgress(0);
+    setGuestUploadEtaSeconds(null);
   };
 
   const openAddModal = () => {
@@ -228,16 +232,16 @@ export default function GuestDirectoryPage() {
     });
   };
 
-  const handleFrontCardChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0];
+  const handleFrontCardFiles = async (files: File[]) => {
+    const selected = files[0];
     setFrontCardError('');
-    setOcrStatus('⚡ Auto-scaling & optimizing card photo for OCR...');
     if (!selected) {
       setFrontCardFile(null);
       setFrontCardData('');
       setOcrStatus(null);
       return;
     }
+    setOcrStatus('⚡ Auto-scaling & optimizing card photo for OCR...');
     setFrontCardFile(selected);
     try {
       const compressedBase64 = await compressCardImageFile(selected);
@@ -249,16 +253,16 @@ export default function GuestDirectoryPage() {
     }
   };
 
-  const handleBackCardChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0];
+  const handleBackCardFiles = async (files: File[]) => {
+    const selected = files[0];
     setBackCardError('');
-    setOcrStatus('⚡ Auto-scaling & optimizing card photo for OCR...');
     if (!selected) {
       setBackCardFile(null);
       setBackCardData('');
       setOcrStatus(null);
       return;
     }
+    setOcrStatus('⚡ Auto-scaling & optimizing card photo for OCR...');
     setBackCardFile(selected);
     try {
       const compressedBase64 = await compressCardImageFile(selected);
@@ -325,7 +329,7 @@ export default function GuestDirectoryPage() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) return;
 
@@ -362,18 +366,24 @@ export default function GuestDirectoryPage() {
       payload.visitingCardBackFileName = backCardFile?.name || 'card_back.jpg';
     }
 
+    setGuestUploadProgress(0);
+    setGuestUploadEtaSeconds(null);
+    const tracker = createProgressTracker((pct, eta) => { setGuestUploadProgress(pct); setGuestUploadEtaSeconds(eta); });
+
     try {
       if (editingGuest) {
-        updateGuest(editingGuest.id, payload, user?.name || 'Admin');
+        await updateGuest(editingGuest.id, payload, user?.name || 'Admin', tracker);
         triggerToast('success', `Updated guest record for ${payload.name}.`);
       } else {
-        addGuest(payload, user?.name || 'Admin');
+        await addGuest(payload, user?.name || 'Admin', tracker);
         triggerToast('success', `Added ${payload.name} to the Guest Directory.`);
       }
       setGuests(getGuests());
       setIsModalOpen(false);
       resetForm();
     } catch (err: any) {
+      // Deliberately doesn't close the modal or clear the card files — a
+      // failed save keeps everything staged so the user can just hit Save again.
       triggerToast('error', err.message || 'Failed to save guest.');
     } finally {
       setIsSaving(false);
@@ -412,11 +422,15 @@ export default function GuestDirectoryPage() {
   };
 
   const handleCsvFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    handleCsvFile(e.target.files?.[0]);
+    e.target.value = '';
+  };
+
+  const handleCsvFile = (file: File | undefined) => {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const text = event.target?.result as string;
       if (!text) return;
 
@@ -466,21 +480,28 @@ export default function GuestDirectoryPage() {
             continue;
           }
 
-          addGuest({
-            name: gName,
-            organization: (orgIndex !== -1 ? values[orgIndex] : '') || undefined,
-            designation: (designationIndex !== -1 ? values[designationIndex] : '') || undefined,
-            phone: (phoneIndex !== -1 ? values[phoneIndex] : '') || undefined,
-            email: gEmail || undefined,
-            website: (websiteIndex !== -1 ? values[websiteIndex] : '') || undefined,
-            address: (addressIndex !== -1 ? values[addressIndex] : '') || undefined,
-            linkedin: (linkedinIndex !== -1 ? values[linkedinIndex] : '') || undefined,
-            notes: (notesIndex !== -1 ? values[notesIndex] : '') || undefined,
-            metBy: (metByIndex !== -1 ? values[metByIndex] : '') || user?.name || 'Unknown',
-          }, user?.name || 'Admin');
+          // Awaited (and caught) per row — addGuest now reaches the server
+          // before it resolves, so a row that genuinely fails to save is
+          // counted as skipped instead of silently reported as imported.
+          try {
+            await addGuest({
+              name: gName,
+              organization: (orgIndex !== -1 ? values[orgIndex] : '') || undefined,
+              designation: (designationIndex !== -1 ? values[designationIndex] : '') || undefined,
+              phone: (phoneIndex !== -1 ? values[phoneIndex] : '') || undefined,
+              email: gEmail || undefined,
+              website: (websiteIndex !== -1 ? values[websiteIndex] : '') || undefined,
+              address: (addressIndex !== -1 ? values[addressIndex] : '') || undefined,
+              linkedin: (linkedinIndex !== -1 ? values[linkedinIndex] : '') || undefined,
+              notes: (notesIndex !== -1 ? values[notesIndex] : '') || undefined,
+              metBy: (metByIndex !== -1 ? values[metByIndex] : '') || user?.name || 'Unknown',
+            }, user?.name || 'Admin');
 
-          if (gEmail) seenEmails.add(gEmail);
-          importCount++;
+            if (gEmail) seenEmails.add(gEmail);
+            importCount++;
+          } catch {
+            skippedCount++;
+          }
         }
 
         if (importCount > 0) {
@@ -494,7 +515,6 @@ export default function GuestDirectoryPage() {
       }
     };
     reader.readAsText(file);
-    e.target.value = '';
   };
 
   const filteredGuests = guests.filter(g => {
@@ -543,11 +563,16 @@ export default function GuestDirectoryPage() {
 
           <button
             onClick={handleCsvUploadClick}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-border/40"
-            title="Upload Filled CSV File"
+            {...csvDragHandlers}
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer border ${
+              isCsvDragOver
+                ? 'border-accent bg-accent/10 shadow-md shadow-accent/20 ring-2 ring-accent/20 text-accent'
+                : 'border-theme-border/40 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary'
+            }`}
+            title="Upload Filled CSV File — click or drag and drop"
           >
             <Upload className="h-4 w-4" />
-            Upload Guests (CSV)
+            {isCsvDragOver ? 'Drop CSV here' : 'Upload Guests (CSV)'}
           </button>
           <input
             type="file"
@@ -878,13 +903,15 @@ export default function GuestDirectoryPage() {
                     <label className="block text-[11px] font-medium text-theme-text-secondary">
                       Front of Card (Image/PDF) <span className="text-danger font-bold">* (Compulsory)</span>
                     </label>
-                    <input
-                      ref={frontInputRef}
-                      type="file"
+                    <FileDropzone
+                      onFilesSelected={handleFrontCardFiles}
                       accept="image/*,application/pdf"
-                      onChange={handleFrontCardChange}
-                      className="w-full text-[11px] file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:bg-accent file:text-white file:text-[11px] file:font-medium file:cursor-pointer cursor-pointer"
+                      label="Click or drag card photo here"
+                      compact
                     />
+                    {frontCardFile && (
+                      <FilePreviewRow file={frontCardFile} onRemove={() => handleFrontCardFiles([])} />
+                    )}
                     {frontCardError && <p className="text-danger text-[11px] font-medium">{frontCardError}</p>}
                     {(editingGuest?.visitingCardFrontUrl || editingGuest?.visitingCardUrl) && !frontCardData && (
                       <p className="text-[10px] text-theme-text-secondary">Front card on file. Choose new image or PDF to replace.</p>
@@ -896,13 +923,15 @@ export default function GuestDirectoryPage() {
                     <label className="block text-[11px] font-medium text-theme-text-secondary">
                       Back of Card (Image/PDF) <span className="text-theme-text-secondary/70 font-normal">(Optional)</span>
                     </label>
-                    <input
-                      ref={backInputRef}
-                      type="file"
+                    <FileDropzone
+                      onFilesSelected={handleBackCardFiles}
                       accept="image/*,application/pdf"
-                      onChange={handleBackCardChange}
-                      className="w-full text-[11px] file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:bg-theme-border/40 file:text-theme-text-primary file:text-[11px] file:font-medium file:cursor-pointer cursor-pointer"
+                      label="Click or drag card photo here"
+                      compact
                     />
+                    {backCardFile && (
+                      <FilePreviewRow file={backCardFile} onRemove={() => handleBackCardFiles([])} />
+                    )}
                     {backCardError && <p className="text-danger text-[11px] font-medium">{backCardError}</p>}
                     {editingGuest?.visitingCardBackUrl && !backCardData && (
                       <p className="text-[10px] text-theme-text-secondary">Back card on file. Choose new image or PDF to replace.</p>
@@ -933,6 +962,18 @@ export default function GuestDirectoryPage() {
                   </div>
                 )}
               </div>
+
+              {isSaving && (frontCardFile || backCardFile) && (
+                <div className="space-y-0.5">
+                  <div className="h-1.5 rounded-full bg-theme-border/30 overflow-hidden">
+                    <div className="h-full bg-accent rounded-full transition-all duration-200" style={{ width: `${guestUploadProgress}%` }} />
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-theme-text-secondary">
+                    <span>Uploading... {guestUploadProgress}%</span>
+                    {guestUploadEtaSeconds !== null && <span>{guestUploadEtaSeconds <= 0 ? 'almost done' : `${Math.ceil(guestUploadEtaSeconds)}s left`}</span>}
+                  </div>
+                </div>
+              )}
 
               <button
                 type="submit"

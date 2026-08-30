@@ -1,6 +1,6 @@
 'use client';
 
-import { ShieldCheck, Copyright, X, Lock, FileText, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, Copyright, X, Lock, FileText, CheckCircle2, Wrench, LogOut } from 'lucide-react';
 
 interface TermsModalProps {
   isOpen: boolean;
@@ -63,7 +63,7 @@ export function TermsModal({ isOpen, onClose }: TermsModalProps) {
               2. Intellectual Property Rights & Codebase Ownership
             </h3>
             <p className="text-theme-text-secondary">
-              The entire platform—including but not limited to source code, React/Next.js components, database schema, design tokens, Group Policy RBAC engine, form engines, report generators, and visual assets—is the sole and exclusive property of <strong>Kayomarz Pavri</strong>.
+              The entire platform—including but not limited to source code, React/Next.js components, database schema, design tokens, Group Policy RBAC engine, form engines, report generators, visual assets, the Public Forms & Feedback engine (with QR code generation and Word-document export), the Design Portal's automated 30-day asset-retention system, the Guest Directory and Members Directory invite tooling, and the automated Indian Holiday Calendar sync and social-media task-approval workflow—is the sole and exclusive property of <strong>Kayomarz Pavri</strong>.
             </p>
             <ul className="list-disc pl-5 text-theme-text-secondary space-y-1">
               <li>No part of this portal or software may be reproduced, modified, distributed, reverse-engineered, decompiled, or re-licensed without explicit prior written authorization from <strong>Kayomarz Pavri</strong>.</li>
@@ -90,6 +90,35 @@ export function TermsModal({ isOpen, onClose }: TermsModalProps) {
             </h3>
             <p className="text-theme-text-secondary">
               All operational actions—including login attempts, task modifications, rating submissions, financial approvals, email dispatches, and policy updates—are logged to an immutable audit trail for security, governance, and compliance.
+            </p>
+          </div>
+
+          {/* Clause 5: Maintenance Term */}
+          <div className="space-y-2">
+            <h3 className="font-bold text-sm text-theme-text-primary flex items-center gap-2">
+              <Wrench className="h-4 w-4 text-accent" />
+              5. Platform Maintenance, Support & Continuity Term
+            </h3>
+            <p className="text-theme-text-secondary">
+              <strong>Kayomarz Pavri</strong>, as the platform's developer and sole intellectual property owner, undertakes to maintain, support, and operate this platform—including bug fixes, security updates, feature development, and server/infrastructure upkeep—for a term of <strong>twenty-five (25) years</strong> from the Effective Date of these Terms, either personally or through a Super User-tier administrator designated for that purpose. This undertaking governs ongoing maintenance responsibility; it does not itself transfer, dilute, or otherwise affect the intellectual property ownership set out in Clause 2, which remains exclusive to Kayomarz Pavri regardless of who is actively performing maintenance at any given time.
+            </p>
+          </div>
+
+          {/* Clause 6: Exit & Transfer */}
+          <div className="space-y-2">
+            <h3 className="font-bold text-sm text-theme-text-primary flex items-center gap-2">
+              <LogOut className="h-4 w-4 text-warning" />
+              6. Exit, Discontinuation & Transfer of Maintenance Responsibility
+            </h3>
+            <p className="text-theme-text-secondary">
+              Notwithstanding Clause 5, the maintenance commitment described above is not unconditional. Kayomarz Pavri may discontinue active maintenance of the platform, or transfer maintenance responsibility to a successor developer or administrator, under either of the following exit conditions:
+            </p>
+            <ul className="list-disc pl-5 text-theme-text-secondary space-y-1">
+              <li><strong>Discontinuation:</strong> Maintenance may be paused or wound down where continuing is no longer reasonably practicable (including but not limited to prolonged unavailability, changed circumstances, or the Centre's own decision to retire or replace the platform), with reasonable advance notice to the Centre Head where circumstances permit.</li>
+              <li><strong>Transfer:</strong> Maintenance responsibility may be handed to a named successor developer or Super User-tier administrator, provided the transfer is reviewed and approved in writing by the Centre Head before it takes effect. An approved transfer carries forward the same 25-year continuity term under this Clause and Clause 5; it does not reset or extend it.</li>
+            </ul>
+            <p className="text-theme-text-secondary">
+              No exit or transfer under this Clause affects the intellectual property ownership set out in Clause 2, which remains exclusive to Kayomarz Pavri unless separately and explicitly assigned in writing.
             </p>
           </div>
 

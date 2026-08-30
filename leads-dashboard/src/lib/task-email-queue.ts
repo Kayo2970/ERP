@@ -128,6 +128,7 @@ export async function flushTaskEmailDigest(recipientEmail: string) {
     `\n\nPlease view and acknowledge your tasks using this link:\n${ackUrl}\n\nRegards,\nLEADS Committee Management`;
 
   const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
     badgeText: `ASSIGNMENT DIGEST (${taskCount} TASK${taskCount === 1 ? '' : 'S'})`,
     badgeColor: '#6366f1',
     headerTitle: `Task & Committee Assignments`,

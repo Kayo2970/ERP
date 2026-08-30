@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ShieldAlert,
   DatabaseBackup,
@@ -11,11 +11,11 @@ import {
   EyeOff,
   CheckCircle2,
   AlertTriangle,
-  FileArchive,
   FileQuestion,
 } from 'lucide-react';
 import { logAuditEvent, getSystemSettings, updateSystemSettings } from '@/lib/local-data';
 import { EmptyState } from '@/components/ui/empty-state';
+import { FileDropzone, FilePreviewRow, createProgressTracker, uploadFormData } from '@/components/ui/file-dropzone';
 
 export default function BackupRestorePage() {
   const [user, setUser] = useState<any>(null);
@@ -34,7 +34,8 @@ export default function BackupRestorePage() {
   const [isRestoring, setIsRestoring] = useState(false);
   const [restoreError, setRestoreError] = useState('');
   const [restoreSuccess, setRestoreSuccess] = useState('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [restoreProgress, setRestoreProgress] = useState(0);
+  const [restoreEtaSeconds, setRestoreEtaSeconds] = useState<number | null>(null);
 
   const [lockdownEnabled, setLockdownEnabled] = useState(false);
   const [isTogglingLockdown, setIsTogglingLockdown] = useState(false);
@@ -115,13 +116,12 @@ export default function BackupRestorePage() {
     }
   };
 
-  const handleRestoreClick = () => fileInputRef.current?.click();
-
-  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    setRestoreFile(file || null);
+  const handleFileSelected = (files: File[]) => {
+    setRestoreFile(files[0] || null);
     setRestoreError('');
     setRestoreSuccess('');
+    setRestoreProgress(0);
+    setRestoreEtaSeconds(null);
   };
 
   const handleRestore = async () => {
@@ -141,14 +141,15 @@ export default function BackupRestorePage() {
     }
 
     setIsRestoring(true);
+    setRestoreProgress(0);
+    setRestoreEtaSeconds(null);
     try {
       const formData = new FormData();
       formData.append('file', restoreFile);
       formData.append('passphrase', restorePassphrase);
 
-      const res = await fetch('/api/backup/restore', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Restore failed.');
+      const tracker = createProgressTracker((pct, eta) => { setRestoreProgress(pct); setRestoreEtaSeconds(eta); });
+      const data = await uploadFormData('/api/backup/restore', formData, tracker);
 
       logAuditEvent(
         'DATABASE_RESTORED',
@@ -162,8 +163,11 @@ export default function BackupRestorePage() {
       setRestoreFile(null);
       setRestorePassphrase('');
       setRestoreConfirmText('');
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      setRestoreProgress(0);
+      setRestoreEtaSeconds(null);
     } catch (err: any) {
+      // Deliberately doesn't clear restoreFile — a failed restore keeps the
+      // backup file staged so a dropped connection can be retried with one tap.
       setRestoreError(err.message || 'Restore failed.');
     } finally {
       setIsRestoring(false);
@@ -345,15 +349,24 @@ export default function BackupRestorePage() {
 
           <div className="space-y-1.5">
             <label className="block text-xs font-medium text-theme-text-secondary">Backup File (.leadsbackup)</label>
-            <input type="file" ref={fileInputRef} onChange={handleFileSelected} accept=".leadsbackup" className="hidden" />
-            <button
-              type="button"
-              onClick={handleRestoreClick}
-              className="w-full flex items-center gap-2 px-4 py-2.5 bg-theme-background/30 border border-dashed border-theme-card-border rounded-xl text-theme-text-secondary hover:text-theme-text-primary hover:border-accent/50 transition-all cursor-pointer text-xs"
-            >
-              <FileArchive className="h-4 w-4 shrink-0" />
-              {restoreFile ? restoreFile.name : 'Click to select a backup file'}
-            </button>
+            <FileDropzone
+              onFilesSelected={handleFileSelected}
+              accept=".leadsbackup"
+              disabled={isRestoring}
+              label="Click or drag a backup file here"
+              compact
+            />
+            {restoreFile && (
+              <FilePreviewRow
+                file={restoreFile}
+                status={isRestoring ? 'uploading' : restoreError ? 'error' : 'idle'}
+                progress={restoreProgress}
+                etaSeconds={restoreEtaSeconds}
+                error={restoreError}
+                onRetry={restoreError ? handleRestore : undefined}
+                onRemove={!isRestoring ? () => handleFileSelected([]) : undefined}
+              />
+            )}
           </div>
 
           <div className="space-y-1.5">

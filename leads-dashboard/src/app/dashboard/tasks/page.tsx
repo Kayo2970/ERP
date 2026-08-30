@@ -15,7 +15,10 @@ import {
   Trash2,
   AlertCircle,
   Clock,
-  Search
+  Search,
+  PartyPopper,
+  ThumbsUp,
+  ThumbsDown
 } from 'lucide-react';
 import {
   getTasks,
@@ -28,13 +31,14 @@ import {
   submitTaskEdit,
   approveTask,
   rejectTask,
+  respondToHolidayApproval,
   addEventCommittee,
   updateEventCommitteeMembers,
   TaskItem,
   EventItem,
   Member
 } from '@/lib/local-data';
-import { canViewTaskExtended, canManageTasks, canCreateTask, canEditTask, canDeleteTask, canRequestTaskExtension, canDecideTaskExtension, isHeadRole, getTaskApprovalRequirement, canApprovePendingTask } from '@/lib/permissions';
+import { canViewTaskExtended, canManageTasks, canCreateTask, canEditTask, canDeleteTask, canRequestTaskExtension, canDecideTaskExtension, isHeadRole, getTaskApprovalRequirement, canApprovePendingTask, canRespondToHolidayApproval } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -383,6 +387,12 @@ export default function TasksPage() {
     triggerSuccess(`Task status changed to ${newStatus}.`);
   };
 
+  const handleHolidayApprovalResponse = (id: string, approved: boolean) => {
+    respondToHolidayApproval(id, approved, user?.name || 'User');
+    setTasks(getTasks());
+    triggerSuccess(approved ? 'Approved — a design & posting task has been assigned.' : 'Noted — no post needed for this one.');
+  };
+
   const handleRequestExtensionSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!extensionTask) return;
@@ -629,6 +639,11 @@ export default function TasksPage() {
                 )}
 
                 <div className="space-y-1">
+                  {(task.workflowType === 'holiday_social_approval' || task.workflowType === 'holiday_design_social') && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-warning/15 border border-warning/30 text-warning text-[10px] font-bold rounded-full">
+                      <PartyPopper className="h-3 w-3" /> Holiday Social Media
+                    </span>
+                  )}
                   <h3 className="font-bold text-sm text-theme-text-primary leading-snug">{task.title}</h3>
                   <p className="text-[11px] text-theme-text-secondary flex items-center gap-1">
                     <Briefcase className="h-3 w-3" />
@@ -650,7 +665,26 @@ export default function TasksPage() {
               {/* Task Actions */}
               <div className="border-t border-theme-border/20 pt-3 flex items-center justify-between gap-2 text-xs">
                 <div className="flex items-center gap-1.5">
-                  {task.status === 'Assigned' && (
+                  {task.workflowType === 'holiday_social_approval' && task.status !== 'Completed' ? (
+                    canRespondToHolidayApproval(task, user) ? (
+                      <>
+                        <button
+                          onClick={() => handleHolidayApprovalResponse(task.id, true)}
+                          className="flex items-center gap-1 px-2.5 py-1 bg-success hover:bg-success/90 text-white font-semibold rounded-lg transition-all text-[11px] cursor-pointer"
+                        >
+                          <ThumbsUp className="h-3 w-3" /> Yes, post needed
+                        </button>
+                        <button
+                          onClick={() => handleHolidayApprovalResponse(task.id, false)}
+                          className="flex items-center gap-1 px-2.5 py-1 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary font-semibold rounded-lg transition-all text-[11px] cursor-pointer"
+                        >
+                          <ThumbsDown className="h-3 w-3" /> No, skip it
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-[11px] text-theme-text-secondary italic">Awaiting Centre Head / Events Head decision</span>
+                    )
+                  ) : task.status === 'Assigned' && (
                     <button
                       onClick={() => handleStatusChange(task.id, 'In Progress')}
                       className="px-2.5 py-1 bg-accent hover:bg-primary-light text-white font-semibold rounded-lg transition-all text-[11px] cursor-pointer"
