@@ -11,10 +11,10 @@ interface LoadingScreenProps {
 }
 
 /**
- * HeroUI-styled Full-Screen Loading Screen
- * Displays a synchronized HeroUI Skeleton wireframe layout in the background
- * with continuous shimmer wave animation, overlaid with the signature LEADS
- * elevated glassmorphic badge and synchronized progress indicator.
+ * HeroUI Full-Screen Loading Screen
+ * Renders a full-width dashboard wireframe skeleton in the background with continuous
+ * HeroUI shimmer wave animations, layered directly underneath the elevated centered
+ * LEADS spinning badge and synchronized progress indicator.
  */
 export function LoadingScreen({ duration, subtitle = 'Loading LEADS Portal...', onComplete }: LoadingScreenProps) {
   const [progress, setProgress] = useState(0);
@@ -42,166 +42,120 @@ export function LoadingScreen({ duration, subtitle = 'Loading LEADS Portal...', 
   }, [duration, onComplete]);
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-space-theme overflow-hidden select-none">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-space-theme overflow-hidden select-none">
       
       {/* ------------------------------------------------------------- */}
-      {/* HeroUI Single Shimmer Background Dashboard Skeleton           */}
+      {/* 1. Background Skeleton Wireframe Layout (Directly Behind)     */}
       {/* ------------------------------------------------------------- */}
-      <div className="skeleton--shimmer absolute inset-0 w-full h-full p-4 md:p-6 opacity-40 dark:opacity-30 pointer-events-none overflow-hidden">
-        <div className="flex h-full w-full gap-6">
-          
-          {/* Skeleton Left Sidebar */}
-          <div className="hidden md:flex w-64 flex-col justify-between p-4 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-sm space-y-6">
-            <div className="space-y-6">
-              {/* Brand logo skeleton */}
-              <div className="flex items-center gap-3">
-                <Skeleton animationType="none" className="h-10 w-10 rounded-xl" />
-                <div className="space-y-2 flex-1">
-                  <Skeleton animationType="none" className="h-3.5 w-4/5 rounded" />
-                  <Skeleton animationType="none" className="h-2 w-1/2 rounded" />
-                </div>
-              </div>
+      <div className="absolute inset-0 w-full h-full p-4 md:p-8 flex flex-col justify-between gap-6 pointer-events-none opacity-45 dark:opacity-35 overflow-hidden">
+        
+        {/* Top Header / Nav Skeleton */}
+        <div className="w-full flex items-center justify-between pb-4 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <Skeleton animationType="shimmer" className="h-10 w-10 rounded-2xl" />
+            <div className="space-y-1.5">
+              <Skeleton animationType="shimmer" className="h-4 w-40 rounded-lg" />
+              <Skeleton animationType="shimmer" className="h-2.5 w-24 rounded" />
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Skeleton animationType="shimmer" className="h-9 w-48 rounded-xl hidden sm:block" />
+            <Skeleton animationType="shimmer" className="h-9 w-9 rounded-xl" />
+            <Skeleton animationType="shimmer" className="h-9 w-9 rounded-xl" />
+            <Skeleton animationType="shimmer" className="h-9 w-28 rounded-xl" />
+          </div>
+        </div>
 
-              {/* Navigation items skeleton */}
-              <div className="space-y-2.5 pt-2">
-                <Skeleton animationType="none" className="h-2 w-1/3 rounded mb-3" />
-                {[...Array(6)].map((_, i) => (
-                  <div key={i} className="flex items-center gap-3 p-2 rounded-xl bg-white/5 border border-white/5">
-                    <Skeleton animationType="none" className="h-4 w-4 rounded shrink-0" />
-                    <Skeleton animationType="none" className="h-2.5 rounded flex-1" style={{ width: `${60 + (i * 7) % 30}%` }} />
-                  </div>
-                ))}
-              </div>
+        {/* Hero Banner Skeleton */}
+        <div className="w-full rounded-3xl border border-white/10 bg-white/5 p-6 space-y-3">
+          <Skeleton animationType="shimmer" className="h-6 w-72 rounded-xl" />
+          <Skeleton animationType="shimmer" className="h-3.5 w-96 rounded-lg max-w-full" />
+          <div className="flex gap-2 pt-2">
+            <Skeleton animationType="shimmer" className="h-8 w-28 rounded-xl" />
+            <Skeleton animationType="shimmer" className="h-8 w-32 rounded-xl" />
+          </div>
+        </div>
 
-              {/* Admin section skeleton */}
-              <div className="space-y-2.5 pt-2">
-                <Skeleton animationType="none" className="h-2 w-1/3 rounded mb-3" />
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="flex items-center gap-3 p-2 rounded-xl bg-white/5 border border-white/5">
-                    <Skeleton animationType="none" className="h-4 w-4 rounded shrink-0" />
-                    <Skeleton animationType="none" className="h-2.5 rounded flex-1" style={{ width: `${50 + (i * 11) % 40}%` }} />
-                  </div>
-                ))}
+        {/* 4 Metric KPI Cards Grid */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 w-full">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-28 rounded-2xl border border-white/10 bg-white/5 p-4 flex flex-col justify-between">
+              <div className="flex justify-between items-start">
+                <Skeleton animationType="shimmer" className="h-3 w-20 rounded" />
+                <Skeleton animationType="shimmer" className="h-6 w-6 rounded-lg" />
+              </div>
+              <div className="space-y-2">
+                <Skeleton animationType="shimmer" className="h-7 w-24 rounded-lg" />
+                <Skeleton animationType="shimmer" className="h-2 w-32 rounded" />
               </div>
             </div>
+          ))}
+        </div>
 
-            {/* Bottom user profile skeleton */}
-            <div className="flex items-center gap-3 p-2 rounded-xl bg-white/10">
-              <Skeleton animationType="none" className="h-8 w-8 rounded-full shrink-0" />
-              <div className="space-y-1.5 flex-1">
-                <Skeleton animationType="none" className="h-2.5 w-3/4 rounded" />
-                <Skeleton animationType="none" className="h-2 w-1/2 rounded" />
-              </div>
+        {/* Main Content Grid (Chart + Activity Feed) */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full flex-1 min-h-0">
+          {/* Chart Wireframe (2 cols) */}
+          <div className="lg:col-span-2 rounded-3xl border border-white/10 bg-white/5 p-6 flex flex-col justify-between space-y-4">
+            <div className="flex justify-between items-center">
+              <Skeleton animationType="shimmer" className="h-4 w-44 rounded-lg" />
+              <Skeleton animationType="shimmer" className="h-7 w-24 rounded-xl" />
+            </div>
+            <div className="h-36 w-full flex items-end justify-between gap-2.5 pt-4 px-2 border-b border-white/10">
+              {[35, 60, 40, 85, 50, 95, 75, 45, 90, 65, 80, 100].map((val, idx) => (
+                <div
+                  key={idx}
+                  className="w-full bg-accent/25 rounded-t-md transition-all"
+                  style={{ height: `${val}%` }}
+                />
+              ))}
             </div>
           </div>
 
-          {/* Skeleton Main Content Area */}
-          <div className="flex-1 flex flex-col space-y-6">
-            
-            {/* Top Navbar Skeleton */}
-            <div className="h-16 w-full rounded-2xl border border-white/10 bg-white/5 p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3 w-1/3">
-                <Skeleton animationType="none" className="h-4 w-4 rounded" />
-                <Skeleton animationType="none" className="h-3 w-36 rounded" />
-              </div>
-              <div className="flex items-center gap-3">
-                <Skeleton animationType="none" className="h-8 w-8 rounded-xl" />
-                <Skeleton animationType="none" className="h-8 w-8 rounded-xl" />
-                <Skeleton animationType="none" className="h-8 w-32 rounded-xl" />
-              </div>
-            </div>
-
-            {/* Hero Welcome Card Skeleton */}
-            <div className="h-32 w-full rounded-3xl border border-white/10 bg-white/5 p-6 flex flex-col justify-center space-y-3">
-              <Skeleton animationType="none" className="h-5 w-1/3 rounded-lg" />
-              <Skeleton animationType="none" className="h-3 w-1/2 rounded" />
-              <div className="flex gap-2 pt-1">
-                <Skeleton animationType="none" className="h-7 w-24 rounded-lg bg-accent/20" />
-                <Skeleton animationType="none" className="h-7 w-28 rounded-lg" />
-              </div>
-            </div>
-
-            {/* 4 Metrics KPI Grid Skeleton */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className="h-28 rounded-2xl border border-white/10 bg-white/5 p-4 flex flex-col justify-between">
-                  <div className="flex justify-between items-start">
-                    <Skeleton animationType="none" className="h-2.5 w-16 rounded" />
-                    <Skeleton animationType="none" className="h-6 w-6 rounded-lg bg-accent/20" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Skeleton animationType="none" className="h-6 w-20 rounded" />
-                    <Skeleton animationType="none" className="h-2 w-28 rounded" />
+          {/* Activity Feed Wireframe (1 col) */}
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-6 flex flex-col space-y-3">
+            <Skeleton animationType="shimmer" className="h-4 w-32 rounded-lg" />
+            <div className="space-y-2.5 pt-1 flex-1">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="flex items-center gap-3 p-2.5 rounded-xl bg-white/5 border border-white/5">
+                  <Skeleton animationType="shimmer" className="h-8 w-8 rounded-xl shrink-0" />
+                  <div className="space-y-1.5 flex-1">
+                    <Skeleton animationType="shimmer" className="h-3 w-3/4 rounded" />
+                    <Skeleton animationType="shimmer" className="h-2 w-1/2 rounded" />
                   </div>
                 </div>
               ))}
             </div>
-
-            {/* 2-Column Content Split Skeleton */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1">
-              {/* Left Chart Skeleton (2 cols) */}
-              <div className="lg:col-span-2 rounded-3xl border border-white/10 bg-white/5 p-6 flex flex-col justify-between space-y-4">
-                <div className="flex justify-between items-center">
-                  <Skeleton animationType="none" className="h-4 w-36 rounded" />
-                  <div className="flex gap-2">
-                    <Skeleton animationType="none" className="h-6 w-16 rounded-lg" />
-                    <Skeleton animationType="none" className="h-6 w-16 rounded-lg" />
-                  </div>
-                </div>
-                {/* Chart wireframe bars */}
-                <div className="h-44 w-full flex items-end justify-between gap-3 pt-6 px-2 border-b border-white/10">
-                  {[45, 65, 30, 80, 55, 90, 70, 40, 85, 60, 75, 95].map((val, idx) => (
-                    <div
-                      key={idx}
-                      className="w-full bg-accent/20 rounded-t-md transition-all"
-                      style={{ height: `${val}%` }}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {/* Right Activity Feed Skeleton (1 col) */}
-              <div className="rounded-3xl border border-white/10 bg-white/5 p-6 flex flex-col space-y-4">
-                <Skeleton animationType="none" className="h-4 w-28 rounded" />
-                <div className="space-y-3 pt-2">
-                  {[...Array(4)].map((_, i) => (
-                    <div key={i} className="flex items-center gap-3 p-2.5 rounded-xl bg-white/5 border border-white/5">
-                      <Skeleton animationType="none" className="h-7 w-7 rounded-lg shrink-0" />
-                      <div className="space-y-1.5 flex-1">
-                        <Skeleton animationType="none" className="h-2.5 w-3/4 rounded" />
-                        <Skeleton animationType="none" className="h-2 w-1/2 rounded" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
           </div>
         </div>
+
       </div>
 
       {/* ------------------------------------------------------------- */}
-      {/* Frosted Glass Overlay with Centered Elevated Loading Badge     */}
+      {/* 2. Frosted Dim Layer Behind Foreground Card                   */}
       {/* ------------------------------------------------------------- */}
-      <div className="relative z-20 flex flex-col items-center">
-        <div className="glass-panel rounded-3xl p-8 md:p-10 flex flex-col items-center gap-6 border border-white/25 shadow-2xl backdrop-blur-xl animate-splash-logo max-w-sm w-full mx-4 text-center">
+      <div className="absolute inset-0 bg-black/20 dark:bg-black/40 backdrop-blur-[4px] z-10 pointer-events-none" />
+
+      {/* ------------------------------------------------------------- */}
+      {/* 3. Foreground Elevated Centered Loading Badge (Directly On Top) */}
+      {/* ------------------------------------------------------------- */}
+      <div className="relative z-20 flex flex-col items-center justify-center p-4">
+        <div className="glass-panel rounded-3xl p-8 md:p-10 flex flex-col items-center gap-6 border border-white/25 shadow-2xl backdrop-blur-2xl animate-splash-logo max-w-sm w-full text-center">
           
           {/* Central Logo with Spinning Rings */}
           <div className="relative h-24 w-24 flex items-center justify-center">
             {/* Outer soft glow ring */}
-            <div className="absolute inset-0 rounded-full bg-accent/15 blur-md animate-pulse"></div>
+            <div className="absolute inset-0 rounded-full bg-accent/25 blur-lg animate-pulse"></div>
             
-            {/* Rotating border ring */}
-            <div className="absolute inset-0 rounded-full border-4 border-accent/20 border-t-accent border-r-accent/60 animate-spin"></div>
+            {/* Rotating outer border ring */}
+            <div className="absolute inset-0 rounded-full border-4 border-accent/20 border-t-accent border-r-accent/70 animate-spin"></div>
             
             {/* Inner dashed ring */}
-            <div className="absolute inset-2 rounded-full border border-dashed border-white/25"></div>
+            <div className="absolute inset-2 rounded-full border border-dashed border-white/30"></div>
 
             <img
               src="/images/leads-short-logo.png"
               alt="LEADS Logo"
-              className="h-13 w-13 object-contain filter drop-shadow-[0_4px_12px_rgba(46,117,182,0.45)]"
+              className="h-13 w-13 object-contain filter drop-shadow-[0_4px_14px_rgba(46,117,182,0.5)]"
             />
           </div>
 
@@ -217,14 +171,14 @@ export function LoadingScreen({ duration, subtitle = 'Loading LEADS Portal...', 
 
           {/* Timed Synchronized Progress Bar */}
           <div className="w-full space-y-1.5">
-            <div className="w-full h-1.5 bg-theme-background/60 rounded-full overflow-hidden border border-white/10">
+            <div className="w-full h-1.5 bg-theme-background/70 rounded-full overflow-hidden border border-white/10">
               <div
-                className="h-full bg-gradient-to-r from-accent to-primary-light transition-all duration-75 rounded-full"
+                className="h-full bg-gradient-to-r from-accent via-primary-light to-accent transition-all duration-75 rounded-full"
                 style={{ width: `${progress}%` }}
               />
             </div>
             <div className="flex justify-between items-center text-[10px] text-theme-text-secondary font-mono">
-              <span>INITIALIZING</span>
+              <span className="tracking-wider">INITIALIZING</span>
               <span>{progress}%</span>
             </div>
           </div>
