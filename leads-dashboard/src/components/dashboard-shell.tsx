@@ -37,7 +37,8 @@ import {
   ChevronRight,
   ArrowRight,
   Compass,
-  Trash2
+  Trash2,
+  Sparkles
 } from 'lucide-react';
 import { getAnnouncements, getTasks, getDesigns, getMembers, getBudgets, getReimbursements, getEvents, logAuditEvent, Member, syncWithServer, getSystemSettings } from '@/lib/local-data';
 import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isFinanceHead, canAccessGuestDirectory, canVerifyBudgetCentreHead, canDecideBudget, canVerifyReimbursementCentreHead, canApproveAsSectorHead, canApproveAsFinanceHead } from '@/lib/permissions';
@@ -71,6 +72,7 @@ const navSections: NavSection[] = [
       { name: 'Dashboard', href: '/dashboard/home', icon: LayoutDashboard },
       { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
       { name: 'Events', href: '/dashboard/events', icon: Calendar },
+      { name: 'Festivals', href: '/dashboard/festivals', icon: Sparkles },
       { name: 'Tasks', href: '/dashboard/tasks', icon: CheckSquare },
       { name: 'Ratings', href: '/dashboard/ratings', icon: Star },
       { name: 'Design Portal', href: '/dashboard/designs', icon: Palette },

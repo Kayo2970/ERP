@@ -18,7 +18,8 @@ import {
   Clock,
   Check,
   Ban,
-  Handshake
+  Handshake,
+  Sparkles
 } from 'lucide-react';
 import { getEvents, addEvent, updateEvent, deleteEvent, approveEvent, rejectEvent, submitEventEdit, submitEventDelete, getEffectiveEventStatus, formatEventDateRange, getEventSortTime, getEventSponsors, getEventSponsorTotal, EventItem, EventSponsor } from '@/lib/local-data';
 import { canCreateEvent, canEditEvent, canDeleteEvent, canManageEvents, canViewEvent, canApprovePendingEvent, getEventApprovalRequirement } from '@/lib/permissions';
@@ -384,12 +385,14 @@ export default function EventsPage() {
   const canSeeApprovalMeta = (event: EventItem) =>
     user?.tier === 1 || event.submittedByEmail === user?.email || canApprovePendingEvent(event, user);
 
-  const visibleEvents = events.filter(event => {
-    if (event.approvalStatus === 'pending_create' || event.approvalStatus === 'rejected') {
-      return canSeeApprovalMeta(event);
-    }
-    return canViewEvent(event, user);
-  });
+  const visibleEvents = events
+    .filter(event => !event.isHoliday)
+    .filter(event => {
+      if (event.approvalStatus === 'pending_create' || event.approvalStatus === 'rejected') {
+        return canSeeApprovalMeta(event);
+      }
+      return canViewEvent(event, user);
+    });
 
   // Upcoming/active events first (soonest start date first), then events whose end
   // date has already passed — those sort most-recently-ended first, and their
@@ -470,6 +473,14 @@ export default function EventsPage() {
               accept=".csv"
               className="hidden"
             />
+
+            <Link
+              href="/dashboard/festivals"
+              className="flex items-center gap-1.5 px-3.5 py-2.5 bg-accent/15 border border-accent/30 text-accent hover:bg-accent/25 text-xs font-semibold rounded-xl transition-all cursor-pointer"
+            >
+              <Sparkles className="h-4 w-4" />
+              Festivals & Observances
+            </Link>
 
             {canCreate && (
               <button
