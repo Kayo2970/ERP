@@ -17,6 +17,7 @@
     "core-js": "^3.50.0",
     "dictionary-en": "^4.0.0",
     "dictionary-en-gb": "^3.0.0",
+    "gsap": "^3.15.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",

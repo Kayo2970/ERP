@@ -1,11 +1,13 @@
 'use client';
 
 import React from 'react';
+import { ParticleCard } from './magic-bento';
 
 export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   variant?: 'shadow' | 'bordered' | 'flat';
   isHoverable?: boolean;
   isPressable?: boolean;
+  isMagic?: boolean;
   className?: string;
   children?: React.ReactNode;
 }
@@ -14,6 +16,7 @@ export function Card({
   variant = 'shadow',
   isHoverable = false,
   isPressable = false,
+  isMagic = false,
   className = '',
   children,
   ...props
@@ -25,13 +28,25 @@ export function Card({
       ? 'bg-theme-card/60 border border-white/5'
       : 'glass-panel shadow-xl';
 
-  const hoverStyle = isHoverable
-    ? 'hover:-translate-y-1 hover:shadow-2xl hover:border-accent/30 transition-all duration-200'
-    : '';
+  const hoverStyle =
+    isHoverable && !isMagic
+      ? 'hover:-translate-y-1 hover:shadow-2xl hover:border-accent/30 transition-all duration-200'
+      : '';
 
   const pressStyle = isPressable
     ? 'cursor-pointer active:scale-[0.98] transition-transform duration-100'
     : '';
+
+  if (isMagic) {
+    return (
+      <ParticleCard
+        className={`rounded-3xl overflow-hidden ${variantStyles} ${pressStyle} ${className}`}
+        {...props}
+      >
+        {children}
+      </ParticleCard>
+    );
+  }
 
   return (
     <div
