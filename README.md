@@ -1,23 +1,21 @@
 # LEADS Next Gen All-in-One Dashboard
 
-This repository contains the private internal operations and management dashboard for the **LEADS Next Gen Centre at MSRUAS, Bengaluru**. It consolidates task traceability, event management, performance evaluation, reimbursement claims, dynamic public form building, and roster management into a single, cohesive portal.
+This repository contains the private internal operations and management dashboard for the **LEADS Next Gen Centre at M.S. Ramaiah University of Applied Sciences (MSRUAS), Bengaluru**. It consolidates task traceability, event management, performance evaluation, dual-level reimbursement pipelines, dynamic public form building, and member roster management into a single, cohesive portal.
 
 ---
 
 ## 📂 Project Structure
 
-- **`leads-dashboard/`**: The Next.js (App Router) + TypeScript + Tailwind CSS (v4) project containing the active implementation of the dashboard.
+- **`leads-dashboard/`**: The Next.js 16 (App Router) + TypeScript + Tailwind CSS v4 project containing the active implementation of the dashboard.
 - **`PROJECT DOCS/`**: Curated product specifications, sitemaps, database models, technical specifications, and copywriting guidelines.
 - **`REFERENCE DATA/`**: Official Ramaiah University of Applied Sciences leadership directory, hierarchy structure, source images, and references.
-- **`docs/`**: Engineering/ops working docs — the member login roster, the bug audit log, and implementation specs for past fix passes.
+- **`docs/`**: Engineering manuals, deployment guides, database schemas, and the complete [Operations & Privileges Manual (DOCX)](docs/LEADS_ERP_Instruction_and_Privileges_Manual.docx).
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Getting Started & First-Time Setup
 
-### 1. Running the LEADS Next Gen Dashboard (Active Implementation)
-
-The dashboard is built using **Next.js** and **Tailwind CSS v4** featuring a modern, premium space-themed glassmorphic UI.
+### 1. Local Development Server
 
 ```bash
 # Navigate to the project directory
@@ -27,92 +25,101 @@ cd leads-dashboard
 npm install
 
 # Run the development server
-npm run dev -- -p 3030
+npm run dev
 ```
 
-Open [http://localhost:3030](http://localhost:3030) in your browser to view the login screen.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+---
+
+## 🪄 One-Time Initial Setup Wizard
+
+On a fresh installation (locally or on a production VPS), the application automatically detects that no accounts exist and enters the **One-Time Initial Setup Wizard**:
+
+1. **Step 1: Super User Account Provisioning**
+   - Enter the root Super User's Full Name, Email Address, and Master Password (min 8 characters).
+   - The password is cryptographically hashed using **scrypt** with a random per-user salt.
+   - The instance starts clean with **zero hardcoded members**.
+2. **Step 2: Database Server-Side Encryption Key (`DATA_ENCRYPTION_KEY`)**
+   - Automatically generate a cryptographically strong 256-bit hexadecimal key (or enter a custom passphrase).
+   - The key is saved permanently to `.env` on the server and used to encrypt all local database collections via **AES-256-GCM**.
+   - A backup alert reminds the operator to store this key in a secure offline password manager.
+
+> **Permanent Lock:** Once the initial setup is completed, the wizard is permanently locked. Future visitors to `/` or `/setup` are taken straight to the normal Sign-In portal.
+
+Alternatively, CLI operators can run the bootstrap script directly in their terminal:
+```bash
+npm run setup
+# or: node scripts/setup-superuser.js
+```
 
 ---
 
 ## 🖥️ Self-Hosted Deployment (Hostinger KVM VPS)
 
-This app runs as **one long-lived instance** — `next start` under PM2 — on a self-hosted Hostinger KVM VPS at **[leadsnextgencentre.online](https://leadsnextgencentre.online)**, with Nginx reverse-proxying HTTPS traffic to it and every team member's browser pointed at that one public domain. There is no separate database server: all data lives under `leads-dashboard/data/` on the VPS — one JSON file per collection (`members.json`, `tasks.json`, `events.json`, ...) plus `data/uploads/`, which holds the actual bytes of every uploaded document (Design Portal assets, reimbursement receipts) referenced from those JSON records by a `storageKey`.
+The application runs as a production service under **PM2** on a self-hosted Hostinger KVM VPS at **[leadsnextgencentre.online](https://leadsnextgencentre.online)**, reverse-proxied with **Nginx** and automated SSL.
 
-**Workflow:**
-1. Develop and test locally, committing to a feature branch as usual.
-2. Push the branch and merge it into `main` once it's ready.
-3. On the VPS: `git pull`, `npm install`, `npm run build`, then `pm2 restart leads-dashboard`.
-4. Every device — anywhere, not just on a LAN — hits `https://leadsnextgencentre.online`, which Nginx routes to the one running instance sharing the one `data/` directory, so everyone stays in sync automatically.
+### Deployment Workflow:
+1. Develop, test, and commit locally to git.
+2. Push commits to `main`.
+3. On the VPS:
+   ```bash
+   git pull
+   npm install
+   npm run build
+   pm2 restart leads-dashboard
+   ```
+4. All client browsers synchronize with the VPS over HTTPS.
 
-**Important:** `leads-dashboard/data/` (JSON collections and `uploads/` alike) is git-ignored on purpose — it's live server state, not source code. Only code changes travel through git; nothing under `data/` should ever be committed or deleted on redeploy (`git pull` never touches it, but a careless `rm -rf` on the app directory would). **To back up or restore the app's data, copy the entire `leads-dashboard/data/` directory as one unit** — the JSON records and the uploaded files they reference (`storageKey`) only make sense together; restoring one without the other leaves broken links or orphaned files.
-
-**How live sync works once the server is running:** every open dashboard page polls the server every 7 seconds and re-renders automatically when new data arrives — no manual refresh needed to see a teammate's change. If you ever suspect sync is stuck, see [`docs/bugs-to-fix.md`](docs/bugs-to-fix.md) for the known-issues log and root-cause history of exactly this class of bug.
-
-**Outbound email** (announcements, password resets, task/event notifications) is sent through a local Postfix relay on the VPS, authenticated as a Google Workspace account for `@msruas.ac.in` — the app never holds that credential itself, and passwords in the system are scrypt-hashed, never plaintext (see the Authentication section below).
-
----
-
-## 🔐 Authentication & Access Level Tiers
-
-Sign-ins are validated server-side (`/api/auth/login`) against the registered members database, with real scrypt-hashed passwords — there is no shared bypass password. A fresh deploy no longer pre-seeds a faculty roster with a shared default password either: `npm run setup` (`scripts/setup-superuser.js`) runs once, interactively, before the app's first start and creates exactly one real Super User account with the email and password you choose right there. Every account added after that (via the Directory, or a new member's own activation link) sets its own real password from day one.
-
-| Role / Rank | Representative Email | Access Level Tier |
-| :--- | :--- | :--- |
-| **Super User** | `kayomarz.pavri@msruas.ac.in` | **Tier 1** — Full Operations & Settings Control |
-| **Centre Head** | `subhadeep.mukherjee@msruas.ac.in` | **Tier 2** — Member uploads & reimbursement audits |
-| **Events Head** | `pallabimund.ms.mc@msruas.ac.in` | **Tier 3** — Event creation and task assignments |
-| **Advisory Board** | `sharath.kumar@msruas.ac.in` | **Tier 4** — Read-only performance and rating reviewer |
-| **Core Committee** | `gurutejas.c@msruas.ac.in` | **Tier 5** — Operations control, task setup, form builder |
-| **Training Associate** | `kunal.bhadauria@msruas.ac.in` | **Tier 6** — Member dashboard, task completion, claim submission |
-
-For the complete roster of all 35 accounts, see [docs/login_creds.md](docs/login_creds.md).
+### Data Persistence & Encryption:
+- Database files reside under `leads-dashboard/data/` as per-collection JSON files (`members.json`, `events.json`, `tasks.json`, etc.).
+- Each file is encrypted at rest using **AES-256-GCM** using the `DATA_ENCRYPTION_KEY` in `.env`.
+- Uploaded assets (Design Portal images, reimbursement receipts) are stored on disk under `data/uploads/`.
+- **Live Sync:** Connected clients automatically poll every 7 seconds, pulling live updates into local context.
 
 ---
 
-## 🛠️ Tech Stack & Key Integrations
+## 🔐 Access Level Tiers & Privileges Matrix
 
-- **Frontend**: Next.js (App Router) & TypeScript
-- **Styling**: Tailwind CSS v4 & custom space glassmorphism utilities (`globals.css`)
-- **State & Theme**: Client-side theme context with localStorage persistence
-- **Charts**: Recharts (fully responsive custom graphs and metrics radar)
-- **Forms**: Dynamic public feedback builder, QR code preview & poster export, and submissions logger
-- **Orchestration**: Direct integration of task workflows, event milestones, and dynamic event-based committees (Logistics, Stage, Food, etc.)
-
----
-
-## 📐 System Architecture & Engineering Diagrams
-
-The LEADS ERP platform features modular data flow pipelines and encrypted persistence layers:
-
-### 1. Database Entity-Relationship (ER) Schema
-![Database Entity-Relationship ER Diagram](docs/database_er_diagram.png)
-
-### 2. Module-to-Module Data Flow Architecture
-![Module Data Flow Diagram](docs/module_data_flow_diagram.png)
-
-### 3. Individual Subsystem Architectural Flowcharts
-
-| Subsystem Area | Structural Flowchart Diagram | Core Module Connections |
-| :--- | :--- | :--- |
-| **Events & Tasks Subsystem** | ![Events & Tasks Diagram](docs/modules/events_and_tasks_module_structure.png) | Draft validation → Approval queues → Sub-committee rosters → Sponsor merge → Deliverable tracking → Automatic completion triggers. |
-| **Finance & Budget Subsystem** | ![Finance & Budget Diagram](docs/modules/finance_and_budget_module_structure.png) | Annual budget → Income/Sponsorship ingestion → Claim validation → 2-Stage audit → Sponsor depletion first → Net Centre cost & surplus return engine. |
-| **Design & Forms Subsystem** | ![Design & Forms Diagram](docs/modules/designs_and_forms_module_structure.png) | Asset upload → AI OCR scan → Gate 1 Style & Gate 2 Proofread clearances → Task auto-completion → Dynamic form creation → Public sign-ups → Word DOCX template exports. |
+| Tier | Role Title | Typical Division | Core Permissions & Scope |
+| :--- | :--- | :--- | :--- |
+| **Tier 1** | **Super User** | Core Committee | Complete system governance, dynamic Quick Switch impersonator, system lockdown, global audit logs, backup/restore. |
+| **Tier 2** | **Centre Head** | Faculty | University-wide operational authority, final budget sign-off, Level-2 reimbursement clearance, email broadcasts, guest directory. |
+| **Tier 2.5** | **GG Campus Head** | Faculty | Regional operational authority and event oversight for the Gnanagangothri (GG) campus. |
+| **Tier 3** | **Faculty / Event Heads** | Faculty | Event proposal approval, Level-1 reimbursement audit, student task lead delegation, rating reviews. |
+| **Tier 4** | **Advisory Board** | Faculty | Read-only access to institutional analytics, event summaries, and evaluation reports. |
+| **Tier 5** | **Core Committee** | Core Committee | Event orchestration, task assignments, public feedback form builder & QR generation, financial claims. |
+| **Tier 6** | **Training Associates** | Training Associate | Task execution & status updates, personal workspace, expense claim submission, feedback participation. |
+| **Tier 7** | **Alumni / Guests** | Alumni / Guest | Read-only historical event records, guest invites, and certificate downloads. |
 
 ---
 
-## 📄 Documentation Index
+## ⚡ Super User Features
 
-For detailed requirements and specs, see the `PROJECT DOCS/files/` directory:
-1. [Product Requirements Document (PRD)](PROJECT%20DOCS/files/01-PRD-LEADSDashboard.md)
-2. [Sitemap & Route Matrix](PROJECT%20DOCS/files/02-Sitemap-LEADSDashboard.md)
-3. [Design System Specification](PROJECT%20DOCS/files/03-DesignSystem-LEADSDashboard.md)
-4. [Technical Specification](PROJECT%20DOCS/files/04-TechSpec-LEADSDashboard.md)
-5. [Entity-Relationship Diagram & Database Schemas](PROJECT%20DOCS/files/05-DataModel-ERD-LEADSDashboard.md)
-6. [Copywriting & Email Alert Templates](PROJECT%20DOCS/files/06-Content-Copy-LEADSDashboard.md)
-7. [Reports & Analytics Specs](PROJECT%20DOCS/files/07-ReportsAnalytics-LEADSDashboard.md)
+- **Dynamic Quick Switch:** The Super User can instantly impersonate any active account in the Directory without entering a password. The switcher queries the live database in real time. A prominent top bar allows one-click return to the Super User session.
+- **Emergency Lockdown Mode:** Instantly restricts non-Super-User access in case of administrative maintenance.
+- **Encrypted Backup & Restore:** Export complete AES-256 encrypted snapshots of the database with offline decryptor tool (`scripts/decrypt-backup.js`).
 
-For engineering/ops working docs, see `docs/`:
-- [Bug Audit Log](docs/bugs-to-fix.md) — full codebase bug audit with current resolution status per item.
-- [Backend Sync Fix — Implementation Spec](docs/changes-needed-for-claude.md) — the spec behind the per-collection API routes, write mutex, and live-sync architecture.
-- [Full System Review](docs/recommended-fixes.md) — screen-by-screen review of the dashboard.
-- [Login Credentials](docs/login_creds.md) — full 35-account roster with real login access, sorted by tier.
+---
+
+## 📄 Comprehensive Operations Manual
+
+A formal Microsoft Word document detailing all workflows, security protocols, and module guidelines is available in the repository:
+- **[LEADS ERP Operations & Privileges Manual (DOCX)](docs/LEADS_ERP_Instruction_and_Privileges_Manual.docx)**
+
+---
+
+## 🛠️ Tech Stack
+
+- **Framework**: Next.js 16 (Turbopack, App Router) & React 19
+- **Language**: TypeScript 5
+- **Styling**: Tailwind CSS v4 & custom glassmorphism design system
+- **Cryptography**: Node.js `crypto` (`scrypt`, `AES-256-GCM`, `PBKDF2`)
+- **Charts & Visualization**: Recharts
+- **PDF & QR Engines**: `jspdf`, `jspdf-autotable`, `qrcode`, `html2canvas`
+- **OCR & Spellcheck**: `tesseract.js`, `nspell`
+- **Email Relay**: `nodemailer` with local Postfix relay
+
+---
+
+© 2026 LEADS Next Gen Centre, M.S. Ramaiah University of Applied Sciences. All rights reserved.

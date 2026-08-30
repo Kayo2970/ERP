@@ -575,22 +575,10 @@ export interface GroupPolicy {
 // password.ts's hashPassword('Kayo29') rather than computed at import time.
 const DEFAULT_PASSWORD_HASH = '039e521fbfd304a0a97bf0ad345fa30c:fabe61e51b9670355e96fa18763974f718215fdff2533c42e3da9fb81bd21f62780271331c4c3fa2f1a10cf452a180b13b45d2aa41604ed02620cb7bf8af2135';
 
-// Real organization roster matching production faculty leadership and super user
-const initialMembersRaw: Member[] = [
-  { id: 'm1', name: 'Kayomarz Pavri', email: 'kayo2970@gmail.com', role: 'Super User', tier: 1, division: 'Core Committee', department: 'Design and Social Media' },
-  { id: 'm2', name: 'Dr. Subhadeep Mukherjee', email: 'subhadeepmukherjee.ms.mc@msruas.ac.in', role: 'Centre Head', tier: 2, division: 'Faculty', department: 'Faculty Oversight' },
-  { id: 'm3', name: 'Dr. Kiran Kumar B M', email: 'kiran.kumar@msruas.ac.in', role: 'Head of Events', tier: 3, division: 'Faculty', department: 'Faculty Oversight' },
-  { id: 'm4', name: 'Dr. K. M. Sharath Kumar', email: 'sharath.kumar@msruas.ac.in', role: 'Advisory Board Member', tier: 3, division: 'Faculty', department: 'Faculty Advisory' },
-  { id: 'm7', name: 'Dr. Hari Krishna S', email: 'hari.krishna@msruas.ac.in', role: 'Faculty Advisor', tier: 3, division: 'Faculty', department: 'Faculty Advisory' },
-  { id: 'm10', name: 'Dr. Pallabi Mund', email: 'pallabimund.ms.mc@msruas.ac.in', role: 'Head of Events GG Campus', tier: 2.5, division: 'Faculty', department: 'Events' },
-  { id: 'm11', name: 'Dr. Ajay R', email: 'ajay.ca.mc@msruas.ac.in', role: 'Faculty Advisor', tier: 3, division: 'Faculty', department: 'Faculty Advisory' },
-  { id: 'm12', name: 'Ms. Sujata Bijwe', email: 'sujata.bijwe@msruas.ac.in', role: 'Faculty Advisor', tier: 3, division: 'Faculty', department: 'Faculty Advisory' },
-];
+// Real organization roster starts empty — created dynamically via Setup Wizard and Directory
+const initialMembersRaw: Member[] = [];
 
-export const initialMembers: Member[] = initialMembersRaw.map(m => ({
-  ...m,
-  passwordHash: m.passwordHash || DEFAULT_PASSWORD_HASH,
-}));
+export const initialMembers: Member[] = [];
 
 export const initialEvents: EventItem[] = [];
 
@@ -893,56 +881,23 @@ async function serverDelete(endpoint: string, id: string): Promise<boolean> {
 // -------------------------------------------------------------
 
 export function getMembers(): Member[] {
-  if (typeof window === 'undefined') return initialMembers;
+  if (typeof window === 'undefined') return [];
   const saved = localStorage.getItem('leads_members');
   if (saved) {
     try {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed)) {
-        const REMOVED_IDS = new Set(['m5', 'm6', 'm8', 'm13', 'm14', 'm15', 'm16', 'm17', 'm18', 'm19', 'm20', 'm21', 'm22', 'm23', 'm24', 'm25', 'm26', 'm27', 'm28', 'm29', 'm30', 'm31', 'm32', 'm33', 'm34', 'm35']);
-        const filtered = parsed.filter((m: any) => !REMOVED_IDS.has(m?.id)).map((m: any) => {
-          if (!m.division) {
-            if (m.tier <= 4) m.division = 'Faculty';
-            else if (m.tier === 5) m.division = 'Core Committee';
-            else if (m.tier === 7) m.division = 'Alumni';
-            else m.division = 'Training Associate';
-          }
-          if (['m2', 'm3', 'm4', 'm7', 'm10', 'm11', 'm12'].includes(m?.id)) {
-            m.division = 'Faculty';
-          }
-          return m;
-        });
-        if (filtered.length < parsed.length) {
-          localStorage.setItem('leads_members', JSON.stringify(filtered));
-        }
-        return filtered;
+        return parsed;
       }
     } catch (e) {
       console.error(e);
     }
   }
-  // Do NOT seed localStorage here — return sample data without writing
-  // syncWithServer() will seed properly on mount
-  return initialMembers;
+  return [];
 }
 
 export function saveMembers(members: Member[]): void {
   if (typeof window === 'undefined') return;
-  // Security Fail-Safe: Ensure at least one Super User account exists in the roster at all times
-  const hasSuperUser = members.some(m => m.id === 'm1' || m.tier === 1 || m.role === 'Super User');
-  if (!hasSuperUser) {
-    const defaultSuperUser: Member = initialMembers[0] || {
-      id: 'm1',
-      name: 'Kayomarz Pavri',
-      email: 'kayo2970@gmail.com',
-      role: 'Super User',
-      tier: 1,
-      division: 'Core Committee',
-      department: 'Design and Social Media',
-      status: 'Active',
-    };
-    members.unshift(defaultSuperUser);
-  }
   localStorage.setItem('leads_members', JSON.stringify(members));
   markLocalWrite('leads_members');
   // Note: Mutations call targeted per-member endpoints (/api/members, /api/members/[id])

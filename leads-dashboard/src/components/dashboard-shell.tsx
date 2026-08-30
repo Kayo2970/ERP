@@ -328,6 +328,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   useEffect(() => {
     const handleSync = () => {
       setLockdownEnabled(getSystemSettings().lockdownEnabled);
+      setAllMembers(getMembers());
       const currentUser = userRef.current;
       if (!currentUser?.email) return;
 
@@ -926,7 +927,10 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             {canQuickSwitch && (
               <div className="relative" ref={quickSwitchRef}>
                 <button
-                  onClick={() => setIsQuickSwitchOpen(!isQuickSwitchOpen)}
+                  onClick={() => {
+                    setAllMembers(getMembers());
+                    setIsQuickSwitchOpen(!isQuickSwitchOpen);
+                  }}
                   className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-xl hover:bg-theme-border/20 transition-all cursor-pointer"
                   title="Quick Switch: view as any account (Super User only)"
                 >
