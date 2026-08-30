@@ -166,16 +166,16 @@ export default function DashboardHome() {
 
       {/* Banner: Task awaiting acknowledgment */}
       {pendingAckCount > 0 && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 bg-amber-500/20 border border-amber-500/40 rounded-2xl text-amber-950 dark:text-amber-100 shadow-md backdrop-blur-xl animate-in fade-in duration-300">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 bg-amber-500/15 dark:bg-amber-500/20 border border-amber-500/30 dark:border-amber-400/40 rounded-2xl shadow-lg backdrop-blur-xl animate-in fade-in duration-300">
           <div className="flex items-center gap-3">
             <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-300 shrink-0" />
-            <span className="text-xs font-bold text-amber-950 dark:text-amber-100">
+            <span className="text-xs font-bold text-slate-900 dark:text-amber-100">
               You have {pendingAckCount} task(s) awaiting your acknowledgment.
             </span>
           </div>
           <Link 
             href="/dashboard/tasks"
-            className="text-xs font-bold text-amber-900 dark:text-amber-100 uppercase tracking-wider bg-amber-500/30 border border-amber-500/40 px-3.5 py-1.5 rounded-xl hover:bg-amber-500/40 transition-all shrink-0"
+            className="text-xs font-extrabold text-white bg-amber-600 hover:bg-amber-700 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400 uppercase tracking-wider px-4 py-2 rounded-xl transition-all shadow-md shadow-amber-500/20 shrink-0 cursor-pointer"
           >
             Review Tasks
           </Link>
