@@ -6,5 +6,6 @@ export * from './confirm-modal';
 export * from './empty-state';
 export * from './file-dropzone';
 export * from './progress';
+export * from './ripple-button';
 export * from './skeleton';
 export * from './sync-status-pill';

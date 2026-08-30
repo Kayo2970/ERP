@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 
 export type ButtonVariant = 'solid' | 'flat' | 'bordered' | 'light' | 'shadow';
@@ -12,11 +12,20 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   color?: ButtonColor;
   size?: ButtonSize;
   isLoading?: boolean;
+  disableRipple?: boolean;
+  rippleColor?: string;
   startContent?: React.ReactNode;
   endContent?: React.ReactNode;
   fullWidth?: boolean;
   className?: string;
   children?: React.ReactNode;
+}
+
+interface Ripple {
+  x: number;
+  y: number;
+  size: number;
+  key: number;
 }
 
 const COLOR_VARIANTS: Record<ButtonColor, Record<ButtonVariant, string>> = {
@@ -72,29 +81,74 @@ const SIZES: Record<ButtonSize, string> = {
 };
 
 /**
- * HeroUI Button Component
- * Highly interactive button with ripple/scale physics, color themes, and content slots.
+ * Button Component with MagicUI Ripple click animation
  */
 export function Button({
   variant = 'solid',
   color = 'default',
   size = 'md',
   isLoading = false,
+  disableRipple = false,
+  rippleColor,
   startContent,
   endContent,
   fullWidth = false,
   disabled = false,
+  onClick,
   className = '',
   children,
   ...props
 }: ButtonProps) {
   const colorStyle = COLOR_VARIANTS[color]?.[variant] || COLOR_VARIANTS.default.solid;
   const sizeStyle = SIZES[size] || SIZES.md;
+  const [ripples, setRipples] = useState<Ripple[]>([]);
+
+  const defaultRippleColor =
+    variant === 'solid' || variant === 'shadow'
+      ? 'rgba(255, 255, 255, 0.4)'
+      : 'rgba(46, 117, 182, 0.25)';
+
+  const activeRippleColor = rippleColor || defaultRippleColor;
+
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (disabled || isLoading) return;
+
+    if (!disableRipple) {
+      const button = e.currentTarget;
+      const rect = button.getBoundingClientRect();
+      const left = e.clientX - rect.left;
+      const top = e.clientY - rect.top;
+      const rippleSize = Math.max(rect.width, rect.height) * 2;
+
+      setRipples((prev) => [
+        ...prev,
+        {
+          x: left - rippleSize / 2,
+          y: top - rippleSize / 2,
+          size: rippleSize,
+          key: Date.now() + Math.random(),
+        },
+      ]);
+    }
+
+    onClick?.(e);
+  };
+
+  useEffect(() => {
+    if (ripples.length > 0) {
+      const last = ripples[ripples.length - 1];
+      const timer = setTimeout(() => {
+        setRipples((prev) => prev.filter((r) => r.key !== last.key));
+      }, 600);
+      return () => clearTimeout(timer);
+    }
+  }, [ripples]);
 
   return (
     <button
       disabled={disabled || isLoading}
-      className={`relative inline-flex items-center justify-center font-medium select-none transition-all duration-150 active:scale-[0.97] cursor-pointer disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed ${colorStyle} ${sizeStyle} ${
+      onClick={handleClick}
+      className={`relative inline-flex items-center justify-center font-medium select-none overflow-hidden transition-all duration-150 active:scale-[0.97] cursor-pointer disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed ${colorStyle} ${sizeStyle} ${
         fullWidth ? 'w-full' : ''
       } ${className}`}
       {...props}
@@ -102,10 +156,30 @@ export function Button({
       {isLoading ? (
         <Loader2 className="h-4 w-4 animate-spin shrink-0" />
       ) : (
-        startContent && <span className="shrink-0">{startContent}</span>
+        startContent && <span className="relative z-10 shrink-0">{startContent}</span>
       )}
-      {children}
-      {!isLoading && endContent && <span className="shrink-0">{endContent}</span>}
+      <span className="relative z-10 flex items-center gap-2">{children}</span>
+      {!isLoading && endContent && <span className="relative z-10 shrink-0">{endContent}</span>}
+
+      {/* Ripple Elements */}
+      {!disableRipple && (
+        <span className="pointer-events-none absolute inset-0">
+          {ripples.map((ripple) => (
+            <span
+              key={ripple.key}
+              className="animate-rippling absolute rounded-full"
+              style={{
+                top: `${ripple.y}px`,
+                left: `${ripple.x}px`,
+                width: `${ripple.size}px`,
+                height: `${ripple.size}px`,
+                backgroundColor: activeRippleColor,
+                transform: 'scale(0)',
+              }}
+            />
+          ))}
+        </span>
+      )}
     </button>
   );
 }
