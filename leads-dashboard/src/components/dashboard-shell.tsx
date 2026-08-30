@@ -35,13 +35,15 @@ import {
   Wallet,
   ChevronLeft,
   ChevronRight,
-  ArrowRight
+  ArrowRight,
+  Compass
 } from 'lucide-react';
 import { getAnnouncements, getTasks, getDesigns, getMembers, getBudgets, getReimbursements, getEvents, logAuditEvent, Member, syncWithServer, getSystemSettings } from '@/lib/local-data';
 import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isFinanceHead, canAccessGuestDirectory, canVerifyBudgetCentreHead, canDecideBudget, canVerifyReimbursementCentreHead, canApproveAsSectorHead, canApproveAsFinanceHead } from '@/lib/permissions';
 import { TermsModal } from '@/components/terms-modal';
 import { NotFoundScreen } from '@/components/not-found-screen';
 import { LoadingScreen } from '@/components/loading-screen';
+import { OnboardingTour } from '@/components/onboarding-tour';
 import { SyncStatusPill } from '@/components/ui/sync-status-pill';
 import { Avatar } from '@/components/ui/avatar';
 
@@ -170,6 +172,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   });
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [lockdownEnabled, setLockdownEnabled] = useState(false);
+  const [isTourOpen, setIsTourOpen] = useState(false);
   // Tracks the current user for the 'leads-data-sync' handler below, which is
   // registered once on mount and would otherwise only ever see this initial
   // (pre-login) placeholder user via a stale closure.
@@ -312,6 +315,12 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       // Load dynamic notifications from recent announcements, tasks, and proofread requests
       setNotifications(buildNotifications(parsedUser));
       setSeenActionIds(loadSeenActionIds());
+
+      // Auto-launch role-tailored Onboarding Tour on first login
+      const tourKey = `leads_tour_completed_${parsedUser.email || parsedUser.name}`;
+      if (!localStorage.getItem(tourKey)) {
+        setTimeout(() => setIsTourOpen(true), 750);
+      }
 
       return () => clearInterval(pollInterval);
     } catch (e) {
@@ -934,6 +943,16 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           </div>
 
           <div className="flex items-center gap-3 flex-wrap justify-end">
+            {/* Interactive Guided Tour button */}
+            <button
+              onClick={() => setIsTourOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-accent/15 border border-accent/30 text-accent hover:bg-accent/25 text-xs font-bold rounded-xl transition-all cursor-pointer shrink-0"
+              title="Interactive Tour of Modules & Permissions"
+            >
+              <Compass className="h-4 w-4" />
+              <span className="hidden sm:inline">Guided Tour</span>
+            </button>
+
             {/* Theme switcher */}
             <button
               onClick={toggleTheme}
@@ -1149,6 +1168,13 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
               {isUserMenuOpen && (
                 <div className="absolute right-0 mt-2 w-48 glass-panel rounded-2xl p-1.5 shadow-2xl border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <button
+                    onClick={() => { setIsUserMenuOpen(false); setIsTourOpen(true); }}
+                    className="flex items-center gap-2.5 w-full px-3 py-2.5 text-xs font-semibold text-accent hover:bg-accent/15 rounded-xl transition-all cursor-pointer"
+                  >
+                    <Compass className="h-4 w-4" />
+                    Guided Tour
+                  </button>
                   <Link
                     href="/dashboard/settings"
                     onClick={() => setIsUserMenuOpen(false)}
@@ -1196,6 +1222,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
         {/* Terms & Conditions Modal */}
         <TermsModal isOpen={isTermsOpen} onClose={() => setIsTermsOpen(false)} />
+
+        {/* Interactive Role-Tailored Onboarding Tour */}
+        <OnboardingTour user={user} isOpen={isTourOpen} onClose={() => setIsTourOpen(false)} />
       </div>
 
       {/* Global save/sync feedback for every background write app-wide */}
