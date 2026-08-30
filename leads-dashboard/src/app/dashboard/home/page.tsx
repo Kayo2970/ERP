@@ -169,7 +169,7 @@ export default function DashboardHome() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 bg-amber-500/15 dark:bg-amber-500/20 border border-amber-500/30 dark:border-amber-400/40 rounded-2xl shadow-lg backdrop-blur-xl animate-in fade-in duration-300">
           <div className="flex items-center gap-3">
             <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-300 shrink-0" />
-            <span className="text-xs font-bold text-slate-900 dark:text-amber-100">
+            <span className="text-xs font-bold text-slate-900 dark:text-white">
               You have {pendingAckCount} task(s) awaiting your acknowledgment.
             </span>
           </div>
