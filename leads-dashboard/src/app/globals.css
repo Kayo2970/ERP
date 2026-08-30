@@ -163,25 +163,32 @@ body {
   animation: splash-logo-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
-/* Windows native HTML select & option dropdown menu readability fix */
-select {
-  color-scheme: light dark;
+/* Skeleton UI Right-to-Left Shimmer Animation for Loading Screens */
+@keyframes shimmer-rtl {
+  0% {
+    transform: translateX(150%);
+  }
+  100% {
+    transform: translateX(-150%);
+  }
 }
 
-.dark select {
-  color-scheme: dark;
+.animate-shimmer-rtl {
+  animation: shimmer-rtl 1.8s infinite ease-in-out;
 }
 
-select option {
-  background-color: #ffffff;
-  color: #0f172a;
+@keyframes pulse-subtle {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.75;
+  }
 }
 
-.dark select option,
-html.dark select option,
-body.dark select option {
-  background-color: #0b1b2e;
-  color: #e8ecf1;
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
 
 
