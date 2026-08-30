@@ -7,6 +7,11 @@
  * known default password. Safe to re-run: if data/members.json already has
  * at least one account, this is a no-op — it never overwrites live data.
  *
+ * Also prompts, right after the Super User's email/password, for the
+ * DATA_ENCRYPTION_KEY used to encrypt everything on disk — unless one is
+ * already configured (.env, .env.local, or the shell environment), in which
+ * case it's left untouched. Never overwrites an existing key.
+ *
  * Usage:
  *   node scripts/setup-superuser.js
  *
@@ -21,7 +26,10 @@ const crypto = require('crypto');
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const MEMBERS_PATH = path.join(DATA_DIR, 'members.json');
+const ENV_PATH = path.join(process.cwd(), '.env');
+const ENV_EXAMPLE_PATH = path.join(process.cwd(), '.env.example');
 const ENCRYPTION_SALT = Buffer.from('LEADS_NEXT_GEN_CENTRE_MSRUAS_SALT_2026', 'utf-8');
+const FALLBACK_KEY = 'LEADS_ERP_MASTER_SECRET_KEY_2026';
 
 // --- best-effort .env / .env.local loader (no dependency, mirrors what
 // Next.js itself loads at runtime, so this script's DATA_ENCRYPTION_KEY
@@ -45,7 +53,9 @@ function loadDotEnv(filename) {
 loadDotEnv('.env');
 loadDotEnv('.env.local');
 
-const MASTER_KEY = process.env.DATA_ENCRYPTION_KEY || 'LEADS_ERP_MASTER_SECRET_KEY_2026';
+// Mutable: resolveOrSetEncryptionKey() below may set this to a key the
+// operator just chose, before encryptData()/decryptData() are ever called.
+let MASTER_KEY = process.env.DATA_ENCRYPTION_KEY || FALLBACK_KEY;
 
 // --- same algorithms as src/lib/password.ts and src/lib/encryption.ts,
 // duplicated here (not imported) since this plain script runs with no
@@ -96,6 +106,56 @@ function ask(rl, question) {
   return new Promise(function (resolve) {
     rl.question(question, function (answer) { resolve(answer); });
   });
+}
+
+/** Appends/replaces DATA_ENCRYPTION_KEY in .env, creating it from
+ * .env.example (or from scratch) first if .env doesn't exist yet. */
+function writeEncryptionKeyToEnv(key) {
+  if (!fs.existsSync(ENV_PATH)) {
+    if (fs.existsSync(ENV_EXAMPLE_PATH)) {
+      fs.copyFileSync(ENV_EXAMPLE_PATH, ENV_PATH);
+    } else {
+      fs.writeFileSync(ENV_PATH, '', 'utf-8');
+    }
+  }
+  let content = fs.readFileSync(ENV_PATH, 'utf-8');
+  if (/^DATA_ENCRYPTION_KEY=.*$/m.test(content)) {
+    content = content.replace(/^DATA_ENCRYPTION_KEY=.*$/m, 'DATA_ENCRYPTION_KEY=' + key);
+  } else {
+    if (content.length && !content.endsWith('\n')) content += '\n';
+    content += '\nDATA_ENCRYPTION_KEY=' + key + '\n';
+  }
+  fs.writeFileSync(ENV_PATH, content, 'utf-8');
+}
+
+/**
+ * If DATA_ENCRYPTION_KEY is already set (via .env, .env.local, or the shell
+ * environment), leaves it alone — changing it would silently make every
+ * already-encrypted record unreadable. Otherwise asks the operator to set
+ * one now, before it's ever used to encrypt anything, rather than quietly
+ * falling back to the fallback key published in this project's own source.
+ */
+async function resolveOrSetEncryptionKey(rl) {
+  if (process.env.DATA_ENCRYPTION_KEY) {
+    console.log('Using the DATA_ENCRYPTION_KEY already configured in your environment — leaving it as is.\n');
+    return;
+  }
+
+  console.log('\n--- Data encryption key ---');
+  console.log('No DATA_ENCRYPTION_KEY is set yet. This is the key that encrypts every record this');
+  console.log('app stores on disk — leaving it unset falls back to a key published in this project\'s');
+  console.log('own source code, which is NOT safe for real data.\n');
+  const choice = (await ask(rl, 'Press Enter to generate a strong random key (recommended), or paste your own: ')).trim();
+  const key = choice || crypto.randomBytes(32).toString('hex');
+
+  writeEncryptionKeyToEnv(key);
+  MASTER_KEY = key;
+  process.env.DATA_ENCRYPTION_KEY = key;
+
+  console.log(choice ? '\nSaved your key to .env.' : '\nGenerated a new key and saved it to .env.');
+  console.log('\n⚠️  SAVE THIS KEY SOMEWHERE OTHER THAN THIS SERVER — it is the only way to decrypt this');
+  console.log('   data if this disk is ever lost. The app will never show it to you again:');
+  console.log('   DATA_ENCRYPTION_KEY=' + key + '\n');
 }
 
 // Control bytes as \u escapes (never as literal raw bytes in this source):
@@ -202,6 +262,13 @@ async function main() {
     console.error('\nGave up after 3 attempts without a matching password. Re-run this script to try again.\n');
     process.exit(1);
   }
+
+  // Asked last, right before it's actually needed to encrypt anything —
+  // reuses process.env.DATA_ENCRYPTION_KEY (via loadDotEnv above) if one is
+  // already configured, and only prompts when nothing is set yet.
+  const rl2 = readline.createInterface({ input: process.stdin, output: process.stdout });
+  await resolveOrSetEncryptionKey(rl2);
+  rl2.close();
 
   const superUser = {
     id: 'm1',
