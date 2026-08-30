@@ -8,6 +8,7 @@ import { logAuditEvent, requestPasswordReset, submitPasswordReset, submitAdminOv
 import { TermsModal } from '@/components/terms-modal';
 import { LoadingScreen } from '@/components/loading-screen';
 import { SetupWizard } from '@/components/setup-wizard';
+import { GhostFibers } from '@/components/ui/ghost-fibers';
 
 interface QuoteItem {
   quote: string;
@@ -433,9 +434,39 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-space-theme flex flex-col items-center justify-center p-4 md:p-8">
+    <div className="min-h-screen bg-space-theme flex flex-col items-center justify-center p-4 md:p-8 relative overflow-hidden">
+      {/* Background Animated GhostFibers WebGL Canvas with LEADS Theme */}
+      <div className="absolute inset-0 pointer-events-none z-0 opacity-70 dark:opacity-85">
+        <GhostFibers
+          lineColor="#0F2A47"
+          glowColor="#2E75B6"
+          speed={0.18}
+          scale={2.2}
+          rotation={10}
+          rotationSpeed={0.15}
+          layers={5}
+          waveAmplitude={0.016}
+          waveFrequency={3.2}
+          waveSpeed={0.14}
+          layerSpeed={0.07}
+          twist={0.12}
+          twistFrequency={4.5}
+          twistSpeed={0.9}
+          lineFrequency={5.5}
+          lineSpacing={2}
+          lineSharpness={18}
+          glowFalloff={9}
+          glowIntensity={1.8}
+          brightness={1.9}
+          blueBoost={1.35}
+          vignette={0.75}
+          grain={0.04}
+          dpr={1}
+        />
+      </div>
+
       {/* Grid Layout Container */}
-      <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 items-stretch">
+      <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 items-stretch relative z-10">
 
         {/* Dynamic Quotes Hero Panel — shown after the login form on mobile so
             signing in never requires scrolling past a tall decorative panel. */}
