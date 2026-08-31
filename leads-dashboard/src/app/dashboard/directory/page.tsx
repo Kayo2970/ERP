@@ -54,7 +54,7 @@ import {
 } from '@/lib/local-data';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { StudentProfileModal } from '@/components/student-profile-modal';
-import { canViewFullDirectory, canEditDirectory, canEditMemberRecordRow, isRestrictedDirectoryEditor, isCentreHead, canViewHiddenAccounts, canSetMemberPassword } from '@/lib/permissions';
+import { canViewFullDirectory, canEditDirectory, canEditMemberRecordRow, isRestrictedDirectoryEditor, isCentreHead, canViewHiddenAccounts, canSetMemberPassword, isKayomarzPavri } from '@/lib/permissions';
 
 export default function DirectoryPage() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -696,8 +696,11 @@ export default function DirectoryPage() {
 
   const handleConfirmDelete = () => {
     if (!deletingMember) return;
+    // Kayomarz Pavri alone can delete another Super User account — never his
+    // own, which the row-level gate below already keeps out of reach here.
+    const bypassSuperUserProtection = isKayomarzPavri(user) && deletingMember.id !== user?.id;
     try {
-      deleteMember(deletingMember.id);
+      deleteMember(deletingMember.id, user?.name || 'Super User', bypassSuperUserProtection);
       setMembers(getMembers());
       triggerSuccess(`Removed ${deletingMember.name} from directory.`);
     } catch (err: any) {
@@ -1445,11 +1448,15 @@ export default function DirectoryPage() {
                                 </button>
                               )}
 
-                              {member.id !== 'm1' && (
+                              {/* Never allow deleting yourself. Otherwise, a
+                                  Super User row is normally protected — except
+                                  for Kayomarz Pavri, who can delete any other
+                                  user, Super User accounts included. */}
+                              {member.id !== user?.id && (member.id !== 'm1' && member.tier !== 1 && member.role !== 'Super User' || isKayomarzPavri(user)) && (
                                 <button
                                   onClick={() => setDeletingMember(member)}
                                   className="p-1.5 text-danger hover:bg-danger/10 rounded-lg transition-all cursor-pointer"
-                                  title="Remove Member"
+                                  title={member.tier === 1 || member.role === 'Super User' ? 'Remove Member (Super User override)' : 'Remove Member'}
                                 >
                                   <UserMinus className="h-3.5 w-3.5" />
                                 </button>

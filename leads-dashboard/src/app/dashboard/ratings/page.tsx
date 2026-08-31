@@ -27,7 +27,7 @@ import {
   EventItem
 } from '@/lib/local-data';
 import { getRatingColor } from '@/lib/design-tokens';
-import { canViewRating, canEvaluateEventStudent, canEditRating } from '@/lib/permissions';
+import { canViewRating, canEvaluateEventStudent, canEditRating, resolveRatingReviewerRole } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { PeriodFilter } from '@/components/period-filter';
 import { PeriodFilterValue, extractAvailableMonths, isWithinPeriod } from '@/lib/period-filter';
@@ -100,6 +100,15 @@ export default function RatingsPage() {
     setTimeout(() => setAlertMsg(''), 4000);
   };
 
+  // Same targetId resolution handleEvaluateSubmit uses when creating a new
+  // rating — factored out so the queue card can look up whether THIS viewer
+  // has already filled their reviewer slot for a task, without duplicating
+  // the member-lookup logic.
+  const getRatingTargetId = (task: TaskItem): string => {
+    const assigneeMember = members.find(m => m.name.toLowerCase() === task.assignee.toLowerCase());
+    return assigneeMember ? assigneeMember.id : (task.assigneeId || task.assignee);
+  };
+
   const openEvaluationForTask = (task: TaskItem) => {
     const linkedEvent = events.find(ev => ev.id === task.eventId || ev.title === task.event);
     const eventCampus = linkedEvent?.campus || task.eventCampus || 'GG Campus';
@@ -170,29 +179,55 @@ export default function RatingsPage() {
       const assigneeMember = members.find(m => m.name.toLowerCase() === selectedTask.assignee.toLowerCase());
       const isCommittee = selectedTask.assigneeType === 'committee' || selectedTask.eventCommitteeId;
       const isGroup = selectedTask.assigneeType === 'group';
+      const targetId = assigneeMember ? assigneeMember.id : (selectedTask.assigneeId || selectedTask.assignee);
+      const reviewerRole = resolveRatingReviewerRole(user, isDesignTask(selectedTask));
 
-      addRating({
-        taskId: selectedTask.id,
-        taskTitle: selectedTask.title,
-        eventId: selectedTask.eventId,
-        eventName: selectedTask.event,
-        targetId: assigneeMember ? assigneeMember.id : (selectedTask.assigneeId || selectedTask.assignee),
-        targetName: selectedTask.assignee,
-        raterName: user.name,
-        quality,
-        timeliness,
-        initiative,
-        collaboration,
-        overallScore: overall,
-        notes,
-      });
+      // Every task gets exactly two reviewers — Centre Head and the GG Campus
+      // Events Head — whose scores are averaged. If this reviewer (identified
+      // by their fixed role slot, not by name) already reviewed this exact
+      // task/target, re-submitting edits their existing review in place
+      // instead of adding a duplicate second row from the same slot.
+      const ownExisting = ratings.find(
+        r => r.taskId === selectedTask.id && r.targetId === targetId && reviewerRole !== null && r.reviewerRole === reviewerRole
+      );
+
+      if (ownExisting) {
+        updateRating(ownExisting.id, {
+          quality,
+          timeliness,
+          initiative,
+          collaboration,
+          overallScore: overall,
+          notes,
+        }, user.name);
+      } else {
+        addRating({
+          taskId: selectedTask.id,
+          taskTitle: selectedTask.title,
+          eventId: selectedTask.eventId,
+          eventName: selectedTask.event,
+          targetId,
+          targetName: selectedTask.assignee,
+          raterName: user.name,
+          reviewerRole: reviewerRole ?? undefined,
+          quality,
+          timeliness,
+          initiative,
+          collaboration,
+          overallScore: overall,
+          notes,
+        });
+      }
 
       const committeeNotice = isCommittee
         ? ' (Evaluation propagated to all student members of this committee)'
         : isGroup
           ? ' (Evaluation propagated to all students in this group)'
           : '';
-      triggerSuccess(`Submitted performance score of ${overall}/5.0 for ${selectedTask.assignee} on "${selectedTask.title}"${committeeNotice}`);
+      const averageNotice = reviewerRole === 'CENTRE_HEAD' || reviewerRole === 'GG_HEAD'
+        ? ' — shown score is the live average of the Centre Head and GG Events Head reviews so far'
+        : '';
+      triggerSuccess(`Submitted performance score of ${overall}/5.0 for ${selectedTask.assignee} on "${selectedTask.title}"${committeeNotice}${averageNotice}`);
     }
 
     setIsModalOpen(false);
@@ -293,6 +328,14 @@ export default function RatingsPage() {
                 const eventCampus = linkedEvent?.campus || task.eventCampus || 'GG Campus';
                 const isDesignDeliverable = isDesignTask(task);
                 const canEval = canEvaluateEventStudent(user, eventCampus, isDesignDeliverable);
+                const reviewerRole = resolveRatingReviewerRole(user, isDesignDeliverable);
+                const targetId = getRatingTargetId(task);
+                const dualReview = reviewerRole === 'CENTRE_HEAD' || reviewerRole === 'GG_HEAD';
+                const myExistingRating = reviewerRole
+                  ? ratings.find(r => r.taskId === task.id && r.targetId === targetId && r.reviewerRole === reviewerRole)
+                  : undefined;
+                const hasCentreHeadReview = ratings.some(r => r.taskId === task.id && r.targetId === targetId && r.reviewerRole === 'CENTRE_HEAD');
+                const hasGgHeadReview = ratings.some(r => r.taskId === task.id && r.targetId === targetId && r.reviewerRole === 'GG_HEAD');
 
                 return (
                   <div 
@@ -341,39 +384,52 @@ export default function RatingsPage() {
                     </div>
 
                     {task.ratingScore ? (
-                      <div className="flex items-center justify-between pt-1 border-t border-theme-border/20 text-[11px]">
-                        <span className="text-theme-text-secondary">Evaluated Score:</span>
-                        <span className="font-bold text-accent flex items-center gap-1">
-                          <Star className="h-3 w-3 fill-accent" />
-                          {task.ratingScore.toFixed(1)}/5.0
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="pt-1 border-t border-theme-border/20 flex items-center justify-between gap-2">
-                        {!canEval ? (
-                          <span className="text-[10px] text-warning font-medium italic">
-                            {isDesignDeliverable
-                              ? 'Evaluations restricted to Centre Head, Head of Events, or Design Head'
-                              : `Evaluations restricted to Centre Head or Head of Events (${eventCampus})`}
+                      <div className="pt-1 border-t border-theme-border/20 space-y-1">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-theme-text-secondary">
+                            {dualReview ? 'Average Score:' : 'Evaluated Score:'}
                           </span>
-                        ) : (
-                          <span className="text-[10px] text-theme-text-secondary">
-                            {task.assigneeType === 'committee' ? 'Rates entire committee' : task.assigneeType === 'group' ? 'Rates entire group' : 'Pending Evaluation'}
+                          <span className="font-bold text-accent flex items-center gap-1">
+                            <Star className="h-3 w-3 fill-accent" />
+                            {task.ratingScore.toFixed(1)}/5.0
                           </span>
+                        </div>
+                        {dualReview && (
+                          <div className="flex items-center gap-1.5 text-[9px] text-theme-text-secondary">
+                            <span className={hasCentreHeadReview ? 'text-success font-semibold' : 'opacity-60'}>
+                              {hasCentreHeadReview ? '✓' : '○'} Centre Head
+                            </span>
+                            <span className={hasGgHeadReview ? 'text-success font-semibold' : 'opacity-60'}>
+                              {hasGgHeadReview ? '✓' : '○'} GG Head
+                            </span>
+                          </div>
                         )}
-                        <button
-                          disabled={!canEval}
-                          onClick={() => openEvaluationForTask(task)}
-                          className={`px-3 py-1 text-[11px] font-medium rounded-lg cursor-pointer transition-all ${
-                            canEval 
-                              ? 'bg-accent/15 text-accent hover:bg-accent/25 border border-accent/20' 
-                              : 'bg-theme-border/20 text-theme-text-secondary cursor-not-allowed opacity-50'
-                          }`}
-                        >
-                          Evaluate Performance
-                        </button>
                       </div>
-                    )}
+                    ) : null}
+
+                    <div className="pt-1 border-t border-theme-border/20 flex items-center justify-between gap-2">
+                      {!canEval ? (
+                        <span className="text-[10px] text-warning font-medium italic">
+                          {isDesignDeliverable
+                            ? 'Evaluations restricted to Centre Head, Head of Events (GG Campus), or Design Head'
+                            : 'Evaluations restricted to Centre Head or Head of Events (GG Campus)'}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-theme-text-secondary">
+                          {myExistingRating
+                            ? 'You already reviewed this'
+                            : task.assigneeType === 'committee' ? 'Rates entire committee' : task.assigneeType === 'group' ? 'Rates entire group' : 'Pending Evaluation'}
+                        </span>
+                      )}
+                      {canEval && (
+                        <button
+                          onClick={() => myExistingRating ? openEditEvaluation(myExistingRating) : openEvaluationForTask(task)}
+                          className="px-3 py-1 text-[11px] font-medium rounded-lg cursor-pointer transition-all bg-accent/15 text-accent hover:bg-accent/25 border border-accent/20"
+                        >
+                          {myExistingRating ? 'Edit My Review' : 'Evaluate Performance'}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })
@@ -445,7 +501,20 @@ export default function RatingsPage() {
                             <span className="text-[10px] text-theme-text-secondary">{rating.eventName}</span>
                           )}
                         </td>
-                        <td className="py-3.5 pr-2 text-theme-text-secondary whitespace-nowrap">{rating.raterName}</td>
+                        <td className="py-3.5 pr-2 text-theme-text-secondary whitespace-nowrap">
+                          {rating.raterName}
+                          {rating.reviewerRole && (
+                            <span className={`ml-1.5 inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${
+                              rating.reviewerRole === 'CENTRE_HEAD'
+                                ? 'bg-accent/10 text-accent border-accent/20'
+                                : rating.reviewerRole === 'GG_HEAD'
+                                  ? 'bg-primary/10 text-primary-light border-primary/20'
+                                  : 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                            }`}>
+                              {rating.reviewerRole === 'CENTRE_HEAD' ? 'Centre Head' : rating.reviewerRole === 'GG_HEAD' ? 'GG Head' : 'Design Head'}
+                            </span>
+                          )}
+                        </td>
                         <td className="py-3.5 pr-2 text-theme-text-secondary whitespace-nowrap">
                           <span className="font-semibold text-theme-text-primary">{rating.quality}</span> &middot; <span className="font-semibold text-theme-text-primary">{rating.timeliness}</span> &middot; <span className="font-semibold text-theme-text-primary">{rating.initiative}</span> &middot; <span className="font-semibold text-theme-text-primary">{rating.collaboration}</span>
                         </td>
@@ -532,6 +601,17 @@ export default function RatingsPage() {
               <p className="text-[11px] text-theme-text-secondary">
                 Student Assignee: <strong className="text-theme-text-primary">{editingRating ? editingRating.targetName : selectedTask?.assignee}</strong>
               </p>
+              {!editingRating && selectedTask && (() => {
+                const role = resolveRatingReviewerRole(user, isDesignTask(selectedTask));
+                if (role === 'CENTRE_HEAD' || role === 'GG_HEAD') {
+                  return (
+                    <p className="text-[10px] text-theme-text-secondary/80 italic">
+                      Reviewing as {role === 'CENTRE_HEAD' ? 'Centre Head' : 'Head of Events (GG Campus)'} — the score shown for this task is the live average of the Centre Head and GG Events Head reviews.
+                    </p>
+                  );
+                }
+                return null;
+              })()}
             </div>
 
             <form onSubmit={handleEvaluateSubmit} className="space-y-4 text-xs">
@@ -543,11 +623,11 @@ export default function RatingsPage() {
                 <div className="space-y-1">
                   <div className="flex justify-between items-center text-xs">
                     <span className="font-semibold text-theme-text-primary">1. Quality of Deliverable</span>
-                    <span className="font-bold text-accent">{quality} / 5</span>
+                    <span className="font-bold text-accent">{quality.toFixed(1)} / 5</span>
                   </div>
-                  <input 
-                    type="range" min="1" max="5" step="1" 
-                    value={quality} onChange={(e) => setQuality(parseInt(e.target.value))}
+                  <input
+                    type="range" min="1" max="5" step="0.5"
+                    value={quality} onChange={(e) => setQuality(parseFloat(e.target.value))}
                     className="w-full accent-accent h-1.5 bg-theme-border/40 rounded-lg appearance-none cursor-pointer"
                   />
                 </div>
@@ -556,11 +636,11 @@ export default function RatingsPage() {
                 <div className="space-y-1">
                   <div className="flex justify-between items-center text-xs">
                     <span className="font-semibold text-theme-text-primary">2. Timeliness & Deadline Adherence</span>
-                    <span className="font-bold text-accent">{timeliness} / 5</span>
+                    <span className="font-bold text-accent">{timeliness.toFixed(1)} / 5</span>
                   </div>
-                  <input 
-                    type="range" min="1" max="5" step="1" 
-                    value={timeliness} onChange={(e) => setTimeliness(parseInt(e.target.value))}
+                  <input
+                    type="range" min="1" max="5" step="0.5"
+                    value={timeliness} onChange={(e) => setTimeliness(parseFloat(e.target.value))}
                     className="w-full accent-accent h-1.5 bg-theme-border/40 rounded-lg appearance-none cursor-pointer"
                   />
                 </div>
@@ -569,11 +649,11 @@ export default function RatingsPage() {
                 <div className="space-y-1">
                   <div className="flex justify-between items-center text-xs">
                     <span className="font-semibold text-theme-text-primary">3. Proactive Initiative & Problem Solving</span>
-                    <span className="font-bold text-accent">{initiative} / 5</span>
+                    <span className="font-bold text-accent">{initiative.toFixed(1)} / 5</span>
                   </div>
-                  <input 
-                    type="range" min="1" max="5" step="1" 
-                    value={initiative} onChange={(e) => setInitiative(parseInt(e.target.value))}
+                  <input
+                    type="range" min="1" max="5" step="0.5"
+                    value={initiative} onChange={(e) => setInitiative(parseFloat(e.target.value))}
                     className="w-full accent-accent h-1.5 bg-theme-border/40 rounded-lg appearance-none cursor-pointer"
                   />
                 </div>
@@ -582,11 +662,11 @@ export default function RatingsPage() {
                 <div className="space-y-1">
                   <div className="flex justify-between items-center text-xs">
                     <span className="font-semibold text-theme-text-primary">4. Team Collaboration & Communication</span>
-                    <span className="font-bold text-accent">{collaboration} / 5</span>
+                    <span className="font-bold text-accent">{collaboration.toFixed(1)} / 5</span>
                   </div>
-                  <input 
-                    type="range" min="1" max="5" step="1" 
-                    value={collaboration} onChange={(e) => setCollaboration(parseInt(e.target.value))}
+                  <input
+                    type="range" min="1" max="5" step="0.5"
+                    value={collaboration} onChange={(e) => setCollaboration(parseFloat(e.target.value))}
                     className="w-full accent-accent h-1.5 bg-theme-border/40 rounded-lg appearance-none cursor-pointer"
                   />
                 </div>

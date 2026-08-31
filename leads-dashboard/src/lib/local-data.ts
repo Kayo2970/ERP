@@ -206,6 +206,14 @@ export interface RatingItem {
   targetId: string; // Member ID
   targetName: string; // Member Name
   raterName: string;
+  // Which fixed reviewer slot this rating fills — see permissions.ts's
+  // resolveRatingReviewerRole. CENTRE_HEAD and GG_HEAD are the two required
+  // reviewers averaged together into the task's ratingScore (see
+  // recomputeTaskAggregateScore below); DESIGN_HEAD is the separate,
+  // unaveraged design-deliverable lane. Undefined on ratings created before
+  // this field existed — treated as neither slot, so old ratings keep
+  // displaying exactly as before rather than retroactively joining an average.
+  reviewerRole?: 'CENTRE_HEAD' | 'GG_HEAD' | 'DESIGN_HEAD';
   quality: number;
   timeliness: number;
   initiative: number;
@@ -907,11 +915,12 @@ async function serverPatch(endpoint: string, id: string, updates: any, onProgres
   }, (result) => result !== null);
 }
 
-async function serverDelete(endpoint: string, id: string): Promise<boolean> {
+async function serverDelete(endpoint: string, id: string, queryParams?: Record<string, string>): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   return trackSync(syncLabelFor(endpoint), 'Removing', async () => {
     try {
-      const res = await fetch(`${endpoint}/${id}`, { method: 'DELETE' });
+      const qs = queryParams ? `?${new URLSearchParams(queryParams).toString()}` : '';
+      const res = await fetch(`${endpoint}/${id}${qs}`, { method: 'DELETE' });
       if (!res.ok) console.warn(`[api] DELETE ${endpoint}/${id} failed:`, res.status);
       return res.ok;
     } catch (err) {
@@ -973,18 +982,32 @@ export async function addMember(member: Omit<Member, 'id'>): Promise<Member & { 
   return createdMember;
 }
 
-export function deleteMember(id: string): void {
+/**
+ * `bypassSuperUserProtection` lifts the "Super User accounts can't be
+ * deleted" guard — reserved for Kayomarz Pavri (see permissions.ts's
+ * isKayomarzPavri) deleting a Super User account other than his own. The
+ * caller is responsible for that identity check (and for blocking
+ * self-deletion) before setting this; deleteMember itself just trusts the
+ * flag, matching how every other admin action in this app is gated
+ * client-side rather than re-checked here.
+ */
+export function deleteMember(id: string, actorName: string = 'System / Admin', bypassSuperUserProtection: boolean = false): void {
   const current = getMembers();
   const target = current.find(m => m.id === id);
   if (!target) return;
-  if (id === 'm1' || target.tier === 1 || target.role === 'Super User') {
+  const isSuperUserTarget = id === 'm1' || target.tier === 1 || target.role === 'Super User';
+  if (isSuperUserTarget && !bypassSuperUserProtection) {
     throw new Error('The Super User account is protected and cannot be deleted.');
   }
 
   const updated = current.filter(m => m.id !== id);
   saveMembers(updated);
-  serverDelete('/api/members', id);
-  logAuditEvent('MEMBER_DELETED', 'System / Admin', `Removed member ${target.name} (${target.email})`);
+  serverDelete('/api/members', id, bypassSuperUserProtection ? { force: 'true' } : undefined);
+  logAuditEvent(
+    'MEMBER_DELETED',
+    actorName,
+    `Removed member ${target.name} (${target.email})${isSuperUserTarget ? ' — Super User account, deleted via Kayomarz Pavri override' : ''}`
+  );
 }
 
 export function syncActiveSessionUser(member: Member): void {
@@ -1848,6 +1871,25 @@ export function saveRatings(ratings: RatingItem[]): void {
   markLocalWrite('leads_ratings');
 }
 
+/**
+ * Recomputes a task's single ratingScore summary field as the average of its
+ * CENTRE_HEAD and GG_HEAD reviews (the two fixed reviewer slots — see
+ * permissions.ts's resolveRatingReviewerRole) for the given targetId (the
+ * parent rating's target — the actual assignee for an individual task, or
+ * the committee/group identifier for a fan-out task). DESIGN_HEAD reviews and
+ * pre-this-feature ratings with no reviewerRole are excluded from the
+ * average, matching the "live average of whichever of the two reviewers has
+ * submitted so far" behavior — 1 review shows as-is, 2 show the true average.
+ */
+function recomputeTaskAggregateScore(taskId: string, targetId: string, actorName: string): void {
+  const relevant = getRatings().filter(
+    r => r.taskId === taskId && r.targetId === targetId && (r.reviewerRole === 'CENTRE_HEAD' || r.reviewerRole === 'GG_HEAD')
+  );
+  if (relevant.length === 0) return;
+  const avg = parseFloat((relevant.reduce((sum, r) => sum + r.overallScore, 0) / relevant.length).toFixed(2));
+  updateTask(taskId, { ratingScore: avg, ratedAt: new Date().toISOString().split('T')[0] }, actorName);
+}
+
 function propagateCommitteeRating(task: TaskItem, parentRating: RatingItem): void {
   const events = getEvents();
   const event = events.find(e => e.id === task.eventId || e.title === task.event);
@@ -1872,8 +1914,32 @@ function propagateCommitteeRating(task: TaskItem, parentRating: RatingItem): voi
     const memberObj = members.find(m => m.id === mId || m.name.toLowerCase() === mId.toLowerCase());
     if (!memberObj) return;
 
-    const alreadyRated = ratings.some(r => r.taskId === task.id && (r.targetId === memberObj.id || r.targetName.toLowerCase() === memberObj.name.toLowerCase()));
-    if (alreadyRated) return;
+    // Scoped to the SAME reviewer role: a second reviewer (e.g. the GG Head,
+    // fanning out after the Centre Head already rated this committee) must
+    // still get their own row per member, not be silently skipped because
+    // the Centre Head's rows already exist. If this exact reviewer already
+    // rated this member for this task, update their existing row in place
+    // (matches the "re-review edits your own score" rule) instead of adding
+    // a duplicate.
+    const existingIdx = ratings.findIndex(
+      r => r.taskId === task.id && (r.targetId === memberObj.id || r.targetName.toLowerCase() === memberObj.name.toLowerCase()) && r.reviewerRole === parentRating.reviewerRole
+    );
+
+    if (existingIdx !== -1) {
+      ratings[existingIdx] = {
+        ...ratings[existingIdx],
+        quality: parentRating.quality,
+        timeliness: parentRating.timeliness,
+        initiative: parentRating.initiative,
+        collaboration: parentRating.collaboration,
+        overallScore: parentRating.overallScore,
+        notes: `[Committee Evaluation: ${committee.name}] ${parentRating.notes || ''}`.trim(),
+        updatedAt: new Date().toISOString().split('T')[0],
+      };
+      serverPatch('/api/ratings', ratings[existingIdx].id, ratings[existingIdx]);
+      updated = true;
+      return;
+    }
 
     const studentRating: RatingItem = {
       id: 'r_comm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
@@ -1884,6 +1950,7 @@ function propagateCommitteeRating(task: TaskItem, parentRating: RatingItem): voi
       targetId: memberObj.id,
       targetName: memberObj.name,
       raterName: parentRating.raterName,
+      reviewerRole: parentRating.reviewerRole,
       quality: parentRating.quality,
       timeliness: parentRating.timeliness,
       initiative: parentRating.initiative,
@@ -1918,8 +1985,26 @@ function propagateGroupRating(task: TaskItem, parentRating: RatingItem): void {
     const memberObj = members.find(m => m.id === mId);
     if (!memberObj) return;
 
-    const alreadyRated = ratings.some(r => r.taskId === task.id && r.targetId === memberObj.id);
-    if (alreadyRated) return;
+    // Same same-reviewer-role scoping as propagateCommitteeRating above.
+    const existingIdx = ratings.findIndex(
+      r => r.taskId === task.id && r.targetId === memberObj.id && r.reviewerRole === parentRating.reviewerRole
+    );
+
+    if (existingIdx !== -1) {
+      ratings[existingIdx] = {
+        ...ratings[existingIdx],
+        quality: parentRating.quality,
+        timeliness: parentRating.timeliness,
+        initiative: parentRating.initiative,
+        collaboration: parentRating.collaboration,
+        overallScore: parentRating.overallScore,
+        notes: `[Group Evaluation] ${parentRating.notes || ''}`.trim(),
+        updatedAt: new Date().toISOString().split('T')[0],
+      };
+      serverPatch('/api/ratings', ratings[existingIdx].id, ratings[existingIdx]);
+      updated = true;
+      return;
+    }
 
     const studentRating: RatingItem = {
       id: 'r_group_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
@@ -1930,6 +2015,7 @@ function propagateGroupRating(task: TaskItem, parentRating: RatingItem): void {
       targetId: memberObj.id,
       targetName: memberObj.name,
       raterName: parentRating.raterName,
+      reviewerRole: parentRating.reviewerRole,
       quality: parentRating.quality,
       timeliness: parentRating.timeliness,
       initiative: parentRating.initiative,
@@ -1959,9 +2045,8 @@ export function addRating(rating: Omit<RatingItem, 'id' | 'createdAt'>): RatingI
   saveRatings(ratings);
   serverPost('/api/ratings', newRating);
 
-  // Update task with rating metadata
   if (rating.taskId) {
-    updateTask(rating.taskId, { ratingScore: rating.overallScore, ratedAt: newRating.createdAt }, rating.raterName);
+    recomputeTaskAggregateScore(rating.taskId, rating.targetId, rating.raterName);
 
     const task = getTasks().find(t => t.id === rating.taskId);
     if (task && (task.assigneeType === 'committee' || task.eventCommitteeId)) {
@@ -1990,8 +2075,8 @@ export function updateRating(id: string, updates: Partial<RatingItem>, actorName
   // client-only sample rating that was never POSTed) creates a complete record.
   serverPatch('/api/ratings', id, ratings[idx]);
 
-  if (ratings[idx].taskId && updates.overallScore) {
-    updateTask(ratings[idx].taskId, { ratingScore: updates.overallScore }, actorName);
+  if (ratings[idx].taskId && updates.overallScore !== undefined) {
+    recomputeTaskAggregateScore(ratings[idx].taskId, ratings[idx].targetId, actorName);
   }
 
   logAuditEvent('RATING_UPDATED', actorName, `Updated evaluation scorecard for ${ratings[idx].targetName}`);

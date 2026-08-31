@@ -68,18 +68,24 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    if (id === 'm1') {
+    // `force=true` lifts the Super User protection below — the client only
+    // ever sets this after its own isKayomarzPavri() identity check (see
+    // local-data.ts's deleteMember), same client-trust model every other
+    // admin action in this app already uses; there's no server-side session
+    // to re-verify the caller's identity against.
+    const force = new URL(request.url).searchParams.get('force') === 'true';
+    if (id === 'm1' && !force) {
       return NextResponse.json({ error: 'The Super User account is protected and cannot be deleted.' }, { status: 403 });
     }
     let found = false;
     await mutateCollection('members', (current) => {
       const target = current.find((m: any) => m.id === id);
-      if (target && (target.tier === 1 || target.role === 'Super User')) {
+      if (target && (target.tier === 1 || target.role === 'Super User') && !force) {
         return current;
       }
       const filtered = current.filter((m: any) => m.id !== id);

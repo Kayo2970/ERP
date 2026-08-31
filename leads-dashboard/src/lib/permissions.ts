@@ -150,36 +150,42 @@ export function isEventsHeadRtcCampus(user: SessionUser): boolean {
 }
 
 /**
- * Strict evaluation rule enforcement:
- * 1) Centre Head & GG Campus Event Head (Tier 2.5) can evaluate across both campuses.
- * 2) RTC Events Head evaluates RTC events ONLY and is strictly blocked from GG events.
- * 3) A Design Portal deliverable task (`isDesignDeliverable`) is a separate lane —
- *    it isn't tied to campus-scoped event committee work, so the Design Head who
- *    actually approved/finalized the design can also rate it, regardless of the
- *    campus-based rules above (which otherwise only recognize Centre Head/Head of
- *    Events, locking every Design Head out of their own team's deliverables).
+ * Fixed dual-reviewer evaluation rule: every task evaluation gets exactly two
+ * reviewers — the Centre Head and the GG Campus Events Head (Tier 2.5) — and
+ * the score shown is the average of whichever of those two have reviewed so
+ * far (see resolveRatingReviewerRole/getEffectiveRatingScore). This applies
+ * to every campus, including RTC: the RTC Events Head no longer independently
+ * evaluates. A Design Portal deliverable task (`isDesignDeliverable`) stays a
+ * separate lane, unaffected by the above — the Design Head who actually
+ * approved/finalized the design can also rate it (their review does not
+ * participate in the Centre Head/GG Head average; see
+ * resolveRatingReviewerRole's DESIGN_HEAD case).
  */
 export function canEvaluateEventStudent(user: SessionUser, eventCampus?: string, isDesignDeliverable?: boolean): boolean {
   if (!user || isAlumniRole(user)) return false;
   if (isDesignDeliverable && isDesignHead(user)) return true;
+  return isCentreHead(user) || isEventsHeadGgCampus(user) || user.tier === 2.5;
+}
 
-  const centreHead = isCentreHead(user);
-  const isGgHead = isEventsHeadGgCampus(user) || user.tier === 2.5;
-  const isRtcHead = isEventsHeadRtcCampus(user);
-  const eventsHead = isHeadOfEvents(user);
+/** The two (or three, for a design deliverable) fixed "slots" a rating submission fills. */
+export type RatingReviewerRole = 'CENTRE_HEAD' | 'GG_HEAD' | 'DESIGN_HEAD';
 
-  if (!centreHead && !eventsHead && !isGgHead) return false;
-  if (centreHead || isGgHead) return true;
-
-  if (eventCampus === 'GG Campus') {
-    return false; // RTC Head cannot evaluate GG events
-  }
-
-  if (eventCampus === 'RTC Campus') {
-    return isRtcHead || eventsHead;
-  }
-
-  return eventsHead;
+/**
+ * Resolves which fixed reviewer slot `user` fills when submitting a rating —
+ * CENTRE_HEAD and GG_HEAD are the two required reviewers averaged together
+ * for every task (see canEvaluateEventStudent); DESIGN_HEAD is the separate,
+ * unaveraged design-deliverable lane. Checked in this order so a Centre Head
+ * (including the Super User, who always satisfies isCentreHead) always fills
+ * the CENTRE_HEAD slot even if they'd otherwise also qualify as Design Head.
+ * Returns null if `user` doesn't hold access at all (mirrors
+ * canEvaluateEventStudent — callers should gate on that first).
+ */
+export function resolveRatingReviewerRole(user: SessionUser, isDesignDeliverable?: boolean): RatingReviewerRole | null {
+  if (!user) return null;
+  if (isCentreHead(user)) return 'CENTRE_HEAD';
+  if (isEventsHeadGgCampus(user) || user.tier === 2.5) return 'GG_HEAD';
+  if (isDesignDeliverable && isDesignHead(user)) return 'DESIGN_HEAD';
+  return null;
 }
 
 /** Check if user is a Design Head (Head role + Design department/role). */
