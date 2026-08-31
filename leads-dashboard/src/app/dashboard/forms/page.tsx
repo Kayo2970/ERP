@@ -55,12 +55,15 @@ import {
   addFormTemplate,
   deleteFormTemplate,
   getEvents,
+  getTasks,
+  isApprovedEvent,
   FEEDBACK_FORM_TEMPLATE_ID,
   PublicFormItem,
   FormField,
   FormSubmissionItem,
   FormTemplateItem,
-  EventItem
+  EventItem,
+  TaskItem
 } from '@/lib/local-data';
 import { canBuildForms, getFormApprovalRequirement, canApprovePendingForm } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
@@ -155,6 +158,7 @@ export default function FormsBuilderPage() {
   const [submissions, setSubmissions] = useState<FormSubmissionItem[]>([]);
   const [templates, setTemplates] = useState<FormTemplateItem[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [user, setUser] = useState<any>(null);
 
   // Modals & Active Edit
@@ -195,6 +199,7 @@ export default function FormsBuilderPage() {
       setSubmissions(getSubmissions());
       setTemplates(getFormTemplates());
       setEvents(getEvents());
+      setTasks(getTasks());
     };
     refreshData();
 
@@ -1124,7 +1129,7 @@ export default function FormsBuilderPage() {
                   className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                 >
                   <option value="">-- No Event Linked --</option>
-                  {events.map(ev => (
+                  {events.filter(ev => isApprovedEvent(ev, tasks)).map(ev => (
                     <option key={ev.id} value={ev.id}>{ev.title}</option>
                   ))}
                 </select>

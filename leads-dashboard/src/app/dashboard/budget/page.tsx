@@ -33,6 +33,7 @@ import {
   decideBudget,
   verifyBudgetByCentreHead,
   getEvents,
+  isApprovedEvent,
   addEvent,
   getReimbursements,
   getTasks,
@@ -1662,7 +1663,7 @@ export default function BudgetPage() {
                       >
                         <option value="">-- Select Existing Event --</option>
                         <option value="CREATE_NEW">✨ + Create New Event On The Spot...</option>
-                        {events.map((ev) => (
+                        {events.filter(ev => isApprovedEvent(ev, tasks)).map((ev) => (
                           <option key={ev.id} value={ev.id}>
                             {ev.title} ({ev.campus})
                           </option>
@@ -1995,7 +1996,7 @@ export default function BudgetPage() {
                   className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                 >
                   <option value="">🏛️ General Centre Income (Unlinked)</option>
-                  {events.map((ev) => (
+                  {events.filter(ev => isApprovedEvent(ev, tasks)).map((ev) => (
                     <option key={ev.id} value={ev.id}>
                       🎯 Event: {ev.title} ({ev.campus})
                     </option>

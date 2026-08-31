@@ -28,10 +28,13 @@ import {
   updateReimbursementStatus,
   verifyReimbursementByCentreHead,
   getEvents,
+  getTasks,
+  isApprovedEvent,
   getMembers,
   Member,
   ReimbursementItem,
   EventItem,
+  TaskItem,
   ReceiptFile
 } from '@/lib/local-data';
 import {
@@ -44,6 +47,7 @@ import {
 export default function ReimbursementsPage() {
   const [reimbursements, setReimbursements] = useState<ReimbursementItem[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [user, setUser] = useState<any>(null);
 
   // Form State (Collaborator Claims)
@@ -83,6 +87,7 @@ export default function ReimbursementsPage() {
     const refreshData = () => {
       setReimbursements(getReimbursements());
       setEvents(getEvents());
+      setTasks(getTasks());
     };
     refreshData();
 
@@ -419,7 +424,7 @@ export default function ReimbursementsPage() {
             >
               <option value="ALL">All Events & Operations</option>
               <option value="GENERAL">General Operations (No Event)</option>
-              {events.map(ev => (
+              {events.filter(ev => isApprovedEvent(ev, tasks)).map(ev => (
                 <option key={ev.id} value={ev.id}>Event: {ev.title}</option>
               ))}
             </select>
@@ -478,7 +483,7 @@ export default function ReimbursementsPage() {
                 className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
               >
                 <option value="">General Operations / Non-Event Expense</option>
-                {events.map(ev => (
+                {events.filter(ev => isApprovedEvent(ev, tasks)).map(ev => (
                   <option key={ev.id} value={ev.id}>{ev.title}</option>
                 ))}
               </select>
@@ -1001,7 +1006,7 @@ export default function ReimbursementsPage() {
               >
                 <option value="ALL">All Events & Operations Combined</option>
                 <option value="GENERAL">General Operations (No Event)</option>
-                {events.map(ev => (
+                {events.filter(ev => isApprovedEvent(ev, tasks)).map(ev => (
                   <option key={ev.id} value={ev.id}>Event: {ev.title}</option>
                 ))}
               </select>

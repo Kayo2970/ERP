@@ -37,6 +37,7 @@ import {
   deleteDesign,
   getMembers,
   getEvents,
+  isApprovedEvent,
   addEvent,
   getTasks,
   submitDesignCaptions,
@@ -1120,7 +1121,7 @@ export default function DesignPortalPage() {
                     className="w-full bg-background border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent"
                   >
                     <option value="">-- No Specific Event --</option>
-                    {events.map(ev => (
+                    {events.filter(ev => isApprovedEvent(ev, tasks)).map(ev => (
                       <option key={ev.id} value={ev.id}>{ev.title}</option>
                     ))}
                   </select>

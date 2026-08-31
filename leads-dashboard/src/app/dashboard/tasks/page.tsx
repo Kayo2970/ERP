@@ -23,6 +23,7 @@ import {
 import {
   getTasks,
   getEvents,
+  isApprovedEvent,
   getMembers,
   addTask,
   updateTask,
@@ -800,7 +801,7 @@ export default function TasksPage() {
                     className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   >
                     <option value="standalone">Standalone (No Event)</option>
-                    {events.map(ev => (
+                    {events.filter(ev => isApprovedEvent(ev, tasks)).map(ev => (
                       <option key={ev.id} value={ev.id}>{ev.title}</option>
                     ))}
                   </select>

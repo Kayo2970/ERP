@@ -1298,6 +1298,63 @@ export function getEventById(id: string): EventItem | null {
   return events.find(e => e.id === id) || null;
 }
 
+/**
+ * Check if an event is approved and ready to appear in dropdowns across the application:
+ * 1. For regular events: approvalStatus is 'approved' or undefined (not 'pending_create', 'pending_delete', or 'rejected').
+ * 2. For festival/holiday events: the post for the festival must be explicitly approved 
+ *    (e.g. a holiday_design_social task exists or holiday_social_approval task was completed with approval).
+ */
+export function isApprovedEvent(event: EventItem, tasks?: TaskItem[]): boolean {
+  if (!event) return false;
+
+  // 1. Regular event approval check
+  if (event.approvalStatus === 'pending_create' || event.approvalStatus === 'rejected') {
+    return false;
+  }
+
+  // 2. Festival / Holiday event post approval check
+  const isFestival = event.isHoliday || (event.description && (
+    event.description.toLowerCase().includes('festival') ||
+    event.description.toLowerCase().includes('holiday')
+  ));
+
+  if (isFestival) {
+    const allTasks = tasks || getTasks();
+    const festivalTasks = allTasks.filter(t => 
+      t.eventId === event.id ||
+      t.event === event.title ||
+      (t.title && t.title.toLowerCase().includes(event.title.toLowerCase()))
+    );
+
+    // Look for design task resulting from an approved festival post
+    const hasApprovedDesignPost = festivalTasks.some(t => 
+      t.workflowType === 'holiday_design_social' ||
+      (t.isDesignDeliverable && t.workflowType !== 'holiday_social_approval' && t.status === 'Completed')
+    );
+    if (hasApprovedDesignPost) return true;
+
+    // Look for festival social approval task
+    const approvalTask = festivalTasks.find(t => t.workflowType === 'holiday_social_approval');
+    if (approvalTask) {
+      if (approvalTask.status === 'Completed' && hasApprovedDesignPost) {
+        return true;
+      }
+      return false;
+    }
+
+    // If no post task has been created or approved for this festival yet, it's not approved for dropdowns
+    return false;
+  }
+
+  return true;
+}
+
+export function getApprovedEvents(tasks?: TaskItem[]): EventItem[] {
+  const events = getEvents();
+  const allTasks = tasks || getTasks();
+  return events.filter(e => isApprovedEvent(e, allTasks));
+}
+
 export function saveEvents(events: EventItem[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_events', JSON.stringify(events));
@@ -1803,13 +1860,17 @@ export function rejectTask(id: string, actorName: string, reason?: string): Task
 
 export function canViewTask(
   task: TaskItem, 
-  user: { id?: string; name: string; email: string; tier: number; division?: string; committee?: string } | null
+  user: { id?: string; name: string; email: string; tier: number; division?: string; committee?: string; role?: string } | null
 ): boolean {
   if (!user) return false;
   // Tier 1-3 (Super User, Centre Head, Head of Events): see all tasks
   if (user.tier <= 3) return true;
   // Tier 4 (Advisory Board): strategic read-only oversight
   if (user.tier === 4) return true;
+
+  // President, Vice President, and Executive Council: see all tasks
+  const role = ((user as any)?.role || '').toLowerCase();
+  if (role.includes('president') || role.includes('vice president') || role.includes('chief coordinator')) return true;
 
   if (task.assigneeType === 'committee') {
     // Check if user's legacy committee field matches committee name

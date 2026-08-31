@@ -28,10 +28,13 @@ import {
   rejectAnnouncement,
   getMembers, 
   getEvents,
+  getTasks,
+  isApprovedEvent,
   getCommittees, 
   AnnouncementItem, 
   Member,
-  EventItem
+  EventItem,
+  TaskItem
 } from '@/lib/local-data';
 import { isCentreHead, canCreateAnnouncement, canApproveAnnouncement } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
@@ -41,6 +44,7 @@ export default function AnnouncementsPage() {
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [committees, setCommittees] = useState<string[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [allMembers, setAllMembers] = useState<Member[]>([]);
   const [user, setUser] = useState<any>(null);
 
@@ -88,6 +92,7 @@ export default function AnnouncementsPage() {
       setCommittees(getCommittees());
       const evList = getEvents();
       setEvents(evList);
+      setTasks(getTasks());
       const memList = getMembers();
       setAllMembers(memList);
 
@@ -610,7 +615,7 @@ export default function AnnouncementsPage() {
                       }}
                       className="w-full px-3.5 py-2 bg-theme-background/50 border border-accent/30 rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-medium"
                     >
-                      {events.map(ev => (
+                      {events.filter(ev => isApprovedEvent(ev, tasks)).map(ev => (
                         <option key={ev.id} value={ev.id}>{ev.title}</option>
                       ))}
                     </select>

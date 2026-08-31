@@ -792,6 +792,7 @@ export function canManageTasks(user: SessionUser): boolean {
  */
 export function canViewTaskExtended(task: TaskItem, user: SessionUser): boolean {
   if (hasCapability(user, 'TASKS_VIEW_ALL') || hasModuleViewAllGrant(user, 'TASKS')) return true;
+  if (isExecutiveRole(user)) return true;
   if (canViewTask(task as any, user as any)) return true;
   if (!user || !isHeadRole(user)) return false;
 
