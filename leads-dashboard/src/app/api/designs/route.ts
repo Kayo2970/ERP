@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { saveBase64File } from '@/lib/file-storage';
 
+export const maxDuration = 60; // 60s execution limit for large uploads (up to 25 MB)
+
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
 
 export async function GET() {
