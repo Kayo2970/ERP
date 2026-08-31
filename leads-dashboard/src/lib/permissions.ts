@@ -365,22 +365,37 @@ export function resolveModuleEditOverride(user: SessionUser, moduleKey: ModuleAc
   return 'NONE';
 }
 
-/** One-time self-edit window for records that track a creator (Members, Guests) — 24 hours from creation. */
-export const SELF_EDIT_WINDOW_MS = 24 * 60 * 60 * 1000;
+/**
+ * Explicit View override from a Group Policy for `moduleKey`: 'ALL' grants
+ * unrestricted view access; 'NONE' revokes view access; 'OWN' limits view
+ * to records this member created or met. Returns undefined when no policy sets a view override.
+ */
+export function resolveModuleViewOverride(user: SessionUser, moduleKey: ModuleAccessKey): 'ALL' | 'OWN' | undefined {
+  if (user?.tier === 1) return 'ALL';
+  const views = matchingModulePolicies(user, moduleKey)
+    .map(p => p.moduleAccess?.[moduleKey]?.view)
+    .filter((v): v is 'ALL' | 'OWN' => v === 'ALL' || v === 'OWN');
+  if (views.length === 0) return undefined;
+  if (views.includes('ALL')) return 'ALL';
+  return 'OWN';
+}
 
 export function isOwnCreatedGuest(guest: { createdBy?: string; metBy?: string }, user: SessionUser): boolean {
   if (!user) return false;
-  const userEmail = (user.email || '').toLowerCase();
-  const userName = (user.name || '').toLowerCase();
-  const userId = (user.id || '').toLowerCase();
+  const userEmail = (user.email || '').trim().toLowerCase();
+  const userName = (user.name || '').trim().toLowerCase();
+  const userId = (user.id || '').trim().toLowerCase();
 
-  const createdBy = (guest.createdBy || '').toLowerCase();
-  const metBy = (guest.metBy || '').toLowerCase();
+  const createdBy = (guest.createdBy || '').trim().toLowerCase();
+  const metBy = (guest.metBy || '').trim().toLowerCase();
 
   if (createdBy && (createdBy === userEmail || createdBy === userId || createdBy === userName)) return true;
   if (metBy && metBy === userName) return true;
   return false;
 }
+
+/** One-time self-edit window for records that track a creator (Members, Guests) — 24 hours from creation. */
+export const SELF_EDIT_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 function isOwnCreatedRecordEditable(record: { createdBy?: string; metBy?: string; createdAt?: string; selfEditUsedAt?: string }, user: SessionUser): boolean {
   if (!user) return false;
@@ -392,14 +407,30 @@ function isOwnCreatedRecordEditable(record: { createdBy?: string; metBy?: string
   return Date.now() - createdAt <= SELF_EDIT_WINDOW_MS;
 }
 
-/** Check if user can view a specific guest record (filtered when moduleAccess.GUEST_DIRECTORY.view === 'OWN'). */
+/** Check if user can view a specific guest record (strictly filtered when moduleAccess.GUEST_DIRECTORY.view === 'OWN' or edit === 'OWN'). */
 export function canViewGuestRecord(guest: Guest, user: SessionUser): boolean {
-  if (!canAccessGuestDirectory(user)) return false;
-  if (user?.tier === 1 || isCentreHead(user)) return true;
-  if (hasModuleViewOwnRestriction(user, 'GUEST_DIRECTORY') || resolveModuleEditOverride(user, 'GUEST_DIRECTORY') === 'OWN') {
+  if (!user) return false;
+  if (user.tier === 1) return true;
+
+  const viewOverride = resolveModuleViewOverride(user, 'GUEST_DIRECTORY');
+  const editOverride = resolveModuleEditOverride(user, 'GUEST_DIRECTORY');
+
+  if (editOverride === 'NONE' && !viewOverride) return false;
+
+  // An explicit 'OWN' override ALWAYS takes precedence over built-in role/tier defaults
+  if (viewOverride === 'OWN' || editOverride === 'OWN' || hasModuleViewOwnRestriction(user, 'GUEST_DIRECTORY')) {
     return isOwnCreatedGuest(guest, user);
   }
-  return true;
+
+  if (viewOverride === 'ALL' || editOverride === 'ALL') {
+    return true;
+  }
+
+  // Built-in default: Centre Head has full view access when no policy override exists
+  if (isCentreHead(user)) return true;
+
+  // All other users holding access default to viewing only their own created/met guests
+  return isOwnCreatedGuest(guest, user);
 }
 
 /**
@@ -429,20 +460,18 @@ export function canEditMemberRecordRow(member: Member, user: SessionUser): boole
 }
 
 /**
- * Per-row Guest Directory edit permission — same three-tier shape as
- * canEditMemberRecordRow: Centre Head/Super User unrestricted; an explicit
- * moduleAccess.GUEST_DIRECTORY.edit override always wins for everyone else;
- * a plain Faculty/Executive member with page access but no override may only
- * edit a guest they personally added, once, within 24 hours.
+ * Per-row Guest Directory edit permission — explicit Group Policy 'OWN' or 'ALL'
+ * override ALWAYS takes precedence over built-in role defaults.
  */
 export function canEditGuestRecord(guest: Guest, user: SessionUser): boolean {
+  if (!user) return false;
   if (user?.tier === 1) return true;
   const override = resolveModuleEditOverride(user, 'GUEST_DIRECTORY');
   if (override === 'NONE') return false;
   if (override === 'ALL') return true;
+  if (override === 'OWN') return isOwnCreatedRecordEditable(guest, user);
   if (isCentreHead(user)) return true;
   if (!canAccessGuestDirectory(user)) return false;
-  if (override === 'OWN') return isOwnCreatedRecordEditable(guest, user);
   return isOwnCreatedRecordEditable(guest, user);
 }
 
