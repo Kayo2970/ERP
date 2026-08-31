@@ -222,12 +222,12 @@ export default function BackupRestorePage() {
             disabled={isTogglingLockdown}
             role="switch"
             aria-checked={lockdownEnabled}
-            className={`shrink-0 relative w-14 h-8 rounded-full transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+            className={`shrink-0 relative w-14 h-8 rounded-full transition-colors duration-200 ease-in-out cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
               lockdownEnabled ? 'bg-danger' : 'bg-theme-border/40'
             }`}
           >
             <span
-              className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow-md transition-transform ${
+              className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow-md transition-transform duration-200 ease-in-out ${
                 lockdownEnabled ? 'translate-x-7' : 'translate-x-1'
               }`}
             />

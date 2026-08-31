@@ -18,6 +18,15 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
   const [notFound, setNotFound] = useState(false);
   const [isTermsOpen, setIsTermsOpen] = useState(false);
 
+  // Public form links are opened standalone (shared via QR code, email, etc.)
+  // outside the dashboard's own theme toggle, so they'd otherwise inherit
+  // whatever `.dark` state the browser happened to be left in (or none at
+  // all) — force the same dynamic dark glassmorphic background the rest of
+  // the app uses, since dark is the only theme this page is designed for.
+  useEffect(() => {
+    document.documentElement.classList.add('dark');
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -96,7 +105,7 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
+      <div className="min-h-screen bg-space-theme flex flex-col items-center justify-center p-4">
         <div className="text-slate-400 text-xs animate-pulse">Loading form details...</div>
       </div>
     );
@@ -104,7 +113,7 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
 
   if (notFound) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-slate-100">
+      <div className="min-h-screen bg-space-theme flex flex-col items-center justify-center p-4 text-slate-100">
         <div className="glass-panel w-full max-w-md rounded-3xl p-8 flex flex-col items-center text-center space-y-5 border border-white/10 shadow-2xl">
           <div className="h-14 w-14 bg-amber-500/15 rounded-2xl flex items-center justify-center border border-amber-500/30 text-amber-400">
             <AlertTriangle className="h-7 w-7" />
@@ -127,7 +136,7 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center p-4 py-12">
+    <div className="min-h-screen bg-space-theme text-slate-100 flex flex-col items-center justify-center p-4 py-12">
       
       {isSubmitted ? (
         // Submission Success View

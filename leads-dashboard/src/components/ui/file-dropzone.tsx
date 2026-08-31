@@ -193,12 +193,18 @@ interface FileDropzoneProps {
   label?: string;
   hint?: string;
   compact?: boolean;
+  /** Forwarded to the hidden input's `capture` attribute — on mobile/tablet
+   *  browsers this opens the device camera directly instead of only the file
+   *  picker (only meaningful paired with an image `accept`). 'user' for the
+   *  front-facing camera, 'environment' for the rear camera, or `true` to
+   *  let the browser pick a default facing mode. */
+  capture?: boolean | 'user' | 'environment';
 }
 
 /** The drag-and-drop target. Reacts to a file being dragged over it with three
  * simultaneous signals — border, glow, and copy shift — before the drop even
  * happens, instead of sitting there giving no sign it's interactive. */
-export function FileDropzone({ onFilesSelected, accept, multiple, disabled, label = 'Click to upload or drag and drop', hint, compact }: FileDropzoneProps) {
+export function FileDropzone({ onFilesSelected, accept, multiple, disabled, label = 'Click to upload or drag and drop', hint, compact, capture }: FileDropzoneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const dragCounter = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -249,6 +255,7 @@ export function FileDropzone({ onFilesSelected, accept, multiple, disabled, labe
         accept={accept}
         multiple={multiple}
         disabled={disabled}
+        capture={capture}
         onClick={(e) => e.stopPropagation()}
         onChange={(e) => {
           handleFiles(e.target.files);

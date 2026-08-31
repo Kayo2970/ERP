@@ -259,10 +259,10 @@ export default function RatingsPage() {
       </div>
 
       {/* Grid: Task Evaluation Queue & Evaluation History */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Left Column: Task Evaluation Queue */}
-        <div className="glass-panel rounded-2xl p-6 xl:col-span-1 space-y-4 flex flex-col max-h-[580px]">
+        <div className="glass-panel rounded-2xl p-6 lg:col-span-1 space-y-4 flex flex-col max-h-[580px]">
           <div>
             <h3 className="text-base font-bold text-theme-text-primary flex items-center gap-2">
               <CheckSquare className="h-4 w-4 text-accent" />
@@ -382,7 +382,7 @@ export default function RatingsPage() {
         </div>
 
         {/* Right Column: Submitted Evaluations & Scorecards History */}
-        <div className="glass-panel rounded-2xl p-6 xl:col-span-2 space-y-4 flex flex-col">
+        <div className="glass-panel rounded-2xl p-6 lg:col-span-2 space-y-4 flex flex-col">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h3 className="text-base font-bold text-theme-text-primary">Performance Evaluation Scorecards</h3>

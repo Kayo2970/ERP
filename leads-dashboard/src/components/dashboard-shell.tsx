@@ -34,10 +34,12 @@ import {
   Contact,
   Wallet,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Compass
 } from 'lucide-react';
 import { getAnnouncements, getTasks, getDesigns, getMembers, getBudgets, getReimbursements, getEvents, logAuditEvent, Member, syncWithServer, getSystemSettings } from '@/lib/local-data';
 import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isFinanceHead, canAccessGuestDirectory, canVerifyBudgetCentreHead, canDecideBudget, canVerifyReimbursementCentreHead, canApproveAsSectorHead, canApproveAsFinanceHead } from '@/lib/permissions';
+import { GuidedTour } from '@/components/guided-tour';
 import { TermsModal } from '@/components/terms-modal';
 import { NotFoundScreen } from '@/components/not-found-screen';
 import { LoadingScreen } from '@/components/loading-screen';
@@ -150,11 +152,16 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const [isImpersonating, setIsImpersonating] = useState(false);
   const [originalUser, setOriginalUser] = useState<any>(null);
   const quickSwitchRef = useRef<HTMLDivElement>(null);
+  const quickSwitchRefMobile = useRef<HTMLDivElement>(null);
 
   // Header user-menu dropdown (Settings / Sign Out), opened by clicking the
   // name/avatar in the desktop navbar.
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Guided workspace tour — auto-shown once per account (see guided-tour.tsx),
+  // and re-launchable any time from the profile menu via forceTourOpen.
+  const [forceTourOpen, setForceTourOpen] = useState(false);
 
   const [user, setUser] = useState({
     name: 'Kayomarz Pavri',
@@ -419,7 +426,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       if (!insideDesktopBell && !insideMobileBell) {
         setIsNotificationsOpen(false);
       }
-      if (quickSwitchRef.current && !quickSwitchRef.current.contains(target)) {
+      const insideDesktopQuickSwitch = quickSwitchRef.current?.contains(target);
+      const insideMobileQuickSwitch = quickSwitchRefMobile.current?.contains(target);
+      if (!insideDesktopQuickSwitch && !insideMobileQuickSwitch) {
         setIsQuickSwitchOpen(false);
       }
       if (userMenuRef.current && !userMenuRef.current.contains(target)) {
@@ -594,6 +603,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const renderNotificationBell = (wrapperRef: React.RefObject<HTMLDivElement | null>) => (
     <div className="relative" ref={wrapperRef}>
       <button
+        data-tour="notifications"
         onClick={handleToggleNotifications}
         className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-xl hover:bg-theme-border/20 transition-all cursor-pointer relative"
         title="Notifications"
@@ -618,7 +628,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             onClick={() => setIsNotificationsOpen(false)}
           />
 
-          <div className="fixed top-16 right-3 left-3 md:static md:left-auto md:right-0 md:absolute md:top-full md:mt-2 md:w-80 glass-panel rounded-2xl p-4 shadow-2xl border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150">
+          <div className="fixed top-16 right-4 left-4 md:static md:left-auto md:right-0 md:absolute md:top-full md:mt-2 md:w-80 glass-panel rounded-2xl p-4 shadow-2xl border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-2.5 border-b border-theme-border/30">
               <h4 className="text-xs font-bold text-theme-text-primary">Notifications</h4>
               {notifications.some(n => !n.read) && (
@@ -662,6 +672,66 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     </div>
   );
 
+  // Rendered twice — once in the desktop navbar, once in the mobile menu —
+  // mirroring renderNotificationBell above, so Super User quick-switch is
+  // reachable on mobile instead of only existing in the desktop header.
+  const renderQuickSwitch = (wrapperRef: React.RefObject<HTMLDivElement | null>) => (
+    <div className="relative" ref={wrapperRef}>
+      <button
+        onClick={() => setIsQuickSwitchOpen(!isQuickSwitchOpen)}
+        className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-xl hover:bg-theme-border/20 transition-all cursor-pointer"
+        title="Quick Switch: view as any account (Super User only)"
+      >
+        <UserCog className="h-4.5 w-4.5" />
+      </button>
+
+      {isQuickSwitchOpen && (
+        <div className="absolute right-0 top-full mt-2 w-80 max-w-[calc(100vw-2rem)] max-h-[70vh] flex flex-col glass-panel rounded-2xl p-3 shadow-2xl border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150">
+          <div className="flex items-center justify-between pb-2 border-b border-theme-border/30 mb-2">
+            <h4 className="text-xs font-bold text-theme-text-primary">Quick Switch</h4>
+            <span className="text-[10px] text-theme-text-secondary">Super User only</span>
+          </div>
+          <div className="flex items-center gap-2 px-2.5 py-1.5 bg-theme-background/40 border border-theme-border/40 rounded-lg mb-2">
+            <Search className="h-3.5 w-3.5 text-theme-text-secondary shrink-0" />
+            <input
+              type="text"
+              autoFocus
+              value={quickSwitchSearch}
+              onChange={(e) => setQuickSwitchSearch(e.target.value)}
+              placeholder="Search by name, email, or role..."
+              className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-xs text-theme-text-primary placeholder-theme-text-secondary"
+            />
+          </div>
+          <div className="max-h-64 flex-1 min-h-0 overflow-y-auto divide-y divide-theme-border/20">
+            {quickSwitchResults.length === 0 ? (
+              <div className="text-center py-6 text-theme-text-secondary text-xs">No matching members.</div>
+            ) : (
+              quickSwitchResults.map(m => (
+                <button
+                  key={m.id}
+                  onClick={() => handleQuickSwitch(m)}
+                  className="w-full flex items-center gap-2.5 py-2 px-1 hover:bg-theme-border/20 rounded-lg transition-all cursor-pointer text-left"
+                >
+                  <div className="h-7 w-7 bg-accent/15 rounded-lg flex items-center justify-center border border-accent/20 shrink-0">
+                    <span className="text-[10px] font-bold text-accent">
+                      {m.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-theme-text-primary truncate">
+                      {m.name}{m.email === user.email && ' (current)'}
+                    </p>
+                    <p className="text-[10px] text-theme-text-secondary truncate">{m.role}{m.division ? ` · ${m.division}` : ''}</p>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-space-theme flex items-center justify-center">
@@ -688,8 +758,12 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         />
       )}
 
-      {/* Sidebar - Desktop */}
-      <aside className={`hidden md:block relative shrink-0 h-screen sticky top-0 z-40 transition-[width] duration-200 ${isSidebarCollapsed ? 'w-20' : 'w-64'}`}>
+      {/* Sidebar - Desktop. min-h-screen (not h-screen) so it stretches to match
+          the main column's real height on pages tall enough to exceed one
+          viewport (common at tablet widths, where cards/tables reflow into
+          more rows) — h-screen hard-capped it at exactly 100vh, leaving a gap
+          at the bottom of the page on those taller pages. */}
+      <aside className={`hidden md:block relative shrink-0 min-h-screen sticky top-0 z-40 transition-[width] duration-200 ${isSidebarCollapsed ? 'w-20' : 'w-64'}`}>
         <div
           onMouseEnter={() => { if (isSidebarCollapsed) setIsSidebarHovering(true); }}
           onMouseLeave={() => setIsSidebarHovering(false)}
@@ -700,6 +774,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           {/* Brand Logo Link to Dashboard Home */}
           <Link
             href="/dashboard/home"
+            data-tour="brand"
             className={`h-16 flex items-center border-b border-theme-border/30 gap-3 hover:opacity-90 transition-all cursor-pointer select-none shrink-0 ${showSidebarLabels ? 'px-6' : 'justify-center px-0'}`}
             title="Return to Dashboard Home"
           >
@@ -719,7 +794,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           </Link>
 
           {/* Sidebar Nav links grouped by section */}
-          <nav className="flex-1 px-4 py-5 space-y-5 overflow-y-auto overflow-x-hidden">
+          <nav data-tour="sidebar-nav" className="flex-1 px-4 py-5 space-y-5 overflow-y-auto overflow-x-hidden">
             {navSections.map((section) => (
               <div key={section.title} className="space-y-1">
                 {showSidebarLabels && (
@@ -793,8 +868,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
       {/* Mobile Header / Nav */}
       <header className="md:hidden flex items-center justify-between h-16 px-4 glass-panel bg-theme-sidebar/80 border-b border-theme-sidebar-border sticky top-0 z-40 w-full">
-        <Link 
-          href="/dashboard/home" 
+        <Link
+          href="/dashboard/home"
+          data-tour="brand"
           className="flex items-center gap-2.5 hover:opacity-90 transition-all cursor-pointer select-none"
           title="Return to Dashboard Home"
         >
@@ -810,6 +886,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
         <div className="flex items-center gap-2">
           <button
+            data-tour="theme-toggle"
             onClick={toggleTheme}
             className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-lg hover:bg-theme-border/20 transition-all"
           >
@@ -819,6 +896,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           {renderNotificationBell(notifRefMobile)}
 
           <button
+            data-tour="menu"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-lg hover:bg-theme-border/20 transition-all"
           >
@@ -874,6 +952,26 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                   <p className="text-[11px] text-theme-text-secondary font-medium">{user.role || 'Member'}</p>
                 </div>
               </div>
+
+              {isImpersonating && (
+                <button
+                  onClick={() => { setIsMobileMenuOpen(false); handleReturnToSelf(); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 mx-2 bg-warning/15 border border-warning/40 text-warning text-[11px] font-semibold rounded-xl hover:bg-warning/25 transition-all cursor-pointer"
+                  title={`Return to ${originalUser?.name || 'your account'}`}
+                >
+                  <Undo2 className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">Viewing as {user.name}</span>
+                  <span className="shrink-0">&mdash; Return</span>
+                </button>
+              )}
+
+              {canQuickSwitch && (
+                <div className="flex items-center justify-between gap-2 px-2">
+                  <span className="text-xs font-semibold text-theme-text-secondary">Quick Switch</span>
+                  {renderQuickSwitch(quickSwitchRefMobile)}
+                </div>
+              )}
+
               <button
                 onClick={() => {
                   setIsMobileMenuOpen(false);
@@ -900,6 +998,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           <div className="flex items-center gap-3 flex-wrap justify-end">
             {/* Theme switcher */}
             <button
+              data-tour="theme-toggle"
               onClick={toggleTheme}
               className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-xl hover:bg-theme-border/20 transition-all cursor-pointer shrink-0"
               title="Toggle Light/Dark Theme"
@@ -923,66 +1022,12 @@ export default function DashboardShell({ children }: { children: React.ReactNode
               </button>
             )}
 
-            {canQuickSwitch && (
-              <div className="relative" ref={quickSwitchRef}>
-                <button
-                  onClick={() => setIsQuickSwitchOpen(!isQuickSwitchOpen)}
-                  className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-xl hover:bg-theme-border/20 transition-all cursor-pointer"
-                  title="Quick Switch: view as any account (Super User only)"
-                >
-                  <UserCog className="h-4.5 w-4.5" />
-                </button>
-
-                {isQuickSwitchOpen && (
-                  <div className="absolute right-0 mt-2 w-80 glass-panel rounded-2xl p-3 shadow-2xl border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150">
-                    <div className="flex items-center justify-between pb-2 border-b border-theme-border/30 mb-2">
-                      <h4 className="text-xs font-bold text-theme-text-primary">Quick Switch</h4>
-                      <span className="text-[10px] text-theme-text-secondary">Super User only</span>
-                    </div>
-                    <div className="flex items-center gap-2 px-2.5 py-1.5 bg-theme-background/40 border border-theme-border/40 rounded-lg mb-2">
-                      <Search className="h-3.5 w-3.5 text-theme-text-secondary shrink-0" />
-                      <input
-                        type="text"
-                        autoFocus
-                        value={quickSwitchSearch}
-                        onChange={(e) => setQuickSwitchSearch(e.target.value)}
-                        placeholder="Search by name, email, or role..."
-                        className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-xs text-theme-text-primary placeholder-theme-text-secondary"
-                      />
-                    </div>
-                    <div className="max-h-64 overflow-y-auto divide-y divide-theme-border/20">
-                      {quickSwitchResults.length === 0 ? (
-                        <div className="text-center py-6 text-theme-text-secondary text-xs">No matching members.</div>
-                      ) : (
-                        quickSwitchResults.map(m => (
-                          <button
-                            key={m.id}
-                            onClick={() => handleQuickSwitch(m)}
-                            className="w-full flex items-center gap-2.5 py-2 px-1 hover:bg-theme-border/20 rounded-lg transition-all cursor-pointer text-left"
-                          >
-                            <div className="h-7 w-7 bg-accent/15 rounded-lg flex items-center justify-center border border-accent/20 shrink-0">
-                              <span className="text-[10px] font-bold text-accent">
-                                {m.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                              </span>
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-xs font-semibold text-theme-text-primary truncate">
-                                {m.name}{m.email === user.email && ' (current)'}
-                              </p>
-                              <p className="text-[10px] text-theme-text-secondary truncate">{m.role}{m.division ? ` · ${m.division}` : ''}</p>
-                            </div>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+            {canQuickSwitch && renderQuickSwitch(quickSwitchRef)}
 
             {/* Active User info — click to open the Settings / Sign Out menu */}
             <div className="relative shrink-0" ref={userMenuRef}>
               <button
+                data-tour="profile"
                 onClick={() => setIsUserMenuOpen(v => !v)}
                 className="flex items-center gap-3 min-w-0 rounded-xl px-1.5 py-1 hover:bg-theme-border/20 transition-all cursor-pointer"
               >
@@ -1002,7 +1047,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
               </button>
 
               {isUserMenuOpen && (
-                <div className="absolute right-0 mt-2 w-48 glass-panel rounded-2xl p-1.5 shadow-2xl border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150">
+                <div className="absolute right-0 top-full mt-2 w-48 max-w-[calc(100vw-2rem)] glass-panel rounded-2xl p-1.5 shadow-2xl border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150">
                   <Link
                     href="/dashboard/settings"
                     onClick={() => setIsUserMenuOpen(false)}
@@ -1011,6 +1056,13 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                     <Settings className="h-4 w-4 text-theme-text-secondary" />
                     Settings
                   </Link>
+                  <button
+                    onClick={() => { setIsUserMenuOpen(false); setForceTourOpen(true); }}
+                    className="flex items-center gap-2.5 w-full px-3 py-2.5 text-xs font-semibold text-theme-text-primary hover:bg-theme-border/20 rounded-xl transition-all cursor-pointer"
+                  >
+                    <Compass className="h-4 w-4 text-theme-text-secondary" />
+                    Take a Tour
+                  </button>
                   <button
                     onClick={() => { setIsUserMenuOpen(false); handleLogout(); }}
                     className="flex items-center gap-2.5 w-full px-3 py-2.5 text-xs font-semibold text-danger hover:bg-danger/10 rounded-xl transition-all cursor-pointer"
@@ -1050,6 +1102,10 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
         {/* Terms & Conditions Modal */}
         <TermsModal isOpen={isTermsOpen} onClose={() => setIsTermsOpen(false)} />
+
+        {/* Guided workspace tour — spotlights real on-screen elements instead
+            of just navigating to a page. Auto-shown once per account. */}
+        <GuidedTour userEmail={user.email} forceOpen={forceTourOpen} onDone={() => setForceTourOpen(false)} />
       </div>
 
       {/* Global save/sync feedback for every background write app-wide */}

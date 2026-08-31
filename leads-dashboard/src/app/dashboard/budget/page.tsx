@@ -683,7 +683,7 @@ export default function BudgetPage() {
   );
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="p-6 md:p-8 space-y-6 pb-12">
       {/* Toast Notification */}
       {toastMsg && (
         <div className="fixed top-20 right-6 z-50 bg-emerald-500 text-white font-semibold px-4 py-3 rounded-xl shadow-xl flex items-center gap-2 animate-in fade-in slide-in-from-top-2 text-xs">

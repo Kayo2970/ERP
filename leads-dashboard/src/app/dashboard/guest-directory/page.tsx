@@ -907,6 +907,7 @@ export default function GuestDirectoryPage() {
                       onFilesSelected={handleFrontCardFiles}
                       accept="image/*,application/pdf"
                       label="Click or drag card photo here"
+                      capture="environment"
                       compact
                     />
                     {frontCardFile && (
@@ -927,6 +928,7 @@ export default function GuestDirectoryPage() {
                       onFilesSelected={handleBackCardFiles}
                       accept="image/*,application/pdf"
                       label="Click or drag card photo here"
+                      capture="environment"
                       compact
                     />
                     {backCardFile && (

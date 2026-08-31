@@ -978,7 +978,7 @@ export default function DirectoryPage() {
       )}
 
       {/* Header section with actions */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-theme-text-primary">Organization Members Directory</h1>
           <p className="text-xs text-theme-text-secondary">Explore center divisions: Advisory Board, Core Committee, Training Associates, and Alumni</p>
@@ -1180,7 +1180,7 @@ export default function DirectoryPage() {
                   </th>
                   <th 
                     onClick={() => toggleSort('name')}
-                    className="pb-3.5 font-semibold cursor-pointer hover:text-theme-text-primary select-none"
+                    className="pb-3.5 pr-4 font-semibold cursor-pointer hover:text-theme-text-primary select-none"
                   >
                     <span className="flex items-center gap-1">
                       Name <ArrowUpDown className="h-3 w-3" />
@@ -1188,7 +1188,7 @@ export default function DirectoryPage() {
                   </th>
                   <th 
                     onClick={() => toggleSort('email')}
-                    className="pb-3.5 font-semibold cursor-pointer hover:text-theme-text-primary select-none"
+                    className="pb-3.5 pr-4 font-semibold cursor-pointer hover:text-theme-text-primary select-none"
                   >
                     <span className="flex items-center gap-1">
                       Email Address <ArrowUpDown className="h-3 w-3" />
@@ -1196,7 +1196,7 @@ export default function DirectoryPage() {
                   </th>
                   <th 
                     onClick={() => toggleSort('division')}
-                    className="pb-3.5 font-semibold cursor-pointer hover:text-theme-text-primary select-none"
+                    className="pb-3.5 pr-4 font-semibold cursor-pointer hover:text-theme-text-primary select-none"
                   >
                     <span className="flex items-center gap-1">
                       Organization Division <ArrowUpDown className="h-3 w-3" />
@@ -1204,7 +1204,7 @@ export default function DirectoryPage() {
                   </th>
                   <th 
                     onClick={() => toggleSort('role')}
-                    className="pb-3.5 font-semibold cursor-pointer hover:text-theme-text-primary select-none"
+                    className="pb-3.5 pr-4 font-semibold cursor-pointer hover:text-theme-text-primary select-none"
                   >
                     <span className="flex items-center gap-1">
                       Designation / Role <ArrowUpDown className="h-3 w-3" />
@@ -1212,7 +1212,7 @@ export default function DirectoryPage() {
                   </th>
                   <th
                     onClick={() => toggleSort('department')}
-                    className="pb-3.5 font-semibold cursor-pointer hover:text-theme-text-primary select-none"
+                    className="pb-3.5 pr-4 font-semibold cursor-pointer hover:text-theme-text-primary select-none"
                   >
                     <span className="flex items-center gap-1">
                       Department <ArrowUpDown className="h-3 w-3" />
@@ -1220,7 +1220,7 @@ export default function DirectoryPage() {
                   </th>
                   <th
                     onClick={() => toggleSort('program')}
-                    className="pb-3.5 font-semibold cursor-pointer hover:text-theme-text-primary select-none"
+                    className="pb-3.5 pr-4 font-semibold cursor-pointer hover:text-theme-text-primary select-none"
                   >
                     <span className="flex items-center gap-1">
                       Program <ArrowUpDown className="h-3 w-3" />
@@ -1253,7 +1253,7 @@ export default function DirectoryPage() {
                           )}
                         </button>
                       </td>
-                      <td className="py-3.5 pr-2 font-bold text-theme-text-primary flex items-center gap-2.5">
+                      <td className="py-3.5 pr-4 font-bold text-theme-text-primary flex items-center gap-2.5">
                         <div className="h-8 w-8 bg-accent/15 rounded-xl flex items-center justify-center border border-accent/20 shrink-0">
                           <span className="text-[11px] font-bold text-accent">
                             {member.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
@@ -1293,8 +1293,8 @@ export default function DirectoryPage() {
                           )}
                         </div>
                       </td>
-                      <td className="py-3.5 pr-2 text-theme-text-secondary">{member.email}</td>
-                      <td className="py-3.5 pr-2">
+                      <td className="py-3.5 pr-4 text-theme-text-secondary">{member.email}</td>
+                      <td className="py-3.5 pr-4">
                         <span className={`inline-flex items-center text-[10px] font-semibold px-2.5 py-0.5 rounded-full border ${
                           member.division === 'Advisory Board' ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' :
                           member.division === 'Faculty' ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30' :
@@ -1305,9 +1305,9 @@ export default function DirectoryPage() {
                           {member.division}
                         </span>
                       </td>
-                      <td className="py-3.5 pr-2 text-theme-text-secondary">{member.role}</td>
-                      <td className="py-3.5 pr-2 text-theme-text-secondary">{member.department || '—'}</td>
-                      <td className="py-3.5 pr-2 text-theme-text-secondary">{member.program || '—'}</td>
+                      <td className="py-3.5 pr-4 text-theme-text-secondary">{member.role}</td>
+                      <td className="py-3.5 pr-4 text-theme-text-secondary">{member.department || '—'}</td>
+                      <td className="py-3.5 pr-4 text-theme-text-secondary">{member.program || '—'}</td>
                       <td className="py-3.5 text-right pr-2" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end items-center gap-1">
                           <button

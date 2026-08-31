@@ -557,11 +557,15 @@ export function canApprovePendingTask(task: TaskItem, user: SessionUser): boolea
 /** Who can answer the weekly holiday-scheduler's "is a social media post
  *  needed for this festival?" task (workflowType 'holiday_social_approval',
  *  see src/lib/holiday-scheduler.ts + local-data.ts's respondToHolidayApproval) —
- *  Centre Head or any Events Head, matching who the task is auto-assigned to. */
+ *  Super User, Centre Head, or the GG Campus Events Head only. The RTC Campus
+ *  Events Head is deliberately excluded (previously granted via isHeadOfEvents/
+ *  isEventsHeadRtcCampus, both removed here) — festival/social-media posting
+ *  approval for this workflow is a GG-only responsibility, matching the same
+ *  GG-only pattern already used by canApprovePendingTask above. */
 export function canRespondToHolidayApproval(task: TaskItem, user: SessionUser): boolean {
   if (!user) return false;
   if (task.workflowType !== 'holiday_social_approval') return false;
-  return isCentreHead(user) || isHeadOfEvents(user) || isEventsHeadGgCampus(user) || isEventsHeadRtcCampus(user);
+  return isCentreHead(user) || isEventsHeadGgCampus(user);
 }
 
 /** Task creation — leadership, Core Committee, any Head, or a TASKS_CREATE grant. */

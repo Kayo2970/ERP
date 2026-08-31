@@ -724,7 +724,7 @@ export default function DesignPortalPage() {
   const assignedToMeCount = designs.filter(d => d.proofreadRequested && d.assignedProofreaderEmail === user?.email && d.review?.status === 'Pending Proofread').length;
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 md:p-8 space-y-6">
       {/* Header Banner */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-card border border-border p-6 rounded-xl shadow-sm">
         <div className="space-y-1">

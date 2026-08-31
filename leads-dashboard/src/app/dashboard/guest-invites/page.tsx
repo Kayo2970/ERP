@@ -299,7 +299,7 @@ export default function GuestInvitesPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Guest List Panel */}
         <div className="glass-panel rounded-2xl p-5 space-y-4">
           <h2 className="text-sm font-bold text-theme-text-primary flex items-center gap-2">
@@ -332,14 +332,14 @@ export default function GuestInvitesPage() {
               value={guestName}
               onChange={e => setGuestName(e.target.value)}
               placeholder="Or type a guest name"
-              className="flex-1 px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl text-xs text-theme-text-primary focus:outline-none focus:border-accent"
+              className="flex-1 min-w-0 px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl text-xs text-theme-text-primary focus:outline-none focus:border-accent"
             />
             <input
               type="email"
               value={guestEmail}
               onChange={e => setGuestEmail(e.target.value)}
               placeholder="guest@example.com"
-              className="flex-1 px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl text-xs text-theme-text-primary focus:outline-none focus:border-accent"
+              className="flex-1 min-w-0 px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl text-xs text-theme-text-primary focus:outline-none focus:border-accent"
             />
             <button
               type="submit"

@@ -11,19 +11,21 @@
   --sidebar-bg: rgba(255, 255, 255, 0.90);
   --sidebar-border: rgba(15, 23, 42, 0.10);
   --page-gradient: url('/images/light-bg.jpg') center / cover no-repeat fixed;
+  --muted-bg: rgba(15, 23, 42, 0.05);
 }
 
 .dark {
-  --background: #0B1B2E;
+  --background: #0A0A0C;
   --foreground: #E8ECF1;
-  --card-bg: rgba(20, 36, 58, 0.65);
+  --card-bg: rgba(24, 24, 27, 0.82);
   --card-border: rgba(255, 255, 255, 0.08);
   --text-primary: #E8ECF1;
   --text-secondary: #9CA3AF;
   --border-color: rgba(255, 255, 255, 0.08);
-  --sidebar-bg: rgba(11, 27, 46, 0.75);
-  --sidebar-border: rgba(255, 255, 255, 0.05);
-  --page-gradient: linear-gradient(90deg, #020617 0%, #081528 25%, #0F284B 50%, #081528 75%, #020617 100%);
+  --sidebar-bg: rgba(18, 18, 21, 0.88);
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --page-gradient: linear-gradient(90deg, #09090B 0%, #18181B 25%, #27272A 50%, #18181B 75%, #09090B 100%);
+  --muted-bg: rgba(255, 255, 255, 0.06);
 }
 
 @theme {
@@ -46,6 +48,25 @@
   --color-theme-text-secondary: var(--text-secondary);
   --color-theme-sidebar: var(--sidebar-bg);
   --color-theme-sidebar-border: var(--sidebar-border);
+
+  /* shadcn-style aliases — a handful of pages (Design Portal, Tasks, the
+     mobile-menu backdrop) were written against `text-foreground`,
+     `bg-muted`, `border-border`, `bg-background`, `text-accent-foreground`
+     instead of this app's own `theme-*` tokens above. Since none of these
+     names existed as theme values, Tailwind silently generated no CSS for
+     them at all — elements lost their intended background/border entirely
+     (transparent, not just dim), which is what actually produced the
+     "clustered", "sharp square corners", and "edge-to-edge" look reported
+     on Design Portal, not a text-opacity issue. Aliasing them here to the
+     equivalent app tokens fixes every existing usage app-wide at once. */
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --color-border: var(--border-color);
+  --color-muted: var(--muted-bg);
+  --color-muted-foreground: var(--text-secondary);
+  --color-accent-foreground: #FFFFFF;
+  --color-card: var(--card-bg);
+  --color-card-foreground: var(--foreground);
 
   /* Rating color scale */
   --color-rating-5: #2E8B57;
@@ -109,37 +130,48 @@ body {
 /* Glassmorphism panel styling — outer shadow tinted toward the page's own
    foreground hue (not flat black) plus a hairline inner highlight along the
    top/left edge to suggest light catching a glass edge, instead of a plain
-   backdrop-blur box. */
-.glass-panel {
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  background-color: var(--card-bg);
-  border: 1px solid var(--card-border);
-  box-shadow:
-    0 8px 32px 0 rgba(15, 23, 42, 0.06),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.15),
-    inset 1px 0 0 0 rgba(255, 255, 255, 0.05);
-}
+   backdrop-blur box.
+   Deliberately placed in @layer components (not left unlayered): Tailwind v4
+   orders its own layers base < components < utilities, so an unlayered rule
+   here would always beat ANY Tailwind utility class regardless of source
+   order — which is exactly what was silently overriding tint utilities like
+   `bg-theme-sidebar/50` on headers/panels that pair them with `glass-panel`,
+   producing the washed-out "frosted middle layer" look. Inside
+   @layer components, an explicit utility on the same element now wins as
+   intended, while elements that use `glass-panel` alone still fall back to
+   this default background. */
+@layer components {
+  .glass-panel {
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    background-color: var(--card-bg);
+    border: 1px solid var(--card-border);
+    box-shadow:
+      0 8px 32px 0 rgba(15, 23, 42, 0.06),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.15),
+      inset 1px 0 0 0 rgba(255, 255, 255, 0.05);
+  }
 
-.dark .glass-panel {
-  box-shadow:
-    0 8px 32px 0 rgba(0, 0, 0, 0.25),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.06),
-    inset 1px 0 0 0 rgba(255, 255, 255, 0.03);
-}
+  .dark .glass-panel {
+    box-shadow:
+      0 8px 32px 0 rgba(0, 0, 0, 0.25),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.06),
+      inset 1px 0 0 0 rgba(255, 255, 255, 0.03);
+  }
 
-/* Background Theme Layout — side-to-side gradient, themed via --page-gradient
-   (a light, airy version in :root; the original dark navy-to-black one in .dark). */
-.bg-space-theme {
-  background: var(--page-gradient);
-  background-attachment: fixed;
-  background-size: cover;
-}
-
-@media (max-width: 768px) {
-  .bg-space-theme, body {
+  /* Background Theme Layout — side-to-side gradient, themed via --page-gradient
+     (a light, airy version in :root; nice dark neutral grays in .dark). */
+  .bg-space-theme {
     background: var(--page-gradient);
     background-attachment: fixed;
+    background-size: cover;
+  }
+
+  @media (max-width: 768px) {
+    .bg-space-theme, body {
+      background: var(--page-gradient);
+      background-attachment: fixed;
+    }
   }
 }
 

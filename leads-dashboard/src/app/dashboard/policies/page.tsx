@@ -385,7 +385,15 @@ export default function GroupPoliciesPage() {
 
   // Wait for localStorage user hydration before deciding what to render, so a real
   // Super User never briefly sees the "Access Restricted" state on first paint.
-  if (!userHydrated) return null;
+  // Renders a spinner (not null) during that window — a blank white flash was
+  // especially visible on slower mobile JS/localStorage timing.
+  if (!userHydrated) {
+    return (
+      <div className="p-6 md:p-8 flex items-center justify-center min-h-[50vh]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent"></div>
+      </div>
+    );
+  }
 
   if (!isSuperUser) {
     return (
