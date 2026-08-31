@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { getAuditLogs, getMembers, saveMembers, updateMember, updateMemberAvatar, logAuditEvent, AuditLogItem, getEmailLogs, requestEmailChange, confirmEmailChange, confirmNewEmailChange } from '@/lib/local-data';
 import { FileDropzone, useUploadTask, formatFileSize } from '@/components/ui/file-dropzone';
+import DOMPurify from 'isomorphic-dompurify';
 
 const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
 
@@ -1202,7 +1203,7 @@ export default function SettingsPage() {
             </div>
 
             <div className="overflow-y-auto rounded-2xl border border-white/10 bg-slate-950 p-4">
-              <div dangerouslySetInnerHTML={{ __html: previewEmail.bodyHtml }} />
+              <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(previewEmail.bodyHtml) }} />
             </div>
 
             <div className="flex justify-between items-center text-[11px] text-theme-text-secondary pt-2 border-t border-theme-border/20">
