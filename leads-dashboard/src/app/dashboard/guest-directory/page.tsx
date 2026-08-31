@@ -32,6 +32,7 @@ import { canAccessGuestDirectory } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 import { FileDropzone, FilePreviewRow, createProgressTracker, useDropTarget } from '@/components/ui/file-dropzone';
+import { parseCsvLine, splitCsvLines, toCsvRow, downloadCsv } from '@/lib/csv';
 
 const MAX_CARD_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -47,38 +48,6 @@ const emptyForm = {
   linkedin: '',
   notes: '',
 };
-
-/** Splits one CSV line into fields, respecting double-quoted fields that may
- * contain commas (e.g. an "Address" value like "123 MG Road, Bangalore"). */
-function parseCsvLine(line: string): string[] {
-  const result: string[] = [];
-  let current = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    if (inQuotes) {
-      if (char === '"') {
-        if (line[i + 1] === '"') {
-          current += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        current += char;
-      }
-    } else if (char === '"') {
-      inQuotes = true;
-    } else if (char === ',') {
-      result.push(current.trim());
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-  result.push(current.trim());
-  return result;
-}
 
 export default function GuestDirectoryPage() {
   const [user, setUser] = useState<any>(null);
@@ -137,6 +106,11 @@ export default function GuestDirectoryPage() {
     setToastMsg({ type, text });
     setTimeout(() => setToastMsg(null), 4000);
   };
+
+  // Rows skipped during the last CSV import specifically because their email
+  // already exists elsewhere — kept around (not auto-dismissed like the toast
+  // above) so the user can download them, fix the email, and re-upload.
+  const [emailConflicts, setEmailConflicts] = useState<{ name: string; organization: string; designation: string; phone: string; email: string; website: string; address: string; linkedin: string; notes: string; metBy: string }[]>([]);
 
   const resetForm = () => {
     setForm(emptyForm);
@@ -417,6 +391,19 @@ export default function GuestDirectoryPage() {
     document.body.removeChild(link);
   };
 
+  const handleDownloadFullBackup = () => {
+    const header = toCsvRow(['Name', 'Organization', 'Designation', 'Phone', 'Email', 'Website', 'Address', 'LinkedIn', 'Notes', 'Met By']);
+    const rows = guests.map(g => toCsvRow([g.name, g.organization, g.designation, g.phone, g.email, g.website, g.address, g.linkedin, g.notes, g.metBy]));
+    downloadCsv(`leads_guest_directory_backup_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows].join('\n'));
+    triggerToast('success', `Downloaded a backup of all ${guests.length} guests.`);
+  };
+
+  const handleDownloadEmailConflicts = () => {
+    const header = toCsvRow(['Name', 'Organization', 'Designation', 'Phone', 'Email', 'Website', 'Address', 'LinkedIn', 'Notes', 'Met By', 'Conflict Reason']);
+    const rows = emailConflicts.map(c => toCsvRow([c.name, c.organization, c.designation, c.phone, c.email, c.website, c.address, c.linkedin, c.notes, c.metBy, 'Email already exists in the guest directory']));
+    downloadCsv(`leads_guest_directory_email_conflicts_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows].join('\n'));
+  };
+
   const handleCsvUploadClick = () => {
     csvFileInputRef.current?.click();
   };
@@ -435,7 +422,7 @@ export default function GuestDirectoryPage() {
       if (!text) return;
 
       try {
-        const lines = text.split('\n').filter(l => l.trim() !== '');
+        const lines = splitCsvLines(text);
         if (lines.length < 2) {
           triggerToast('error', 'CSV file is empty or missing headers.');
           return;
@@ -465,6 +452,7 @@ export default function GuestDirectoryPage() {
         );
         let importCount = 0;
         let skippedCount = 0;
+        const conflicts: typeof emailConflicts = [];
 
         for (let i = 1; i < lines.length; i++) {
           const values = parseCsvLine(lines[i]);
@@ -474,9 +462,23 @@ export default function GuestDirectoryPage() {
             continue;
           }
 
-          const gEmail = emailIndex !== -1 ? values[emailIndex]?.toLowerCase() : '';
+          const rowFields = {
+            name: gName,
+            organization: (orgIndex !== -1 ? values[orgIndex] : '') || '',
+            designation: (designationIndex !== -1 ? values[designationIndex] : '') || '',
+            phone: (phoneIndex !== -1 ? values[phoneIndex] : '') || '',
+            email: emailIndex !== -1 ? values[emailIndex] || '' : '',
+            website: (websiteIndex !== -1 ? values[websiteIndex] : '') || '',
+            address: (addressIndex !== -1 ? values[addressIndex] : '') || '',
+            linkedin: (linkedinIndex !== -1 ? values[linkedinIndex] : '') || '',
+            notes: (notesIndex !== -1 ? values[notesIndex] : '') || '',
+            metBy: (metByIndex !== -1 ? values[metByIndex] : '') || user?.name || 'Unknown',
+          };
+
+          const gEmail = rowFields.email.toLowerCase();
           if (gEmail && seenEmails.has(gEmail)) {
             skippedCount++;
+            conflicts.push(rowFields);
             continue;
           }
 
@@ -485,30 +487,33 @@ export default function GuestDirectoryPage() {
           // counted as skipped instead of silently reported as imported.
           try {
             await addGuest({
-              name: gName,
-              organization: (orgIndex !== -1 ? values[orgIndex] : '') || undefined,
-              designation: (designationIndex !== -1 ? values[designationIndex] : '') || undefined,
-              phone: (phoneIndex !== -1 ? values[phoneIndex] : '') || undefined,
+              name: rowFields.name,
+              organization: rowFields.organization || undefined,
+              designation: rowFields.designation || undefined,
+              phone: rowFields.phone || undefined,
               email: gEmail || undefined,
-              website: (websiteIndex !== -1 ? values[websiteIndex] : '') || undefined,
-              address: (addressIndex !== -1 ? values[addressIndex] : '') || undefined,
-              linkedin: (linkedinIndex !== -1 ? values[linkedinIndex] : '') || undefined,
-              notes: (notesIndex !== -1 ? values[notesIndex] : '') || undefined,
-              metBy: (metByIndex !== -1 ? values[metByIndex] : '') || user?.name || 'Unknown',
+              website: rowFields.website || undefined,
+              address: rowFields.address || undefined,
+              linkedin: rowFields.linkedin || undefined,
+              notes: rowFields.notes || undefined,
+              metBy: rowFields.metBy,
             }, user?.name || 'Admin');
 
             if (gEmail) seenEmails.add(gEmail);
             importCount++;
           } catch {
             skippedCount++;
+            if (gEmail) conflicts.push(rowFields);
           }
         }
+
+        setEmailConflicts(conflicts);
 
         if (importCount > 0) {
           setGuests(getGuests());
           triggerToast('success', `Successfully imported ${importCount} guest${importCount === 1 ? '' : 's'}.${skippedCount > 0 ? ` (${skippedCount} row${skippedCount === 1 ? '' : 's'} skipped)` : ''}`);
         } else {
-          triggerToast('error', skippedCount > 0 ? `No new guests imported. ${skippedCount} row(s) skipped (missing name or duplicate email).` : 'No valid guest rows found in the CSV.');
+          triggerToast('error', skippedCount > 0 ? `No new guests imported. ${skippedCount} row(s) skipped (missing name or duplicate email — see below).` : 'No valid guest rows found in the CSV.');
         }
       } catch {
         triggerToast('error', 'Error parsing CSV file. Please verify formatting.');
@@ -552,6 +557,15 @@ export default function GuestDirectoryPage() {
           <p className="text-xs text-theme-text-secondary">Guests, sponsors, and visitors met at events — sourced from visiting cards. Separate from the Member roster and Guest Invites tool.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={handleDownloadFullBackup}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-border/40"
+            title="Download a full CSV backup of every guest in the directory"
+          >
+            <Download className="h-4 w-4" />
+            Download Backup (CSV)
+          </button>
+
           <button
             onClick={handleDownloadTemplate}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-border/40"
@@ -597,6 +611,33 @@ export default function GuestDirectoryPage() {
           toastMsg.type === 'success' ? 'bg-success/15 border border-success/20 text-theme-text-primary' : 'bg-danger/15 border border-danger/20 text-theme-text-primary'
         }`}>
           <span>{toastMsg.text}</span>
+        </div>
+      )}
+
+      {emailConflicts.length > 0 && (
+        <div className="flex items-start sm:items-center justify-between gap-3 p-4 bg-warning/15 border border-warning/30 rounded-2xl text-xs animate-in fade-in duration-300 flex-col sm:flex-row">
+          <div className="flex items-start sm:items-center gap-3">
+            <Mail className="h-5 w-5 text-warning shrink-0" />
+            <span className="text-theme-text-primary">
+              {emailConflicts.length} row{emailConflicts.length === 1 ? '' : 's'} skipped during the last import — the email address already exists in the guest directory.
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleDownloadEmailConflicts}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-warning/20 hover:bg-warning/30 text-warning text-xs font-semibold rounded-xl transition-all cursor-pointer border border-warning/40"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Download Conflict Report
+            </button>
+            <button
+              onClick={() => setEmailConflicts([])}
+              className="p-1.5 text-theme-text-secondary hover:text-theme-text-primary hover:bg-theme-border/20 rounded-lg transition-all cursor-pointer"
+              title="Dismiss"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       )}
 

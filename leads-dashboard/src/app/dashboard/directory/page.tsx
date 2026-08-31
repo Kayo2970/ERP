@@ -36,6 +36,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { useDropTarget } from '@/components/ui/file-dropzone';
+import { parseCsvLine, splitCsvLines, toCsvRow, downloadCsv } from '@/lib/csv';
 import {
   getMembers,
   addMember,
@@ -272,6 +273,13 @@ export default function DirectoryPage() {
       window.removeEventListener('storage', refreshData);
     };
   }, []);
+
+  // Rows skipped during the last CSV import specifically because their email
+  // already exists elsewhere (in the roster or earlier in the same file) —
+  // kept around (not auto-dismissed like the toasts above) so the user can
+  // download them, fix the email, and re-upload rather than losing track of
+  // which rows didn't make it in.
+  const [emailConflicts, setEmailConflicts] = useState<{ name: string; email: string; division: string; role: string; department: string; program: string; batch: string }[]>([]);
 
   const triggerSuccess = (msg: string) => {
     setSuccessMsg(msg);
@@ -552,13 +560,13 @@ export default function DirectoryPage() {
       if (!text) return;
 
       try {
-        const lines = text.split('\n');
+        const lines = splitCsvLines(text);
         if (lines.length < 2) {
           triggerError('CSV file is empty or missing headers.');
           return;
         }
 
-        const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+        const headers = parseCsvLine(lines[0]).map(h => h.toLowerCase());
         const nameIndex = headers.indexOf('name');
         const emailIndex = headers.indexOf('email');
         const divisionIndex = headers.indexOf('division');
@@ -580,12 +588,10 @@ export default function DirectoryPage() {
         const seenEmails = new Set(getMembers().map(m => m.email.toLowerCase()));
         let importCount = 0;
         let duplicateCount = 0;
+        const conflicts: typeof emailConflicts = [];
 
         for (let i = 1; i < lines.length; i++) {
-          const line = lines[i].trim();
-          if (!line) continue;
-
-          const values = line.split(',').map(v => v.replace(/^"|"$/g, '').trim());
+          const values = parseCsvLine(lines[i]);
           if (values.length < 2) continue;
 
           const mName = values[nameIndex];
@@ -600,6 +606,7 @@ export default function DirectoryPage() {
 
           if (seenEmails.has(mEmail)) {
             duplicateCount++;
+            conflicts.push({ name: mName, email: mEmail, division: mDivStr, role: mRole, department: mDept, program: mProgram, batch: mBatch });
             continue;
           }
 
@@ -646,14 +653,17 @@ export default function DirectoryPage() {
             importCount++;
           } catch {
             duplicateCount++;
+            conflicts.push({ name: mName, email: mEmail, division: mDivStr, role: mRole, department: mDept, program: mProgram, batch: mBatch });
           }
         }
 
+        setEmailConflicts(conflicts);
+
         if (importCount > 0) {
           setMembers(getMembers());
-          triggerSuccess(`Successfully imported ${importCount} new members. ${duplicateCount > 0 ? `(${duplicateCount} duplicate emails skipped)` : ''}`);
+          triggerSuccess(`Successfully imported ${importCount} new members. ${duplicateCount > 0 ? `(${duplicateCount} email conflicts skipped — see below)` : ''}`);
         } else if (duplicateCount > 0) {
-          triggerError(`No new members imported. ${duplicateCount} duplicate email addresses found in file.`);
+          triggerError(`No new members imported. ${duplicateCount} email conflicts found in file — see below.`);
         } else {
           triggerError('No valid member rows found in the CSV.');
         }
@@ -662,6 +672,19 @@ export default function DirectoryPage() {
       }
     };
     reader.readAsText(file);
+  };
+
+  const handleDownloadEmailConflicts = () => {
+    const header = toCsvRow(['Name', 'Email', 'Division', 'Role', 'Department', 'Program', 'Batch', 'Conflict Reason']);
+    const rows = emailConflicts.map(c => toCsvRow([c.name, c.email, c.division, c.role, c.department, c.program, c.batch, 'Email already exists in the roster']));
+    downloadCsv(`leads_members_email_conflicts_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows].join('\n'));
+  };
+
+  const handleDownloadFullBackup = () => {
+    const header = toCsvRow(['Name', 'Email', 'Division', 'Role', 'Department', 'Program', 'Batch', 'Status', 'Tier']);
+    const rows = members.map(m => toCsvRow([m.name, m.email, m.division, m.role, m.department, m.program, m.batch, m.status || 'Active', m.tier]));
+    downloadCsv(`leads_members_backup_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows].join('\n'));
+    triggerSuccess(`Downloaded a backup of all ${members.length} members.`);
   };
 
   const handleConfirmDelete = () => {
@@ -977,15 +1000,51 @@ export default function DirectoryPage() {
         </div>
       )}
 
+      {emailConflicts.length > 0 && (
+        <div className="flex items-start sm:items-center justify-between gap-3 p-4 bg-warning/15 border border-warning/30 rounded-2xl text-xs animate-in fade-in duration-300 flex-col sm:flex-row">
+          <div className="flex items-start sm:items-center gap-3">
+            <Mail className="h-5 w-5 text-warning shrink-0" />
+            <span className="text-theme-text-primary">
+              {emailConflicts.length} row{emailConflicts.length === 1 ? '' : 's'} skipped during the last import — the email address already exists in the roster.
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleDownloadEmailConflicts}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-warning/20 hover:bg-warning/30 text-warning text-xs font-semibold rounded-xl transition-all cursor-pointer border border-warning/40"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Download Conflict Report
+            </button>
+            <button
+              onClick={() => setEmailConflicts([])}
+              className="p-1.5 text-theme-text-secondary hover:text-theme-text-primary hover:bg-theme-border/20 rounded-lg transition-all cursor-pointer"
+              title="Dismiss"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header section with actions */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-theme-text-primary">Organization Members Directory</h1>
           <p className="text-xs text-theme-text-secondary">Explore center divisions: Advisory Board, Core Committee, Training Associates, and Alumni</p>
         </div>
-        
+
         {isAdmin && (
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleDownloadFullBackup}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-border/40"
+              title="Download a full CSV backup of every member in the directory"
+            >
+              <Download className="h-4 w-4" />
+              Download Backup (CSV)
+            </button>
+
             <button
               onClick={handleDownloadTemplate}
               className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-border/40"
@@ -994,7 +1053,7 @@ export default function DirectoryPage() {
               <Download className="h-4 w-4" />
               Download Template
             </button>
-            
+
             <button
               onClick={handleUploadClick}
               {...csvDragHandlers}
