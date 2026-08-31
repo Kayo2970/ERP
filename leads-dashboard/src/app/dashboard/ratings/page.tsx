@@ -27,7 +27,7 @@ import {
   EventItem
 } from '@/lib/local-data';
 import { getRatingColor } from '@/lib/design-tokens';
-import { canViewRating, canEvaluateEventStudent, isCentreHead, hasCapability } from '@/lib/permissions';
+import { canViewRating, canEvaluateEventStudent, canEditRating } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { PeriodFilter } from '@/components/period-filter';
 import { PeriodFilterValue, extractAvailableMonths, isWithinPeriod } from '@/lib/period-filter';
@@ -432,7 +432,7 @@ export default function RatingsPage() {
                 <tbody className="divide-y divide-theme-border/20">
                   {filteredRatingsHistory.map(rating => {
                     const colorTokens = getRatingColor(rating.overallScore);
-                    const canEdit = user && (user.tier === 1 || user.name === rating.raterName || isCentreHead(user) || hasCapability(user, 'RATING_EDIT_ANY'));
+                    const canEdit = canEditRating(rating, user);
 
                     return (
                       <tr key={rating.id} className="hover:bg-theme-border/10 transition-all text-xs">

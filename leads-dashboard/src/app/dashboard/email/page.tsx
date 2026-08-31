@@ -30,7 +30,7 @@ import {
   Filter
 } from 'lucide-react';
 import { EmailSettings, EmailLog } from '@/lib/email-service';
-import { isCentreHead } from '@/lib/permissions';
+import { canManageEmailSettings } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -350,8 +350,8 @@ export default function EmailManagementPage() {
 
   const isSuperUser = user && (user.tier === 1 || user.role === 'Super User' || user.id === 'm1' || user.email?.toLowerCase() === 'kayo2970@gmail.com');
 
-  // Strict Access Guard — Centre Head / Super User Only
-  const isAuthorized = user && (user.tier === 1 || isCentreHead(user));
+  // Access Guard — Centre Head / Super User, or an explicit Group Policy grant
+  const isAuthorized = user && canManageEmailSettings(user);
 
   if (user && !isAuthorized) {
     return (

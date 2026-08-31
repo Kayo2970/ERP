@@ -21,7 +21,7 @@ import {
   Square,
 } from 'lucide-react';
 import { logAuditEvent, getGuests, getMembers, Guest as DirectoryGuest, Member } from '@/lib/local-data';
-import { isCentreHead } from '@/lib/permissions';
+import { canManageGuestInvites } from '@/lib/permissions';
 import { EmptyState } from '@/components/ui/empty-state';
 
 interface Guest {
@@ -264,13 +264,13 @@ export default function GuestInvitesPage() {
 
   if (!userHydrated) return null;
 
-  if (!isCentreHead(user)) {
+  if (!canManageGuestInvites(user)) {
     return (
       <div className="p-6 md:p-8">
         <EmptyState
           icon={ShieldAlert}
           title="Centre Head Access Required"
-          description="Sending guest invitations is limited to the Centre Head."
+          description="Sending guest invitations is limited to the Centre Head, or a member granted Guest Invites access via Group Policies."
         />
       </div>
     );

@@ -28,7 +28,7 @@ import {
   Scan,
 } from 'lucide-react';
 import { getGuests, addGuest, updateGuest, deleteGuest, Guest } from '@/lib/local-data';
-import { canAccessGuestDirectory } from '@/lib/permissions';
+import { canAccessGuestDirectory, canEditGuestRecord, canRemoveGuestContact, isRestrictedGuestEditor } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 import { FileDropzone, FilePreviewRow, createProgressTracker, useDropTarget } from '@/components/ui/file-dropzone';
@@ -346,9 +346,15 @@ export default function GuestDirectoryPage() {
 
     try {
       if (editingGuest) {
+        // A restricted (non-admin) editor spends their one-time edit the
+        // moment they save — see permissions.ts's canEditGuestRecord.
+        if (isRestrictedGuestEditor(user)) {
+          payload.selfEditUsedAt = new Date().toISOString();
+        }
         await updateGuest(editingGuest.id, payload, user?.name || 'Admin', tracker);
         triggerToast('success', `Updated guest record for ${payload.name}.`);
       } else {
+        payload.createdBy = user?.email;
         await addGuest(payload, user?.name || 'Admin', tracker);
         triggerToast('success', `Added ${payload.name} to the Guest Directory.`);
       }
@@ -497,6 +503,7 @@ export default function GuestDirectoryPage() {
               linkedin: rowFields.linkedin || undefined,
               notes: rowFields.notes || undefined,
               metBy: rowFields.metBy,
+              createdBy: user?.email,
             }, user?.name || 'Admin');
 
             if (gEmail) seenEmails.add(gEmail);
@@ -669,20 +676,28 @@ export default function GuestDirectoryPage() {
                   {guest.designation && <p className="text-[11px] font-medium text-theme-text-secondary leading-normal break-words mt-0.5">{guest.designation}</p>}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    onClick={() => openEditModal(guest)}
-                    className="p-1.5 text-theme-text-secondary hover:text-accent hover:bg-theme-border/20 rounded-lg transition-all cursor-pointer"
-                    title="Edit Guest"
-                  >
-                    <Edit2 className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    onClick={() => setDeletingGuest(guest)}
-                    className="p-1.5 text-danger hover:bg-danger/10 rounded-lg transition-all cursor-pointer"
-                    title="Remove Guest"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  {canEditGuestRecord(guest, user) && (
+                    <button
+                      onClick={() => openEditModal(guest)}
+                      className="p-1.5 text-theme-text-secondary hover:text-accent hover:bg-theme-border/20 rounded-lg transition-all cursor-pointer"
+                      title={
+                        isRestrictedGuestEditor(user)
+                          ? 'Edit Guest — one-time correction window, within 24 hours of adding this record'
+                          : 'Edit Guest'
+                      }
+                    >
+                      <Edit2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  {canRemoveGuestContact(user) && (
+                    <button
+                      onClick={() => setDeletingGuest(guest)}
+                      className="p-1.5 text-danger hover:bg-danger/10 rounded-lg transition-all cursor-pointer"
+                      title="Remove Guest"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
 

@@ -54,7 +54,7 @@ import {
 } from '@/lib/local-data';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { StudentProfileModal } from '@/components/student-profile-modal';
-import { canViewFullDirectory, canEditDirectory, isCentreHead, canViewHiddenAccounts, canSetMemberPassword } from '@/lib/permissions';
+import { canViewFullDirectory, canEditDirectory, canEditMemberRecordRow, isRestrictedDirectoryEditor, isCentreHead, canViewHiddenAccounts, canSetMemberPassword } from '@/lib/permissions';
 
 export default function DirectoryPage() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -392,7 +392,11 @@ export default function DirectoryPage() {
         division,
         department: derived.department,
         program: program.trim() || undefined,
-        batch: division === 'Alumni' ? batch.trim() : undefined
+        batch: division === 'Alumni' ? batch.trim() : undefined,
+        // Powers the restricted "uploader" edit rule for non-admin editors —
+        // see permissions.ts's canEditMemberRecordRow.
+        createdBy: user?.email,
+        createdAt: new Date().toISOString(),
       });
 
       setName('');
@@ -507,7 +511,10 @@ export default function DirectoryPage() {
       division: editDivision,
       department: derived.department,
       program: editProgram.trim() || undefined,
-      batch: editDivision === 'Alumni' ? editBatch.trim() : undefined
+      batch: editDivision === 'Alumni' ? editBatch.trim() : undefined,
+      // A restricted (non-admin) editor spends their one-time edit the moment
+      // they save — a full admin can keep editing the same record anytime.
+      ...(isRestrictedDirectoryEditor(user) ? { selfEditUsedAt: new Date().toISOString() } : {}),
     }, user?.name || 'Admin');
 
     if (tierChanged) {
@@ -1378,16 +1385,22 @@ export default function DirectoryPage() {
                             <span className="text-[11px] font-semibold hidden sm:inline">Profile</span>
                           </button>
                           
+                          {canEditMemberRecordRow(member, user) && (
+                            <button
+                              onClick={() => startEdit(member)}
+                              className="p-1.5 text-theme-text-secondary hover:text-accent hover:bg-theme-border/20 rounded-lg transition-all cursor-pointer"
+                              title={
+                                isRestrictedDirectoryEditor(user)
+                                  ? 'Edit Member — one-time correction window, within 24 hours of adding this record'
+                                  : 'Edit Member'
+                              }
+                            >
+                              <Edit2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+
                           {isAdmin && (
                             <>
-                              <button
-                                onClick={() => startEdit(member)}
-                                className="p-1.5 text-theme-text-secondary hover:text-accent hover:bg-theme-border/20 rounded-lg transition-all cursor-pointer"
-                                title="Edit Member"
-                              >
-                                <Edit2 className="h-3.5 w-3.5" />
-                              </button>
-
                               {member.status !== 'Terminated' && (
                                 <button
                                   onClick={() => setPasswordResetModalMember(member)}

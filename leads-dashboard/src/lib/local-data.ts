@@ -33,6 +33,16 @@ export interface Member {
   avatarUrl?: string;        // servable path under /api/files, backed by a real file on disk
   avatarStorageKey?: string; // path relative to data/uploads
   mustSetupPassword?: boolean; // Super User admin override: user must set password without OTP on next login
+  // Who added this record and when — powers the restricted "uploader" edit
+  // rule (see permissions.ts's canEditMemberRecordRow): a non-admin editor
+  // (Group-Policy-granted EDIT_DIRECTORY, not full base leadership) may edit
+  // ONLY the record they personally created, ONLY once, and ONLY within
+  // SELF_EDIT_WINDOW_MS of createdAt. createdBy is the adder's email (stable
+  // even if their name later changes), matching the createdBy convention
+  // already used on EventItem/TaskItem.
+  createdBy?: string;
+  createdAt?: string;
+  selfEditUsedAt?: string; // set the moment a restricted editor spends their one edit
 }
 
 // A person encountered outside the org (event guest, sponsor contact, vendor,
@@ -64,6 +74,10 @@ export interface Guest {
   visitingCardFrontStorageKey?: string;
   visitingCardBackStorageKey?: string;
   createdAt: string;
+  // Same restricted "uploader" edit rule as Member.createdBy — see
+  // permissions.ts's canEditGuestRecord. Email of whoever added this guest.
+  createdBy?: string;
+  selfEditUsedAt?: string;
 }
 
 export interface EventCommittee {
@@ -537,6 +551,24 @@ export const initialSystemSettings: SystemSettings[] = [DEFAULT_SYSTEM_SETTINGS]
  * required to grant or revoke access. See permissions.ts's hasCapability() for
  * the resolution logic and CAPABILITY_CATALOG for the grantable capabilities.
  */
+
+// Every module a Group Policy can target with a View/Edit access override —
+// see GroupPolicy.moduleAccess and permissions.ts's MODULE_CATALOG (which
+// pairs each key with a label/description for the Group Policies UI).
+export type ModuleAccessKey =
+  | 'EVENTS'
+  | 'TASKS'
+  | 'DIRECTORY'
+  | 'GUEST_DIRECTORY'
+  | 'DESIGNS'
+  | 'REIMBURSEMENTS'
+  | 'BUDGET'
+  | 'FORMS'
+  | 'ANNOUNCEMENTS'
+  | 'RATINGS'
+  | 'GUEST_INVITES'
+  | 'EMAIL';
+
 export interface GroupPolicy {
   id: string;
   tag: string; // short unique code, e.g. "JUNIOR_EVENT_LEAD" — used for display/reference
@@ -558,6 +590,19 @@ export interface GroupPolicy {
   // (unrestricted) visibility every member has today. Purely restrictive — never
   // grants visibility beyond the default, only narrows it for the targeted group.
   eventVisibilityScope?: 'OWN_ONLY';
+  // Generalizes eventVisibilityScope (kept above for back-compat with policies
+  // saved before this field existed — permissions.ts's resolver honors both)
+  // to every module: per module, a policy can grant/restrict a View scope
+  // ('ALL' grants full-roster visibility beyond a member's built-in default;
+  // 'OWN' restricts them to only records they created, purely narrowing —
+  // never below what an explicit 'ALL' grant elsewhere gives them) and set an
+  // Edit override ('ALL' grants unrestricted edit; 'OWN' limits edit to
+  // records they created, one-time within a 24h window, for modules that
+  // track a creator; 'NONE' revokes edit outright, overriding whatever a
+  // member's tier/role would otherwise allow — the Super User's "cannot edit
+  // in view" lever). Absent = inherit that module's built-in default
+  // entirely, so nothing regresses for any policy saved before this existed.
+  moduleAccess?: Partial<Record<ModuleAccessKey, { view?: 'OWN' | 'ALL'; edit?: 'OWN' | 'ALL' | 'NONE' }>>;
   // If set, any capability this policy grants only takes effect once a designated
   // approver signs off — the grantee's action lands in a pending state instead of
   // applying immediately. See permissions.ts's getApprovalRequirement().

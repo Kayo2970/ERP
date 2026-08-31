@@ -1064,7 +1064,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           lightMode={!isDarkTheme}
           speed={0.2}
           scale={2}
-          rotation={-24}
+          rotation={0}
           rotationSpeed={0.25}
           layers={4}
           waveAmplitude={0.015}

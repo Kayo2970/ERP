@@ -12,7 +12,7 @@
  * There is no session-scoped "current user" object here; every function takes the
  * user explicitly so it works the same in pages, modals, and background sync code.
  */
-import { Member, TaskItem, RatingItem, ReimbursementItem, BudgetItem, GroupPolicy, EventItem, PublicFormItem, getMembers, getGroupPolicies, getAccessLevelSettings, canViewTask } from './local-data';
+import { Member, Guest, TaskItem, RatingItem, ReimbursementItem, BudgetItem, GroupPolicy, EventItem, PublicFormItem, ModuleAccessKey, getMembers, getGroupPolicies, getAccessLevelSettings, canViewTask } from './local-data';
 
 export type SessionUser = {
   id?: string;
@@ -213,30 +213,36 @@ function resolveMember(user: SessionUser): Member | undefined {
  * grant has the exact same effect as the hardcoded tier/role rules already
  * covering that action — it's an additional grant path, never a replacement.
  */
-export const CAPABILITY_CATALOG: { key: string; label: string; description: string }[] = [
-  { key: 'EVENTS_CREATE', label: 'Create Events', description: 'Create new events and their sub-committees.' },
-  { key: 'EVENTS_EDIT', label: 'Edit Events', description: "Edit any existing event's details." },
-  { key: 'EVENTS_DELETE', label: 'Delete Events', description: 'Delete any event.' },
-  { key: 'EVENTS_VIEW_ALL', label: 'View All Events', description: 'See every event, not just ones created by or listing this person.' },
-  { key: 'TASKS_CREATE', label: 'Create Tasks', description: 'Assign new tasks to individuals or committees.' },
-  { key: 'TASKS_EDIT', label: 'Edit Tasks', description: 'Edit any existing task.' },
-  { key: 'TASKS_DELETE', label: 'Delete Tasks', description: 'Delete any task.' },
-  { key: 'TASKS_VIEW_ALL', label: 'View All Tasks', description: "See every task, not just this person's own or their department's." },
-  { key: 'EDIT_DIRECTORY', label: 'Edit Member Directory', description: 'Add, edit, remove, and bulk-manage member records.' },
-  { key: 'VIEW_FULL_DIRECTORY', label: 'View Full Directory', description: 'See the entire member roster, not just their own profile.' },
-  { key: 'BUILD_FORMS', label: 'Build Public Forms', description: 'Create and edit public-facing forms.' },
-  { key: 'CREATE_ANNOUNCEMENT', label: 'Publish Announcements', description: 'Author and publish announcements to a chosen scope.' },
-  { key: 'VIEW_ALL_DESIGNS', label: 'View All Design Submissions', description: 'See every submission in the Design Portal, not just their own.' },
-  { key: 'APPROVE_REIMBURSEMENTS_SECTOR', label: 'Approve Reimbursements (Sector Head stage)', description: 'First-pass reimbursement review and approval.' },
-  { key: 'APPROVE_REIMBURSEMENTS_FINANCE', label: 'Approve Reimbursements (Finance Head stage)', description: 'Final-stage reimbursement approval.' },
-  { key: 'TERMINATE_MEMBER', label: 'Terminate/Reactivate Members', description: 'Terminate or reactivate any member account.' },
-  { key: 'DESIGN_STYLE_APPROVE', label: 'Style Approve/Reject Designs', description: 'Approve or reject a design submission on the Style Review step.' },
-  { key: 'DESIGN_DELETE', label: 'Delete Design Submissions', description: 'Delete any design submission, not just their own.' },
-  { key: 'APPROVE_ANNOUNCEMENT', label: 'Approve Announcements', description: 'Approve or reject a Pending announcement before it circulates.' },
-  { key: 'PROPOSE_BUDGET', label: 'Propose Budgets', description: 'Propose an annual or monthly budget request.' },
-  { key: 'DECIDE_TASK_EXTENSION', label: 'Decide Task Extensions', description: 'Approve or reject a Pending Extension request on a task.' },
-  { key: 'RATING_EDIT_ANY', label: 'Edit/Delete Any Rating', description: 'Edit or delete a rating authored by someone else.' },
-  { key: 'VIEW_ALL_REPORTS', label: 'View All Reports', description: 'See every report/rating record, not just their own or their department’s.' },
+export const CAPABILITY_CATALOG: { key: string; label: string; description: string; module: string }[] = [
+  { key: 'EVENTS_CREATE', label: 'Create Events', description: 'Create new events and their sub-committees.', module: 'Events' },
+  { key: 'EVENTS_EDIT', label: 'Edit Events', description: "Edit any existing event's details.", module: 'Events' },
+  { key: 'EVENTS_DELETE', label: 'Delete Events', description: 'Delete any event.', module: 'Events' },
+  { key: 'EVENTS_VIEW_ALL', label: 'View All Events', description: 'See every event, not just ones created by or listing this person.', module: 'Events' },
+  { key: 'TASKS_CREATE', label: 'Create Tasks', description: 'Assign new tasks to individuals or committees.', module: 'Tasks' },
+  { key: 'TASKS_EDIT', label: 'Edit Tasks', description: 'Edit any existing task.', module: 'Tasks' },
+  { key: 'TASKS_DELETE', label: 'Delete Tasks', description: 'Delete any task.', module: 'Tasks' },
+  { key: 'TASKS_VIEW_ALL', label: 'View All Tasks', description: "See every task, not just this person's own or their department's.", module: 'Tasks' },
+  { key: 'DECIDE_TASK_EXTENSION', label: 'Decide Task Extensions', description: 'Approve or reject a Pending Extension request on a task.', module: 'Tasks' },
+  { key: 'EDIT_DIRECTORY', label: 'Edit Member Directory', description: 'Add, edit, remove, and bulk-manage member records.', module: 'Members Directory' },
+  { key: 'VIEW_FULL_DIRECTORY', label: 'View Full Directory', description: 'See the entire member roster, not just their own profile.', module: 'Members Directory' },
+  { key: 'TERMINATE_MEMBER', label: 'Terminate/Reactivate Members', description: 'Terminate or reactivate any member account.', module: 'Members Directory' },
+  { key: 'GUEST_DIRECTORY_ACCESS', label: 'Access Guest Directory', description: 'Open the Guest Directory module at all (visiting-card contacts) — same baseline as Centre Head/Faculty/Executive get by default.', module: 'Guest Directory' },
+  { key: 'GUEST_DIRECTORY_DELETE', label: 'Delete Guest Records', description: 'Remove any guest from the Guest Directory, not just ones they added.', module: 'Guest Directory' },
+  { key: 'VIEW_ALL_DESIGNS', label: 'View All Design Submissions', description: 'See every submission in the Design Portal, not just their own.', module: 'Design Portal' },
+  { key: 'DESIGN_STYLE_APPROVE', label: 'Style Approve/Reject Designs', description: 'Approve or reject a design submission on the Style Review step.', module: 'Design Portal' },
+  { key: 'DESIGN_DELETE', label: 'Delete Design Submissions', description: 'Delete any design submission, not just their own.', module: 'Design Portal' },
+  { key: 'APPROVE_REIMBURSEMENTS_SECTOR', label: 'Approve Reimbursements (Sector Head stage)', description: 'First-pass reimbursement review and approval.', module: 'Reimbursements' },
+  { key: 'APPROVE_REIMBURSEMENTS_FINANCE', label: 'Approve Reimbursements (Finance Head stage)', description: 'Final-stage reimbursement approval.', module: 'Reimbursements' },
+  { key: 'PROPOSE_BUDGET', label: 'Propose Budgets', description: 'Propose an annual or monthly budget request.', module: 'Budget & Funds' },
+  { key: 'MANAGE_BUDGET', label: 'Manage Budget & Funds', description: 'Propose and manage budget requests beyond the built-in Centre Head/Finance Head roles.', module: 'Budget & Funds' },
+  { key: 'BUILD_FORMS', label: 'Build Public Forms', description: 'Create and edit public-facing forms.', module: 'Public Forms' },
+  { key: 'CREATE_ANNOUNCEMENT', label: 'Publish Announcements', description: 'Author and publish announcements to a chosen scope.', module: 'Announcements' },
+  { key: 'APPROVE_ANNOUNCEMENT', label: 'Approve Announcements', description: 'Approve or reject a Pending announcement before it circulates.', module: 'Announcements' },
+  { key: 'RATING_EDIT_ANY', label: 'Edit/Delete Any Rating', description: 'Edit or delete a rating authored by someone else.', module: 'Ratings & Reports' },
+  { key: 'VIEW_ALL_REPORTS', label: 'View All Reports', description: 'See every report/rating record, not just their own or their department’s.', module: 'Ratings & Reports' },
+  { key: 'MANAGE_GUEST_INVITES', label: 'Manage Guest Invites', description: 'Access the Guest Invites mail-merge tool.', module: 'Guest Invites' },
+  { key: 'MANAGE_BACKUP', label: 'Access Backup & Restore', description: 'Download system backups and restore from an archive.', module: 'Administration' },
+  { key: 'MANAGE_EMAIL_SETTINGS', label: 'Access Email Management', description: 'View dispatch logs and manage email settings.', module: 'Administration' },
 ];
 
 /** True if a policy is enabled and, when it has an expiry date, hasn't passed it yet. */
@@ -270,6 +276,163 @@ export function hasCapability(user: SessionUser, capability: string): boolean {
   if (!member) return false;
   const policies = getGroupPolicies().filter(isPolicyActive);
   return policies.some(p => p.capabilities?.includes(capability) && memberMatchesPolicy(member, p));
+}
+
+/**
+ * Module View/Edit Access — the generalized, every-module version of the
+ * eventVisibilityScope pattern (GroupPolicy.moduleAccess). Each module gets a
+ * canonical key + label here for the Group Policies UI; the actual grant/
+ * restriction resolution lives in the functions below and is threaded into
+ * each module's existing can*() checks as an additional path, never a
+ * replacement — a policy with no moduleAccess entry for a module changes
+ * nothing about that module's built-in behavior.
+ */
+export const MODULE_CATALOG: { key: ModuleAccessKey; label: string; description: string; ownershipNote?: string }[] = [
+  { key: 'EVENTS', label: 'Events', description: 'Event records and their committees.', ownershipNote: 'Ownership = the event’s creator or a listed committee member.' },
+  { key: 'TASKS', label: 'Tasks', description: 'Assigned task deliverables.', ownershipNote: 'Ownership = the task’s creator or assignee.' },
+  { key: 'DIRECTORY', label: 'Members Directory', description: 'The member roster.', ownershipNote: 'Ownership = whoever added the member record. Edit ‘Own’ is one-time, within 24 hours of adding.' },
+  { key: 'GUEST_DIRECTORY', label: 'Guest Directory', description: 'Visiting-card guest contacts.', ownershipNote: 'Ownership = whoever added the guest record. Edit ‘Own’ is one-time, within 24 hours of adding.' },
+  { key: 'DESIGNS', label: 'Design Portal', description: 'Design submissions and proofreading.' },
+  { key: 'REIMBURSEMENTS', label: 'Reimbursements', description: 'Reimbursement claims.', ownershipNote: 'Ownership = the claimant.' },
+  { key: 'BUDGET', label: 'Budget & Funds', description: 'Budget proposals and verification.' },
+  { key: 'FORMS', label: 'Public Forms', description: 'Public-facing forms and their submissions.' },
+  { key: 'ANNOUNCEMENTS', label: 'Announcements', description: 'Published announcements.' },
+  { key: 'RATINGS', label: 'Ratings & Reports', description: 'Student performance ratings.', ownershipNote: 'Ownership = the rating’s author.' },
+  { key: 'GUEST_INVITES', label: 'Guest Invites', description: 'The guest-invite mail-merge tool.' },
+  { key: 'EMAIL', label: 'Email Management', description: 'Dispatch logs and email settings.' },
+];
+
+/** Active, targeting-matched policies that set a moduleAccess entry for `moduleKey` (or, for EVENTS only, the legacy eventVisibilityScope flag). */
+function matchingModulePolicies(user: SessionUser, moduleKey: ModuleAccessKey): GroupPolicy[] {
+  if (!user) return [];
+  const member = resolveMember(user);
+  if (!member) return [];
+  return getGroupPolicies().filter(p => {
+    if (!isPolicyActive(p) || !memberMatchesPolicy(member, p)) return false;
+    if (p.moduleAccess?.[moduleKey]) return true;
+    if (moduleKey === 'EVENTS' && p.eventVisibilityScope === 'OWN_ONLY') return true;
+    return false;
+  });
+}
+
+/** True if an active policy grants this member full ("ALL") view access to `moduleKey`, beyond whatever their built-in role/tier already gives them. Super User always true. */
+export function hasModuleViewAllGrant(user: SessionUser, moduleKey: ModuleAccessKey): boolean {
+  if (user?.tier === 1) return true;
+  return matchingModulePolicies(user, moduleKey).some(p => p.moduleAccess?.[moduleKey]?.view === 'ALL');
+}
+
+/**
+ * True if this member should be restricted to only records they created for
+ * `moduleKey` — purely restrictive, exactly like the legacy eventVisibilityScope
+ * OWN_ONLY flag it generalizes: an explicit 'ALL' grant from ANY matching
+ * policy always wins over a restriction from another. Never true for Super User.
+ */
+export function hasModuleViewOwnRestriction(user: SessionUser, moduleKey: ModuleAccessKey): boolean {
+  if (user?.tier === 1) return false;
+  const policies = matchingModulePolicies(user, moduleKey);
+  if (policies.some(p => p.moduleAccess?.[moduleKey]?.view === 'ALL')) return false;
+  return policies.some(p => p.moduleAccess?.[moduleKey]?.view === 'OWN' || (moduleKey === 'EVENTS' && p.eventVisibilityScope === 'OWN_ONLY'));
+}
+
+/**
+ * Explicit Edit override from a Group Policy for `moduleKey`: 'ALL' grants
+ * unrestricted edit access beyond the module's built-in rule; 'NONE' revokes
+ * edit outright, even overriding a tier/role that would otherwise qualify —
+ * the "cannot edit, view only" lever; 'OWN' limits edit to records this
+ * member created (only meaningful for modules whose records track a
+ * creator — see each MODULE_CATALOG entry's ownershipNote). Returns
+ * undefined when no matching policy sets an edit override at all, so the
+ * caller should fall back to that module's own default entirely. When
+ * multiple matching policies disagree, the most permissive wins (ALL > OWN >
+ * NONE) — the same "more permissive path wins" rule getApprovalRequirement
+ * already uses. Super User (tier 1) always resolves to 'ALL' and can never
+ * be downgraded by a policy.
+ */
+export function resolveModuleEditOverride(user: SessionUser, moduleKey: ModuleAccessKey): 'ALL' | 'OWN' | 'NONE' | undefined {
+  if (user?.tier === 1) return 'ALL';
+  const edits = matchingModulePolicies(user, moduleKey)
+    .map(p => p.moduleAccess?.[moduleKey]?.edit)
+    .filter((e): e is 'ALL' | 'OWN' | 'NONE' => !!e);
+  if (edits.length === 0) return undefined;
+  if (edits.includes('ALL')) return 'ALL';
+  if (edits.includes('OWN')) return 'OWN';
+  return 'NONE';
+}
+
+/** One-time self-edit window for records that track a creator (Members, Guests) — 24 hours from creation. */
+export const SELF_EDIT_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+function isOwnCreatedRecordEditable(record: { createdBy?: string; createdAt?: string; selfEditUsedAt?: string }, user: SessionUser): boolean {
+  if (!user?.email || !record.createdBy) return false;
+  if (record.createdBy.toLowerCase() !== user.email.toLowerCase()) return false;
+  if (record.selfEditUsedAt) return false;
+  if (!record.createdAt) return false;
+  const createdAt = new Date(record.createdAt).getTime();
+  if (Number.isNaN(createdAt)) return false;
+  return Date.now() - createdAt <= SELF_EDIT_WINDOW_MS;
+}
+
+/**
+ * Per-row Member Directory edit permission — three tiers of control:
+ * 1) Super User / base leadership (Centre Head, Head of Events): unrestricted,
+ *    same as before this feature existed.
+ * 2) An explicit moduleAccess.DIRECTORY.edit override from a Group Policy
+ *    ('ALL' unrestricted, 'NONE' revoked, 'OWN' restricted per (3)) always wins
+ *    over the default for anyone who isn't base leadership.
+ * 3) Default for a non-leadership member who only holds EDIT_DIRECTORY via a
+ *    Group Policy capability grant (no explicit edit override set): they may
+ *    edit ONLY the member record they personally added, ONLY ONCE, and ONLY
+ *    within 24 hours of adding it — after that (or after their one edit),
+ *    the record is theirs to view but never edit again; a full admin can
+ *    still edit it anytime.
+ */
+export function canEditMemberRecordRow(member: Member, user: SessionUser): boolean {
+  if (user?.tier === 1) return true;
+  const override = resolveModuleEditOverride(user, 'DIRECTORY');
+  if (override === 'NONE') return false;
+  if (override === 'ALL') return true;
+  if (isBaseLeadership(user)) return true;
+  if (override === 'OWN') return isOwnCreatedRecordEditable(member, user);
+  if (hasCapability(user, 'EDIT_DIRECTORY')) return isOwnCreatedRecordEditable(member, user);
+  return false;
+}
+
+/**
+ * Per-row Guest Directory edit permission — same three-tier shape as
+ * canEditMemberRecordRow: Centre Head/Super User unrestricted; an explicit
+ * moduleAccess.GUEST_DIRECTORY.edit override always wins for everyone else;
+ * a plain Faculty/Executive member with page access but no override may only
+ * edit a guest they personally added, once, within 24 hours.
+ */
+export function canEditGuestRecord(guest: Guest, user: SessionUser): boolean {
+  if (user?.tier === 1) return true;
+  const override = resolveModuleEditOverride(user, 'GUEST_DIRECTORY');
+  if (override === 'NONE') return false;
+  if (override === 'ALL') return true;
+  if (isCentreHead(user)) return true;
+  if (!canAccessGuestDirectory(user)) return false;
+  if (override === 'OWN') return isOwnCreatedRecordEditable(guest, user);
+  return isOwnCreatedRecordEditable(guest, user);
+}
+
+/**
+ * True when `user`'s Directory edit access is the restricted, one-time-per-
+ * record kind rather than full admin access — the Directory page uses this
+ * right after a successful save to decide whether to stamp selfEditUsedAt
+ * (spending the editor's one-time use) or leave the record untouched
+ * (a full admin can edit the same record again later).
+ */
+export function isRestrictedDirectoryEditor(user: SessionUser): boolean {
+  if (user?.tier === 1) return false;
+  if (resolveModuleEditOverride(user, 'DIRECTORY') === 'ALL') return false;
+  return !isBaseLeadership(user);
+}
+
+/** Same as isRestrictedDirectoryEditor, for the Guest Directory page. */
+export function isRestrictedGuestEditor(user: SessionUser): boolean {
+  if (user?.tier === 1) return false;
+  if (resolveModuleEditOverride(user, 'GUEST_DIRECTORY') === 'ALL') return false;
+  return !isCentreHead(user);
 }
 
 export interface ApprovalRequirement {
@@ -342,9 +505,12 @@ export function canApproveAsFinanceHead(user: SessionUser, claim?: Reimbursement
   return claim.centreHeadVerified === true || claim.status === 'Verified by Centre Head' || claim.status === 'Under Review';
 }
 
-/** Centre Head can propose budgets (annual + monthly breakdowns). */
+/** Centre Head can propose budgets (annual + monthly breakdowns), or a PROPOSE_BUDGET/MANAGE_BUDGET grant. A moduleAccess.BUDGET.edit override always wins. */
 export function canSubmitBudget(user: SessionUser): boolean {
-  return isCentreHead(user) || hasCapability(user, 'PROPOSE_BUDGET');
+  const override = resolveModuleEditOverride(user, 'BUDGET');
+  if (override === 'NONE') return false;
+  if (override === 'ALL') return true;
+  return isCentreHead(user) || hasCapability(user, 'PROPOSE_BUDGET') || hasCapability(user, 'MANAGE_BUDGET');
 }
 
 /** Centre Head stage-1 verification permission for a Pending budget request. */
@@ -390,6 +556,9 @@ export function canViewReimbursement(claim: ReimbursementItem, user: SessionUser
   // Super User sees all
   if (user.tier === 1) return true;
 
+  // An explicit moduleAccess.REIMBURSEMENTS.view === 'ALL' Group Policy grant
+  if (hasModuleViewAllGrant(user, 'REIMBURSEMENTS')) return true;
+
   // Sector Head sees all claims, including stage-1 Pending claims
   if (isSectorHead(user)) return true;
 
@@ -412,8 +581,16 @@ export function canCreateEvent(user: SessionUser): boolean {
   return isBaseLeadership(user) || isCoreCommitteeTier(user) || isHeadRole(user) || hasCapability(user, 'EVENTS_CREATE');
 }
 
-/** Event editing — same baseline as creation, or an EVENTS_EDIT grant. */
+/**
+ * Event editing — same baseline as creation, or an EVENTS_EDIT grant. A
+ * moduleAccess.EVENTS.edit override from a Group Policy always wins over
+ * that baseline: 'NONE' revokes edit even for a role that would otherwise
+ * qualify, 'ALL' grants it outright.
+ */
 export function canEditEvent(user: SessionUser): boolean {
+  const override = resolveModuleEditOverride(user, 'EVENTS');
+  if (override === 'NONE') return false;
+  if (override === 'ALL') return true;
   return isBaseLeadership(user) || isCoreCommitteeTier(user) || isHeadRole(user) || hasCapability(user, 'EVENTS_EDIT');
 }
 
@@ -451,14 +628,12 @@ export function canViewEvent(event: EventItem, user: SessionUser): boolean {
     return false;
   }
 
-  if (isBaseLeadership(user) || isHeadRole(user) || user.tier === 2.5 || hasCapability(user, 'EVENTS_VIEW_ALL')) return true;
+  if (isBaseLeadership(user) || isHeadRole(user) || user.tier === 2.5 || hasCapability(user, 'EVENTS_VIEW_ALL') || hasModuleViewAllGrant(user, 'EVENTS')) return true;
 
   const member = resolveMember(user);
   if (!member) return true;
 
-  const policies = getGroupPolicies().filter(p => isPolicyActive(p) && memberMatchesPolicy(member, p));
-  const restricting = policies.find(p => p.eventVisibilityScope === 'OWN_ONLY');
-  if (!restricting) return true;
+  if (!hasModuleViewOwnRestriction(user, 'EVENTS')) return true;
 
   if (event.createdBy && (event.createdBy === user.name || event.createdBy === user.email)) return true;
   return (event.committees || []).some(c => (c.memberIds || []).includes(member.id));
@@ -573,8 +748,14 @@ export function canCreateTask(user: SessionUser): boolean {
   return isBaseLeadership(user) || isCoreCommitteeTier(user) || isHeadRole(user) || hasCapability(user, 'TASKS_CREATE');
 }
 
-/** Task editing — same baseline as creation, or a TASKS_EDIT grant. */
+/**
+ * Task editing — same baseline as creation, or a TASKS_EDIT grant. A
+ * moduleAccess.TASKS.edit override always wins over that baseline.
+ */
 export function canEditTask(user: SessionUser): boolean {
+  const override = resolveModuleEditOverride(user, 'TASKS');
+  if (override === 'NONE') return false;
+  if (override === 'ALL') return true;
   return isBaseLeadership(user) || isCoreCommitteeTier(user) || isHeadRole(user) || hasCapability(user, 'TASKS_EDIT');
 }
 
@@ -604,7 +785,7 @@ export function canManageTasks(user: SessionUser): boolean {
  * everyone without one of these grants.
  */
 export function canViewTaskExtended(task: TaskItem, user: SessionUser): boolean {
-  if (hasCapability(user, 'TASKS_VIEW_ALL')) return true;
+  if (hasCapability(user, 'TASKS_VIEW_ALL') || hasModuleViewAllGrant(user, 'TASKS')) return true;
   if (canViewTask(task as any, user as any)) return true;
   if (!user || !isHeadRole(user)) return false;
 
@@ -667,7 +848,7 @@ export function canViewHiddenAccounts(user: SessionUser): boolean {
  */
 export function canViewRating(rating: RatingItem, user: SessionUser): boolean {
   if (!user) return false;
-  if (isBaseLeadership(user) || isCentreHead(user) || isDrSubhadeep(user) || hasCapability(user, 'VIEW_ALL_REPORTS')) return true;
+  if (isBaseLeadership(user) || isCentreHead(user) || isDrSubhadeep(user) || hasCapability(user, 'VIEW_ALL_REPORTS') || hasModuleViewAllGrant(user, 'RATINGS')) return true;
 
   const isOwn =
     rating.targetId === user.id ||
@@ -687,6 +868,23 @@ export function canViewRating(rating: RatingItem, user: SessionUser): boolean {
 }
 
 /**
+ * Rating edit/delete permission: the rating's own author, Centre Head, a
+ * RATING_EDIT_ANY grant, or a moduleAccess.RATINGS.edit override ('ALL'
+ * grants edit-any, 'NONE' revokes even the author's own edit rights).
+ */
+export function canEditRating(rating: RatingItem, user: SessionUser): boolean {
+  if (!user) return false;
+  const override = resolveModuleEditOverride(user, 'RATINGS');
+  const isAuthor = user.name === rating.raterName;
+  if (override === 'NONE') return false;
+  if (override === 'ALL') return true;
+  if (user.tier === 1 || isAuthor || isCentreHead(user) || hasCapability(user, 'RATING_EDIT_ANY')) return true;
+  if (override === 'OWN') return isAuthor;
+
+  return false;
+}
+
+/**
  * Full member roster visibility: everyone tier <= 5 (Advisory Board through Core
  * Committee, which already covers every Head-role member seeded at tier 5, plus the
  * tier-3 "Head of Events" case). Training Associates (tier 6) and Alumni (tier 7) only
@@ -694,13 +892,20 @@ export function canViewRating(rating: RatingItem, user: SessionUser): boolean {
  */
 export function canViewFullDirectory(user: SessionUser): boolean {
   if (isAlumniRole(user)) return false;
-  return !!user && (user.tier <= 5 || isHeadRole(user) || isExecutiveRole(user) || hasCapability(user, 'VIEW_FULL_DIRECTORY'));
+  return !!user && (user.tier <= 5 || isHeadRole(user) || isExecutiveRole(user) || hasCapability(user, 'VIEW_FULL_DIRECTORY') || hasModuleViewAllGrant(user, 'DIRECTORY'));
 }
 
-/** Roster CRUD (add/edit/remove/bulk-edit members) — base leadership, or an explicit Group Policy grant. */
+/**
+ * Roster CRUD access at all (shows the Add Member button, CSV import, and
+ * bulk tools) — base leadership, or an explicit Group Policy grant. This is
+ * the umbrella "can manage the directory" gate; PER-ROW edit permission for
+ * a specific member is narrower and handled separately by
+ * canEditMemberRecordRow, which restricts a non-leadership grantee to only
+ * the records they personally added.
+ */
 export function canEditDirectory(user: SessionUser): boolean {
   if (isExecutiveRole(user) || isAlumniRole(user)) return false;
-  return isBaseLeadership(user) || hasCapability(user, 'EDIT_DIRECTORY');
+  return isBaseLeadership(user) || hasCapability(user, 'EDIT_DIRECTORY') || resolveModuleEditOverride(user, 'DIRECTORY') === 'ALL';
 }
 
 /** Check if user can terminate members (Centre Head or Super User only). */
@@ -725,28 +930,37 @@ export function isFaculty(user: SessionUser): boolean {
   return !!user && user.division === 'Faculty';
 }
 
-/** Guest Directory (visiting-card contacts) — Centre Head, Faculty, and Executive Council. */
+/** Guest Directory (visiting-card contacts) — Centre Head, Faculty, Executive Council, or a GUEST_DIRECTORY_ACCESS/moduleAccess grant. */
 export function canAccessGuestDirectory(user: SessionUser): boolean {
   if (isAlumniRole(user)) return false;
-  return isCentreHead(user) || isFaculty(user) || isExecutiveRole(user);
+  if (resolveModuleEditOverride(user, 'GUEST_DIRECTORY') === 'NONE') return false;
+  return isCentreHead(user) || isFaculty(user) || isExecutiveRole(user) || hasCapability(user, 'GUEST_DIRECTORY_ACCESS') || !!resolveModuleEditOverride(user, 'GUEST_DIRECTORY');
 }
 
-/** Check if user can delete contacts from guest directory. */
+/** Check if user can delete contacts from guest directory — Centre Head/Super User by default, or an explicit GUEST_DIRECTORY_DELETE grant. */
 export function canRemoveGuestContact(user: SessionUser): boolean {
   if (isExecutiveRole(user) || isAlumniRole(user)) return false;
-  return isCentreHead(user) || user?.tier === 1;
+  return isCentreHead(user) || user?.tier === 1 || hasCapability(user, 'GUEST_DIRECTORY_DELETE');
 }
 
-/** Form builder access — existing convention (tier 1 or tier 5), plus any Head regardless of tier. */
+/**
+ * Form builder access — existing convention (tier 1 or tier 5), plus any Head
+ * regardless of tier, or a BUILD_FORMS grant. A moduleAccess.FORMS.edit
+ * override always wins: 'NONE' revokes, 'ALL' grants outright.
+ */
 export function canBuildForms(user: SessionUser): boolean {
   if (isAlumniRole(user)) return false;
+  const override = resolveModuleEditOverride(user, 'FORMS');
+  if (override === 'NONE') return false;
+  if (override === 'ALL') return true;
   return (!!user && (user.tier === 1 || user.tier === 5)) || isHeadRole(user) || isExecutiveRole(user) || hasCapability(user, 'BUILD_FORMS');
 }
 
-/** Check if user can delete public forms (Centre Head or Super User only). */
+/** Check if user can delete public forms (Centre Head or Super User only), or a moduleAccess.FORMS.edit === 'ALL' grant. */
 export function canDeleteForms(user: SessionUser): boolean {
   if (isExecutiveRole(user) || isAlumniRole(user)) return false;
-  return isCentreHead(user) || user?.tier === 1;
+  if (resolveModuleEditOverride(user, 'FORMS') === 'NONE') return false;
+  return isCentreHead(user) || user?.tier === 1 || resolveModuleEditOverride(user, 'FORMS') === 'ALL';
 }
 
 /**
@@ -793,9 +1007,16 @@ export function canApprovePendingForm(form: PublicFormItem, user: SessionUser): 
   return isCentreHead(user); // CENTER_HEAD (default)
 }
 
-/** Announcement authoring — Core Committee, Advisory Board, Faculty, Heads, Centre Head & GG Campus Events Head. */
+/**
+ * Announcement authoring — Core Committee, Advisory Board, Faculty, Heads,
+ * Centre Head & GG Campus Events Head, or a CREATE_ANNOUNCEMENT grant. A
+ * moduleAccess.ANNOUNCEMENTS.edit override always wins over that baseline.
+ */
 export function canCreateAnnouncement(user: SessionUser): boolean {
   if (!user || isAlumniRole(user)) return false;
+  const override = resolveModuleEditOverride(user, 'ANNOUNCEMENTS');
+  if (override === 'NONE') return false;
+  if (override === 'ALL') return true;
   return isBaseLeadership(user) || isCoreCommitteeTier(user) || user.tier === 4 || user.tier === 5 || isFaculty(user) || isHeadRole(user) || hasCapability(user, 'CREATE_ANNOUNCEMENT');
 }
 
@@ -803,10 +1024,12 @@ export function canCreateAnnouncement(user: SessionUser): boolean {
  * Design Portal visibility: a plain Design submitter only sees their own uploads
  * (plus anything explicitly assigned to them to proofread — handled separately in
  * the page's own "proofread" tab). Leadership and any Head see every submission.
+ * Also doubles as the Design Portal's edit-any-submission gate (see designs/page.tsx),
+ * so a moduleAccess.DESIGNS.view === 'ALL' grant here also grants edit-any there.
  */
 export function canViewAllDesigns(user: SessionUser): boolean {
   if (isAlumniRole(user) || isExecutiveRole(user)) return false;
-  return isBaseLeadership(user) || isDesignHead(user) || hasCapability(user, 'VIEW_ALL_DESIGNS');
+  return isBaseLeadership(user) || isDesignHead(user) || hasCapability(user, 'VIEW_ALL_DESIGNS') || hasModuleViewAllGrant(user, 'DESIGNS');
 }
 
 /** Task extension request permission: own task or a team member in department (for Heads). */
@@ -829,6 +1052,26 @@ export function canRequestTaskExtension(task: TaskItem, user: SessionUser): bool
 /** Task extension approval/rejection: base leadership, or Faculty. */
 export function canDecideTaskExtension(user: SessionUser): boolean {
   return isBaseLeadership(user) || isFaculty(user) || hasCapability(user, 'DECIDE_TASK_EXTENSION');
+}
+
+/** Guest Invites mail-merge tool — Centre Head/Super User by default, or a MANAGE_GUEST_INVITES/moduleAccess grant. */
+export function canManageGuestInvites(user: SessionUser): boolean {
+  const override = resolveModuleEditOverride(user, 'GUEST_INVITES');
+  if (override === 'NONE') return false;
+  if (override === 'ALL') return true;
+  return isCentreHead(user) || hasCapability(user, 'MANAGE_GUEST_INVITES');
+}
+
+/** Backup & Restore access — Super User by default, or a MANAGE_BACKUP grant. Deliberately no moduleAccess 'NONE' override: this always stays at least Super-User-only, never revocable from the one account that must always be able to recover the system. */
+export function canManageBackup(user: SessionUser): boolean {
+  return user?.tier === 1 || hasCapability(user, 'MANAGE_BACKUP');
+}
+
+/** Email Management access — Super User/Centre Head by default, or a MANAGE_EMAIL_SETTINGS grant. */
+export function canManageEmailSettings(user: SessionUser): boolean {
+  const override = resolveModuleEditOverride(user, 'EMAIL');
+  if (override === 'ALL') return true;
+  return user?.tier === 1 || isCentreHead(user) || hasCapability(user, 'MANAGE_EMAIL_SETTINGS');
 }
 
 /**

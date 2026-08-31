@@ -14,6 +14,7 @@ import {
   FileQuestion,
 } from 'lucide-react';
 import { logAuditEvent, getSystemSettings, updateSystemSettings } from '@/lib/local-data';
+import { canManageBackup } from '@/lib/permissions';
 import { EmptyState } from '@/components/ui/empty-state';
 import { FileDropzone, FilePreviewRow, createProgressTracker, uploadFormData } from '@/components/ui/file-dropzone';
 
@@ -61,7 +62,7 @@ export default function BackupRestorePage() {
     setIsTogglingLockdown(false);
   };
 
-  const isSuperUser = user?.tier === 1;
+  const hasBackupAccess = canManageBackup(user);
 
   const handleDownloadBackup = async () => {
     setBackupError('');
@@ -176,7 +177,7 @@ export default function BackupRestorePage() {
 
   if (!userHydrated) return null;
 
-  if (!isSuperUser) {
+  if (!hasBackupAccess) {
     return (
       <div className="p-6 md:p-8">
         <EmptyState

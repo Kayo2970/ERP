@@ -34,8 +34,9 @@ import {
   Member,
   MemberDivision,
   AccessLevelSettings,
+  ModuleAccessKey,
 } from '@/lib/local-data';
-import { CAPABILITY_CATALOG } from '@/lib/permissions';
+import { CAPABILITY_CATALOG, MODULE_CATALOG } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -46,6 +47,9 @@ function slugifyTag(name: string): string {
   const slug = name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40);
   return slug || 'NEW_TAG';
 }
+
+type ModuleAccessGrant = { view?: 'OWN' | 'ALL'; edit?: 'OWN' | 'ALL' | 'NONE' };
+type ModuleAccessMap = Partial<Record<ModuleAccessKey, ModuleAccessGrant>>;
 
 interface TargetCriteria {
   targetDivisions: MemberDivision[];
@@ -111,9 +115,31 @@ export default function GroupPoliciesPage() {
   const [isMemberDropdownOpen, setIsMemberDropdownOpen] = useState(false);
   const memberDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Restrict event visibility to own/listed only for the targeted people (opt-in —
-  // omitted means unrestricted, exactly as before this control existed).
-  const [restrictEventVisibility, setRestrictEventVisibility] = useState(false);
+  // Per-module View/Edit access overrides — the generalized, every-module
+  // version of the old single-module "restrict event visibility" checkbox
+  // this replaces (handleOpenEdit migrates a legacy-saved policy's
+  // eventVisibilityScope into moduleAccess.EVENTS.view for display).
+  const [moduleAccess, setModuleAccess] = useState<ModuleAccessMap>({});
+
+  const setModuleViewOverride = (key: ModuleAccessKey, view: 'OWN' | 'ALL' | '') => {
+    setModuleAccess(prev => {
+      const next = { ...prev };
+      const entry: ModuleAccessGrant = { ...(next[key] || {}) };
+      if (view) entry.view = view; else delete entry.view;
+      if (!entry.view && !entry.edit) delete next[key]; else next[key] = entry;
+      return next;
+    });
+  };
+  const setModuleEditOverride = (key: ModuleAccessKey, edit: 'OWN' | 'ALL' | 'NONE' | '') => {
+    setModuleAccess(prev => {
+      const next = { ...prev };
+      const entry: ModuleAccessGrant = { ...(next[key] || {}) };
+      if (edit) entry.edit = edit; else delete entry.edit;
+      if (!entry.view && !entry.edit) delete next[key]; else next[key] = entry;
+      return next;
+    });
+  };
+
 
   // Approval requirement: any capability this tag grants only takes effect once
   // the resolved approver signs off.
@@ -187,7 +213,7 @@ export default function GroupPoliciesPage() {
     setExpiresAt('');
     setMemberSearchQuery('');
     setIsMemberDropdownOpen(false);
-    setRestrictEventVisibility(false);
+    setModuleAccess({});
     setRequiresApproval(false);
     setApproverType('CENTER_HEAD');
     setApproverMemberId('');
@@ -217,7 +243,14 @@ export default function GroupPoliciesPage() {
     setExpiresAt(policy.expiresAt ? policy.expiresAt.split('T')[0] : '');
     setMemberSearchQuery('');
     setIsMemberDropdownOpen(false);
-    setRestrictEventVisibility(policy.eventVisibilityScope === 'OWN_ONLY');
+    // Migrate the legacy eventVisibilityScope flag into the new moduleAccess
+    // shape for display, unless the policy already has an explicit
+    // moduleAccess.EVENTS.view set (which always wins).
+    const migratedModuleAccess: ModuleAccessMap = { ...(policy.moduleAccess || {}) };
+    if (policy.eventVisibilityScope === 'OWN_ONLY' && !migratedModuleAccess.EVENTS?.view) {
+      migratedModuleAccess.EVENTS = { ...migratedModuleAccess.EVENTS, view: 'OWN' };
+    }
+    setModuleAccess(migratedModuleAccess);
     setRequiresApproval(!!policy.requiresApproval);
     setApproverType(policy.approverType || 'CENTER_HEAD');
     setApproverMemberId(policy.approverMemberId || '');
@@ -293,7 +326,10 @@ export default function GroupPoliciesPage() {
       // Expires at the END of the chosen day, so the policy stays active through
       // the whole date the admin picked rather than lapsing at midnight.
       expiresAt: expiresAt ? new Date(`${expiresAt}T23:59:59.999Z`).toISOString() : undefined,
-      eventVisibilityScope: restrictEventVisibility ? ('OWN_ONLY' as const) : undefined,
+      // Saving through this form always retires the legacy single-module
+      // flag — moduleAccess.EVENTS carries the same restriction now.
+      eventVisibilityScope: undefined,
+      moduleAccess: Object.keys(moduleAccess).length > 0 ? moduleAccess : undefined,
       requiresApproval,
       approverType: requiresApproval ? approverType : undefined,
       approverMemberId: requiresApproval && approverType === 'SPECIFIC_MEMBER' ? approverMemberId : undefined,
@@ -520,11 +556,27 @@ export default function GroupPoliciesPage() {
                       </span>
                     );
                   })}
-                  {policy.eventVisibilityScope === 'OWN_ONLY' && (
+                  {policy.eventVisibilityScope === 'OWN_ONLY' && !policy.moduleAccess?.EVENTS?.view && (
                     <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 bg-warning/10 text-warning rounded-md border border-warning/20">
                       <Eye className="h-3 w-3" /> Own/Listed Events Only
                     </span>
                   )}
+                  {policy.moduleAccess && Object.entries(policy.moduleAccess).map(([key, grant]) => {
+                    if (!grant?.view && !grant?.edit) return null;
+                    const mod = MODULE_CATALOG.find(m => m.key === key);
+                    const parts = [
+                      grant.view && `View: ${grant.view === 'ALL' ? 'All' : 'Own Only'}`,
+                      grant.edit && `Edit: ${grant.edit === 'ALL' ? 'All' : grant.edit === 'NONE' ? 'None' : 'Own Only'}`,
+                    ].filter(Boolean).join(' · ');
+                    return (
+                      <span
+                        key={key}
+                        className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 bg-warning/10 text-warning rounded-md border border-warning/20"
+                      >
+                        <Eye className="h-3 w-3" /> {mod?.label || key} — {parts}
+                      </span>
+                    );
+                  })}
                   {policy.requiresApproval && (
                     <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 bg-accent/10 text-accent rounded-md border border-accent/20">
                       <ClipboardCheck className="h-3 w-3" /> Approval Required &rarr; {describeApprover(policy)}
@@ -820,46 +872,82 @@ export default function GroupPoliciesPage() {
                     </button>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {CAPABILITY_CATALOG.map(cap => (
-                    <label
-                      key={cap.key}
-                      title={cap.description}
-                      className={`flex items-start gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${
-                        capabilities.includes(cap.key)
-                          ? 'bg-accent/10 border-accent/30'
-                          : 'bg-theme-background/20 border-theme-card-border hover:bg-theme-border/10'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={capabilities.includes(cap.key)}
-                        onChange={() => toggleCapability(cap.key)}
-                        className="accent-accent mt-0.5"
-                      />
-                      <span className="font-medium text-theme-text-primary leading-tight">{cap.label}</span>
-                    </label>
+                <div className="space-y-3">
+                  {Array.from(new Set(CAPABILITY_CATALOG.map(c => c.module))).map(moduleLabel => (
+                    <div key={moduleLabel} className="space-y-1.5">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-theme-text-secondary/70">{moduleLabel}</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {CAPABILITY_CATALOG.filter(c => c.module === moduleLabel).map(cap => (
+                          <label
+                            key={cap.key}
+                            title={cap.description}
+                            className={`flex items-start gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                              capabilities.includes(cap.key)
+                                ? 'bg-accent/10 border-accent/30'
+                                : 'bg-theme-background/20 border-theme-card-border hover:bg-theme-border/10'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={capabilities.includes(cap.key)}
+                              onChange={() => toggleCapability(cap.key)}
+                              className="accent-accent mt-0.5"
+                            />
+                            <span className="font-medium text-theme-text-primary leading-tight">{cap.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
 
-              <label
-                title="Members matched by this tag will only see events they created or are listed on a committee for, instead of every event. Purely restrictive — it never grants visibility beyond what someone already has."
-                className={`flex items-start gap-2 p-3 rounded-xl border cursor-pointer transition-all ${
-                  restrictEventVisibility ? 'bg-warning/10 border-warning/30' : 'bg-theme-background/20 border-theme-card-border hover:bg-theme-border/10'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={restrictEventVisibility}
-                  onChange={(e) => setRestrictEventVisibility(e.target.checked)}
-                  className="accent-warning mt-0.5"
-                />
-                <span className="flex items-center gap-1.5 font-medium text-theme-text-primary leading-tight">
-                  <Eye className="h-3.5 w-3.5 text-warning shrink-0" />
-                  Restrict event visibility to their own / listed events only
-                </span>
-              </label>
+              <div className="space-y-1.5 pt-1 border-t border-theme-border/20">
+                <label className="block font-medium text-theme-text-secondary pt-2">
+                  Module Access <span className="font-normal">(optional — leave "Inherit" to change nothing about that module's default behavior)</span>
+                </label>
+                <p className="text-[11px] text-theme-text-secondary leading-relaxed">
+                  View controls whether members matched by this tag see every record in a module or only ones they created (never removes access an explicit capability above already grants). Edit is a hard override: <span className="font-semibold text-theme-text-primary">All</span> grants unrestricted edit, <span className="font-semibold text-theme-text-primary">None</span> revokes edit outright — even for a tier/role that would otherwise qualify — and <span className="font-semibold text-theme-text-primary">Own</span> limits edit to records they created (one-time, within 24 hours, for Members/Guest Directory).
+                </p>
+                <div className="rounded-2xl border border-theme-card-border overflow-hidden">
+                  <div className="grid grid-cols-[1fr_auto_auto] sm:grid-cols-[1fr_140px_140px] items-center gap-2 px-3 py-2 bg-theme-background/40 text-[10px] font-bold uppercase tracking-wider text-theme-text-secondary/70">
+                    <span>Module</span>
+                    <span>View</span>
+                    <span>Edit</span>
+                  </div>
+                  {MODULE_CATALOG.map((mod, i) => {
+                    const grant = moduleAccess[mod.key] || {};
+                    return (
+                      <div
+                        key={mod.key}
+                        title={mod.ownershipNote}
+                        className={`grid grid-cols-[1fr_auto_auto] sm:grid-cols-[1fr_140px_140px] items-center gap-2 px-3 py-2 ${i % 2 === 1 ? 'bg-theme-background/10' : ''}`}
+                      >
+                        <span className="font-medium text-theme-text-primary truncate">{mod.label}</span>
+                        <select
+                          value={grant.view || ''}
+                          onChange={(e) => setModuleViewOverride(mod.key, e.target.value as 'OWN' | 'ALL' | '')}
+                          className="px-2 py-1.5 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary text-[11px] focus:outline-none focus:border-accent cursor-pointer"
+                        >
+                          <option value="">Inherit</option>
+                          <option value="OWN">Own Only</option>
+                          <option value="ALL">All</option>
+                        </select>
+                        <select
+                          value={grant.edit || ''}
+                          onChange={(e) => setModuleEditOverride(mod.key, e.target.value as 'OWN' | 'ALL' | 'NONE' | '')}
+                          className="px-2 py-1.5 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary text-[11px] focus:outline-none focus:border-accent cursor-pointer"
+                        >
+                          <option value="">Inherit</option>
+                          <option value="OWN">Own Only</option>
+                          <option value="ALL">All</option>
+                          <option value="NONE">None</option>
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
 
               <div className="space-y-3 pt-1 border-t border-theme-border/20">
                 <label className="block font-medium text-theme-text-secondary">
