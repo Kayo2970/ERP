@@ -1068,8 +1068,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           still paints above the canvas exactly as before. */}
       <div className="fixed inset-0 pointer-events-none -z-10 opacity-40 dark:opacity-90 transition-opacity duration-500 overflow-hidden">
         <GhostFibers
-          lineColor="#0061ff"
-          glowColor="#00daff"
+          lineColor="#001f53"
+          glowColor="#03d8fc"
           lightMode={!isDarkTheme}
           speed={0.2}
           scale={2}
