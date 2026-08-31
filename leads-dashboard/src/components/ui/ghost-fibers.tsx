@@ -246,34 +246,44 @@ export function GhostFibers({
     container.appendChild(canvas);
 
     const geometry = new Triangle(gl);
+    // Seeded directly from the current props (not hardcoded literals) — this
+    // used to hardcode each uniform to its default-parameter value and rely
+    // on the second effect below to overwrite them with the real props via
+    // the `contexts` WeakMap right after mount. That worked in dev only by
+    // accident: React's Strict Mode double-invokes effects there, so the
+    // second pass papered over the gap. In a real production build (no
+    // double-invocation) there's a real window where the first rendered
+    // frame — and on a slow/first paint, the one actually seen — used
+    // wrong defaults instead of the intended look, which is what made the
+    // production background render solid black instead of the tuned glow.
     const program = new Program(gl, {
       vertex,
       fragment,
       uniforms: {
         uResolution: { value: new Float32Array([1, 1]) },
         uTime: { value: 0 },
-        uSpeed: { value: 0.2 },
-        uScale: { value: 2 },
-        uRotation: { value: 0 },
-        uRotationSpeed: { value: 0.25 },
-        uLayers: { value: 4 },
-        uWaveAmplitude: { value: 0.015 },
-        uWaveFrequency: { value: 3 },
-        uWaveSpeed: { value: 0.15 },
-        uLayerSpeed: { value: 0.08 },
-        uTwist: { value: 0.1 },
-        uTwistFrequency: { value: 5 },
-        uTwistSpeed: { value: 1.2 },
-        uLineFrequency: { value: 5 },
-        uLineSpacing: { value: 2 },
-        uLineSharpness: { value: 16 },
-        uGlowFalloff: { value: 10 },
-        uGlowIntensity: { value: 1.6 },
-        uBrightness: { value: 2 },
-        uBlueBoost: { value: 1.25 },
-        uVignette: { value: 0.8 },
-        uGrain: { value: 0.05 },
-        uLightMode: { value: 0 },
+        uSpeed: { value: speed },
+        uScale: { value: scale },
+        uRotation: { value: rotation },
+        uRotationSpeed: { value: rotationSpeed },
+        uLayers: { value: Math.min(Math.max(Math.round(layers), 1), 10) },
+        uWaveAmplitude: { value: waveAmplitude },
+        uWaveFrequency: { value: waveFrequency },
+        uWaveSpeed: { value: waveSpeed },
+        uLayerSpeed: { value: layerSpeed },
+        uTwist: { value: twist },
+        uTwistFrequency: { value: twistFrequency },
+        uTwistSpeed: { value: twistSpeed },
+        uLineFrequency: { value: lineFrequency },
+        uLineSpacing: { value: lineSpacing },
+        uLineSharpness: { value: lineSharpness },
+        uGlowFalloff: { value: glowFalloff },
+        uGlowIntensity: { value: glowIntensity },
+        uBrightness: { value: brightness },
+        uBlueBoost: { value: blueBoost },
+        uVignette: { value: vignette },
+        uGrain: { value: grain },
+        uLightMode: { value: lightMode ? 1 : 0 },
         uLineColor: { value: new Float32Array(hexToRgb(lineColor)) },
         uGlowColor: { value: new Float32Array(hexToRgb(glowColor)) },
       },

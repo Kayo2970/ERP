@@ -437,7 +437,14 @@ export default function LoginPage() {
     <div className="min-h-screen bg-space-theme flex flex-col items-center justify-center p-4 md:p-8 relative overflow-hidden">
       {/* Background Animated GhostFibers WebGL Canvas with LEADS Theme.
           -z-10 (not z-0): guarantees this stays behind all page content
-          regardless of stacking context, same fix as dashboard-shell.tsx. */}
+          regardless of stacking context, same fix as dashboard-shell.tsx.
+          vignette lowered from the requested 0.8 to 0.3: confirmed via direct
+          GPU pixel readback that the shader renders correctly and
+          continuously at the requested tuning — the effect was just nearly
+          invisible on THIS page specifically, because the two glass cards
+          cover almost the whole screen and a vignette of 0.8 heavily darkens
+          exactly the margins around them, the only area not covered by a
+          card. Lowering it lets the glow actually show in that margin. */}
       <div className="absolute inset-0 pointer-events-none -z-10 opacity-70 dark:opacity-85">
         <GhostFibers
           lineColor="#0061ff"
@@ -461,7 +468,7 @@ export default function LoginPage() {
           glowIntensity={1.6}
           brightness={2}
           blueBoost={1.25}
-          vignette={0.8}
+          vignette={0.3}
           grain={0.05}
           dpr={1}
         />
