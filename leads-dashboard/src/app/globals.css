@@ -208,7 +208,7 @@ body {
 }
 
 .animate-splash-logo {
-  animation: splash-logo-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: splash-logo-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 /* ------------------------------------------------------------- */
@@ -250,7 +250,7 @@ body {
     rgba(255, 255, 255, 0.16) 50%,
     transparent 100%
   );
-  animation: skeleton-shimmer 1.8s ease-in-out infinite;
+  animation: skeleton-shimmer 0.9s ease-in-out infinite;
   pointer-events: none;
   z-index: 10;
 }
@@ -265,7 +265,7 @@ body {
 }
 
 .skeleton--pulse {
-  animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  animation: pulse-subtle 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 .skeleton--none::before {
@@ -383,7 +383,7 @@ body {
 }
 
 .animate-rippling {
-  animation: rippling 0.6s cubic-bezier(0, 0, 0.2, 1) forwards;
+  animation: rippling 0.3s cubic-bezier(0, 0, 0.2, 1) forwards;
 }
 
 /* ------------------------------------------------------------- */

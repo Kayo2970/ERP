@@ -14,7 +14,7 @@ interface LoadingScreenProps {
  * Full-screen branded splash shown during login and dashboard module transitions
  * with the animated LEADS GhostFibers WebGL backdrop behind the rotating logo badge.
  */
-export function LoadingScreen({ duration = 1000, subtitle, onComplete }: LoadingScreenProps) {
+export function LoadingScreen({ duration = 500, subtitle, onComplete }: LoadingScreenProps) {
   useEffect(() => {
     if (!onComplete) return;
     const timer = setTimeout(onComplete, duration);
@@ -28,18 +28,18 @@ export function LoadingScreen({ duration = 1000, subtitle, onComplete }: Loading
         <GhostFibers
           lineColor="#0061ff"
           glowColor="#00daff"
-          speed={0.2}
+          speed={0.4}
           scale={2}
           rotation={-24}
-          rotationSpeed={0.25}
+          rotationSpeed={0.5}
           layers={4}
           waveAmplitude={0.015}
           waveFrequency={3}
-          waveSpeed={0.15}
-          layerSpeed={0.08}
+          waveSpeed={0.3}
+          layerSpeed={0.16}
           twist={0.1}
           twistFrequency={5}
-          twistSpeed={1.2}
+          twistSpeed={2.4}
           lineFrequency={5}
           lineSpacing={2}
           lineSharpness={16}

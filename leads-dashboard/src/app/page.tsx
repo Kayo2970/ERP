@@ -184,15 +184,15 @@ export default function LoginPage() {
       });
   }, []);
 
-  // Auto-rotate quotes every ~3.5 seconds
+  // Auto-rotate quotes every ~1.75 seconds (50% faster)
   useEffect(() => {
     const timer = setInterval(() => {
       setIsQuoteFading(true);
       setTimeout(() => {
         setQuoteIndex(prev => (prev + 1) % INSPIRATIONAL_QUOTES.length);
         setIsQuoteFading(false);
-      }, 350);
-    }, 3500);
+      }, 175);
+    }, 1750);
 
     return () => clearInterval(timer);
   }, []);
@@ -426,7 +426,7 @@ export default function LoginPage() {
   if (showLoginSplash) {
     return (
       <LoadingScreen
-        duration={2000}
+        duration={1000}
         subtitle="Signing you in..."
         onComplete={() => router.push('/dashboard/home')}
       />
