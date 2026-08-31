@@ -388,59 +388,69 @@ body {
 
 /* ------------------------------------------------------------- */
 /* React Bits MagicBento Dynamic Card Hover & Border Glow        */
+/* Wrapped in @layer components (like the glass-panel base rule  */
+/* above) so its `position: relative` on .glass-panel never beats */
+/* an explicit Tailwind `absolute` utility on the same element —  */
+/* left unlayered, this rule was overriding every glass-panel     */
+/* dropdown (Quick Switch, notification bell, user menu) back to  */
+/* `position: relative`, since unlayered CSS always wins over any */
+/* Tailwind layer regardless of source order, breaking their      */
+/* `absolute right-0 top-full` anchoring in production.           */
 /* ------------------------------------------------------------- */
-.magic-bento-card,
-.glass-panel:not(header):not(aside):not(.no-magic),
-.dashboard-card {
-  --glow-x: 50%;
-  --glow-y: 50%;
-  --glow-intensity: 0;
-  --glow-radius: 260px;
-  --glow-color: 46, 117, 182;
-  position: relative;
-  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.22s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.22s ease;
-  will-change: transform;
-}
+@layer components {
+  .magic-bento-card,
+  .glass-panel:not(header):not(aside):not(.no-magic),
+  .dashboard-card {
+    --glow-x: 50%;
+    --glow-y: 50%;
+    --glow-intensity: 0;
+    --glow-radius: 260px;
+    --glow-color: 46, 117, 182;
+    position: relative;
+    transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.22s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.22s ease;
+    will-change: transform;
+  }
 
-.magic-bento-card::after,
-.glass-panel:not(header):not(aside):not(.no-magic)::after,
-.dashboard-card::after {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  padding: 1.5px;
-  background: radial-gradient(
-    var(--glow-radius) circle at var(--glow-x) var(--glow-y),
-    rgba(var(--glow-color), calc(var(--glow-intensity) * 0.95)) 0%,
-    rgba(var(--glow-color), calc(var(--glow-intensity) * 0.4)) 35%,
-    transparent 70%
-  );
-  -webkit-mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  mask-composite: exclude;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.25s ease;
-  z-index: 20;
-}
+  .magic-bento-card::after,
+  .glass-panel:not(header):not(aside):not(.no-magic)::after,
+  .dashboard-card::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1.5px;
+    background: radial-gradient(
+      var(--glow-radius) circle at var(--glow-x) var(--glow-y),
+      rgba(var(--glow-color), calc(var(--glow-intensity) * 0.95)) 0%,
+      rgba(var(--glow-color), calc(var(--glow-intensity) * 0.4)) 35%,
+      transparent 70%
+    );
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    z-index: 20;
+  }
 
-.magic-bento-card:hover::after,
-.glass-panel:not(header):not(aside):not(.no-magic):hover::after,
-.dashboard-card:hover::after {
-  opacity: 1;
-}
+  .magic-bento-card:hover::after,
+  .glass-panel:not(header):not(aside):not(.no-magic):hover::after,
+  .dashboard-card:hover::after {
+    opacity: 1;
+  }
 
-.magic-bento-card:hover,
-.glass-panel:not(header):not(aside):not(.no-magic):hover,
-.dashboard-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 30px -10px rgba(46, 117, 182, 0.35);
+  .magic-bento-card:hover,
+  .glass-panel:not(header):not(aside):not(.no-magic):hover,
+  .dashboard-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 30px -10px rgba(46, 117, 182, 0.35);
+  }
 }
 
 .magic-particle::before {
