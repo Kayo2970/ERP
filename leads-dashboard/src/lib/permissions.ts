@@ -393,6 +393,7 @@ function isOwnCreatedRecordEditable(record: { createdBy?: string; createdAt?: st
  *    still edit it anytime.
  */
 export function canEditMemberRecordRow(member: Member, user: SessionUser): boolean {
+  if (isExecutiveRole(user) || isAlumniRole(user)) return false;
   if (user?.tier === 1) return true;
   const override = resolveModuleEditOverride(user, 'DIRECTORY');
   if (override === 'NONE') return false;
