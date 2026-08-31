@@ -65,6 +65,14 @@ export async function POST(request: Request) {
           return {
             ...m,
             passwordHash: hashPassword(newPassword),
+            // A new member is always created with mustSetupPassword: true
+            // (see /api/members POST) so login knows to route them here
+            // instead of straight to a password check. Leaving it true
+            // after they successfully set a password here was making
+            // login's mustSetupPassword check (checked before passwordHash)
+            // send them right back through "set up your password" a
+            // second time on their very next sign-in.
+            mustSetupPassword: false,
             ...(dateOfBirth ? { dateOfBirth } : {}),
           };
         }
