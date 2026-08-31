@@ -24,6 +24,7 @@ An enterprise-grade, institutional management and operations platform designed f
 - **Sub-Committee Formation**: Create specialized committees (Logistics, Technical, Media, Operations) and assign member rosters.
 - **Bulk Roster Import**: Download a CSV template and bulk-upload events, same pattern as the Member Directory and Guest Directory importers.
 - **Approval Engine**: Event creation by Executive Council members (President, VP, Chief Coordinator) automatically triggers a Centre Head sign-off requirement.
+- **Festivals & Observances Approval Gate**: Synced Indian national holidays and observances require explicit social media post sign-off (`holiday_social_approval`). Until a festival's post is approved and moved to content design (`holiday_design_social`), the festival event is hidden from event selection dropdowns across all dashboard modules.
 - **Student Performance Evaluation**: Integrated dual-gate rating system for Centre Head and campus-specific Events Heads.
 
 #### 4. Tasks Desk (`/dashboard/tasks`)
@@ -31,7 +32,7 @@ An enterprise-grade, institutional management and operations platform designed f
 - **Status Tracking**: Visual progress pipeline: *To Do* → *In Progress* → *Under Review* → *Completed*.
 - **Auto-Generated Design Tasks**: A finalized Design Portal submission (style-approved, and proofread-approved if proofreading was requested) automatically creates or completes a task here — linked to its event when tagged to one, or standalone otherwise — so it flows straight into the rating queue with no manual re-entry.
 - **Extension Requests**: Assignees can submit task deadline extension requests, which Faculty Advisors or the Centre Head can approve or reject.
-- **Executive Task Allotment**: Executive Council task assignments require Event Head approval before activation.
+- **Executive Task Allotment & Universal Visibility**: Executive Council leadership (President & Vice President) hold complete platform-wide task visibility access to monitor all assigned tasks, while new executive task assignments route through Event Head approval.
 
 #### 5. Ratings & Student Performance (`/dashboard/ratings`)
 - **Rubric Evaluation**: 5-point performance scoring system for student deliverables and leadership contributions.

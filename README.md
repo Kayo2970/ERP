@@ -88,7 +88,7 @@ The application runs as a production service under **PM2** on a self-hosted Host
 | **Tier 2.5** | **GG Campus Head** | Faculty | Regional operational authority and event oversight for the Gnanagangothri (GG) campus. |
 | **Tier 3** | **Faculty / Event Heads** | Faculty | Event proposal approval, Level-1 reimbursement audit, student task lead delegation, rating reviews. |
 | **Tier 4** | **Advisory Board** | Faculty | Read-only access to institutional analytics, event summaries, and evaluation reports. |
-| **Tier 5** | **Core Committee** | Core Committee | Event orchestration, task assignments, public feedback form builder & QR generation, financial claims. |
+| **Tier 5** | **Core Committee** | Core Committee | Executive Council (President & Vice President) hold universal task oversight across the platform; Event orchestration, task assignments, public form builder & QR generation, financial claims. Festival events require post sign-off to appear in dropdowns. |
 | **Tier 6** | **Training Associates** | Training Associate | Task execution & status updates, personal workspace, expense claim submission, feedback participation. |
 | **Tier 7** | **Alumni / Guests** | Alumni / Guest | Read-only historical event records, guest invites, and certificate downloads. |
 
