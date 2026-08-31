@@ -1047,24 +1047,33 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   }
 
   return (
-    <div className="min-h-screen bg-space-theme flex flex-col md:flex-row transition-all duration-300 relative">
+    <div className="min-h-screen bg-space-theme flex flex-col md:flex-row transition-all duration-300 relative z-0">
       {/* Background Animated GhostFibers WebGL Canvas.
-          -z-10 (not z-0): z-0 still creates a positioned stacking context that
-          paints AFTER normal non-positioned in-flow content (CSS stacking
-          order groups positioned z-index:0 boxes above plain in-flow boxes,
-          regardless of DOM order) — that's what was washing out every bare
-          page heading/subtitle that isn't inside a .glass-panel card (cards
-          escaped it because backdrop-filter gives them their own stacking
-          context). A negative z-index guarantees this canvas paints strictly
-          behind ALL normal content, everywhere, with no exceptions. */}
-      <div className="fixed inset-0 pointer-events-none -z-10 opacity-40 dark:opacity-65 transition-opacity duration-500 overflow-hidden">
+          -z-10 on the canvas (not z-0): z-0 on the CANVAS itself would create
+          a positioned stacking context that paints AFTER normal non-positioned
+          in-flow content (CSS stacking order groups positioned z-index:0 boxes
+          above plain in-flow boxes, regardless of DOM order) — that's what was
+          washing out every bare page heading/subtitle that isn't inside a
+          .glass-panel card (cards escaped it because backdrop-filter gives
+          them their own stacking context). A negative z-index guarantees this
+          canvas paints strictly behind ALL normal content, everywhere.
+          The OUTER wrapper here also needs its own explicit z-0 (not just
+          `relative`, which alone never creates a stacking context) — without
+          it, this div's own opaque bg-space-theme background paints in the
+          root stacking context's normal-flow layer, which comes AFTER the
+          canvas's negative-z-index layer there, hiding the canvas completely
+          behind a flat color. With z-0 here, this div becomes its own
+          stacking-context root: its background paints first/backmost inside
+          THAT context, the canvas paints just above it, and everything else
+          still paints above the canvas exactly as before. */}
+      <div className="fixed inset-0 pointer-events-none -z-10 opacity-40 dark:opacity-90 transition-opacity duration-500 overflow-hidden">
         <GhostFibers
           lineColor="#0061ff"
           glowColor="#00daff"
           lightMode={!isDarkTheme}
           speed={0.2}
           scale={2}
-          rotation={0}
+          rotation={-24}
           rotationSpeed={0.25}
           layers={4}
           waveAmplitude={0.015}

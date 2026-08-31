@@ -434,17 +434,22 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-space-theme flex flex-col items-center justify-center p-4 md:p-8 relative overflow-hidden">
+    <div className="min-h-screen bg-space-theme flex flex-col items-center justify-center p-4 md:p-8 relative z-0 overflow-hidden">
       {/* Background Animated GhostFibers WebGL Canvas with LEADS Theme.
-          -z-10 (not z-0): guarantees this stays behind all page content
-          regardless of stacking context, same fix as dashboard-shell.tsx.
-          vignette lowered from the requested 0.8 to 0.3: confirmed via direct
-          GPU pixel readback that the shader renders correctly and
-          continuously at the requested tuning — the effect was just nearly
-          invisible on THIS page specifically, because the two glass cards
-          cover almost the whole screen and a vignette of 0.8 heavily darkens
-          exactly the margins around them, the only area not covered by a
-          card. Lowering it lets the glow actually show in that margin. */}
+          -z-10 on the canvas keeps it behind all page content, same as
+          dashboard-shell.tsx. The outer wrapper's `z-0` (added alongside
+          `relative`) is the actual fix for this canvas being invisible: without
+          an explicit z-index, `relative` alone never creates a stacking
+          context, so this div's own opaque bg-space-theme background was
+          painting in the root stacking context's normal-flow layer — which
+          comes AFTER (paints over) the canvas's negative-z-index layer there,
+          hiding it completely behind a flat color. `z-0` makes this div its
+          own stacking-context root, so its background paints first/backmost
+          inside that context and the canvas paints just above it. (A prior
+          pass diagnosed the low visibility here as a vignette/margin-coverage
+          tradeoff and lowered vignette from 0.8 to 0.3 to compensate — that
+          was treating a symptom; this is the real fix, so vignette is
+          restored to the originally requested 0.8.) */}
       <div className="absolute inset-0 pointer-events-none -z-10 opacity-70 dark:opacity-85">
         <GhostFibers
           lineColor="#0061ff"
@@ -468,7 +473,7 @@ export default function LoginPage() {
           glowIntensity={1.6}
           brightness={2}
           blueBoost={1.25}
-          vignette={0.3}
+          vignette={0.8}
           grain={0.05}
           dpr={1}
         />
