@@ -9,7 +9,10 @@
  */
 import crypto from 'crypto';
 
-const DEFAULT_MASTER_KEY = process.env.DATA_ENCRYPTION_KEY || 'LEADS_ERP_MASTER_SECRET_KEY_2026';
+export function getMasterKey(): string {
+  return process.env.DATA_ENCRYPTION_KEY || 'LEADS_ERP_MASTER_SECRET_KEY_2026';
+}
+
 const FIXED_SALT = Buffer.from('LEADS_NEXT_GEN_CENTRE_MSRUAS_SALT_2026', 'utf-8');
 
 export interface EncryptedPayload {
@@ -30,7 +33,7 @@ function deriveKey(passphrase: string, salt: Buffer = FIXED_SALT): Buffer {
  * Returns a JSON-serializable EncryptedPayload object.
  */
 export function encryptData(text: string, customPassphrase?: string): EncryptedPayload {
-  const passphrase = customPassphrase || DEFAULT_MASTER_KEY;
+  const passphrase = customPassphrase || getMasterKey();
   const key = deriveKey(passphrase);
   const iv = crypto.randomBytes(12);
 
@@ -58,7 +61,7 @@ export function decryptData(payload: EncryptedPayload, customPassphrase?: string
     throw new Error('Invalid encrypted payload format.');
   }
 
-  const passphrase = customPassphrase || DEFAULT_MASTER_KEY;
+  const passphrase = customPassphrase || getMasterKey();
   const key = deriveKey(passphrase);
   const iv = Buffer.from(payload.iv, 'hex');
   const authTag = Buffer.from(payload.authTag, 'hex');

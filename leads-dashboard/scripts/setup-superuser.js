@@ -158,11 +158,11 @@ async function resolveOrSetEncryptionKey(rl) {
   console.log('   DATA_ENCRYPTION_KEY=' + key + '\n');
 }
 
-// Control bytes as \u escapes (never as literal raw bytes in this source):
-// Enter is handled via '\n'/'\r'; Ctrl+C is ETX (U+0003); backspace is
-// either BS (U+0008) or DEL (U+007F) depending on the terminal.
-var CTRL_C = '';
-var BACKSPACE_CHARS = ['', ''];
+// Control bytes as \u escapes:
+// Enter is handled via '\n'/'\r'; Ctrl+C is ETX (\u0003); backspace is
+// either BS (\u0008) or DEL (\u007F) depending on the terminal.
+var CTRL_C = '\u0003';
+var BACKSPACE_CHARS = ['\u0008', '\u007F'];
 
 /** Prompts for a password without echoing it to the terminal. */
 function askPassword(question) {

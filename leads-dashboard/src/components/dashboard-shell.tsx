@@ -35,15 +35,21 @@ import {
   Wallet,
   ChevronLeft,
   ChevronRight,
-  Compass
+  ArrowRight,
+  Compass,
+  Trash2,
+  Sparkles
 } from 'lucide-react';
 import { getAnnouncements, getTasks, getDesigns, getMembers, getBudgets, getReimbursements, getEvents, logAuditEvent, Member, syncWithServer, getSystemSettings } from '@/lib/local-data';
 import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isFinanceHead, canAccessGuestDirectory, canVerifyBudgetCentreHead, canDecideBudget, canVerifyReimbursementCentreHead, canApproveAsSectorHead, canApproveAsFinanceHead } from '@/lib/permissions';
-import { GuidedTour } from '@/components/guided-tour';
 import { TermsModal } from '@/components/terms-modal';
 import { NotFoundScreen } from '@/components/not-found-screen';
 import { LoadingScreen } from '@/components/loading-screen';
+import { OnboardingTour } from '@/components/onboarding-tour';
+import { PromotionModal, PromotionData } from '@/components/promotion-modal';
 import { SyncStatusPill } from '@/components/ui/sync-status-pill';
+import { Avatar } from '@/components/ui/avatar';
+import { GhostFibers } from '@/components/ui/ghost-fibers';
 
 interface SidebarItem {
   name: string;
@@ -67,6 +73,7 @@ const navSections: NavSection[] = [
       { name: 'Dashboard', href: '/dashboard/home', icon: LayoutDashboard },
       { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
       { name: 'Events', href: '/dashboard/events', icon: Calendar },
+      { name: 'Festivals', href: '/dashboard/festivals', icon: Sparkles },
       { name: 'Tasks', href: '/dashboard/tasks', icon: CheckSquare },
       { name: 'Ratings', href: '/dashboard/ratings', icon: Star },
       { name: 'Design Portal', href: '/dashboard/designs', icon: Palette },
@@ -159,10 +166,6 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  // Guided workspace tour — auto-shown once per account (see guided-tour.tsx),
-  // and re-launchable any time from the profile menu via forceTourOpen.
-  const [forceTourOpen, setForceTourOpen] = useState(false);
-
   const [user, setUser] = useState({
     name: 'Kayomarz Pavri',
     email: 'kayo2970@gmail.com',
@@ -175,6 +178,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   });
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [lockdownEnabled, setLockdownEnabled] = useState(false);
+  const [isTourOpen, setIsTourOpen] = useState(false);
+  const [isPromotionModalOpen, setIsPromotionModalOpen] = useState(false);
+  const [promotionData, setPromotionData] = useState<PromotionData | null>(null);
   // Tracks the current user for the 'leads-data-sync' handler below, which is
   // registered once on mount and would otherwise only ever see this initial
   // (pre-login) placeholder user via a stale closure.
@@ -264,11 +270,33 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         link: `/dashboard/events`,
       }));
 
-    return [...budgetNotifs, ...reimbursementNotifs, ...eventApprovalNotifs, ...proofreadNotifs, ...recentAnnounce, ...recentTasks];
+    const dismissed = loadDismissedNotifIds();
+    return [...budgetNotifs, ...reimbursementNotifs, ...eventApprovalNotifs, ...proofreadNotifs, ...recentAnnounce, ...recentTasks]
+      .filter(n => !dismissed.has(n.id));
   };
+
+  const loadDismissedNotifIds = (): Set<string> => {
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('leads_dismissed_notif_ids') : null;
+      if (!raw) return new Set();
+      const parsed = JSON.parse(raw);
+      return new Set(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      return new Set();
+    }
+  };
+
+  const saveDismissedNotifIds = (ids: Set<string>) => {
+    try {
+      localStorage.setItem('leads_dismissed_notif_ids', JSON.stringify(Array.from(ids)));
+    } catch {}
+  };
+
+  const [dismissedNotifIds, setDismissedNotifIds] = useState<Set<string>>(new Set());
 
   // Initialize theme, user session, notifications, and server sync
   useEffect(() => {
+    setDismissedNotifIds(loadDismissedNotifIds());
     const theme = localStorage.getItem('theme');
     const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     
@@ -318,6 +346,53 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       setNotifications(buildNotifications(parsedUser));
       setSeenActionIds(loadSeenActionIds());
 
+      // Auto-launch role-tailored Onboarding Tour ONLY on first-time initial account setup ever
+      const isInitialSetup = parsedUser.isFirstLogin === true || (parsedUser as any).isNewAccount === true;
+      const hasCompletedTour =
+        (parsedUser.id && localStorage.getItem(`leads_tour_completed_${parsedUser.id}`)) ||
+        (parsedUser.email && localStorage.getItem(`leads_tour_completed_${parsedUser.email}`)) ||
+        (parsedUser.name && localStorage.getItem(`leads_tour_completed_${parsedUser.name}`)) ||
+        (parsedUser.email && localStorage.getItem(`leads_has_logged_in_${parsedUser.email}`));
+
+      const isImpersonatingSession = typeof window !== 'undefined' && sessionStorage.getItem('impersonator_original_user');
+
+      if (isInitialSetup && !hasCompletedTour && !isImpersonatingSession) {
+        setTimeout(() => setIsTourOpen(true), 800);
+      }
+
+      // Mark that account has logged in so tutorial is not auto-shown repeatedly
+      if (parsedUser.email) {
+        localStorage.setItem(`leads_has_logged_in_${parsedUser.email}`, 'true');
+        if (parsedUser.id) localStorage.setItem(`leads_has_logged_in_${parsedUser.id}`, 'true');
+      }
+
+      // Detect Promotion / Role Elevation on session load
+      const userKey = parsedUser.email || parsedUser.id || parsedUser.name;
+      const storedLastTier = localStorage.getItem(`leads_seen_tier_${userKey}`);
+      const storedLastRole = localStorage.getItem(`leads_seen_role_${userKey}`);
+
+      if (storedLastTier !== null && storedLastRole !== null) {
+        const lastTierNum = parseInt(storedLastTier, 10);
+        // In LEADS ERP, lower tier number indicates higher rank (Tier 1 = Super User, Tier 2 = Leadership, Tier 3 = Core)
+        const isTierElevated = !isNaN(lastTierNum) && parsedUser.tier < lastTierNum;
+        const isRolePromoted = isTierElevated || (storedLastRole !== (parsedUser.role || '') && parsedUser.tier <= lastTierNum);
+
+        if (isRolePromoted && !isImpersonatingSession) {
+          setPromotionData({
+            previousTier: lastTierNum,
+            previousRole: storedLastRole,
+            newTier: parsedUser.tier,
+            newRole: parsedUser.role || 'Elevated Member',
+            newDivision: parsedUser.division,
+          });
+          setTimeout(() => setIsPromotionModalOpen(true), 600);
+        }
+      }
+
+      // Record baseline seen role & tier
+      localStorage.setItem(`leads_seen_tier_${userKey}`, String(parsedUser.tier));
+      localStorage.setItem(`leads_seen_role_${userKey}`, parsedUser.role || '');
+
       return () => clearInterval(pollInterval);
     } catch (e) {
       console.error('Failed to parse user session:', e);
@@ -335,6 +410,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   useEffect(() => {
     const handleSync = () => {
       setLockdownEnabled(getSystemSettings().lockdownEnabled);
+      setAllMembers(getMembers());
       const currentUser = userRef.current;
       if (!currentUser?.email) return;
 
@@ -371,6 +447,30 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           liveRecord.ifscCode !== (currentUser as any).ifscCode;
 
         if (hasProfileChanges) {
+          const userKey = liveRecord.email || liveRecord.id || liveRecord.name;
+          const storedLastTier = localStorage.getItem(`leads_seen_tier_${userKey}`);
+          const storedLastRole = localStorage.getItem(`leads_seen_role_${userKey}`);
+
+          if (storedLastTier !== null && storedLastRole !== null) {
+            const lastTierNum = parseInt(storedLastTier, 10);
+            const isTierElevated = !isNaN(lastTierNum) && liveRecord.tier < lastTierNum;
+            const isRolePromoted = isTierElevated || (storedLastRole !== (liveRecord.role || '') && liveRecord.tier <= lastTierNum);
+
+            if (isRolePromoted) {
+              setPromotionData({
+                previousTier: lastTierNum,
+                previousRole: storedLastRole,
+                newTier: liveRecord.tier,
+                newRole: liveRecord.role || 'Elevated Member',
+                newDivision: liveRecord.division,
+              });
+              setIsPromotionModalOpen(true);
+            }
+          }
+
+          localStorage.setItem(`leads_seen_tier_${userKey}`, String(liveRecord.tier));
+          localStorage.setItem(`leads_seen_role_${userKey}`, liveRecord.role || '');
+
           const updatedSessionUser = {
             ...currentUser,
             id: liveRecord.id,
@@ -535,6 +635,39 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     localStorage.setItem('sidebarCollapsed', String(next));
   };
 
+  // MagicBento Global Dynamic Cursor Tracker for all module cards and boxes
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      const cards = document.querySelectorAll<HTMLElement>(
+        '.glass-panel:not(header):not(aside):not(.no-magic), .magic-bento-card, .dashboard-card'
+      );
+      const mouseX = e.clientX;
+      const mouseY = e.clientY;
+
+      cards.forEach((card) => {
+        const rect = card.getBoundingClientRect();
+        const isInside =
+          mouseX >= rect.left &&
+          mouseX <= rect.right &&
+          mouseY >= rect.top &&
+          mouseY <= rect.bottom;
+
+        if (isInside) {
+          const relativeX = ((mouseX - rect.left) / rect.width) * 100;
+          const relativeY = ((mouseY - rect.top) / rect.height) * 100;
+          card.style.setProperty('--glow-x', `${relativeX}%`);
+          card.style.setProperty('--glow-y', `${relativeY}%`);
+          card.style.setProperty('--glow-intensity', '1');
+        } else {
+          card.style.setProperty('--glow-intensity', '0');
+        }
+      });
+    };
+
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, [pathname]);
+
   const toggleTheme = () => {
     const newTheme = !isDarkTheme;
     setIsDarkTheme(newTheme);
@@ -583,6 +716,24 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     markActionNotifsSeen();
   };
 
+  const clearAllNotifications = () => {
+    const currentIds = notifications.map(n => n.id);
+    const next = new Set(dismissedNotifIds);
+    currentIds.forEach(id => next.add(id));
+    setDismissedNotifIds(next);
+    saveDismissedNotifIds(next);
+    setNotifications([]);
+  };
+
+  const handleDismissNotification = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const next = new Set(dismissedNotifIds);
+    next.add(id);
+    setDismissedNotifIds(next);
+    saveDismissedNotifIds(next);
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
   const handleNotifClick = (notif: { id: string; link: string }) => {
     setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
     setIsNotificationsOpen(false);
@@ -601,11 +752,10 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   // only one is ever visible at a time (the other's ancestor is `hidden` via CSS),
   // this keeps the bell available on phones without duplicating ~50 lines of JSX.
   const renderNotificationBell = (wrapperRef: React.RefObject<HTMLDivElement | null>) => (
-    <div className="relative" ref={wrapperRef}>
+    <div className="relative inline-flex items-center justify-center shrink-0" ref={wrapperRef}>
       <button
-        data-tour="notifications"
         onClick={handleToggleNotifications}
-        className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-xl hover:bg-theme-border/20 transition-all cursor-pointer relative"
+        className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-xl hover:bg-theme-border/20 transition-all cursor-pointer relative shrink-0"
         title="Notifications"
       >
         <Bell className="h-4.5 w-4.5" />
@@ -622,24 +772,47 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
       {isNotificationsOpen && (
         <>
-          {/* Mobile backdrop dim overlay to prevent bleed-through and dismiss on backdrop click */}
+          {/* Mobile backdrop dim overlay */}
           <div
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
             onClick={() => setIsNotificationsOpen(false)}
           />
 
-          <div className="fixed top-16 right-4 left-4 md:static md:left-auto md:right-0 md:absolute md:top-full md:mt-2 md:w-80 glass-panel rounded-2xl p-4 shadow-2xl border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-2.5 border-b border-theme-border/30">
-              <h4 className="text-xs font-bold text-theme-text-primary">Notifications</h4>
-              {notifications.some(n => !n.read) && (
-                <button
-                  onClick={markAllNotificationsAsRead}
-                  className="text-[10px] text-accent hover:underline font-semibold flex items-center gap-1 cursor-pointer"
-                >
-                  <Check className="h-3 w-3" />
-                  Mark all read
-                </button>
-              )}
+          {/* Floating Dropdown Popover */}
+          <div className="fixed md:absolute top-16 md:top-full right-3 md:right-0 left-3 md:left-auto mt-0 md:mt-2 w-[calc(100vw-24px)] md:w-96 glass-panel rounded-3xl p-4 shadow-2xl border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-2xl bg-white/95 dark:bg-[#0B1B2E]/95 text-theme-text-primary">
+            <div className="flex items-center justify-between pb-2.5 border-b border-theme-border/30 gap-2">
+              <div className="flex items-center gap-1.5">
+                <h4 className="text-xs font-bold text-theme-text-primary">Notifications</h4>
+                {notifications.length > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/10 text-theme-text-secondary font-mono">
+                    {notifications.length}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                {notifications.some(n => !n.read) && (
+                  <button
+                    onClick={markAllNotificationsAsRead}
+                    className="text-[10px] text-accent hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+                    title="Mark all notifications as read"
+                  >
+                    <Check className="h-3 w-3" />
+                    Mark read
+                  </button>
+                )}
+
+                {notifications.length > 0 && (
+                  <button
+                    onClick={clearAllNotifications}
+                    className="text-[10px] text-danger hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+                    title="Clear all received notifications"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Clear all
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="divide-y divide-theme-border/20 max-h-64 overflow-y-auto pt-1 space-y-1">
@@ -649,20 +822,31 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                 </div>
               ) : (
                 notifications.map(notif => (
-                  <button
+                  <div
                     key={notif.id}
-                    type="button"
-                    onClick={() => handleNotifClick(notif)}
-                    className={`w-full text-left py-2.5 px-2 rounded-lg text-xs transition-all cursor-pointer hover:bg-accent/10 ${notif.read ? 'opacity-60' : 'bg-accent/5'}`}
+                    className={`group relative flex items-start justify-between gap-2 p-2.5 rounded-xl text-xs transition-all hover:bg-accent/10 ${notif.read ? 'opacity-60' : 'bg-accent/5'}`}
                   >
-                    <div className="flex items-start gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleNotifClick(notif)}
+                      className="flex-1 text-left flex items-start gap-2.5 cursor-pointer min-w-0"
+                    >
                       <Info className={`h-3.5 w-3.5 shrink-0 mt-0.5 ${notif.actionNeeded ? 'text-danger' : 'text-accent'}`} />
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <p className="font-medium text-theme-text-primary text-xs leading-snug">{notif.title}</p>
                         <p className="text-[10px] text-theme-text-secondary mt-0.5">{notif.time}</p>
                       </div>
-                    </div>
-                  </button>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => handleDismissNotification(notif.id, e)}
+                      className="opacity-0 group-hover:opacity-100 p-1 text-theme-text-secondary hover:text-danger hover:bg-danger/10 rounded-lg transition-all cursor-pointer shrink-0"
+                      title="Clear this notification"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
                 ))
               )}
             </div>
@@ -675,10 +859,16 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   // Rendered twice — once in the desktop navbar, once in the mobile menu —
   // mirroring renderNotificationBell above, so Super User quick-switch is
   // reachable on mobile instead of only existing in the desktop header.
+  // Anchored with an explicit top-full (instead of relying on the browser's
+  // static-position fallback for an unset `top`) so it never drifts above
+  // the trigger button when the header row wraps at tablet widths.
   const renderQuickSwitch = (wrapperRef: React.RefObject<HTMLDivElement | null>) => (
     <div className="relative" ref={wrapperRef}>
       <button
-        onClick={() => setIsQuickSwitchOpen(!isQuickSwitchOpen)}
+        onClick={() => {
+          setAllMembers(getMembers());
+          setIsQuickSwitchOpen(!isQuickSwitchOpen);
+        }}
         className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-xl hover:bg-theme-border/20 transition-all cursor-pointer"
         title="Quick Switch: view as any account (Super User only)"
       >
@@ -686,46 +876,154 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       </button>
 
       {isQuickSwitchOpen && (
-        <div className="absolute right-0 top-full mt-2 w-80 max-w-[calc(100vw-2rem)] max-h-[70vh] flex flex-col glass-panel rounded-2xl p-3 shadow-2xl border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150">
-          <div className="flex items-center justify-between pb-2 border-b border-theme-border/30 mb-2">
-            <h4 className="text-xs font-bold text-theme-text-primary">Quick Switch</h4>
-            <span className="text-[10px] text-theme-text-secondary">Super User only</span>
+        <div className="absolute right-0 top-full mt-3 w-88 md:w-96 max-w-[calc(100vw-2rem)] max-h-[70vh] flex flex-col glass-panel rounded-3xl p-3.5 shadow-2xl border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-2xl bg-space-theme/95">
+          {/* ListBox Header */}
+          <div className="flex items-center justify-between px-1.5 pt-1 pb-2.5 border-b border-theme-border/40 mb-2.5">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-xl bg-accent/20 text-accent">
+                <UserCog className="h-4 w-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-theme-text-primary flex items-center gap-1.5">
+                  Account Switcher
+                  <span className="text-[9px] font-semibold uppercase tracking-wider text-accent bg-accent/15 px-1.5 py-0.2 rounded-full border border-accent/20">
+                    Super User
+                  </span>
+                </h4>
+                <p className="text-[10px] text-theme-text-secondary">
+                  Instantly switch view & permissions
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsQuickSwitchOpen(false)}
+              className="text-theme-text-secondary hover:text-theme-text-primary p-1 rounded-lg hover:bg-white/10 transition-all cursor-pointer text-xs"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           </div>
-          <div className="flex items-center gap-2 px-2.5 py-1.5 bg-theme-background/40 border border-theme-border/40 rounded-lg mb-2">
-            <Search className="h-3.5 w-3.5 text-theme-text-secondary shrink-0" />
-            <input
-              type="text"
-              autoFocus
-              value={quickSwitchSearch}
-              onChange={(e) => setQuickSwitchSearch(e.target.value)}
-              placeholder="Search by name, email, or role..."
-              className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-xs text-theme-text-primary placeholder-theme-text-secondary"
-            />
-          </div>
-          <div className="max-h-64 flex-1 min-h-0 overflow-y-auto divide-y divide-theme-border/20">
-            {quickSwitchResults.length === 0 ? (
-              <div className="text-center py-6 text-theme-text-secondary text-xs">No matching members.</div>
-            ) : (
-              quickSwitchResults.map(m => (
+
+          {/* Search Input Box */}
+          <div className="relative mb-2.5">
+            <div className="flex items-center gap-2 px-3 py-2 bg-theme-background/50 border border-theme-border/50 rounded-xl focus-within:border-accent focus-within:ring-1 focus-within:ring-accent/30 transition-all">
+              <Search className="h-3.5 w-3.5 text-theme-text-secondary shrink-0" />
+              <input
+                type="text"
+                autoFocus
+                value={quickSwitchSearch}
+                onChange={(e) => setQuickSwitchSearch(e.target.value)}
+                placeholder="Search by name, email, or role..."
+                className="w-full bg-transparent border-0 focus:outline-none text-xs text-theme-text-primary placeholder-theme-text-secondary"
+              />
+              {quickSwitchSearch && (
                 <button
-                  key={m.id}
-                  onClick={() => handleQuickSwitch(m)}
-                  className="w-full flex items-center gap-2.5 py-2 px-1 hover:bg-theme-border/20 rounded-lg transition-all cursor-pointer text-left"
+                  onClick={() => setQuickSwitchSearch('')}
+                  className="text-theme-text-secondary hover:text-theme-text-primary text-[10px] p-0.5 rounded cursor-pointer"
                 >
-                  <div className="h-7 w-7 bg-accent/15 rounded-lg flex items-center justify-center border border-accent/20 shrink-0">
-                    <span className="text-[10px] font-bold text-accent">
-                      {m.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                    </span>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-theme-text-primary truncate">
-                      {m.name}{m.email === user.email && ' (current)'}
-                    </p>
-                    <p className="text-[10px] text-theme-text-secondary truncate">{m.role}{m.division ? ` · ${m.division}` : ''}</p>
-                  </div>
+                  <X className="h-3 w-3" />
                 </button>
-              ))
+              )}
+            </div>
+          </div>
+
+          {/* Return to self banner if impersonating */}
+          {isImpersonating && originalUser && (
+            <div className="mb-2.5 p-2.5 rounded-2xl bg-accent/15 border border-accent/30 flex items-center justify-between">
+              <div className="flex items-center gap-2 min-w-0">
+                <Undo2 className="h-3.5 w-3.5 text-accent shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold text-theme-text-primary truncate">Currently Impersonating</p>
+                  <p className="text-[10px] text-theme-text-secondary truncate">Original: {originalUser.name}</p>
+                </div>
+              </div>
+              <button
+                onClick={handleReturnToSelf}
+                className="px-2.5 py-1 bg-accent text-white rounded-lg text-[10px] font-bold hover:bg-primary-light transition-all shrink-0 cursor-pointer shadow-sm"
+              >
+                Return
+              </button>
+            </div>
+          )}
+
+          {/* HeroUI ListBox Items */}
+          <div className="max-h-64 flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-0.5">
+            {quickSwitchResults.length === 0 ? (
+              <div className="text-center py-8 text-theme-text-secondary space-y-1">
+                <p className="text-xs font-semibold">No matching members found</p>
+                <p className="text-[10px]">Try searching by name, role, or division</p>
+              </div>
+            ) : (
+              quickSwitchResults.map(m => {
+                const isSelected = m.email.toLowerCase() === user.email.toLowerCase();
+
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => handleQuickSwitch(m)}
+                    className={`w-full group flex items-center justify-between p-2.5 rounded-2xl transition-all duration-150 cursor-pointer text-left border ${
+                      isSelected
+                        ? 'bg-accent/15 border-accent/40 shadow-sm shadow-accent/10'
+                        : 'bg-theme-background/30 border-transparent hover:bg-white/10 dark:hover:bg-white/5 hover:border-theme-border/50'
+                    }`}
+                  >
+                    {/* Left: Avatar + Label & Description */}
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      {/* Avatar */}
+                      <div className="relative shrink-0">
+                        <Avatar
+                          size="sm"
+                          src={m.avatarUrl}
+                          name={m.name}
+                          color={isSelected ? 'accent' : 'default'}
+                          className="rounded-xl shadow-sm"
+                        />
+                        {isSelected && (
+                          <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 border-2 border-theme-background z-10" />
+                        )}
+                      </div>
+
+                      {/* Label + Description */}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-theme-text-primary group-hover:text-accent transition-colors truncate">
+                            {m.name}
+                          </span>
+                          {isSelected && (
+                            <span className="text-[9px] font-semibold text-accent bg-accent/10 px-1.5 py-0.2 rounded-md border border-accent/20 shrink-0">
+                              Active
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[10px] text-theme-text-secondary mt-0.5 truncate">
+                          <span className="truncate">{m.email}</span>
+                          <span className="shrink-0">•</span>
+                          <span className="font-medium text-theme-text-secondary/80 shrink-0">{m.role}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: Item Indicator */}
+                    <div className="shrink-0 ml-2">
+                      {isSelected ? (
+                        <div className="h-6 w-6 rounded-full bg-accent text-white flex items-center justify-center shadow-sm">
+                          <Check className="h-3.5 w-3.5" />
+                        </div>
+                      ) : (
+                        <div className="h-6 w-6 rounded-full bg-transparent flex items-center justify-center opacity-0 group-hover:opacity-100 group-hover:bg-white/10 transition-all text-theme-text-secondary group-hover:text-theme-text-primary">
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                );
+              })
             )}
+          </div>
+
+          {/* ListBox Footer Info */}
+          <div className="pt-2 mt-2 border-t border-theme-border/30 flex items-center justify-between text-[10px] text-theme-text-secondary px-1 shrink-0">
+            <span>{allMembers.length} Available {allMembers.length === 1 ? 'Account' : 'Accounts'}</span>
+            <span className="text-[9px] opacity-75">Click to switch</span>
           </div>
         </div>
       )}
@@ -749,20 +1047,51 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   }
 
   return (
-    <div className="min-h-screen bg-space-theme flex flex-col md:flex-row transition-all duration-300">
+    <div className="min-h-screen bg-space-theme flex flex-col md:flex-row transition-all duration-300 relative">
+      {/* Background Animated GhostFibers WebGL Canvas — Dark Mode (Navy/Blue) & Light Mode (Clean Porcelain White & Blue Lines) */}
+      <div className="fixed inset-0 pointer-events-none z-0 opacity-40 dark:opacity-65 transition-opacity duration-500 overflow-hidden">
+        <GhostFibers
+          lineColor={isDarkTheme ? '#0F2A47' : '#1E4D7B'}
+          glowColor={isDarkTheme ? '#2E75B6' : '#3B82F6'}
+          lightMode={!isDarkTheme}
+          speed={0.14}
+          scale={2.4}
+          rotation={20}
+          rotationSpeed={0.12}
+          layers={5}
+          waveAmplitude={0.015}
+          waveFrequency={3.0}
+          waveSpeed={0.12}
+          layerSpeed={0.06}
+          twist={0.1}
+          twistFrequency={4.0}
+          twistSpeed={0.8}
+          lineFrequency={5.0}
+          lineSpacing={2}
+          lineSharpness={18}
+          glowFalloff={9}
+          glowIntensity={isDarkTheme ? 1.7 : 1.4}
+          brightness={isDarkTheme ? 1.8 : 1.1}
+          blueBoost={isDarkTheme ? 1.35 : 1.05}
+          vignette={isDarkTheme ? 0.75 : 0.2}
+          grain={0.02}
+          dpr={1}
+        />
+      </div>
+
       {isModuleTransitioning && (
         <LoadingScreen
-          duration={1000}
+          duration={2000}
           subtitle="Loading module..."
           onComplete={() => setIsModuleTransitioning(false)}
         />
       )}
 
-      {/* Sidebar - Desktop. min-h-screen (not h-screen) so it stretches to match
-          the main column's real height on pages tall enough to exceed one
-          viewport (common at tablet widths, where cards/tables reflow into
-          more rows) — h-screen hard-capped it at exactly 100vh, leaving a gap
-          at the bottom of the page on those taller pages. */}
+      {/* Sidebar - Desktop */}
+      {/* min-h-screen (not h-screen) so it stretches to match the main column's
+          real height on pages tall enough to exceed one viewport (common at
+          tablet widths, where cards/tables reflow into more rows) — h-screen
+          hard-capped it at exactly 100vh, leaving a gap at the bottom. */}
       <aside className={`hidden md:block relative shrink-0 min-h-screen sticky top-0 z-40 transition-[width] duration-200 ${isSidebarCollapsed ? 'w-20' : 'w-64'}`}>
         <div
           onMouseEnter={() => { if (isSidebarCollapsed) setIsSidebarHovering(true); }}
@@ -774,35 +1103,40 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           {/* Brand Logo Link to Dashboard Home */}
           <Link
             href="/dashboard/home"
-            data-tour="brand"
-            className={`h-16 flex items-center border-b border-theme-border/30 gap-3 hover:opacity-90 transition-all cursor-pointer select-none shrink-0 ${showSidebarLabels ? 'px-6' : 'justify-center px-0'}`}
-            title="Return to Dashboard Home"
+            title="LEADS Next Gen Centre"
+            className={`flex items-center gap-3 p-4 border-b border-theme-border/40 hover:bg-theme-border/10 transition-colors cursor-pointer select-none ${
+              showSidebarLabels ? 'px-4' : 'justify-center px-0'
+            }`}
           >
-            <div className="h-8 w-8 flex items-center justify-center shrink-0">
+            <div className="h-9 w-9 flex items-center justify-center shrink-0">
               <img
                 src="/images/leads-short-logo.png"
                 alt="LEADS Logo"
-                className="h-full w-full object-contain"
+                className="h-full w-full object-contain filter drop-shadow-[0_2px_8px_rgba(46,117,182,0.3)]"
               />
             </div>
             {showSidebarLabels && (
-              <div className="whitespace-nowrap">
-                <h1 className="font-bold text-theme-text-primary text-xs tracking-wider uppercase">LEADS NEXT GEN CENTRE</h1>
-                <p className="text-[10px] text-theme-text-secondary font-medium tracking-wider uppercase">MSRUAS Portal</p>
+              <div className="flex flex-col">
+                <span className="font-extrabold text-xs tracking-wider uppercase text-theme-text-primary">
+                  LEADS CENTRE
+                </span>
+                <span className="text-[10px] text-theme-text-secondary font-medium">
+                  Next Gen ERP
+                </span>
               </div>
             )}
           </Link>
 
-          {/* Sidebar Nav links grouped by section */}
-          <nav data-tour="sidebar-nav" className="flex-1 px-4 py-5 space-y-5 overflow-y-auto overflow-x-hidden">
+          {/* Navigation Links */}
+          <nav className="flex-1 overflow-y-auto p-3 space-y-6">
             {navSections.map((section) => (
               <div key={section.title} className="space-y-1">
                 {showSidebarLabels && (
-                  <h3 className="px-3 text-[11px] font-bold text-theme-text-secondary uppercase tracking-wider whitespace-nowrap">
+                  <h4 className="px-3 text-[10px] font-bold text-theme-text-secondary uppercase tracking-wider mb-2">
                     {section.title}
-                  </h3>
+                  </h4>
                 )}
-                <div className="space-y-1 pt-1">
+                <div className="space-y-1">
                   {section.items.filter(item => (!item.superUserOnly || user.tier === 1) && (!item.centreHeadOnly || isCentreHead(user)) && (!item.guestDirectoryOnly || canAccessGuestDirectory(user)) && (!item.budgetAccessOnly || isCentreHead(user) || isFinanceHead(user))).map((item) => {
                     const Icon = item.icon;
                     const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
@@ -867,28 +1201,27 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       </aside>
 
       {/* Mobile Header / Nav */}
-      <header className="md:hidden flex items-center justify-between h-16 px-4 glass-panel bg-theme-sidebar/80 border-b border-theme-sidebar-border sticky top-0 z-40 w-full">
-        <Link
-          href="/dashboard/home"
-          data-tour="brand"
-          className="flex items-center gap-2.5 hover:opacity-90 transition-all cursor-pointer select-none"
+      <header className="md:hidden flex items-center justify-between h-16 px-3 sm:px-4 glass-panel bg-theme-sidebar/95 border-b border-theme-sidebar-border sticky top-0 z-40 w-full gap-2">
+        <Link 
+          href="/dashboard/home" 
+          className="flex items-center gap-2 hover:opacity-90 transition-all cursor-pointer select-none min-w-0 max-w-[65%]"
           title="Return to Dashboard Home"
         >
-          <div className="h-7 w-7 flex items-center justify-center">
+          <div className="h-7 w-7 flex items-center justify-center shrink-0">
             <img 
               src="/images/leads-short-logo.png" 
               alt="LEADS Logo" 
               className="h-full w-full object-contain"
             />
           </div>
-          <span className="font-bold text-xs tracking-wider uppercase text-theme-text-primary">LEADS NEXT GEN CENTRE</span>
+          <span className="font-bold text-xs tracking-wider uppercase text-theme-text-primary truncate">LEADS NEXT GEN CENTRE</span>
         </Link>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 shrink-0">
           <button
-            data-tour="theme-toggle"
             onClick={toggleTheme}
-            className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-lg hover:bg-theme-border/20 transition-all"
+            className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-lg hover:bg-theme-border/20 transition-all cursor-pointer"
+            title="Toggle Theme"
           >
             {isDarkTheme ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </button>
@@ -896,9 +1229,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           {renderNotificationBell(notifRefMobile)}
 
           <button
-            data-tour="menu"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-lg hover:bg-theme-border/20 transition-all"
+            className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-lg hover:bg-theme-border/20 transition-all cursor-pointer"
           >
             {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
@@ -990,15 +1322,24 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Desktop Navbar */}
-        <header className="hidden md:flex items-center justify-between min-h-16 py-2 px-8 gap-4 glass-panel bg-theme-sidebar/50 border-b border-theme-sidebar-border sticky top-0 z-30">
+        <header className="hidden md:flex items-center justify-between h-16 px-8 gap-4 glass-panel bg-theme-sidebar/50 border-b border-theme-sidebar-border sticky top-0 z-30">
           <div className="flex items-center gap-3 shrink-0">
             <h2 className="text-base font-bold text-theme-text-primary">{activeItem.name}</h2>
           </div>
 
-          <div className="flex items-center gap-3 flex-wrap justify-end">
+          <div className="flex items-center gap-3 justify-end shrink-0">
+            {/* Interactive Guided Tour button */}
+            <button
+              onClick={() => setIsTourOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-accent/15 border border-accent/30 text-accent hover:bg-accent/25 text-xs font-bold rounded-xl transition-all cursor-pointer shrink-0"
+              title="Interactive Tour of Modules & Permissions"
+            >
+              <Compass className="h-4 w-4" />
+              <span className="hidden sm:inline">Guided Tour</span>
+            </button>
+
             {/* Theme switcher */}
             <button
-              data-tour="theme-toggle"
               onClick={toggleTheme}
               className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-xl hover:bg-theme-border/20 transition-all cursor-pointer shrink-0"
               title="Toggle Light/Dark Theme"
@@ -1027,7 +1368,6 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             {/* Active User info — click to open the Settings / Sign Out menu */}
             <div className="relative shrink-0" ref={userMenuRef}>
               <button
-                data-tour="profile"
                 onClick={() => setIsUserMenuOpen(v => !v)}
                 className="flex items-center gap-3 min-w-0 rounded-xl px-1.5 py-1 hover:bg-theme-border/20 transition-all cursor-pointer"
               >
@@ -1035,19 +1375,24 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                   <h4 className="font-bold text-xs text-theme-text-primary truncate" title={user.name}>{user.name}</h4>
                   <p className="text-[10px] text-theme-text-secondary font-medium tracking-wide truncate" title={user.role}>{user.role}</p>
                 </div>
-                <div className="h-8.5 w-8.5 shrink-0 bg-accent rounded-xl flex items-center justify-center shadow-md shadow-accent/20 overflow-hidden">
-                  {user.avatarUrl ? (
-                    <img src={user.avatarUrl} alt={user.name} className="h-full w-full object-cover" />
-                  ) : (
-                    <span className="text-white font-bold text-xs">
-                      {user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                    </span>
-                  )}
-                </div>
+                <Avatar
+                  size="sm"
+                  src={user.avatarUrl}
+                  name={user.name}
+                  color="accent"
+                  className="rounded-xl shadow-md shadow-accent/20"
+                />
               </button>
 
               {isUserMenuOpen && (
                 <div className="absolute right-0 top-full mt-2 w-48 max-w-[calc(100vw-2rem)] glass-panel rounded-2xl p-1.5 shadow-2xl border border-white/20 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <button
+                    onClick={() => { setIsUserMenuOpen(false); setIsTourOpen(true); }}
+                    className="flex items-center gap-2.5 w-full px-3 py-2.5 text-xs font-semibold text-accent hover:bg-accent/15 rounded-xl transition-all cursor-pointer"
+                  >
+                    <Compass className="h-4 w-4" />
+                    Guided Tour
+                  </button>
                   <Link
                     href="/dashboard/settings"
                     onClick={() => setIsUserMenuOpen(false)}
@@ -1056,13 +1401,6 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                     <Settings className="h-4 w-4 text-theme-text-secondary" />
                     Settings
                   </Link>
-                  <button
-                    onClick={() => { setIsUserMenuOpen(false); setForceTourOpen(true); }}
-                    className="flex items-center gap-2.5 w-full px-3 py-2.5 text-xs font-semibold text-theme-text-primary hover:bg-theme-border/20 rounded-xl transition-all cursor-pointer"
-                  >
-                    <Compass className="h-4 w-4 text-theme-text-secondary" />
-                    Take a Tour
-                  </button>
                   <button
                     onClick={() => { setIsUserMenuOpen(false); handleLogout(); }}
                     className="flex items-center gap-2.5 w-full px-3 py-2.5 text-xs font-semibold text-danger hover:bg-danger/10 rounded-xl transition-all cursor-pointer"
@@ -1103,9 +1441,15 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         {/* Terms & Conditions Modal */}
         <TermsModal isOpen={isTermsOpen} onClose={() => setIsTermsOpen(false)} />
 
-        {/* Guided workspace tour — spotlights real on-screen elements instead
-            of just navigating to a page. Auto-shown once per account. */}
-        <GuidedTour userEmail={user.email} forceOpen={forceTourOpen} onDone={() => setForceTourOpen(false)} />
+        {/* Interactive Role-Tailored Onboarding Tour */}
+        <OnboardingTour user={user} isOpen={isTourOpen} onClose={() => setIsTourOpen(false)} />
+
+        {/* Role Elevation & Promotion Celebration Modal */}
+        <PromotionModal
+          data={promotionData}
+          isOpen={isPromotionModalOpen}
+          onClose={() => setIsPromotionModalOpen(false)}
+        />
       </div>
 
       {/* Global save/sync feedback for every background write app-wide */}

@@ -12,7 +12,8 @@ import {
   Star,
   Crown,
   Award,
-  Users
+  Users,
+  Sparkles
 } from 'lucide-react';
 import {
   getTasks,
@@ -40,8 +41,8 @@ export default function DashboardHome() {
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [user, setUser] = useState<any>(null);
   
-  // Announcements and Events Tab State
-  const [activeTab, setActiveTab] = useState<'events' | 'announcements'>('events');
+  // Announcements, Events, and Festivals Tab State
+  const [activeTab, setActiveTab] = useState<'events' | 'festivals' | 'announcements'>('events');
 
   // Leaderboard State
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
@@ -105,15 +106,24 @@ export default function DashboardHome() {
     setTasks(getTasks());
   };
 
+  const todayStr = new Date().toISOString().slice(0, 10);
+
   // Same visibility rule as the Events page: approved/legacy events follow the
   // own-vs-all Group Policy scope; pending/rejected submissions are only shown to
   // their submitter, their resolved approver, or the Super User.
-  const visibleEvents = events.filter(event => {
-    if (event.approvalStatus === 'pending_create' || event.approvalStatus === 'rejected') {
-      return user?.tier === 1 || event.submittedByEmail === user?.email || canApprovePendingEvent(event, user);
-    }
-    return canViewEvent(event, user);
-  });
+  const visibleEvents = events
+    .filter(event => !event.isHoliday)
+    .filter(event => {
+      if (event.approvalStatus === 'pending_create' || event.approvalStatus === 'rejected') {
+        return user?.tier === 1 || event.submittedByEmail === user?.email || canApprovePendingEvent(event, user);
+      }
+      return canViewEvent(event, user);
+    });
+
+  const visibleFestivals = events
+    .filter(event => event.isHoliday || event.description?.includes('holiday') || event.description?.includes('festival'))
+    .filter(event => event.startDate >= todayStr)
+    .sort((a, b) => a.startDate.localeCompare(b.startDate));
 
   const activeEventsCount = visibleEvents.filter(e => {
     const effective = getEffectiveEventStatus(e, tasks);
@@ -156,16 +166,16 @@ export default function DashboardHome() {
 
       {/* Banner: Task awaiting acknowledgment */}
       {pendingAckCount > 0 && (
-        <div className="flex items-center justify-between p-4 bg-warning/10 border border-warning/20 rounded-2xl text-theme-text-primary animate-in fade-in duration-300">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 bg-amber-500/15 dark:bg-amber-500/20 border border-amber-500/30 dark:border-amber-400/40 rounded-2xl shadow-lg backdrop-blur-xl animate-in fade-in duration-300">
           <div className="flex items-center gap-3">
-            <AlertCircle className="h-5 w-5 text-warning shrink-0" />
-            <span className="text-xs font-semibold">
+            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-300 shrink-0" />
+            <span className="text-xs font-bold text-slate-900 dark:text-white">
               You have {pendingAckCount} task(s) awaiting your acknowledgment.
             </span>
           </div>
           <Link 
             href="/dashboard/tasks"
-            className="text-xs font-semibold text-warning uppercase tracking-wider bg-warning/15 px-2.5 py-1 rounded-lg hover:bg-warning/25 transition-all"
+            className="text-xs font-extrabold text-white bg-amber-600 hover:bg-amber-700 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400 uppercase tracking-wider px-4 py-2 rounded-xl transition-all shadow-md shadow-amber-500/20 shrink-0 cursor-pointer"
           >
             Review Tasks
           </Link>
@@ -418,9 +428,9 @@ export default function DashboardHome() {
           </div>
         </div>
 
-        {/* Dynamic Tabbed Events & Announcements Panel */}
+        {/* Dynamic Tabbed Events, Festivals & Announcements Panel */}
         <div className="glass-panel rounded-2xl p-6 flex flex-col space-y-4">
-          <div className="flex border-b border-theme-border/30 pb-2.5 gap-2">
+          <div className="flex border-b border-theme-border/30 pb-2.5 gap-2 flex-wrap">
             <button
               onClick={() => setActiveTab('events')}
               className={`pb-1 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
@@ -430,8 +440,21 @@ export default function DashboardHome() {
               }`}
             >
               <Calendar className="h-3.5 w-3.5" />
-              Upcoming Events
+              Upcoming Events ({visibleEvents.filter(ev => getEffectiveEventStatus(ev, tasks) !== 'completed' && getEffectiveEventStatus(ev, tasks) !== 'archived').length})
             </button>
+
+            <button
+              onClick={() => setActiveTab('festivals')}
+              className={`pb-1 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                activeTab === 'festivals'
+                  ? 'text-accent border-b-2 border-accent'
+                  : 'text-theme-text-secondary hover:text-theme-text-primary'
+              }`}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Festivals ({visibleFestivals.length})
+            </button>
+
             <button
               onClick={() => setActiveTab('announcements')}
               className={`pb-1 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
@@ -453,10 +476,10 @@ export default function DashboardHome() {
                   return effective !== 'completed' && effective !== 'archived';
                 });
                 if (upcoming.length === 0) {
-                  return <div className="text-center py-8 text-theme-text-secondary text-xs">No upcoming events.</div>;
+                  return <div className="text-center py-8 text-theme-text-secondary text-xs">No upcoming club/university events.</div>;
                 }
                 return upcoming.map(ev => (
-                  <div key={ev.id} className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-1 hover:bg-theme-border/15 transition-all">
+                  <div key={ev.id} className="p-3 bg-white/40 dark:bg-white/5 border border-theme-border/20 rounded-xl space-y-1 hover:bg-white/60 dark:hover:bg-white/10 transition-all">
                     <div className="flex items-center justify-between">
                       <h4 className="font-semibold text-theme-text-primary text-xs">{ev.title}</h4>
                       <span className="text-[10px] px-2 py-0.5 bg-accent/15 text-accent font-semibold rounded-md capitalize">{getEffectiveEventStatus(ev, tasks)}</span>
@@ -466,12 +489,36 @@ export default function DashboardHome() {
                   </div>
                 ));
               })()
+            ) : activeTab === 'festivals' ? (
+              (() => {
+                if (visibleFestivals.length === 0) {
+                  return <div className="text-center py-8 text-theme-text-secondary text-xs">No upcoming festivals in the next 30 days.</div>;
+                }
+                return visibleFestivals.slice(0, 8).map(fest => (
+                  <div key={fest.id} className="p-3 bg-white/40 dark:bg-white/5 border border-theme-border/20 rounded-xl space-y-1 hover:bg-white/60 dark:hover:bg-white/10 transition-all flex items-start justify-between gap-3">
+                    <div className="space-y-0.5 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-semibold text-theme-text-primary text-xs truncate">{fest.title}</h4>
+                        <span className="text-[10px] px-1.5 py-0.2 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-semibold rounded shrink-0">Festival</span>
+                      </div>
+                      <p className="text-[10px] text-theme-text-secondary line-clamp-1">{fest.description}</p>
+                      <p className="text-[10px] font-medium text-theme-text-secondary">{fest.startDate}</p>
+                    </div>
+                    <Link
+                      href="/dashboard/festivals"
+                      className="text-[10px] text-accent hover:underline font-semibold shrink-0"
+                    >
+                      Details &rarr;
+                    </Link>
+                  </div>
+                ));
+              })()
             ) : (
               announcements.length === 0 ? (
                 <div className="text-center py-8 text-theme-text-secondary text-xs">No announcements published.</div>
               ) : (
                 announcements.map(ann => (
-                  <div key={ann.id} className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-1 hover:bg-theme-border/15 transition-all">
+                  <div key={ann.id} className="p-3 bg-white/40 dark:bg-white/5 border border-theme-border/20 rounded-xl space-y-1 hover:bg-white/60 dark:hover:bg-white/10 transition-all">
                     <div className="flex items-center justify-between">
                       <h4 className="font-semibold text-theme-text-primary text-xs">{ann.title}</h4>
                       <span className="text-[10px] text-accent font-medium px-2 py-0.5 bg-accent/10 rounded">{ann.scope}</span>

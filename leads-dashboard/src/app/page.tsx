@@ -7,6 +7,8 @@ import { ShieldAlert, LogIn, Mail, Lock, Eye, EyeOff, KeyRound, CheckCircle2, Cl
 import { logAuditEvent, requestPasswordReset, submitPasswordReset, submitAdminOverridePasswordReset } from '@/lib/local-data';
 import { TermsModal } from '@/components/terms-modal';
 import { LoadingScreen } from '@/components/loading-screen';
+import { SetupWizard } from '@/components/setup-wizard';
+import { GhostFibers } from '@/components/ui/ghost-fibers';
 
 interface QuoteItem {
   quote: string;
@@ -154,6 +156,33 @@ export default function LoginPage() {
   const [overrideError, setOverrideError] = useState('');
   const [overrideSuccess, setOverrideSuccess] = useState('');
   const [isOverrideLoading, setIsOverrideLoading] = useState(false);
+
+  // Initial Setup Wizard detection state
+  const [needsSetup, setNeedsSetup] = useState(false);
+  const [isCheckingSetup, setIsCheckingSetup] = useState(true);
+  const [isKeyConfigured, setIsKeyConfigured] = useState(false);
+  const [suggestedKey, setSuggestedKey] = useState('');
+
+  // Check if system requires initial setup
+  useEffect(() => {
+    fetch('/api/setup')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.needsSetup) {
+          setNeedsSetup(true);
+          setIsKeyConfigured(Boolean(data.isKeyConfigured));
+          setSuggestedKey(data.suggestedKey || '');
+        } else {
+          setNeedsSetup(false);
+        }
+      })
+      .catch(err => {
+        console.error('Setup check failed:', err);
+      })
+      .finally(() => {
+        setIsCheckingSetup(false);
+      });
+  }, []);
 
   // Auto-rotate quotes every ~3.5 seconds
   useEffect(() => {
@@ -405,9 +434,39 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-space-theme flex flex-col items-center justify-center p-4 md:p-8">
+    <div className="min-h-screen bg-space-theme flex flex-col items-center justify-center p-4 md:p-8 relative overflow-hidden">
+      {/* Background Animated GhostFibers WebGL Canvas with LEADS Theme */}
+      <div className="absolute inset-0 pointer-events-none z-0 opacity-70 dark:opacity-85">
+        <GhostFibers
+          lineColor="#0F2A47"
+          glowColor="#2E75B6"
+          speed={0.18}
+          scale={2.2}
+          rotation={10}
+          rotationSpeed={0.15}
+          layers={5}
+          waveAmplitude={0.016}
+          waveFrequency={3.2}
+          waveSpeed={0.14}
+          layerSpeed={0.07}
+          twist={0.12}
+          twistFrequency={4.5}
+          twistSpeed={0.9}
+          lineFrequency={5.5}
+          lineSpacing={2}
+          lineSharpness={18}
+          glowFalloff={9}
+          glowIntensity={1.8}
+          brightness={1.9}
+          blueBoost={1.35}
+          vignette={0.75}
+          grain={0.04}
+          dpr={1}
+        />
+      </div>
+
       {/* Grid Layout Container */}
-      <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 items-stretch">
+      <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 items-stretch relative z-10">
 
         {/* Dynamic Quotes Hero Panel — shown after the login form on mobile so
             signing in never requires scrolling past a tall decorative panel. */}
@@ -446,115 +505,127 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Login Form Panel — comes first on mobile so signing in is immediate. */}
-        <div className="order-1 md:order-2 md:col-span-6 lg:col-span-5 glass-panel rounded-3xl p-6 md:p-8 flex flex-col justify-between space-y-5 md:space-y-7 relative overflow-hidden transition-all duration-300 border border-white/15 shadow-2xl">
+        {/* Login or Initial Setup Wizard Panel */}
+        {needsSetup ? (
+          <div className="order-1 md:order-2 md:col-span-6 lg:col-span-5">
+            <SetupWizard
+              initialSuggestedKey={suggestedKey}
+              isKeyConfigured={isKeyConfigured}
+              onComplete={(_user) => {
+                setShowLoginSplash(true);
+              }}
+            />
+          </div>
+        ) : (
+          <div className="order-1 md:order-2 md:col-span-6 lg:col-span-5 glass-panel rounded-3xl p-6 md:p-8 flex flex-col justify-between space-y-5 md:space-y-7 relative overflow-hidden transition-all duration-300 border border-white/15 shadow-2xl">
 
-          {/* Brand Header */}
-          <Link
-            href="/"
-            className="flex flex-col items-center text-center space-y-2 md:space-y-3 hover:opacity-90 transition-all cursor-pointer select-none"
-            title="LEADS Home"
-          >
-            <div className="h-12 w-12 md:h-16 md:w-16 flex items-center justify-center">
-              <img
-                src="/images/leads-short-logo.png"
-                alt="LEADS Logo"
-                className="h-full w-full object-contain filter drop-shadow-[0_4px_10px_rgba(46,117,182,0.35)]"
-              />
-            </div>
-            <div>
-              <h1 className="text-xl font-extrabold tracking-wider uppercase text-theme-text-primary">
-                LEADS NEXT GEN CENTRE
-              </h1>
-              <p className="text-xs text-theme-text-secondary mt-1 font-medium">
-                Sign in with your MSRUAS email to access the operational portal
-              </p>
-            </div>
-          </Link>
-
-          {/* Error Alert Box */}
-          {error && (
-            <div className="flex gap-3 p-3.5 bg-danger/10 border border-danger/25 rounded-2xl text-danger text-xs leading-relaxed animate-in fade-in duration-200">
-              <ShieldAlert className="h-4.5 w-4.5 shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {/* Login Form */}
-          <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-            <div className="space-y-1.5">
-              <label className="block font-semibold text-theme-text-secondary uppercase tracking-wider">
-                Email Address
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3.5 top-3 h-4 w-4 text-theme-text-secondary" />
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@msruas.ac.in"
-                  className="w-full pl-10 pr-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary placeholder-theme-text-secondary focus:outline-none focus:border-accent text-xs transition-all"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center">
-                <label className="block font-semibold text-theme-text-secondary uppercase tracking-wider">
-                  Password
-                </label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setForgotEmail(email);
-                    setForgotError('');
-                    setForgotSuccess('');
-                    setForgotStep('REQUEST');
-                    setShowForgotModal(true);
-                  }}
-                  className="text-[11px] text-accent hover:underline cursor-pointer font-medium"
-                >
-                  Forgot Password?
-                </button>
-              </div>
-              <div className="relative">
-                <Lock className="absolute left-3.5 top-3 h-4 w-4 text-theme-text-secondary" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full pl-10 pr-10 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary placeholder-theme-text-secondary focus:outline-none focus:border-accent text-xs transition-all"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-2.5 p-0.5 rounded text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
-                  title={showPassword ? 'Hide password' : 'View password'}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full py-3 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all duration-200 shadow-md shadow-accent/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+            {/* Brand Header */}
+            <Link
+              href="/"
+              className="flex flex-col items-center text-center space-y-2 md:space-y-3 hover:opacity-90 transition-all cursor-pointer select-none"
+              title="LEADS Home"
             >
-              {isLoading ? (
-                <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-              ) : (
-                <>
-                  <LogIn className="h-4 w-4" />
-                  Sign In
-                </>
-              )}
-            </button>
-          </form>
-        </div>
+              <div className="h-12 w-12 md:h-16 md:w-16 flex items-center justify-center">
+                <img
+                  src="/images/leads-short-logo.png"
+                  alt="LEADS Logo"
+                  className="h-full w-full object-contain filter drop-shadow-[0_4px_10px_rgba(46,117,182,0.35)]"
+                />
+              </div>
+              <div>
+                <h1 className="text-xl font-extrabold tracking-wider uppercase text-theme-text-primary">
+                  LEADS NEXT GEN CENTRE
+                </h1>
+                <p className="text-xs text-theme-text-secondary mt-1 font-medium">
+                  Sign in with your MSRUAS email to access the operational portal
+                </p>
+              </div>
+            </Link>
+
+            {/* Error Alert Box */}
+            {error && (
+              <div className="flex gap-3 p-3.5 bg-danger/10 border border-danger/25 rounded-2xl text-danger text-xs leading-relaxed animate-in fade-in duration-200">
+                <ShieldAlert className="h-4.5 w-4.5 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {/* Login Form */}
+            <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+              <div className="space-y-1.5">
+                <label className="block font-semibold text-theme-text-secondary uppercase tracking-wider">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-3 h-4 w-4 text-theme-text-secondary" />
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@msruas.ac.in"
+                    className="w-full pl-10 pr-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary placeholder-theme-text-secondary focus:outline-none focus:border-accent text-xs transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <label className="block font-semibold text-theme-text-secondary uppercase tracking-wider">
+                    Password
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotEmail(email);
+                      setForgotError('');
+                      setForgotSuccess('');
+                      setForgotStep('REQUEST');
+                      setShowForgotModal(true);
+                    }}
+                    className="text-[11px] text-accent hover:underline cursor-pointer font-medium"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-3 h-4 w-4 text-theme-text-secondary" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full pl-10 pr-10 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary placeholder-theme-text-secondary focus:outline-none focus:border-accent text-xs transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-2.5 p-0.5 rounded text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
+                    title={showPassword ? 'Hide password' : 'View password'}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-3 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all duration-200 shadow-md shadow-accent/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+              >
+                {isLoading ? (
+                  <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                ) : (
+                  <>
+                    <LogIn className="h-4 w-4" />
+                    Sign In
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+        )}
       </div>
 
       {/* Forgot Password Modal */}

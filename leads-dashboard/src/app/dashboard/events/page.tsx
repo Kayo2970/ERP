@@ -18,7 +18,8 @@ import {
   Clock,
   Check,
   Ban,
-  Handshake
+  Handshake,
+  Sparkles
 } from 'lucide-react';
 import { getEvents, addEvent, updateEvent, deleteEvent, approveEvent, rejectEvent, submitEventEdit, submitEventDelete, getEffectiveEventStatus, formatEventDateRange, getEventSortTime, getEventSponsors, getEventSponsorTotal, EventItem, EventSponsor } from '@/lib/local-data';
 import { canCreateEvent, canEditEvent, canDeleteEvent, canManageEvents, canViewEvent, canApprovePendingEvent, getEventApprovalRequirement } from '@/lib/permissions';
@@ -384,12 +385,14 @@ export default function EventsPage() {
   const canSeeApprovalMeta = (event: EventItem) =>
     user?.tier === 1 || event.submittedByEmail === user?.email || canApprovePendingEvent(event, user);
 
-  const visibleEvents = events.filter(event => {
-    if (event.approvalStatus === 'pending_create' || event.approvalStatus === 'rejected') {
-      return canSeeApprovalMeta(event);
-    }
-    return canViewEvent(event, user);
-  });
+  const visibleEvents = events
+    .filter(event => !event.isHoliday)
+    .filter(event => {
+      if (event.approvalStatus === 'pending_create' || event.approvalStatus === 'rejected') {
+        return canSeeApprovalMeta(event);
+      }
+      return canViewEvent(event, user);
+    });
 
   // Upcoming/active events first (soonest start date first), then events whose end
   // date has already passed — those sort most-recently-ended first, and their
@@ -436,14 +439,14 @@ export default function EventsPage() {
       {/* Header section with Create Button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-theme-text-primary">Events & Milestone Operations</h1>
-          <p className="text-xs text-theme-text-secondary">Manage symposiums, create event-specific sub-committees, and assign student teams</p>
+          <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Events & Milestone Operations</h1>
+          <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">Manage symposiums, create event-specific sub-committees, and assign student teams</p>
         </div>
         {canManage && (
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2.5">
             <button
               onClick={handleDownloadTemplate}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-border/40"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/15 text-slate-800 dark:text-white text-xs font-bold rounded-xl transition-all cursor-pointer border border-slate-300 dark:border-white/15 shadow-sm"
               title="Download CSV Template"
             >
               <Download className="h-4 w-4" />
@@ -453,10 +456,10 @@ export default function EventsPage() {
             <button
               onClick={handleUploadClick}
               {...csvDragHandlers}
-              className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer border ${
+              className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer border shadow-sm ${
                 isCsvDragOver
-                  ? 'border-accent bg-accent/10 shadow-md shadow-accent/20 ring-2 ring-accent/20 text-accent'
-                  : 'border-theme-border/40 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary'
+                  ? 'border-accent bg-accent/15 shadow-md shadow-accent/25 ring-2 ring-accent/30 text-accent'
+                  : 'border-slate-300 dark:border-white/15 bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/15 text-slate-800 dark:text-white'
               }`}
               title="Upload Filled CSV File — click or drag and drop"
             >
@@ -471,10 +474,18 @@ export default function EventsPage() {
               className="hidden"
             />
 
+            <Link
+              href="/dashboard/festivals"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-accent/15 border border-accent/35 text-accent hover:bg-accent/25 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm"
+            >
+              <Sparkles className="h-4 w-4" />
+              Festivals & Observances
+            </Link>
+
             {canCreate && (
               <button
                 onClick={handleOpenCreate}
-                className="flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer"
+                className="flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent/90 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-accent/25 cursor-pointer uppercase tracking-wider"
               >
                 <Plus className="h-4 w-4" />
                 Create New Event
@@ -486,7 +497,7 @@ export default function EventsPage() {
 
       {/* Status Filter Tabs */}
       {visibleEvents.length > 0 && (
-        <div className="flex items-center gap-1 bg-theme-border/20 rounded-xl p-1 w-fit">
+        <div className="flex items-center gap-1.5 bg-slate-100/90 dark:bg-slate-900/80 rounded-2xl p-1.5 w-fit border border-slate-200/90 dark:border-white/15 shadow-sm">
           {([
             { key: 'ALL', label: 'All Events' },
             { key: 'ONGOING', label: 'Ongoing' },
@@ -496,10 +507,10 @@ export default function EventsPage() {
             <button
               key={tab.key}
               onClick={() => setStatusFilter(tab.key)}
-              className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+              className={`px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
                 statusFilter === tab.key
-                  ? 'bg-accent text-white shadow-sm'
-                  : 'text-theme-text-secondary hover:text-theme-text-primary'
+                  ? 'bg-accent text-white shadow-md shadow-accent/25 scale-105'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/80 dark:hover:bg-white/10'
               }`}
             >
               {tab.label}
@@ -532,7 +543,7 @@ export default function EventsPage() {
             return (
               <div
                 key={event.id}
-                className={`glass-panel rounded-3xl p-6 flex flex-col justify-between hover:bg-theme-border/10 transition-all border border-theme-card-border/50 group space-y-5 ${isPast ? 'opacity-70' : ''}`}
+                className={`glass-panel rounded-3xl p-6 flex flex-col justify-between hover:border-accent/60 transition-all border border-slate-200/90 dark:border-white/20 shadow-lg shadow-slate-200/60 dark:shadow-black/40 bg-white/95 dark:bg-[#0D1F38]/95 backdrop-blur-2xl group space-y-5 ${isPast ? 'opacity-80' : ''}`}
               >
                 <div className="space-y-3.5">
                   <div className="flex items-center justify-between">
