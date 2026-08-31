@@ -368,14 +368,38 @@ export function resolveModuleEditOverride(user: SessionUser, moduleKey: ModuleAc
 /** One-time self-edit window for records that track a creator (Members, Guests) — 24 hours from creation. */
 export const SELF_EDIT_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-function isOwnCreatedRecordEditable(record: { createdBy?: string; createdAt?: string; selfEditUsedAt?: string }, user: SessionUser): boolean {
-  if (!user?.email || !record.createdBy) return false;
-  if (record.createdBy.toLowerCase() !== user.email.toLowerCase()) return false;
+export function isOwnCreatedGuest(guest: { createdBy?: string; metBy?: string }, user: SessionUser): boolean {
+  if (!user) return false;
+  const userEmail = (user.email || '').toLowerCase();
+  const userName = (user.name || '').toLowerCase();
+  const userId = (user.id || '').toLowerCase();
+
+  const createdBy = (guest.createdBy || '').toLowerCase();
+  const metBy = (guest.metBy || '').toLowerCase();
+
+  if (createdBy && (createdBy === userEmail || createdBy === userId || createdBy === userName)) return true;
+  if (metBy && metBy === userName) return true;
+  return false;
+}
+
+function isOwnCreatedRecordEditable(record: { createdBy?: string; metBy?: string; createdAt?: string; selfEditUsedAt?: string }, user: SessionUser): boolean {
+  if (!user) return false;
+  if (!isOwnCreatedGuest(record, user)) return false;
   if (record.selfEditUsedAt) return false;
   if (!record.createdAt) return false;
   const createdAt = new Date(record.createdAt).getTime();
   if (Number.isNaN(createdAt)) return false;
   return Date.now() - createdAt <= SELF_EDIT_WINDOW_MS;
+}
+
+/** Check if user can view a specific guest record (filtered when moduleAccess.GUEST_DIRECTORY.view === 'OWN'). */
+export function canViewGuestRecord(guest: Guest, user: SessionUser): boolean {
+  if (!canAccessGuestDirectory(user)) return false;
+  if (user?.tier === 1 || isCentreHead(user)) return true;
+  if (hasModuleViewOwnRestriction(user, 'GUEST_DIRECTORY') || resolveModuleEditOverride(user, 'GUEST_DIRECTORY') === 'OWN') {
+    return isOwnCreatedGuest(guest, user);
+  }
+  return true;
 }
 
 /**

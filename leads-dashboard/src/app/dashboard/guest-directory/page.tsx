@@ -28,7 +28,7 @@ import {
   Scan,
 } from 'lucide-react';
 import { getGuests, addGuest, updateGuest, deleteGuest, Guest } from '@/lib/local-data';
-import { canAccessGuestDirectory, canEditGuestRecord, canRemoveGuestContact, isRestrictedGuestEditor } from '@/lib/permissions';
+import { canAccessGuestDirectory, canEditGuestRecord, canRemoveGuestContact, isRestrictedGuestEditor, canViewGuestRecord } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 import { FileDropzone, FilePreviewRow, createProgressTracker, useDropTarget } from '@/components/ui/file-dropzone';
@@ -397,11 +397,13 @@ export default function GuestDirectoryPage() {
     document.body.removeChild(link);
   };
 
+  const visibleGuests = guests.filter(g => canViewGuestRecord(g, user));
+
   const handleDownloadFullBackup = () => {
     const header = toCsvRow(['Name', 'Organization', 'Designation', 'Phone', 'Email', 'Website', 'Address', 'LinkedIn', 'Notes', 'Met By']);
-    const rows = guests.map(g => toCsvRow([g.name, g.organization, g.designation, g.phone, g.email, g.website, g.address, g.linkedin, g.notes, g.metBy]));
+    const rows = visibleGuests.map(g => toCsvRow([g.name, g.organization, g.designation, g.phone, g.email, g.website, g.address, g.linkedin, g.notes, g.metBy]));
     downloadCsv(`leads_guest_directory_backup_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows].join('\n'));
-    triggerToast('success', `Downloaded a backup of all ${guests.length} guests.`);
+    triggerToast('success', `Downloaded a backup of ${visibleGuests.length} guest records.`);
   };
 
   const handleDownloadEmailConflicts = () => {
@@ -529,7 +531,7 @@ export default function GuestDirectoryPage() {
     reader.readAsText(file);
   };
 
-  const filteredGuests = guests.filter(g => {
+  const filteredGuests = visibleGuests.filter(g => {
     const q = searchQuery.toLowerCase();
     if (!q) return true;
     return (
