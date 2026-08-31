@@ -1048,33 +1048,41 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
   return (
     <div className="min-h-screen bg-space-theme flex flex-col md:flex-row transition-all duration-300 relative">
-      {/* Background Animated GhostFibers WebGL Canvas — Dark Mode (Navy/Blue) & Light Mode (Clean Porcelain White & Blue Lines) */}
-      <div className="fixed inset-0 pointer-events-none z-0 opacity-40 dark:opacity-65 transition-opacity duration-500 overflow-hidden">
+      {/* Background Animated GhostFibers WebGL Canvas.
+          -z-10 (not z-0): z-0 still creates a positioned stacking context that
+          paints AFTER normal non-positioned in-flow content (CSS stacking
+          order groups positioned z-index:0 boxes above plain in-flow boxes,
+          regardless of DOM order) — that's what was washing out every bare
+          page heading/subtitle that isn't inside a .glass-panel card (cards
+          escaped it because backdrop-filter gives them their own stacking
+          context). A negative z-index guarantees this canvas paints strictly
+          behind ALL normal content, everywhere, with no exceptions. */}
+      <div className="fixed inset-0 pointer-events-none -z-10 opacity-40 dark:opacity-65 transition-opacity duration-500 overflow-hidden">
         <GhostFibers
-          lineColor={isDarkTheme ? '#0F2A47' : '#1E4D7B'}
-          glowColor={isDarkTheme ? '#2E75B6' : '#3B82F6'}
+          lineColor="#0061ff"
+          glowColor="#00daff"
           lightMode={!isDarkTheme}
-          speed={0.14}
-          scale={2.4}
-          rotation={20}
-          rotationSpeed={0.12}
-          layers={5}
+          speed={0.2}
+          scale={2}
+          rotation={-24}
+          rotationSpeed={0.25}
+          layers={4}
           waveAmplitude={0.015}
-          waveFrequency={3.0}
-          waveSpeed={0.12}
-          layerSpeed={0.06}
+          waveFrequency={3}
+          waveSpeed={0.15}
+          layerSpeed={0.08}
           twist={0.1}
-          twistFrequency={4.0}
-          twistSpeed={0.8}
-          lineFrequency={5.0}
+          twistFrequency={5}
+          twistSpeed={1.2}
+          lineFrequency={5}
           lineSpacing={2}
-          lineSharpness={18}
-          glowFalloff={9}
-          glowIntensity={isDarkTheme ? 1.7 : 1.4}
-          brightness={isDarkTheme ? 1.8 : 1.1}
-          blueBoost={isDarkTheme ? 1.35 : 1.05}
-          vignette={isDarkTheme ? 0.75 : 0.2}
-          grain={0.02}
+          lineSharpness={16}
+          glowFalloff={10}
+          glowIntensity={1.6}
+          brightness={2}
+          blueBoost={1.25}
+          vignette={0.8}
+          grain={0.05}
           dpr={1}
         />
       </div>

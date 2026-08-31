@@ -435,32 +435,34 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-space-theme flex flex-col items-center justify-center p-4 md:p-8 relative overflow-hidden">
-      {/* Background Animated GhostFibers WebGL Canvas with LEADS Theme */}
-      <div className="absolute inset-0 pointer-events-none z-0 opacity-70 dark:opacity-85">
+      {/* Background Animated GhostFibers WebGL Canvas with LEADS Theme.
+          -z-10 (not z-0): guarantees this stays behind all page content
+          regardless of stacking context, same fix as dashboard-shell.tsx. */}
+      <div className="absolute inset-0 pointer-events-none -z-10 opacity-70 dark:opacity-85">
         <GhostFibers
-          lineColor="#0F2A47"
-          glowColor="#2E75B6"
-          speed={0.18}
-          scale={2.2}
-          rotation={10}
-          rotationSpeed={0.15}
-          layers={5}
-          waveAmplitude={0.016}
-          waveFrequency={3.2}
-          waveSpeed={0.14}
-          layerSpeed={0.07}
-          twist={0.12}
-          twistFrequency={4.5}
-          twistSpeed={0.9}
-          lineFrequency={5.5}
+          lineColor="#0061ff"
+          glowColor="#00daff"
+          speed={0.2}
+          scale={2}
+          rotation={-24}
+          rotationSpeed={0.25}
+          layers={4}
+          waveAmplitude={0.015}
+          waveFrequency={3}
+          waveSpeed={0.15}
+          layerSpeed={0.08}
+          twist={0.1}
+          twistFrequency={5}
+          twistSpeed={1.2}
+          lineFrequency={5}
           lineSpacing={2}
-          lineSharpness={18}
-          glowFalloff={9}
-          glowIntensity={1.8}
-          brightness={1.9}
-          blueBoost={1.35}
-          vignette={0.75}
-          grain={0.04}
+          lineSharpness={16}
+          glowFalloff={10}
+          glowIntensity={1.6}
+          brightness={2}
+          blueBoost={1.25}
+          vignette={0.8}
+          grain={0.05}
           dpr={1}
         />
       </div>

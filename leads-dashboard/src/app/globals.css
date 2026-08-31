@@ -23,12 +23,12 @@
 
 .dark {
   --background: #0B1B2E;
-  --foreground: #F8FAFC;
+  --foreground: #FFFFFF;
   --card: rgba(15, 30, 50, 0.85);
   --card-foreground: #F8FAFC;
   --card-bg: rgba(15, 30, 50, 0.85);
   --card-border: rgba(255, 255, 255, 0.12);
-  --text-primary: #F8FAFC;
+  --text-primary: #FFFFFF;
   --text-secondary: #94A3B8;
   --muted: rgba(255, 255, 255, 0.08);
   --muted-foreground: #94A3B8;
