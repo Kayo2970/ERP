@@ -14,7 +14,7 @@ interface LoadingScreenProps {
  * Full-screen branded splash shown during login and dashboard module transitions
  * with the animated LEADS GhostFibers WebGL backdrop behind the rotating logo badge.
  */
-export function LoadingScreen({ duration = 2000, subtitle, onComplete }: LoadingScreenProps) {
+export function LoadingScreen({ duration = 1000, subtitle, onComplete }: LoadingScreenProps) {
   useEffect(() => {
     if (!onComplete) return;
     const timer = setTimeout(onComplete, duration);

@@ -1098,7 +1098,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
       {isModuleTransitioning && (
         <LoadingScreen
-          duration={2000}
+          duration={1000}
           subtitle="Loading module..."
           onComplete={() => setIsModuleTransitioning(false)}
         />
