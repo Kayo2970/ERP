@@ -5,6 +5,7 @@ import { CheckCircle2, ChevronLeft, Send, Sparkles, AlertTriangle, ShieldCheck }
 import Link from 'next/link';
 import { getForms, addSubmission, syncWithServer, PublicFormItem } from '@/lib/local-data';
 import { TermsModal } from '@/components/terms-modal';
+import { GhostFibers } from '@/components/ui/ghost-fibers';
 
 export default function PublicFormPage({ params }: { params: Promise<{ slug: string }> }) {
   const resolvedParams = use(params);
@@ -103,30 +104,66 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
     setIsSubmitted(true);
   };
 
+  const backgroundShader = (
+    <div className="fixed inset-0 pointer-events-none -z-10 opacity-75 dark:opacity-90 overflow-hidden">
+      <GhostFibers
+        lineColor="#001f53"
+        glowColor="#03d8fc"
+        speed={0.2}
+        scale={2}
+        rotation={-24}
+        rotationSpeed={0.25}
+        layers={4}
+        waveAmplitude={0.015}
+        waveFrequency={3}
+        waveSpeed={0.15}
+        layerSpeed={0.08}
+        twist={0.1}
+        twistFrequency={5}
+        twistSpeed={1.2}
+        lineFrequency={5}
+        lineSpacing={2}
+        lineSharpness={16}
+        glowFalloff={10}
+        glowIntensity={1.6}
+        brightness={2}
+        blueBoost={1.25}
+        vignette={0.8}
+        grain={0.05}
+        dpr={1}
+      />
+    </div>
+  );
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-space-theme flex flex-col items-center justify-center p-4">
-        <div className="text-slate-400 text-xs animate-pulse">Loading form details...</div>
+      <div className="min-h-screen bg-space-theme flex flex-col items-center justify-center p-4 relative z-0 overflow-hidden select-none">
+        {backgroundShader}
+        <div className="glass-panel rounded-2xl px-6 py-4 flex items-center gap-3 border border-white/15 shadow-2xl backdrop-blur-xl">
+          <div className="h-4 w-4 border-2 border-accent border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-xs font-semibold text-theme-text-primary">Loading form details...</span>
+        </div>
       </div>
     );
   }
 
   if (notFound) {
     return (
-      <div className="min-h-screen bg-space-theme flex flex-col items-center justify-center p-4 text-slate-100">
-        <div className="glass-panel w-full max-w-md rounded-3xl p-8 flex flex-col items-center text-center space-y-5 border border-white/10 shadow-2xl">
+      <div className="min-h-screen bg-space-theme text-theme-text-primary flex flex-col items-center justify-center p-4 relative z-0 overflow-hidden select-none">
+        {backgroundShader}
+        <div className="glass-panel w-full max-w-md rounded-3xl p-8 flex flex-col items-center text-center space-y-5 border border-white/20 dark:border-white/15 shadow-2xl backdrop-blur-2xl bg-theme-card/90">
           <div className="h-14 w-14 bg-amber-500/15 rounded-2xl flex items-center justify-center border border-amber-500/30 text-amber-400">
             <AlertTriangle className="h-7 w-7" />
           </div>
           <div className="space-y-1.5">
-            <h1 className="text-lg font-bold text-white">Form Not Found</h1>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              The public form at <code className="text-amber-400 font-mono">/forms/{slug}</code> does not exist, has expired, or the link has changed.
+            <h1 className="text-lg font-bold text-theme-text-primary">Form Not Found</h1>
+            <p className="text-xs text-theme-text-secondary leading-relaxed">
+              The public form at <code className="text-accent font-mono">/forms/{slug}</code> does not exist, has expired, or the link has changed.
             </p>
           </div>
           <Link
             href="/"
-            className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold rounded-xl transition-all"
+            className="px-4 py-2 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/20 cursor-pointer"
           >
             Return to Portal Home
           </Link>
@@ -136,23 +173,24 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
   }
 
   return (
-    <div className="min-h-screen bg-space-theme text-slate-100 flex flex-col items-center justify-center p-4 py-12">
+    <div className="min-h-screen bg-space-theme text-theme-text-primary flex flex-col items-center justify-center p-4 py-12 relative z-0 overflow-hidden select-none">
+      {backgroundShader}
       
       {isSubmitted ? (
         // Submission Success View
-        <div className="glass-panel w-full max-w-md rounded-3xl p-8 flex flex-col items-center text-center space-y-6 border border-emerald-500/30 shadow-2xl animate-in zoom-in-95 duration-300">
+        <div className="glass-panel w-full max-w-md rounded-3xl p-8 flex flex-col items-center text-center space-y-6 border border-emerald-500/30 shadow-2xl backdrop-blur-2xl bg-theme-card/90 animate-in zoom-in-95 duration-300">
           <div className="h-16 w-16 bg-emerald-500/15 rounded-full flex items-center justify-center border border-emerald-500/30">
             <CheckCircle2 className="h-9 w-9 text-emerald-400" />
           </div>
           
           <div className="space-y-2">
-            <h1 className="text-xl font-bold text-white">Response Recorded!</h1>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Thank you for your submission. Your details have been securely recorded for <strong>{form?.title}</strong>.
+            <h1 className="text-xl font-bold text-theme-text-primary">Response Recorded!</h1>
+            <p className="text-xs text-theme-text-secondary leading-relaxed">
+              Thank you for your submission. Your details have been securely recorded for <strong className="text-theme-text-primary">{form?.title}</strong>.
             </p>
           </div>
 
-          <div className="border-t border-white/10 pt-4 w-full text-center">
+          <div className="border-t border-theme-border/40 pt-4 w-full text-center">
             <Link 
               href="/"
               className="inline-flex items-center gap-1.5 text-xs text-accent hover:underline font-semibold"
@@ -163,22 +201,25 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
           </div>
         </div>
       ) : (
-        // Public Form Fill View (Clean light/dark responsive card)
-        <div className="w-full max-w-xl rounded-3xl p-8 flex flex-col space-y-6 relative overflow-hidden bg-slate-800/80 backdrop-blur-md border border-slate-700/80 shadow-2xl">
+        // Public Form Fill View (Clean light/dark responsive card with GhostFibers background)
+        <div className="glass-panel w-full max-w-xl rounded-3xl p-6 md:p-8 flex flex-col space-y-6 relative overflow-hidden border border-white/20 dark:border-white/15 shadow-2xl backdrop-blur-2xl bg-theme-card/90">
           
           {/* Top Banner Accent */}
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-400"></div>
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#001f53] via-accent to-[#03d8fc]"></div>
 
           {/* Form Header */}
-          <div className="flex flex-col items-center text-center space-y-2">
-            <div className="h-10 w-10 bg-blue-500/15 border border-blue-500/30 rounded-xl flex items-center justify-center shadow-lg">
-              <Sparkles className="h-5 w-5 text-blue-400" />
+          <div className="flex flex-col items-center text-center space-y-2 pt-1">
+            <div className="h-11 w-11 bg-accent/15 border border-accent/30 rounded-2xl flex items-center justify-center shadow-lg text-accent">
+              <Sparkles className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-white leading-tight">{form?.title}</h1>
-              <p className="text-[11px] text-slate-400 mt-1">{form?.description || 'Please complete the requested information below.'}</p>
+              <h1 className="text-xl font-extrabold text-theme-text-primary tracking-tight leading-tight">{form?.title}</h1>
+              <p className="text-xs text-theme-text-secondary mt-1">{form?.description || 'Please complete the requested information below.'}</p>
               {form?.eventName && (
-                <p className="text-[10px] text-blue-400 font-semibold mt-1">For event: {form.eventName}</p>
+                <p className="text-xs text-accent font-semibold mt-1 flex items-center justify-center gap-1">
+                  <span>For event:</span>
+                  <span className="underline">{form.eventName}</span>
+                </p>
               )}
             </div>
           </div>
@@ -200,8 +241,8 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
 
             {form?.fields.map((field) => (
               <div key={field.id} className="space-y-1.5">
-                <label className="block font-medium text-slate-300">
-                  {field.label} {field.required && <span className="text-red-400">*</span>}
+                <label className="block font-semibold text-theme-text-primary">
+                  {field.label} {field.required && <span className="text-danger">*</span>}
                 </label>
 
                 {field.type === 'scale' ? (
@@ -210,10 +251,10 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
                       {[1, 2, 3, 4, 5].map(n => (
                         <label
                           key={n}
-                          className={`flex-1 flex items-center justify-center py-2.5 rounded-xl border cursor-pointer text-sm font-bold transition-all ${
+                          className={`flex-1 flex items-center justify-center py-3 rounded-xl border cursor-pointer text-sm font-bold transition-all shadow-sm ${
                             Number(formData[field.id]) === n
-                              ? 'bg-blue-600 border-blue-500 text-white'
-                              : 'bg-slate-900/60 border-slate-700 text-slate-300 hover:border-blue-500/60'
+                              ? 'bg-accent border-accent text-white shadow-accent/30'
+                              : 'bg-theme-background/60 border-theme-border/60 text-theme-text-secondary hover:border-accent/60 hover:text-theme-text-primary'
                           }`}
                         >
                           <input
@@ -229,7 +270,7 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
                         </label>
                       ))}
                     </div>
-                    <div className="flex items-center justify-between text-[10px] text-slate-500 px-0.5">
+                    <div className="flex items-center justify-between text-[10px] text-theme-text-secondary px-0.5">
                       <span>1 = Low</span>
                       <span>5 = High</span>
                     </div>
@@ -241,14 +282,14 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
                     onChange={(e) => handleInputChange(field.id, e.target.value)}
                     rows={3}
                     placeholder="Enter your response..."
-                    className="w-full px-4 py-2.5 bg-slate-900/60 border border-slate-700 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-xs"
+                    className="w-full px-4 py-3 bg-theme-background/60 border border-theme-border/60 rounded-xl text-theme-text-primary placeholder:text-theme-text-secondary/60 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all text-xs"
                   />
                 ) : field.type === 'select' && field.options ? (
                   <select
                     required={field.required}
                     value={formData[field.id] || ''}
                     onChange={(e) => handleInputChange(field.id, e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-900/60 border border-slate-700 rounded-xl text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-xs"
+                    className="w-full px-4 py-3 bg-theme-background/60 border border-theme-border/60 rounded-xl text-theme-text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all text-xs"
                   >
                     <option value="">Select an option...</option>
                     {field.options.map(opt => (
@@ -256,14 +297,14 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
                     ))}
                   </select>
                 ) : field.type === 'checkbox' ? (
-                  <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+                  <label className="flex items-center gap-2.5 cursor-pointer text-theme-text-primary">
                     <input
                       type="checkbox"
                       checked={Boolean(formData[field.id])}
                       onChange={(e) => handleInputChange(field.id, e.target.checked)}
-                      className="h-4 w-4 rounded border-slate-600 bg-slate-900/60 text-blue-600 focus:ring-blue-500"
+                      className="h-4 w-4 rounded border-theme-border/80 bg-theme-background text-accent focus:ring-accent"
                     />
-                    <span className="text-[11px]">Yes</span>
+                    <span className="text-xs font-medium">Yes</span>
                   </label>
                 ) : field.type === 'multiselect' && field.options ? (
                   <div className="grid grid-cols-2 gap-2" role="group" aria-label={field.label}>
@@ -273,17 +314,17 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
                       return (
                         <label
                           key={opt}
-                          className={`flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer text-[11px] transition-all ${
+                          className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border cursor-pointer text-xs font-medium transition-all ${
                             checked
-                              ? 'bg-blue-600/20 border-blue-500 text-blue-100'
-                              : 'bg-slate-900/60 border-slate-700 text-slate-300 hover:border-blue-500/60'
+                              ? 'bg-accent/20 border-accent text-theme-text-primary shadow-sm'
+                              : 'bg-theme-background/60 border-theme-border/60 text-theme-text-secondary hover:border-accent/60'
                           }`}
                         >
                           <input
                             type="checkbox"
                             checked={checked}
                             onChange={() => handleMultiselectToggle(field.id, opt)}
-                            className="h-3.5 w-3.5 rounded border-slate-600 bg-slate-900/60 text-blue-600 focus:ring-blue-500"
+                            className="h-4 w-4 rounded border-theme-border/80 bg-theme-background text-accent focus:ring-accent"
                           />
                           {opt}
                         </label>
@@ -297,24 +338,24 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
                     value={formData[field.id] || ''}
                     onChange={(e) => handleInputChange(field.id, e.target.value)}
                     placeholder={`Enter ${field.label.toLowerCase()}...`}
-                    className="w-full px-4 py-2.5 bg-slate-900/60 border border-slate-700 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-xs"
+                    className="w-full px-4 py-3 bg-theme-background/60 border border-theme-border/60 rounded-xl text-theme-text-primary placeholder:text-theme-text-secondary/60 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all text-xs"
                   />
                 )}
               </div>
             ))}
 
-            <div className="pt-2">
+            <div className="pt-3">
               <button
                 type="submit"
-                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl transition-all shadow-lg shadow-blue-600/25 flex items-center justify-center gap-2 cursor-pointer text-xs"
+                className="w-full py-3.5 bg-accent hover:bg-accent/90 text-white font-bold rounded-xl transition-all shadow-xl shadow-accent/25 flex items-center justify-center gap-2.5 cursor-pointer text-xs uppercase tracking-wider"
               >
                 <Send className="h-4 w-4" />
                 Submit Registration
               </button>
             </div>
 
-            <div className="flex items-center justify-center gap-1 text-[10px] text-slate-500 pt-2">
-              <ShieldCheck className="h-3 w-3 text-emerald-500" />
+            <div className="flex items-center justify-center gap-1.5 text-[10px] text-theme-text-secondary pt-2">
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
               <span>Encrypted & Verified &bull; LEADS Next Gen MSRUAS</span>
             </div>
           </form>
@@ -322,13 +363,13 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
       )}
 
       {/* Footer Info */}
-      <footer className="mt-8 text-center text-[11px] text-slate-400 space-y-1 max-w-lg px-4 pb-6">
+      <footer className="mt-8 text-center text-[11px] text-theme-text-secondary space-y-1 max-w-lg px-4 pb-6">
         <p>
           By visiting or using this portal, you agree to our{' '}
           <button
             type="button"
             onClick={() => setIsTermsOpen(true)}
-            className="font-semibold text-sky-400 underline hover:text-sky-300 transition-colors cursor-pointer"
+            className="font-semibold text-accent underline hover:text-accent/80 transition-colors cursor-pointer"
           >
             Terms & Conditions
           </button>.
