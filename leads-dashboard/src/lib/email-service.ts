@@ -300,6 +300,48 @@ export function wrapInMasterEmailTemplate(options: {
   `;
 }
 
+/**
+ * Turns a raw Nodemailer/SMTP failure into a plain-English diagnosis. The
+ * #1 real-world cause of "I entered the correct company email and password
+ * but it still won't send through Outlook" is that Microsoft 365 disables
+ * SMTP AUTH (plain username/password sign-in) tenant-wide by default as of
+ * 2023 — no password is ever accepted until an admin re-enables it for that
+ * specific mailbox. Nodemailer surfaces Microsoft's own rejection text
+ * (e.g. "535 5.7.139 ... SmtpClientAuthenticationDisabled") verbatim, which
+ * reads like a generic auth error unless it's translated here.
+ */
+function diagnoseSmtpFailure(err: any, provider: string): string {
+  const raw = err?.message || String(err);
+  const code = String(err?.code || err?.responseCode || '');
+  let diagnosis = '';
+
+  if (/SmtpClientAuthentication is disabled/i.test(raw) || /5\.7\.139/.test(raw)) {
+    diagnosis =
+      'Microsoft 365 has SMTP AUTH (plain username/password sign-in) turned OFF for this mailbox by default — ' +
+      'this is a tenant setting, not a wrong password. An admin must enable it: Microsoft 365 admin center → ' +
+      'Users → Active users → select this mailbox → Mail → "Manage email apps" → turn on Authenticated SMTP ' +
+      '(or run Set-CASMailbox -Identity <email> -SmtpClientAuthenticationDisabled $false in Exchange Online PowerShell). ' +
+      'No amount of re-entering the password will fix this until that switch is flipped.';
+  } else if (provider === 'outlook' && /535|Invalid login|Username and Password not accepted/i.test(raw)) {
+    diagnosis =
+      'Outlook/Microsoft 365 rejected the sign-in. If this account has multi-factor authentication (MFA) enabled, ' +
+      'the regular account password will not work over SMTP — an admin needs to either create an app password ' +
+      'for this mailbox or enable SMTP AUTH as described above. Also confirm there is no typo in the email or password.';
+  } else if (/535|Invalid login|Username and Password not accepted/i.test(raw)) {
+    diagnosis = 'The mail server rejected the username/password combination — double-check for typos, and whether an app-specific password is required.';
+  } else if (/ETIMEDOUT|ESOCKET|ECONNREFUSED|EHOSTUNREACH/i.test(code + raw)) {
+    diagnosis =
+      `Could not reach the ${provider === 'outlook' ? 'Outlook/Microsoft 365' : 'mail'} server at all — this is a network-reachability ` +
+      'failure, not a credentials problem. The most common cause is a hosting provider blocking outbound SMTP ports ' +
+      '(587/465) by default to prevent spam abuse; contact your VPS/hosting support to have it unblocked, or try the ' +
+      '"Direct Send" provider instead.';
+  } else if (/STARTTLS/i.test(raw)) {
+    diagnosis = 'The server requires STARTTLS but the connection did not negotiate it — confirm the port is 587 with "secure" off (STARTTLS), not 465.';
+  }
+
+  return diagnosis ? `${diagnosis}\n\nRaw server response: ${raw}` : raw;
+}
+
 export async function testEmailConnection(testRecipient: string): Promise<{ success: boolean; message: string }> {
   try {
     const { transporter: t, settings, effectiveHost, effectivePort } = await buildTransporter();
@@ -346,7 +388,8 @@ export async function testEmailConnection(testRecipient: string): Promise<{ succ
     };
   } catch (err: any) {
     console.error('[email-service] SMTP Connection Test Failed:', err);
-    return { success: false, message: err?.message || 'Failed to establish connection to SMTP server.' };
+    const settings = await getEmailSettings();
+    return { success: false, message: err ? diagnoseSmtpFailure(err, settings.provider) : 'Failed to establish connection to SMTP server.' };
   }
 }
 
@@ -422,7 +465,8 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
       status = 'SENT';
     }
   } catch (err) {
-    errorMessage = err instanceof Error ? err.message : String(err);
+    const provider = (await getEmailSettings()).provider;
+    errorMessage = diagnoseSmtpFailure(err, provider);
     console.error(`[email-service] Failed to send to ${payload.to}:`, errorMessage);
   }
 
