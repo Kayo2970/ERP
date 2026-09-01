@@ -273,7 +273,11 @@ export default function EmailManagementPage() {
       const res = await fetch('/api/email/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ testRecipient }),
+        // Test whatever is currently in the form — including a provider
+        // switch or credentials that haven't been saved yet — not whatever
+        // was last saved. Otherwise switching providers here and testing
+        // silently re-tests the old saved config with no way to tell.
+        body: JSON.stringify({ testRecipient, settings }),
       });
       const data = await res.json();
       setTestResult(data);

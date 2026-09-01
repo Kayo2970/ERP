@@ -144,8 +144,8 @@ export async function updateEmailSettings(settings: Partial<EmailSettings>, acto
   return updated;
 }
 
-async function buildTransporter(): Promise<{ transporter: Transporter; settings: EmailSettings; effectiveHost: string; effectivePort: number }> {
-  const settings = await getEmailSettings();
+async function buildTransporter(overrideSettings?: EmailSettings): Promise<{ transporter: Transporter; settings: EmailSettings; effectiveHost: string; effectivePort: number }> {
+  const settings = overrideSettings || await getEmailSettings();
 
   const dkim = settings.dkimDomain && settings.dkimSelector && settings.dkimPrivateKey
     ? {
@@ -342,9 +342,21 @@ function diagnoseSmtpFailure(err: any, provider: string): string {
   return diagnosis ? `${diagnosis}\n\nRaw server response: ${raw}` : raw;
 }
 
-export async function testEmailConnection(testRecipient: string): Promise<{ success: boolean; message: string }> {
+/**
+ * `draftSettings` lets the caller test whatever is currently typed into the
+ * Settings form — including a provider switch or new credentials that
+ * haven't been saved yet. Without this, "Test Connection" always verified
+ * the last-*saved* config, silently ignoring in-progress edits: selecting
+ * Outlook and testing it could report success/failure for a stale Gmail
+ * config underneath, with no way to tell the two apart from the result.
+ * Fields the draft leaves unset (DKIM, replyTo, ...) still fall back to
+ * whatever is already persisted.
+ */
+export async function testEmailConnection(testRecipient: string, draftSettings?: Partial<EmailSettings>): Promise<{ success: boolean; message: string }> {
   try {
-    const { transporter: t, settings, effectiveHost, effectivePort } = await buildTransporter();
+    const persisted = await getEmailSettings();
+    const effectiveSettings: EmailSettings = draftSettings ? { ...persisted, ...draftSettings } : persisted;
+    const { transporter: t, settings, effectiveHost, effectivePort } = await buildTransporter(effectiveSettings);
     await t.verify();
 
     const from = `${settings.fromName || 'LEADS Next Gen Centre'} <${settings.fromEmail || 'leads@msruas.ac.in'}>`;
@@ -388,8 +400,8 @@ export async function testEmailConnection(testRecipient: string): Promise<{ succ
     };
   } catch (err: any) {
     console.error('[email-service] SMTP Connection Test Failed:', err);
-    const settings = await getEmailSettings();
-    return { success: false, message: err ? diagnoseSmtpFailure(err, settings.provider) : 'Failed to establish connection to SMTP server.' };
+    const provider = draftSettings?.provider || (await getEmailSettings()).provider;
+    return { success: false, message: err ? diagnoseSmtpFailure(err, provider) : 'Failed to establish connection to SMTP server.' };
   }
 }
 
