@@ -1048,6 +1048,23 @@ export default function EmailManagementPage() {
                       </div>
                     </div>
                   </div>
+
+                  {settings.provider === 'outlook' && (
+                    <div className="p-4 bg-amber-500/10 rounded-2xl border border-amber-500/25 space-y-1.5 text-[11px] text-theme-text-secondary leading-relaxed">
+                      <span className="font-bold text-theme-text-primary flex items-center gap-1.5">
+                        <ShieldAlert className="h-3.5 w-3.5 text-amber-500" />
+                        Company email + password not connecting?
+                      </span>
+                      <p>
+                        Microsoft 365 turns off SMTP AUTH (plain username/password sign-in) for every mailbox by default —
+                        this is a tenant setting, not a wrong password. An admin has to enable it per mailbox: Microsoft 365
+                        admin center → Users → Active users → this mailbox → Mail → &quot;Manage email apps&quot; → turn on
+                        Authenticated SMTP. If the mailbox has multi-factor authentication (MFA) on, an app password is
+                        required instead of the regular sign-in password. Use &quot;Test Connection &amp; Send Email&quot; below —
+                        it now explains exactly which of these is blocking you.
+                      </p>
+                    </div>
+                  )}
                 </>
               )}
 
@@ -1077,6 +1094,7 @@ export default function EmailManagementPage() {
                 </div>
               </div>
 
+              {settings.provider !== 'gmail' && settings.provider !== 'outlook' && (
               <div className="border-t border-theme-border/20 pt-4">
                 <button
                   type="button"
@@ -1128,6 +1146,7 @@ export default function EmailManagementPage() {
                   </div>
                 )}
               </div>
+              )}
 
               <div className="flex items-center justify-between pt-4 border-t border-theme-border/20">
                 <span className="text-[11px] text-theme-text-secondary">
