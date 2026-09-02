@@ -36,6 +36,38 @@ export function isExecutiveRole(user: SessionUser): boolean {
   return role.includes('president') || role.includes('vice president') || role.includes('chief coordinator');
 }
 
+/** President specifically (not Vice President) — used to resolve who gets
+ *  cc'd on the approved-event-report email. Matches "President" and the
+ *  Advisory Board's "Senior President" variant. */
+export function isPresident(user: SessionUser): boolean {
+  if (!user) return false;
+  const role = ((user as any)?.role || '').toLowerCase();
+  return role.includes('president') && !role.includes('vice');
+}
+
+/**
+ * The Core Committee's "General Secretary" position (see directory/page.tsx's
+ * CorePosition options) — a student-level role, tier 5, distinct from the
+ * Advisory Board's senior variant. This is who the Event Report module lets
+ * submit a report for an event.
+ */
+export function isGeneralSecretary(user: SessionUser): boolean {
+  if (!user) return false;
+  const role = ((user as any)?.role || '').toLowerCase();
+  return user.tier === 5 && role.includes('general secretary') && !role.includes('senior');
+}
+
+/** Who may submit an event report — the General Secretary, or a Super User covering for them. */
+export function canSubmitEventReport(user: SessionUser): boolean {
+  if (!user) return false;
+  return isGeneralSecretary(user) || user.tier === 1;
+}
+
+/** Who reviews a pending event report — the same two roles required to approve one. */
+export function canReviewEventReports(user: SessionUser): boolean {
+  return isCentreHead(user) || isEventsHeadGgCampus(user);
+}
+
 /** Check if user holds Alumni role/tier. */
 export function isAlumniRole(user: SessionUser): boolean {
   if (!user) return false;

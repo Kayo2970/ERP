@@ -19,7 +19,7 @@ export interface EmailLog {
   subject: string;
   bodyText: string;
   bodyHtml: string;
-  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION' | 'BIRTHDAY';
+  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION' | 'BIRTHDAY' | 'EVENT_REPORT_APPROVAL' | 'DESIGN_APPROVAL';
   status: 'SENT' | 'FAILED';
   sentAt: string;
   // Diagnostics for "shows SENT but never arrives" — a resolved sendMail()
@@ -38,7 +38,13 @@ export interface SendEmailPayload {
   bodyHtml?: string;
   badgeText?: string;
   badgeColor?: string;
-  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION' | 'BIRTHDAY';
+  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION' | 'BIRTHDAY' | 'EVENT_REPORT_APPROVAL' | 'DESIGN_APPROVAL';
+  // Files attached to the outgoing message, e.g. an approved event report
+  // or design asset read straight off disk via file-storage.ts's
+  // readStoredFile(). Not persisted on the EmailLog entry (only the fact
+  // that an email was sent/failed is), since the file itself already lives
+  // in data/uploads and re-storing it on every log entry would duplicate it.
+  attachments?: Array<{ filename: string; content: Buffer; contentType?: string }>;
 }
 
 export interface EmailSettings {
@@ -461,6 +467,7 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
       replyTo: settings.replyTo || settings.fromEmail,
       xMailer: false,
       headers,
+      attachments: payload.attachments,
     });
 
     smtpResponse = info.response;
@@ -831,6 +838,106 @@ export function generateBirthdayEmailTemplate(memberName: string): { subject: st
       <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Dear <strong>${memberName}</strong>,</p>
       <p style="color: #334155; font-size: 14px; line-height: 1.6;">On behalf of the entire LEADS Next Gen Centre family, we wish you a wonderful birthday! Thank you for your energy and dedication.</p>
       <p style="color: #64748b; font-size: 13px; line-height: 1.6; margin-bottom: 0;">Have a fantastic year ahead!</p>
+    `
+  });
+
+  return { subject, bodyText, bodyHtml };
+}
+
+/**
+ * Resolves the fixed recipient set for the two approved-attachment emails
+ * (event reports, design assets) directly off plain member records — NOT
+ * permissions.ts's isCentreHead/isEventsHeadGgCampus/isPresident, which read
+ * from getAccessLevelSettings()'s localStorage-backed config and are meant
+ * to run client-side against a single signed-in user. This mirrors the same
+ * simple tier/role matching resolveDesignReviewer() already does client-side
+ * for proofreader routing, just server-side and scanning every member.
+ */
+export interface ApprovalRecipients {
+  centreHead?: { name: string; email: string };
+  eventsHeadGg?: { name: string; email: string };
+  president?: { name: string; email: string };
+}
+
+export function findApprovalRecipients(members: Array<{ name: string; email?: string; role?: string; tier?: number; status?: string }>): ApprovalRecipients {
+  const active = members.filter(m => m.status !== 'Terminated' && m.email);
+
+  // Titled "Centre Head" first — NOT tier === 1, which is Super User and
+  // would otherwise outrank the actual Centre Head simply for sorting
+  // first in the roster. Super User is only the fallback when no titled
+  // Centre Head exists at all, mirroring resolveDesignReviewer()'s
+  // established precedent for the same ambiguity.
+  const centreHead = active.find(m => {
+    const role = (m.role || '').toLowerCase();
+    return role.includes('centre head') || role.includes('center head');
+  }) || active.find(m => m.tier === 1);
+
+  const eventsHeadGg = active.find(m => {
+    const role = (m.role || '').toLowerCase();
+    return m.tier === 2.5 || (role.includes('events head') && role.includes('gg')) || (role.includes('head of events') && role.includes('gg'));
+  });
+
+  const president = active.find(m => {
+    const role = (m.role || '').toLowerCase();
+    return role.includes('president') && !role.includes('vice');
+  });
+
+  return {
+    centreHead: centreHead ? { name: centreHead.name, email: centreHead.email! } : undefined,
+    eventsHeadGg: eventsHeadGg ? { name: eventsHeadGg.name, email: eventsHeadGg.email! } : undefined,
+    president: president ? { name: president.name, email: president.email! } : undefined,
+  };
+}
+
+/**
+ * Template Generator: Event Report Approved (sent with the report file
+ * attached once BOTH the Centre Head and GG Campus Head of Events have
+ * signed off).
+ */
+export function generateEventReportApprovedEmailTemplate(eventTitle: string, submitterName: string): { subject: string; bodyText: string; bodyHtml: string } {
+  const subject = `Event Report Approved: ${eventTitle}`;
+  const bodyText = `Hello,\n\n` +
+    `The event report for "${eventTitle}", submitted by ${submitterName}, has been approved by both the Centre Head and the GG Campus Head of Events.\n\n` +
+    `The full report is attached to this email.\n\n` +
+    `Regards,\nLEADS Next Gen Centre, MSRUAS`;
+
+  const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
+    headerTitle: `Event Report Approved`,
+    headerSubtitle: eventTitle,
+    badgeText: `Report Approved`,
+    badgeColor: `#15803d`,
+    bodyContentHtml: `
+      <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello,</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">The event report for <strong>${eventTitle}</strong>, submitted by <strong>${submitterName}</strong>, has been approved by both the Centre Head and the GG Campus Head of Events.</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">The full report is attached to this email.</p>
+    `
+  });
+
+  return { subject, bodyText, bodyHtml };
+}
+
+/**
+ * Template Generator: Design Style Approved (sent with the design asset
+ * attached once the Design Head marks it Style Approved).
+ */
+export function generateDesignApprovedEmailTemplate(designTitle: string, designerName: string): { subject: string; bodyText: string; bodyHtml: string } {
+  const subject = `Design Approved: ${designTitle}`;
+  const bodyText = `Hello,\n\n` +
+    `The design "${designTitle}", submitted by ${designerName}, has been Style Approved.\n\n` +
+    `The final asset is attached to this email.\n\n` +
+    `Regards,\nLEADS Next Gen Centre, MSRUAS`;
+
+  const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
+    headerTitle: `Design Approved`,
+    headerSubtitle: designTitle,
+    badgeText: `Style Approved`,
+    badgeColor: `#15803d`,
+    bodyContentHtml: `
+      <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello,</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">The design <strong>${designTitle}</strong>, submitted by <strong>${designerName}</strong>, has been Style Approved.</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">The final asset is attached to this email.</p>
     `
   });
 

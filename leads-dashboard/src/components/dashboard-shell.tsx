@@ -38,10 +38,11 @@ import {
   ArrowRight,
   Compass,
   Trash2,
-  Sparkles
+  Sparkles,
+  FileCheck2
 } from 'lucide-react';
 import { getAnnouncements, getTasks, getDesigns, getMembers, getBudgets, getReimbursements, getEvents, logAuditEvent, Member, syncWithServer, getSystemSettings } from '@/lib/local-data';
-import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isFinanceHead, canAccessGuestDirectory, canVerifyBudgetCentreHead, canDecideBudget, canVerifyReimbursementCentreHead, canApproveAsSectorHead, canApproveAsFinanceHead } from '@/lib/permissions';
+import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isFinanceHead, canAccessGuestDirectory, canVerifyBudgetCentreHead, canDecideBudget, canVerifyReimbursementCentreHead, canApproveAsSectorHead, canApproveAsFinanceHead, canSubmitEventReport, canReviewEventReports } from '@/lib/permissions';
 import { TermsModal } from '@/components/terms-modal';
 import { NotFoundScreen } from '@/components/not-found-screen';
 import { LoadingScreen } from '@/components/loading-screen';
@@ -59,6 +60,7 @@ interface SidebarItem {
   centreHeadOnly?: boolean;
   guestDirectoryOnly?: boolean;
   budgetAccessOnly?: boolean;
+  eventReportsOnly?: boolean;
 }
 
 interface NavSection {
@@ -77,6 +79,7 @@ const navSections: NavSection[] = [
       { name: 'Tasks', href: '/dashboard/tasks', icon: CheckSquare },
       { name: 'Ratings', href: '/dashboard/ratings', icon: Star },
       { name: 'Design Portal', href: '/dashboard/designs', icon: Palette },
+      { name: 'Event Reports', href: '/dashboard/event-reports', icon: FileCheck2, eventReportsOnly: true },
     ],
   },
   {
@@ -1154,7 +1157,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                   </h4>
                 )}
                 <div className="space-y-1">
-                  {section.items.filter(item => (!item.superUserOnly || user.tier === 1) && (!item.centreHeadOnly || isCentreHead(user)) && (!item.guestDirectoryOnly || canAccessGuestDirectory(user)) && (!item.budgetAccessOnly || isCentreHead(user) || isFinanceHead(user))).map((item) => {
+                  {section.items.filter(item => (!item.superUserOnly || user.tier === 1) && (!item.centreHeadOnly || isCentreHead(user)) && (!item.guestDirectoryOnly || canAccessGuestDirectory(user)) && (!item.budgetAccessOnly || isCentreHead(user) || isFinanceHead(user)) && (!item.eventReportsOnly || canSubmitEventReport(user) || canReviewEventReports(user))).map((item) => {
                     const Icon = item.icon;
                     const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
                     return (
@@ -1264,7 +1267,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                   <h4 className="px-2 text-[10px] font-bold text-theme-text-secondary uppercase tracking-wider">
                     {section.title}
                   </h4>
-                  {section.items.filter(item => (!item.superUserOnly || user.tier === 1) && (!item.centreHeadOnly || isCentreHead(user)) && (!item.guestDirectoryOnly || canAccessGuestDirectory(user)) && (!item.budgetAccessOnly || isCentreHead(user) || isFinanceHead(user))).map((item) => {
+                  {section.items.filter(item => (!item.superUserOnly || user.tier === 1) && (!item.centreHeadOnly || isCentreHead(user)) && (!item.guestDirectoryOnly || canAccessGuestDirectory(user)) && (!item.budgetAccessOnly || isCentreHead(user) || isFinanceHead(user)) && (!item.eventReportsOnly || canSubmitEventReport(user) || canReviewEventReports(user))).map((item) => {
                     const Icon = item.icon;
                     const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
                     return (

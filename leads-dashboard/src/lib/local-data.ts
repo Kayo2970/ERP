@@ -214,6 +214,45 @@ export interface TaskItem {
   rejectionReason?: string;
 }
 
+/**
+ * A General Secretary's post-event writeup, uploaded as a finished file
+ * (Word/PDF) rather than authored in-app. Requires sign-off from BOTH the
+ * Centre Head and the GG Campus Head of Events independently — mirrors the
+ * dual-reviewer requirement already used for Ratings — before it's
+ * considered approved. Once both have signed off, the server emails the
+ * uploaded file as an attachment to the Centre Head, the GG Campus Head of
+ * Events, and the President (see /api/event-reports/[id]'s PATCH handler).
+ */
+export interface EventReportItem {
+  id: string;
+  eventId: string;
+  eventTitle: string;
+  fileUrl?: string;
+  storageKey?: string;
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+  submittedBy: string;
+  submittedByEmail: string;
+  submittedAt: string;
+  centreHeadApproved: boolean;
+  centreHeadApprovedBy?: string;
+  centreHeadApprovedAt?: string;
+  eventsHeadGgApproved: boolean;
+  eventsHeadGgApprovedBy?: string;
+  eventsHeadGgApprovedAt?: string;
+  status: 'pending_review' | 'approved' | 'rejected';
+  rejectedBy?: string;
+  rejectedAt?: string;
+  rejectionReason?: string;
+  // Whether the final approved-attachment email actually went out — set by
+  // the server once both approvals land (see the honest-delivery-status
+  // precedent in account-activation.ts). A false value with emailError set
+  // means the report IS approved but nobody was actually emailed yet.
+  emailSent?: boolean;
+  emailError?: string;
+}
+
 export interface RatingItem {
   id: string;
   taskId: string;
@@ -449,6 +488,13 @@ export interface DesignSubmissionItem {
   styleFeedback?: string;
   styleDecidedBy?: string;
   styleDecidedAt?: string;
+  // Whether the "Style Approved" attachment email to the Centre Head / GG
+  // Campus Head of Events actually went out — set by /api/designs/[id]'s
+  // PATCH handler the moment styleStatus first becomes 'Style Approved'.
+  // A false value with styleApprovalEmailError set means the design IS
+  // approved but nobody was actually emailed the asset yet.
+  styleApprovalEmailSent?: boolean;
+  styleApprovalEmailError?: string;
   eventId?: string;
   eventName?: string;
   // Set once a Style Approved design linked to an event auto-creates a
@@ -885,6 +931,7 @@ const SYNC_LABELS: Record<string, string> = {
   submissions: 'form response',
   ratings: 'rating',
   'group-policies': 'group policy',
+  'event-reports': 'event report',
 };
 function syncLabelFor(endpoint: string): string {
   const collection = endpoint.replace(/^\/api\//, '').split('/')[0];
@@ -1787,6 +1834,178 @@ export function getCommittees(eventId?: string): string[] {
     return ['Logistics & Venue Committee', 'Technical & AV Committee', 'Design & Media Committee'];
   }
   return Array.from(names);
+}
+
+// -------------------------------------------------------------
+// Event Reports (General Secretary submission -> dual approval -> email)
+// -------------------------------------------------------------
+
+export function getEventReports(): EventReportItem[] {
+  if (typeof window === 'undefined') return [];
+  const saved = localStorage.getItem('leads_event_reports');
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return parsed;
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  return [];
+}
+
+export function saveEventReports(reports: EventReportItem[]): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem('leads_event_reports', JSON.stringify(reports));
+  markLocalWrite('leads_event_reports');
+}
+
+/** Submit a finished report file for an event. POSTs first so the server
+ *  writes the file to disk and returns fileUrl/storageKey, matching the
+ *  addDesign/addGuest upload pattern. */
+export async function addEventReport(
+  report: {
+    eventId: string;
+    eventTitle: string;
+    fileData: string;
+    fileName: string;
+    fileSize: number;
+    fileType: string;
+    submittedBy: string;
+    submittedByEmail: string;
+  },
+  onProgress?: UploadProgressCallback
+): Promise<EventReportItem> {
+  if (report.fileSize > 25 * 1024 * 1024) {
+    throw new Error('File size exceeds the 25 MB limit.');
+  }
+
+  const newReport = {
+    id: 'evrep_' + Date.now(),
+    eventId: report.eventId,
+    eventTitle: report.eventTitle,
+    fileData: report.fileData,
+    fileName: report.fileName,
+    fileSize: report.fileSize,
+    fileType: report.fileType,
+    submittedBy: report.submittedBy,
+    submittedByEmail: report.submittedByEmail,
+    submittedAt: new Date().toISOString(),
+    centreHeadApproved: false,
+    eventsHeadGgApproved: false,
+    status: 'pending_review' as const,
+  };
+
+  const serverResult = await serverPost('/api/event-reports', newReport, onProgress);
+  if (!serverResult) {
+    throw new Error('The report failed to upload to the server. Please check your connection and try again.');
+  }
+
+  const created: EventReportItem = { ...newReport, ...serverResult };
+  delete (created as any).fileData;
+
+  const current = getEventReports();
+  current.unshift(created);
+  saveEventReports(current);
+  logAuditEvent('EVENT_REPORT_SUBMITTED', report.submittedBy, `Submitted event report for "${report.eventTitle}"`, report.submittedByEmail);
+
+  return created;
+}
+
+/** Replace the file on a rejected report and put it back up for review,
+ *  resetting both approvals -- mirrors updateDesignFile's re-submission
+ *  pattern. */
+export async function resubmitEventReport(
+  id: string,
+  fileData: string,
+  fileName: string,
+  fileSize: number,
+  fileType: string,
+  actorName: string,
+  onProgress?: UploadProgressCallback
+): Promise<EventReportItem | null> {
+  if (fileSize > 25 * 1024 * 1024) {
+    throw new Error('File size exceeds the 25 MB limit.');
+  }
+
+  const serverResult = await serverPatch('/api/event-reports', id, {
+    fileData,
+    fileName,
+    fileSize,
+    fileType,
+    status: 'pending_review',
+    centreHeadApproved: false,
+    centreHeadApprovedBy: undefined,
+    centreHeadApprovedAt: undefined,
+    eventsHeadGgApproved: false,
+    eventsHeadGgApprovedBy: undefined,
+    eventsHeadGgApprovedAt: undefined,
+    rejectedBy: undefined,
+    rejectedAt: undefined,
+    rejectionReason: undefined,
+    emailSent: undefined,
+    emailError: undefined,
+  }, onProgress);
+  if (!serverResult) return null;
+
+  const current = getEventReports();
+  const idx = current.findIndex(r => r.id === id);
+  if (idx !== -1) {
+    current[idx] = { ...current[idx], ...serverResult };
+    saveEventReports(current);
+  }
+  logAuditEvent('EVENT_REPORT_RESUBMITTED', actorName, `Resubmitted event report "${serverResult.eventTitle || ''}"`);
+  return current[idx] || null;
+}
+
+/** Approve a report as Centre Head or GG Campus Head of Events. Both are
+ *  required before the server marks it fully approved and emails the
+ *  attachment -- see /api/event-reports/[id]'s PATCH handler. */
+export async function approveEventReport(id: string, as: 'centre_head' | 'gg_events_head', actorName: string): Promise<EventReportItem | null> {
+  const patch = as === 'centre_head'
+    ? { centreHeadApproved: true, centreHeadApprovedBy: actorName, centreHeadApprovedAt: new Date().toISOString() }
+    : { eventsHeadGgApproved: true, eventsHeadGgApprovedBy: actorName, eventsHeadGgApprovedAt: new Date().toISOString() };
+
+  const serverResult = await serverPatch('/api/event-reports', id, patch);
+  if (!serverResult) return null;
+
+  const current = getEventReports();
+  const idx = current.findIndex(r => r.id === id);
+  if (idx !== -1) {
+    current[idx] = { ...current[idx], ...serverResult };
+    saveEventReports(current);
+  }
+  logAuditEvent('EVENT_REPORT_APPROVED', actorName, `${as === 'centre_head' ? 'Centre Head' : 'GG Campus Head of Events'} approved event report "${serverResult.eventTitle || ''}"${serverResult.status === 'approved' ? ' -- now fully approved' : ''}`);
+  return current[idx] || null;
+}
+
+export async function rejectEventReport(id: string, actorName: string, reason?: string): Promise<EventReportItem | null> {
+  const serverResult = await serverPatch('/api/event-reports', id, {
+    status: 'rejected',
+    rejectedBy: actorName,
+    rejectedAt: new Date().toISOString(),
+    rejectionReason: reason,
+  });
+  if (!serverResult) return null;
+
+  const current = getEventReports();
+  const idx = current.findIndex(r => r.id === id);
+  if (idx !== -1) {
+    current[idx] = { ...current[idx], ...serverResult };
+    saveEventReports(current);
+  }
+  logAuditEvent('EVENT_REPORT_REJECTED', actorName, `Rejected event report "${serverResult.eventTitle || ''}"${reason ? `: ${reason}` : ''}`);
+  return current[idx] || null;
+}
+
+export async function deleteEventReport(id: string, actorName: string): Promise<boolean> {
+  const target = getEventReports().find(r => r.id === id);
+  const ok = await serverDelete('/api/event-reports', id);
+  if (ok) {
+    saveEventReports(getEventReports().filter(r => r.id !== id));
+    logAuditEvent('EVENT_REPORT_DELETED', actorName, `Deleted event report${target ? ` for "${target.eventTitle}"` : ''}`);
+  }
+  return ok;
 }
 
 // -------------------------------------------------------------
