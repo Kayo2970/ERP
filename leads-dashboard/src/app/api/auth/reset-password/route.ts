@@ -43,6 +43,12 @@ export async function POST(request: Request) {
           return {
             ...m,
             passwordHash: hashPassword(newPassword),
+            // Completing a self-service reset satisfies any pending admin-requested
+            // reset too — otherwise mustSetupPassword stays true, the "Reset Pending"
+            // badge never clears in the directory, and login keeps routing them back
+            // through "set up your password" (see activate-account/route.ts for the
+            // same fix on the activation-link path).
+            mustSetupPassword: false,
           };
         }
         return m;
