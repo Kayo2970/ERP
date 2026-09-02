@@ -86,6 +86,23 @@ export interface EventCommittee {
   leadMemberId?: string;
   leadMemberName?: string;
   memberIds: string[]; // Students participating in this event committee
+  // Approval workflow, scoped to this one committee sub-record rather than
+  // the whole event. Unlike EventItem's version, there is no policy-tag
+  // delegation here -- the approver is always fixed to Centre Head or GG
+  // Campus Head of Events (see permissions.ts's isCommitteeApprover), since
+  // that's the specific oversight the feature was built for: President and
+  // Vice President can create committees and allot students to them, but
+  // neither role bypasses this approval the way they do for the event
+  // itself. Absent/'approved' means a normal, immediately-effective
+  // committee (every committee before this feature, and any created by an
+  // approver).
+  approvalStatus?: 'pending_create' | 'pending_members' | 'approved' | 'rejected';
+  pendingMemberIds?: string[]; // for pending_members: staged roster, applied on approval
+  submittedBy?: string;
+  submittedByEmail?: string;
+  decidedBy?: string;
+  decidedAt?: string;
+  rejectionReason?: string;
 }
 
 export interface EventSponsor {
@@ -1634,6 +1651,108 @@ export function updateEventCommitteeMembers(eventId: string, committeeId: string
   saveEvents(events);
   serverPatch('/api/events', eventId, event);
   logAuditEvent('EVENT_COMMITTEE_UPDATED', actorName, `Updated member assignments for committee "${comm.name}" in event "${event.title}"`);
+  return event;
+}
+
+/** Submit a new committee for sign-off instead of creating it immediately —
+ *  used when the creator isn't Centre Head or GG Campus Head of Events (see
+ *  isCommitteeApprover). The committee exists but is hidden from the normal
+ *  roster/task-assignment flows until approved. */
+export function submitEventCommitteeCreate(eventId: string, committeeName: string, submittedBy: string, submittedByEmail: string): EventItem | null {
+  const events = getEvents();
+  const event = events.find(e => e.id === eventId);
+  if (!event) return null;
+
+  const newComm: EventCommittee = {
+    id: 'comm_' + Date.now(),
+    name: committeeName,
+    memberIds: [],
+    approvalStatus: 'pending_create',
+    submittedBy,
+    submittedByEmail,
+  };
+  event.committees.push(newComm);
+  saveEvents(events);
+  serverPatch('/api/events', eventId, event);
+  logAuditEvent('EVENT_COMMITTEE_CREATE_SUBMITTED', submittedBy, `Submitted committee "${committeeName}" for event "${event.title}" for approval`, submittedByEmail);
+  return event;
+}
+
+/** Submit a committee's student roster for sign-off instead of applying it
+ *  immediately. The committee keeps showing its last-approved roster to
+ *  everyone else until the change is approved (applied) or rejected
+ *  (discarded, original roster stands). */
+export function submitEventCommitteeMembers(eventId: string, committeeId: string, memberIds: string[], submittedBy: string, submittedByEmail: string): EventItem | null {
+  const events = getEvents();
+  const event = events.find(e => e.id === eventId);
+  if (!event) return null;
+
+  const comm = event.committees.find(c => c.id === committeeId);
+  if (!comm) return null;
+
+  comm.pendingMemberIds = memberIds;
+  comm.approvalStatus = 'pending_members';
+  comm.submittedBy = submittedBy;
+  comm.submittedByEmail = submittedByEmail;
+  saveEvents(events);
+  serverPatch('/api/events', eventId, event);
+  logAuditEvent('EVENT_COMMITTEE_MEMBERS_SUBMITTED', submittedBy, `Submitted a roster update for committee "${comm.name}" in event "${event.title}" for approval`, submittedByEmail);
+  return event;
+}
+
+/** Approve a pending committee creation or roster update. For a roster
+ *  update, applies the staged pendingMemberIds; for a creation, simply
+ *  marks it approved (roster stays empty until members are assigned). */
+export function approveEventCommittee(eventId: string, committeeId: string, actorName: string): EventItem | null {
+  const events = getEvents();
+  const event = events.find(e => e.id === eventId);
+  if (!event) return null;
+
+  const comm = event.committees.find(c => c.id === committeeId);
+  if (!comm) return null;
+
+  const isMembersUpdate = comm.approvalStatus === 'pending_members';
+  if (isMembersUpdate) {
+    comm.memberIds = comm.pendingMemberIds || [];
+  }
+  comm.approvalStatus = 'approved';
+  comm.pendingMemberIds = undefined;
+  comm.decidedBy = actorName;
+  comm.decidedAt = new Date().toISOString();
+  saveEvents(events);
+  serverPatch('/api/events', eventId, event);
+  logAuditEvent('EVENT_COMMITTEE_APPROVED', actorName, `Approved ${isMembersUpdate ? 'a roster update for' : 'the creation of'} committee "${comm.name}" in event "${event.title}"`);
+  return event;
+}
+
+/** Reject a pending committee creation or roster update. A rejected
+ *  creation is removed outright (an empty, permanently-rejected committee
+ *  has no audit value worth keeping). A rejected roster update simply
+ *  reverts to 'approved' — the original roster stands, nothing is lost. */
+export function rejectEventCommittee(eventId: string, committeeId: string, actorName: string, reason?: string): EventItem | null {
+  const events = getEvents();
+  const event = events.find(e => e.id === eventId);
+  if (!event) return null;
+
+  const comm = event.committees.find(c => c.id === committeeId);
+  if (!comm) return null;
+
+  if (comm.approvalStatus === 'pending_create') {
+    event.committees = event.committees.filter(c => c.id !== committeeId);
+    saveEvents(events);
+    serverPatch('/api/events', eventId, event);
+    logAuditEvent('EVENT_COMMITTEE_REJECTED', actorName, `Rejected the creation of committee "${comm.name}" in event "${event.title}"${reason ? `: ${reason}` : ''}`);
+    return event;
+  }
+
+  comm.approvalStatus = 'approved';
+  comm.pendingMemberIds = undefined;
+  comm.decidedBy = actorName;
+  comm.decidedAt = new Date().toISOString();
+  comm.rejectionReason = reason;
+  saveEvents(events);
+  serverPatch('/api/events', eventId, event);
+  logAuditEvent('EVENT_COMMITTEE_REJECTED', actorName, `Rejected a roster update for committee "${comm.name}" in event "${event.title}"${reason ? `: ${reason}` : ''}`);
   return event;
 }
 

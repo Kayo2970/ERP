@@ -138,6 +138,20 @@ export function isEventsHeadGgCampus(user: SessionUser): boolean {
          (committee.includes('gg campus') && isHeadOfEvents(user));
 }
 
+/**
+ * Whether `user` is trusted to create event committees / allot their student
+ * rosters immediately, with no sign-off needed — and, symmetrically, who is
+ * allowed to approve someone else's pending committee action. Deliberately
+ * fixed to just these two roles rather than reusing isBaseLeadership (which
+ * would also cover President/Vice President): those two roles CAN create
+ * events and edit them without approval, but their committee creation and
+ * student allotment specifically must still be signed off by Centre Head or
+ * GG Campus Head of Events.
+ */
+export function isCommitteeApprover(user: SessionUser): boolean {
+  return isCentreHead(user) || isEventsHeadGgCampus(user);
+}
+
 /** Check if user is Events Head for RTC Campus. */
 export function isEventsHeadRtcCampus(user: SessionUser): boolean {
   if (!user) return false;

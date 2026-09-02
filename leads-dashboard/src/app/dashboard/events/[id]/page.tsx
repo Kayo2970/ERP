@@ -17,6 +17,10 @@ import {
   Wallet,
   Landmark,
   TrendingUp,
+  Clock,
+  Check,
+  X,
+  Ban,
 } from 'lucide-react';
 import {
   getEventById,
@@ -28,6 +32,10 @@ import {
   addEventCommittee,
   updateEventCommitteeMembers,
   deleteEventCommittee,
+  submitEventCommitteeCreate,
+  submitEventCommitteeMembers,
+  approveEventCommittee,
+  rejectEventCommittee,
   formatEventDateRange,
   getEventSponsors,
   getEventSponsorTotal,
@@ -36,7 +44,7 @@ import {
   Member,
   TaskItem
 } from '@/lib/local-data';
-import { canManageEvents } from '@/lib/permissions';
+import { canManageEvents, isCommitteeApprover } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { StudentProfileModal } from '@/components/student-profile-modal';
 
@@ -63,6 +71,8 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
   const [taskDueDate, setTaskDueDate] = useState('');
 
   const [deletingCommitteeId, setDeletingCommitteeId] = useState<string | null>(null);
+  const [rejectingCommitteeId, setRejectingCommitteeId] = useState<string | null>(null);
+  const [committeeRejectionReasonInput, setCommitteeRejectionReasonInput] = useState('');
   const [selectedStudentForProfile, setSelectedStudentForProfile] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -97,15 +107,23 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
     setTimeout(() => setSuccessMsg(''), 4000);
   };
 
+  const canBypassCommitteeApproval = isCommitteeApprover(user);
+
   const handleCreateCommittee = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCommitteeName.trim() || !event) return;
 
-    addEventCommittee(event.id, newCommitteeName.trim(), user?.name || 'User');
+    const committeeName = newCommitteeName.trim();
+    if (canBypassCommitteeApproval) {
+      addEventCommittee(event.id, committeeName, user?.name || 'User');
+      triggerSuccess(`Created event committee "${committeeName}"`);
+    } else {
+      submitEventCommitteeCreate(event.id, committeeName, user?.name || 'User', user?.email || '');
+      triggerSuccess(`Committee "${committeeName}" submitted for approval from the Centre Head or GG Campus Head of Events.`);
+    }
     setNewCommitteeName('');
     setIsAddCommitteeModalOpen(false);
     setEvent(getEventById(eventId));
-    triggerSuccess(`Created event committee "${newCommitteeName.trim()}"`);
   };
 
   const openManageMembers = (committee: EventCommittee) => {
@@ -114,7 +132,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
   };
 
   const handleToggleMember = (memberId: string) => {
-    setSelectedMemberIds(prev => 
+    setSelectedMemberIds(prev =>
       prev.includes(memberId) ? prev.filter(id => id !== memberId) : [...prev, memberId]
     );
   };
@@ -122,10 +140,15 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
   const handleSaveCommitteeMembers = () => {
     if (!event || !managingCommittee) return;
 
-    updateEventCommitteeMembers(event.id, managingCommittee.id, selectedMemberIds, user?.name || 'User');
+    if (canBypassCommitteeApproval) {
+      updateEventCommitteeMembers(event.id, managingCommittee.id, selectedMemberIds, user?.name || 'User');
+      triggerSuccess(`Updated student roster for "${managingCommittee.name}"`);
+    } else {
+      submitEventCommitteeMembers(event.id, managingCommittee.id, selectedMemberIds, user?.name || 'User', user?.email || '');
+      triggerSuccess(`Roster update for "${managingCommittee.name}" submitted for approval from the Centre Head or GG Campus Head of Events.`);
+    }
     setManagingCommittee(null);
     setEvent(getEventById(eventId));
-    triggerSuccess(`Updated student roster for "${managingCommittee.name}"`);
   };
 
   const handleConfirmDeleteCommittee = () => {
@@ -135,6 +158,22 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
     setDeletingCommitteeId(null);
     setEvent(getEventById(eventId));
     triggerSuccess('Removed committee from event.');
+  };
+
+  const handleApproveCommittee = (committeeId: string) => {
+    if (!event) return;
+    approveEventCommittee(event.id, committeeId, user?.name || 'User');
+    setEvent(getEventById(eventId));
+    triggerSuccess('Approved. The change is now live.');
+  };
+
+  const handleConfirmRejectCommittee = () => {
+    if (!event || !rejectingCommitteeId) return;
+    rejectEventCommittee(event.id, rejectingCommitteeId, user?.name || 'User', committeeRejectionReasonInput || undefined);
+    setEvent(getEventById(eventId));
+    setRejectingCommitteeId(null);
+    setCommitteeRejectionReasonInput('');
+    triggerSuccess('Rejected.');
   };
 
   const handleCreateTask = (e: React.FormEvent) => {
@@ -408,13 +447,20 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
             ) : (
               event.committees.map(committee => {
                 const assignedStudents = members.filter(m => committee.memberIds.includes(m.id));
-                
+                const isPendingCreate = committee.approvalStatus === 'pending_create';
+                const isPendingMembers = committee.approvalStatus === 'pending_members';
+                const pendingStudents = isPendingMembers
+                  ? members.filter(m => (committee.pendingMemberIds || []).includes(m.id))
+                  : [];
+
                 return (
-                  <div key={committee.id} className="p-4 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-3 text-xs">
+                  <div key={committee.id} className={`p-4 border rounded-xl space-y-3 text-xs ${isPendingCreate ? 'bg-warning/5 border-warning/25' : 'bg-theme-border/10 border-theme-border/20'}`}>
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <h4 className="font-bold text-theme-text-primary text-xs">{committee.name}</h4>
-                        <span className="text-[10px] text-theme-text-secondary">{assignedStudents.length} student members assigned</span>
+                        {!isPendingCreate && (
+                          <span className="text-[10px] text-theme-text-secondary">{assignedStudents.length} student members assigned</span>
+                        )}
                       </div>
                       {isLeadership && (
                         <button
@@ -427,34 +473,71 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                       )}
                     </div>
 
-                    {/* Member Avatars */}
-                    <div className="flex flex-wrap gap-1.5">
-                      {assignedStudents.length === 0 ? (
-                        <span className="text-[11px] text-theme-text-secondary italic">No students assigned</span>
-                      ) : (
-                        assignedStudents.map(s => (
-                          <button
-                            key={s.id}
-                            type="button"
-                            onClick={() => setSelectedStudentForProfile(s.id)}
-                            className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-accent/15 hover:bg-accent/25 text-theme-text-primary border border-accent/25 transition-all cursor-pointer"
-                            title="Click to view student profile"
-                          >
-                            <User className="h-2.5 w-2.5 text-accent" />
-                            {s.name}
-                          </button>
-                        ))
-                      )}
-                    </div>
+                    {isPendingCreate ? (
+                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-warning">
+                        <Clock className="h-3 w-3" />
+                        Awaiting approval from Centre Head / GG Campus Head of Events
+                      </div>
+                    ) : (
+                      <>
+                        {/* Member Avatars */}
+                        <div className="flex flex-wrap gap-1.5">
+                          {assignedStudents.length === 0 ? (
+                            <span className="text-[11px] text-theme-text-secondary italic">No students assigned</span>
+                          ) : (
+                            assignedStudents.map(s => (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => setSelectedStudentForProfile(s.id)}
+                                className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-accent/15 hover:bg-accent/25 text-theme-text-primary border border-accent/25 transition-all cursor-pointer"
+                                title="Click to view student profile"
+                              >
+                                <User className="h-2.5 w-2.5 text-accent" />
+                                {s.name}
+                              </button>
+                            ))
+                          )}
+                        </div>
 
-                    {isLeadership && (
-                      <button
-                        onClick={() => openManageMembers(committee)}
-                        className="w-full py-1.5 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-[11px] font-semibold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5"
-                      >
-                        <UserPlus className="h-3 w-3" />
-                        Assign / Manage Students
-                      </button>
+                        {isPendingMembers && (
+                          <div className="p-2 bg-warning/10 border border-warning/25 rounded-lg space-y-1.5">
+                            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-warning">
+                              <Clock className="h-3 w-3" />
+                              Roster update awaiting approval ({pendingStudents.length} student{pendingStudents.length === 1 ? '' : 's'} proposed)
+                            </div>
+                          </div>
+                        )}
+
+                        {isLeadership && (
+                          <button
+                            onClick={() => openManageMembers(committee)}
+                            className="w-full py-1.5 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-[11px] font-semibold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                          >
+                            <UserPlus className="h-3 w-3" />
+                            Assign / Manage Students
+                          </button>
+                        )}
+                      </>
+                    )}
+
+                    {(isPendingCreate || isPendingMembers) && canBypassCommitteeApproval && (
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          onClick={() => handleApproveCommittee(committee.id)}
+                          className="flex-1 py-1.5 bg-success/15 hover:bg-success/25 text-success border border-success/30 text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <Check className="h-3 w-3" />
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => setRejectingCommitteeId(committee.id)}
+                          className="flex-1 py-1.5 bg-danger/15 hover:bg-danger/25 text-danger border border-danger/30 text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <X className="h-3 w-3" />
+                          Reject
+                        </button>
+                      </div>
                     )}
                   </div>
                 );
@@ -700,7 +783,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                     className="w-full px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   >
                     <option value="">General Event Task</option>
-                    {event.committees.map(c => (
+                    {event.committees.filter(c => c.approvalStatus !== 'pending_create').map(c => (
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
@@ -768,6 +851,42 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
         memberIdOrName={selectedStudentForProfile}
         onClose={() => setSelectedStudentForProfile(null)}
       />
+
+      {/* Reject Pending Committee Approval Modal */}
+      {rejectingCommitteeId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="glass-panel w-full max-w-md rounded-3xl p-6 flex flex-col space-y-4 relative border border-white/15 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-theme-text-primary flex items-center gap-2">
+                <Ban className="h-4.5 w-4.5 text-danger" />
+                Reject Submission
+              </h2>
+              <button
+                onClick={() => { setRejectingCommitteeId(null); setCommitteeRejectionReasonInput(''); }}
+                className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-1.5 text-xs">
+              <label className="block font-medium text-theme-text-secondary">Reason (optional)</label>
+              <textarea
+                value={committeeRejectionReasonInput}
+                onChange={(e) => setCommitteeRejectionReasonInput(e.target.value)}
+                rows={3}
+                placeholder="Let the submitter know why this was rejected..."
+                className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent resize-none"
+              />
+            </div>
+            <button
+              onClick={handleConfirmRejectCommittee}
+              className="w-full py-3 bg-danger hover:bg-danger/90 text-white font-semibold text-xs rounded-xl transition-all shadow-md cursor-pointer"
+            >
+              Confirm Rejection
+            </button>
+          </div>
+        </div>
+      )}
 
     </div>
   );
