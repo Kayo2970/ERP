@@ -78,6 +78,11 @@ export default function DirectoryPage() {
   const [selectedStudentForProfile, setSelectedStudentForProfile] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { isDragOver: isCsvDragOver, dragHandlers: csvDragHandlers } = useDropTarget((files) => handleCsvFile(files[0]));
+  // Tracks the last auto-suggested department for the edit modal, so that
+  // switching division/position re-suggests a department only while the
+  // admin hasn't typed a manual correction of their own.
+  const editLastSuggestedDeptRef = useRef<string>('');
+  const prevEditPositionFieldsRef = useRef<{ division: string; faculty: string; core: string; campus: string } | null>(null);
 
   // Pagination & Sorting State
   const [currentPage, setCurrentPage] = useState(1);
@@ -93,6 +98,23 @@ export default function DirectoryPage() {
     'Finance & Sponsorships',
     'Marketing & Branding',
     'Operations & Logistics',
+  ];
+
+  // Every department value the app can actually produce or accept — the
+  // seven standardized ones above plus the fixed departments certain
+  // positions (President, Events Head, Advisor, ...) always resolve to.
+  // Used to populate the CSV template/reference list and the department
+  // datalist so imported/typed values can be checked against real options.
+  const ALL_KNOWN_DEPARTMENTS = [
+    ...STANDARDIZED_DEPARTMENTS,
+    'Events',
+    'Industrial Connects',
+    'Faculty Oversight',
+    'Faculty Advisory',
+    'Executive Council',
+    'Secretariat',
+    'Coordination',
+    'Alumni Roster',
   ];
 
   type FacultyPosition = 'Events Head' | 'Industrial Connects' | 'Finance Head' | 'Centre Head' | 'Advisor';
@@ -274,12 +296,48 @@ export default function DirectoryPage() {
     };
   }, []);
 
+  // Re-suggest the department when the admin changes division/position while
+  // the edit modal is open — but only while they haven't typed a manual
+  // department correction of their own (tracked via editLastSuggestedDeptRef).
+  useEffect(() => {
+    if (!editingMember) {
+      prevEditPositionFieldsRef.current = null;
+      return;
+    }
+
+    const prev = prevEditPositionFieldsRef.current;
+    const curr = { division: editDivision, faculty: editFacultyPosition, core: editCorePosition, campus: editCampus };
+
+    if (prev && (prev.division !== curr.division || prev.faculty !== curr.faculty || prev.core !== curr.core || prev.campus !== curr.campus)) {
+      const suggestion = deriveMemberRoleAndDepartment(editDivision, {
+        facultyPosition: editFacultyPosition,
+        campus: editCampus,
+        corePosition: editCorePosition,
+        departmentSelect: '',
+        associatePosition: editAssociatePosition,
+      }).department;
+
+      if (editDepartmentSelect === editLastSuggestedDeptRef.current) {
+        setEditDepartmentSelect(suggestion);
+      }
+      editLastSuggestedDeptRef.current = suggestion;
+    }
+
+    prevEditPositionFieldsRef.current = curr;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingMember, editDivision, editFacultyPosition, editCorePosition, editCampus]);
+
   // Rows skipped during the last CSV import specifically because their email
   // already exists elsewhere (in the roster or earlier in the same file) —
   // kept around (not auto-dismissed like the toasts above) so the user can
   // download them, fix the email, and re-upload rather than losing track of
   // which rows didn't make it in.
   const [emailConflicts, setEmailConflicts] = useState<{ name: string; email: string; division: string; role: string; department: string; program: string; batch: string }[]>([]);
+  // Members imported successfully but whose Department cell didn't match any
+  // known department value — still imported as-is (free text), just flagged
+  // so the admin knows to open the record and fix it via the always-editable
+  // Department field in the edit modal.
+  const [deptWarnings, setDeptWarnings] = useState<{ name: string; email: string; department: string }[]>([]);
 
   const triggerSuccess = (msg: string) => {
     setSuccessMsg(msg);
@@ -475,13 +533,13 @@ export default function DirectoryPage() {
       setEditCorePosition('Department Head');
     }
 
-    // Infer department
-    if (STANDARDIZED_DEPARTMENTS.includes(d)) {
-      setEditDepartmentSelect(d);
-    } else {
-      const match = STANDARDIZED_DEPARTMENTS.find(dept => r.includes(dept) || d.includes(dept));
-      setEditDepartmentSelect(match || STANDARDIZED_DEPARTMENTS[0]);
-    }
+    // Always load the department exactly as stored — including a custom or
+    // mis-typed value from a CSV import — so it's visible and correctable
+    // in the form instead of being silently replaced with a guess.
+    const loadedDept = d || STANDARDIZED_DEPARTMENTS[0];
+    setEditDepartmentSelect(loadedDept);
+    editLastSuggestedDeptRef.current = loadedDept;
+    prevEditPositionFieldsRef.current = null;
 
     if (r.includes('Associate - ')) {
       setEditAssociatePosition('Department Associate');
@@ -514,6 +572,11 @@ export default function DirectoryPage() {
 
     const finalTier = isSuperUser ? editTierOverride : derived.tier;
     const tierChanged = isSuperUser && finalTier !== editingMember.tier;
+    // The department field is always editable and always wins — this is
+    // what lets an admin fix a department that came in wrong from a CSV
+    // import, even for divisions/positions that normally get a fixed
+    // department (President, Events Head, etc.).
+    const finalDepartment = editDepartmentSelect.trim() || derived.department;
 
     updateMember(editingMember.id, {
       name: editName.trim(),
@@ -521,7 +584,7 @@ export default function DirectoryPage() {
       role: derived.role,
       tier: finalTier,
       division: editDivision,
-      department: derived.department,
+      department: finalDepartment,
       program: editProgram.trim() || undefined,
       batch: editDivision === 'Alumni' ? editBatch.trim() : undefined,
       // A restricted (non-admin) editor spends their one-time edit the moment
@@ -544,20 +607,23 @@ export default function DirectoryPage() {
   };
 
   const handleDownloadTemplate = () => {
-    const csvContent = 'Name,Email,Division,Role,Department,Program,Batch\n' +
-      'John Doe,john.doe@msruas.ac.in,Training Associate,Junior Coordinator,Operations and Logistics,B.Tech Computer Science Engineering,\n' +
-      'Jane Smith,jane.smith@msruas.ac.in,Core Committee,Vice President,Executive Council,B.Tech Electronics and Communication,\n' +
-      'Dr. Sharath Kumar,sharath.kumar@msruas.ac.in,Advisory Board,Advisory Member,Faculty Advisory,,\n' +
-      'Dr. Ajay Rao,ajay.rao@msruas.ac.in,Faculty,Assistant Professor,Faculty Advisory,,\n' +
-      'Kayomarz M Pavri,kayo2970@gmail.com,Alumni,Alumni Mentor,Design and Social Media,,Class of 2024';
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', 'leads_organization_roster_template.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const header = toCsvRow(['Name', 'Email', 'Division', 'Role', 'Department', 'Program', 'Batch']);
+    const sampleRows = [
+      toCsvRow(['John Doe', 'john.doe@msruas.ac.in', 'Training Associate', 'Junior Coordinator', 'Operations & Logistics', 'B.Tech Computer Science Engineering', '']),
+      toCsvRow(['Jane Smith', 'jane.smith@msruas.ac.in', 'Core Committee', 'Vice President', 'Executive Council', 'B.Tech Electronics and Communication', '']),
+      toCsvRow(['Dr. Sharath Kumar', 'sharath.kumar@msruas.ac.in', 'Advisory Board', 'Advisory Member', 'Faculty Advisory', '', '']),
+      toCsvRow(['Dr. Ajay Rao', 'ajay.rao@msruas.ac.in', 'Faculty', 'Assistant Professor', 'Faculty Advisory', '', '']),
+      toCsvRow(['Kayomarz M Pavri', 'kayo2970@gmail.com', 'Alumni', 'Alumni Mentor', 'Design & Social Media', '', 'Class of 2024']),
+    ];
+    // Reference rows have no Name/Email, so handleCsvFile's `!mName || !mEmail`
+    // check skips them automatically if this template is re-uploaded as-is —
+    // they exist purely so the admin can copy the exact Department spelling
+    // into their own rows instead of guessing/mistyping it.
+    const referenceHeaderRow = toCsvRow(['DO NOT IMPORT — reference only', 'Copy the exact text from the Department column into your rows above', '', '', '', '', '']);
+    const referenceRows = ALL_KNOWN_DEPARTMENTS.map(dept => toCsvRow(['', '', '', '', dept, '', '']));
+
+    const csvContent = [header, ...sampleRows, toCsvRow(['', '', '', '', '', '', '']), referenceHeaderRow, ...referenceRows].join('\n');
+    downloadCsv('leads_organization_roster_template.csv', csvContent);
   };
 
   const handleUploadClick = () => {
@@ -605,9 +671,11 @@ export default function DirectoryPage() {
         // server — a manual push + single saveMembers() call at the end (the old
         // approach) only ever wrote localStorage, never the server.
         const seenEmails = new Set(getMembers().map(m => m.email.toLowerCase()));
+        const knownDepartmentsLower = new Set(ALL_KNOWN_DEPARTMENTS.map(d => d.toLowerCase()));
         let importCount = 0;
         let duplicateCount = 0;
         const conflicts: typeof emailConflicts = [];
+        const deptFlags: typeof deptWarnings = [];
 
         for (let i = 1; i < lines.length; i++) {
           const values = parseCsvLine(lines[i]);
@@ -670,6 +738,13 @@ export default function DirectoryPage() {
             });
             seenEmails.add(mEmail);
             importCount++;
+
+            // Import the department as typed (it might be a real, intentional
+            // custom value) but flag it if it doesn't match a known
+            // department so the admin can review/correct it in the dashboard.
+            if (mDept && !knownDepartmentsLower.has(mDept.trim().toLowerCase())) {
+              deptFlags.push({ name: mName, email: mEmail, department: mDept });
+            }
           } catch {
             duplicateCount++;
             conflicts.push({ name: mName, email: mEmail, division: mDivStr, role: mRole, department: mDept, program: mProgram, batch: mBatch });
@@ -677,10 +752,12 @@ export default function DirectoryPage() {
         }
 
         setEmailConflicts(conflicts);
+        setDeptWarnings(deptFlags);
 
         if (importCount > 0) {
           setMembers(getMembers());
-          triggerSuccess(`Successfully imported ${importCount} new members. ${duplicateCount > 0 ? `(${duplicateCount} email conflicts skipped — see below)` : ''}`);
+          const deptNote = deptFlags.length > 0 ? ` ${deptFlags.length} member${deptFlags.length === 1 ? '' : 's'} had an unrecognized department — review and correct them below.` : '';
+          triggerSuccess(`Successfully imported ${importCount} new members. ${duplicateCount > 0 ? `(${duplicateCount} email conflicts skipped — see below)` : ''}${deptNote}`);
         } else if (duplicateCount > 0) {
           triggerError(`No new members imported. ${duplicateCount} email conflicts found in file — see below.`);
         } else {
@@ -697,6 +774,12 @@ export default function DirectoryPage() {
     const header = toCsvRow(['Name', 'Email', 'Division', 'Role', 'Department', 'Program', 'Batch', 'Conflict Reason']);
     const rows = emailConflicts.map(c => toCsvRow([c.name, c.email, c.division, c.role, c.department, c.program, c.batch, 'Email already exists in the roster']));
     downloadCsv(`leads_members_email_conflicts_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows].join('\n'));
+  };
+
+  const handleDownloadDeptWarnings = () => {
+    const header = toCsvRow(['Name', 'Email', 'Department As Imported']);
+    const rows = deptWarnings.map(w => toCsvRow([w.name, w.email, w.department]));
+    downloadCsv(`leads_members_department_review_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows].join('\n'));
   };
 
   const handleDownloadFullBackup = () => {
@@ -1008,6 +1091,15 @@ export default function DirectoryPage() {
   return (
     <div className="p-6 md:p-8 space-y-6">
 
+      {/* Shared department options — lets the department input in the edit
+          form act like a copy-paste-friendly dropdown while still allowing
+          a custom value. */}
+      <datalist id="directory-department-options">
+        {ALL_KNOWN_DEPARTMENTS.map(dept => (
+          <option key={dept} value={dept} />
+        ))}
+      </datalist>
+
       {/* Notifications */}
       {successMsg && (
         <div className="flex items-center gap-3 p-4 bg-success/15 border border-success/20 rounded-2xl text-theme-text-primary text-xs animate-in fade-in duration-300">
@@ -1040,6 +1132,33 @@ export default function DirectoryPage() {
             </button>
             <button
               onClick={() => setEmailConflicts([])}
+              className="p-1.5 text-theme-text-secondary hover:text-theme-text-primary hover:bg-theme-border/20 rounded-lg transition-all cursor-pointer"
+              title="Dismiss"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {deptWarnings.length > 0 && (
+        <div className="flex items-start sm:items-center justify-between gap-3 p-4 bg-warning/15 border border-warning/30 rounded-2xl text-xs animate-in fade-in duration-300 flex-col sm:flex-row">
+          <div className="flex items-start sm:items-center gap-3">
+            <ShieldAlert className="h-5 w-5 text-warning shrink-0" />
+            <span className="text-theme-text-primary">
+              {deptWarnings.length} member{deptWarnings.length === 1 ? '' : 's'} imported with an unrecognized department — open each record and use the always-editable Department field to correct it.
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleDownloadDeptWarnings}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-warning/20 hover:bg-warning/30 text-warning text-xs font-semibold rounded-xl transition-all cursor-pointer border border-warning/40"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Download Review List
+            </button>
+            <button
+              onClick={() => setDeptWarnings([])}
               className="p-1.5 text-theme-text-secondary hover:text-theme-text-primary hover:bg-theme-border/20 rounded-lg transition-all cursor-pointer"
               title="Dismiss"
             >
@@ -1846,20 +1965,21 @@ export default function DirectoryPage() {
                     </div>
                   )}
 
-                  {editDivision === 'Training Associate' && (
-                    <div className="space-y-1.5">
-                      <label className="block font-medium text-theme-text-secondary">Select Department *</label>
-                      <select
-                        value={editDepartmentSelect}
-                        onChange={(e) => setEditDepartmentSelect(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-semibold"
-                      >
-                        {STANDARDIZED_DEPARTMENTS.map(dept => (
-                          <option key={dept} value={dept}>{dept}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">Department</label>
+                  <input
+                    list="directory-department-options"
+                    type="text"
+                    value={editDepartmentSelect}
+                    onChange={(e) => setEditDepartmentSelect(e.target.value)}
+                    placeholder="Pick from the list or type the correct department"
+                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-semibold"
+                  />
+                  <p className="text-[10px] text-theme-text-secondary">
+                    Always editable — use this to fix a department that came in wrong from a CSV import. Start typing to see the standard options.
+                  </p>
                 </div>
 
                 {/* Sub-Selection for Events Head Campus */}
@@ -1893,22 +2013,6 @@ export default function DirectoryPage() {
                   </div>
                 )}
 
-                {/* Department Selection for Department Heads */}
-                {(editDivision === 'Core Committee' || editDivision === 'Advisory Board') && editCorePosition === 'Department Head' && (
-                  <div className="space-y-1.5">
-                    <label className="block font-medium text-theme-text-secondary">Select Department *</label>
-                    <select
-                      value={editDepartmentSelect}
-                      onChange={(e) => setEditDepartmentSelect(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-semibold"
-                    >
-                      {STANDARDIZED_DEPARTMENTS.map(dept => (
-                        <option key={dept} value={dept}>{dept}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
                 {/* Live Derived Designation Preview Banner */}
                 <div className="p-3.5 bg-accent/10 border border-accent/30 rounded-2xl flex flex-col space-y-1">
                   <span className="text-[10px] uppercase font-bold tracking-wider text-accent">Auto-Generated Designation</span>
@@ -1918,8 +2022,8 @@ export default function DirectoryPage() {
                       Tier {user?.tier === 1 ? editTierOverride : preview.tier}
                     </span>
                   </div>
-                  {preview.department && (
-                    <span className="text-[11px] text-theme-text-secondary">Department: {preview.department}</span>
+                  {(editDepartmentSelect.trim() || preview.department) && (
+                    <span className="text-[11px] text-theme-text-secondary">Department: {editDepartmentSelect.trim() || preview.department}</span>
                   )}
                 </div>
 
