@@ -112,6 +112,19 @@ export default function EmailManagementPage() {
     fetchSettings();
     fetchLogs();
     fetchQueues();
+
+    // Config may have been changed from another device/session — always
+    // re-pull the persisted settings when the user comes back to this tab
+    // instead of trusting whatever was fetched at mount time.
+    const revalidateSettings = () => {
+      if (document.visibilityState === 'visible') fetchSettings();
+    };
+    document.addEventListener('visibilitychange', revalidateSettings);
+    window.addEventListener('focus', revalidateSettings);
+    return () => {
+      document.removeEventListener('visibilitychange', revalidateSettings);
+      window.removeEventListener('focus', revalidateSettings);
+    };
   }, []);
 
   const triggerToast = (type: 'success' | 'error', text: string) => {
@@ -121,7 +134,7 @@ export default function EmailManagementPage() {
 
   const fetchSettings = async () => {
     try {
-      const res = await fetch('/api/email/settings');
+      const res = await fetch('/api/email/settings', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setSettings(data);
@@ -455,9 +468,12 @@ export default function EmailManagementPage() {
 
         {isSuperUser && (
           <button
-            onClick={() => setActiveTab('settings')}
+            onClick={() => {
+              setActiveTab('settings');
+              fetchSettings();
+            }}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all cursor-pointer ${
-              activeTab === 'settings' 
+              activeTab === 'settings'
                 ? 'bg-accent text-white shadow-md shadow-accent/20' 
                 : 'text-theme-text-secondary hover:bg-theme-border/20'
             }`}
