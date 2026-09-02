@@ -23,6 +23,8 @@ export async function POST(request: Request) {
     const created = updated.find((m: any) => m.id === member.id);
 
     let activationLink = '';
+    let activationEmailSent = false;
+    let activationEmailError: string | undefined;
     if (created && created.email) {
       try {
         const host = request.headers.get('host');
@@ -31,12 +33,15 @@ export async function POST(request: Request) {
 
         const result = await createActivationTokenAndSendEmail({ id: created.id, name: created.name, email: created.email }, 'Super User', origin, request);
         activationLink = result.activationLink;
+        activationEmailSent = result.emailSent;
+        activationEmailError = result.emailError;
       } catch (emailErr) {
         console.error('[members-api] Welcome email dispatch failed:', emailErr);
+        activationEmailError = emailErr instanceof Error ? emailErr.message : String(emailErr);
       }
     }
 
-    return NextResponse.json({ ...created, activationLink }, { status: 201 });
+    return NextResponse.json({ ...created, activationLink, activationEmailSent, activationEmailError }, { status: 201 });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 });
   }

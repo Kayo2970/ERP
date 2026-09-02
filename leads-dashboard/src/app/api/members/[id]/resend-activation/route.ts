@@ -23,11 +23,15 @@ export async function POST(
     const proto = request.headers.get('x-forwarded-proto') || (host?.includes('localhost') ? 'http' : 'https');
     const origin = request.headers.get('origin') || (host ? `${proto}://${host}` : undefined);
 
-    const { activationLink } = await createActivationTokenAndSendEmail({ id: member.id, name: member.name, email: member.email }, 'Super User', origin, request);
+    const { activationLink, emailSent, emailError } = await createActivationTokenAndSendEmail({ id: member.id, name: member.name, email: member.email }, 'Super User', origin, request);
     return NextResponse.json({
       success: true,
       activationLink,
-      message: `Welcome email sent to ${member.email} with password setup link.`,
+      emailSent,
+      emailError,
+      message: emailSent
+        ? `Welcome email sent to ${member.email} with password setup link.`
+        : `Could not deliver the welcome email to ${member.email} — the activation link below still works, so copy and send it to them directly.`,
     });
   } catch (err: any) {
     console.error('[resend-activation-api] Error:', err);

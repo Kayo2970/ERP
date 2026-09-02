@@ -64,7 +64,13 @@ export async function createActivationTokenAndSendEmail(
   const activationLink = `${baseUrl}/activate?token=${token}`;
   const template = generateWelcomeActivationEmailTemplate(member.name, activationLink);
 
-  await dispatchEmail({
+  // dispatchEmail() never throws on an SMTP failure -- it logs the failure
+  // into the emails collection and resolves normally either way, so its
+  // return value is the only signal a caller has that the message didn't
+  // actually go out. Ignoring it (as this used to) meant the admin was
+  // always told "welcome email sent" even when delivery silently failed,
+  // leaving the member with no way to ever see the activation link.
+  const emailLog = await dispatchEmail({
     to: member.email,
     subject: template.subject,
     bodyText: template.bodyText,
@@ -72,5 +78,5 @@ export async function createActivationTokenAndSendEmail(
     category: 'ACCOUNT_ACTIVATION',
   });
 
-  return { token, activationLink };
+  return { token, activationLink, emailSent: emailLog.status === 'SENT', emailError: emailLog.errorMessage };
 }

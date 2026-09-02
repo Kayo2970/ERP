@@ -349,8 +349,16 @@ export default function DirectoryPage() {
       const res = await fetch(`/api/members/${member.id}/resend-activation`, { method: 'POST' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to resend the welcome email.');
-      triggerSuccess(data.message || `Welcome email resent to ${member.email}.`);
-      if (data.activationLink && activationModalData?.member.id === member.id) {
+      if (data.emailSent === false) {
+        triggerError(data.message || `Could not deliver the welcome email to ${member.email} — use the activation link below instead.`);
+      } else {
+        triggerSuccess(data.message || `Welcome email resent to ${member.email}.`);
+      }
+      // Open (or refresh) the manual-link modal any time delivery is in
+      // doubt, not only when it happened to already be open — that's the
+      // only path an admin has to hand a member their link when email
+      // delivery silently fails.
+      if (data.activationLink && (data.emailSent === false || activationModalData?.member.id === member.id)) {
         setActivationModalData({ member, link: data.activationLink });
       }
     } catch (err: any) {
@@ -412,7 +420,11 @@ export default function DirectoryPage() {
       setIsModalOpen(false);
 
       setMembers(getMembers());
-      triggerSuccess('New member added to roster successfully.');
+      if (created.activationEmailSent === false) {
+        triggerError(`Member added, but the welcome email couldn't be delivered${created.activationEmailError ? ` (${created.activationEmailError.split('\n')[0]})` : ''} — copy the activation link below and send it to them directly.`);
+      } else {
+        triggerSuccess('New member added to roster successfully.');
+      }
 
       handleOpenActivationModal(created, created.activationLink);
     } catch (err: any) {

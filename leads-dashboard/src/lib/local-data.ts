@@ -957,7 +957,7 @@ export function saveMembers(members: Member[]): void {
   // Note: Mutations call targeted per-member endpoints (/api/members, /api/members/[id])
 }
 
-export async function addMember(member: Omit<Member, 'id'>): Promise<Member & { activationLink?: string }> {
+export async function addMember(member: Omit<Member, 'id'>): Promise<Member & { activationLink?: string; activationEmailSent?: boolean; activationEmailError?: string }> {
   const current = getMembers();
   const existing = current.find(m => m.email.toLowerCase() === member.email.toLowerCase());
   if (existing) {
@@ -971,7 +971,7 @@ export async function addMember(member: Omit<Member, 'id'>): Promise<Member & { 
   };
 
   const serverResult = await serverPost('/api/members', newMember);
-  const createdMember: Member & { activationLink?: string } = {
+  const createdMember: Member & { activationLink?: string; activationEmailSent?: boolean; activationEmailError?: string } = {
     ...newMember,
     ...(serverResult || {}),
   };
