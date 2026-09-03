@@ -214,7 +214,14 @@ export interface TaskItem {
     // media coverage of the just-concluded event.
     | 'event_social_post'
     // Auto-created the moment an 'event_social_post' task is marked Completed
-    // (see updateTask below) — assigned to the General Secretary, requesting
+    // (see updateTask below) — assigned as a group to the Centre Head, Advisor,
+    // and GG Campus Events Head, asking them to pick the student who should
+    // prepare the report (via the existing delegateAutoTask reassignment flow).
+    // Converts in place to 'event_report_request' once that delegation is
+    // approved — see updateTask's chain reaction below.
+    | 'event_report_assignment'
+    // What 'event_report_assignment' becomes once one of the three panel
+    // members delegates it to a specific student — that student now submits
     // the formal event report (see EventReportItem) for the same event.
     | 'event_report_request';
   // Only set on workflowType 'design_social_posting' tasks — distinguishes
@@ -2473,7 +2480,27 @@ export function updateTask(id: string, updates: Partial<TaskItem>, actorName: st
   if (idx === -1) return null;
 
   const previousStatus = tasks[idx].status;
+  const previousApprovalStatus = tasks[idx].approvalStatus;
   tasks[idx] = { ...tasks[idx], ...updates };
+
+  // Chain reaction: the moment the Centre Head / Advisor / GG Campus Events
+  // Head's "who should prepare this report" assignment task is delegated to
+  // a specific student and that delegation is approved, the task converts in
+  // place into the real "submit the event report" request for that student
+  // — see spawnEventReportRequestTask below for how the assignment task
+  // itself gets created, and delegateAutoTask for how it's handed off.
+  if (
+    updates.approvalStatus === 'approved' &&
+    previousApprovalStatus === 'pending_edit' &&
+    tasks[idx].workflowType === 'event_report_assignment'
+  ) {
+    tasks[idx] = {
+      ...tasks[idx],
+      workflowType: 'event_report_request',
+      title: `Submit event report for "${tasks[idx].event || 'the event'}"`,
+    };
+  }
+
   saveTasks(tasks);
   // Send the full merged task, not just the diff, so a server-side upsert (a
   // client-only sample task that was never POSTed) creates a complete record.
@@ -2481,8 +2508,9 @@ export function updateTask(id: string, updates: Partial<TaskItem>, actorName: st
   logAuditEvent('TASK_UPDATED', actorName, `Updated task: ${tasks[idx].title}`);
 
   // Chain reaction: the moment the event-lapse social media task is marked
-  // Completed, auto-generate the follow-on event report request for the
-  // General Secretary — see spawnEventReportRequestTask below.
+  // Completed, auto-generate the follow-on "who should prepare the report"
+  // assignment task for the Centre Head / Advisor / GG Campus Events Head —
+  // see spawnEventReportRequestTask below.
   if (
     updates.status === 'Completed' &&
     previousStatus !== 'Completed' &&
@@ -2496,10 +2524,15 @@ export function updateTask(id: string, updates: Partial<TaskItem>, actorName: st
 }
 
 /**
- * Auto-creates the "please submit an event report" task for the General
- * Secretary the moment the corresponding event_social_post task is completed
- * — see updateTask above. Deterministic id keyed off the event, so a second
- * completion (e.g. re-marking the same task Completed) never double-creates it.
+ * Auto-creates the "event report for this event: who should prepare it?"
+ * task for the Centre Head / Advisor / GG Campus Events Head the moment the
+ * corresponding event_social_post task is completed — see updateTask above.
+ * Whichever of them acts uses the existing delegateAutoTask reassignment
+ * flow to hand this off to the student who should write the report; once
+ * that delegation is approved, updateTask's chain reaction above converts
+ * this same task record into the real 'event_report_request' now assigned to
+ * that student. Deterministic id keyed off the event, so a second completion
+ * (e.g. re-marking the same task Completed) never double-creates it.
  */
 function spawnEventReportRequestTask(eventId: string, eventTitle: string | undefined, actorName: string): void {
   const id = 'task_event_report_' + eventId;
@@ -2507,33 +2540,45 @@ function spawnEventReportRequestTask(eventId: string, eventTitle: string | undef
   if (tasks.some(t => t.id === id)) return;
 
   const members = getMembers().filter(m => m.status !== 'Terminated');
-  let pool = members.filter(m => {
+  const centreHead = members.find(m => {
     const role = (m.role || '').toLowerCase();
-    return m.tier === 5 && role.includes('general secretary') && !role.includes('senior');
+    return role.includes('centre head') || role.includes('center head');
+  }) || members.find(m => m.tier === 1);
+  const advisor = members.find(m => /\badvisor\b/.test((m.role || '').toLowerCase()));
+  const eventsHeadGg = members.find(m => {
+    const role = (m.role || '').toLowerCase();
+    return m.tier === 2.5 || (role.includes('events head') && role.includes('gg')) || (role.includes('head of events') && role.includes('gg'));
+  });
+
+  const seen = new Set<string>();
+  let pool = [centreHead, advisor, eventsHeadGg].filter((m): m is Member => !!m).filter(m => {
+    if (seen.has(m.id)) return false;
+    seen.add(m.id);
+    return true;
   });
   // Never leave the task with no one able to see/answer it.
   if (pool.length === 0) pool = members.filter(m => m.tier <= 2);
 
   const dueDate = new Date();
-  dueDate.setDate(dueDate.getDate() + 7);
+  dueDate.setDate(dueDate.getDate() + 3);
 
   const newTask: TaskItem = {
     id,
-    title: `Submit event report for "${eventTitle || 'the event'}"`,
+    title: `Event report for "${eventTitle || 'the event'}": who would you like to allot this task to?`,
     event: eventTitle,
     eventId,
-    assignee: pool.map(m => m.name).join(', ') || 'General Secretary',
+    assignee: pool.map(m => m.name).join(', ') || 'Centre Head',
     assigneeType: 'group',
     assigneeIds: pool.map(m => m.id),
     dueDate: dueDate.toISOString().slice(0, 10),
     status: 'Assigned',
     creatorName: 'Event Scheduler',
-    workflowType: 'event_report_request',
+    workflowType: 'event_report_assignment',
   };
   const next = [newTask, ...tasks];
   saveTasks(next);
   serverPost('/api/tasks', newTask);
-  logAuditEvent('EVENT_REPORT_TASK_CREATED', actorName, `Requested an event report for "${eventTitle}" from the General Secretary`);
+  logAuditEvent('EVENT_REPORT_TASK_CREATED', actorName, `Asked the Centre Head, Advisor, and GG Campus Events Head who should prepare the event report for "${eventTitle}"`);
 }
 
 /**

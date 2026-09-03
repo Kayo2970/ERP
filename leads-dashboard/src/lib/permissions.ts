@@ -63,9 +63,25 @@ export function canSubmitEventReport(user: SessionUser): boolean {
   return isGeneralSecretary(user) || user.tier === 1;
 }
 
-/** Who reviews a pending event report — the same two roles required to approve one. */
+/** Who reviews/approves a pending event report — Centre Head (which already
+ *  folds in Advisor, see isCentreHead) or the GG Campus Events Head; any one
+ *  of the three is sufficient, not all of them. */
 export function canReviewEventReports(user: SessionUser): boolean {
   return isCentreHead(user) || isEventsHeadGgCampus(user);
+}
+
+/**
+ * Full standing access to the Event Report module (submit for anyone, review
+ * every submission, see every past report) — Centre Head/Advisor, GG Campus
+ * Events Head, General Secretary, Chief Coordinator/President/VP, or Super
+ * User. A member outside this set who was individually delegated the
+ * report-writing task (see event_report_request in local-data.ts) gets
+ * narrower, task-scoped access instead — resolved on the Event Reports page
+ * itself, not here, since it depends on live task assignment, not role.
+ */
+export function canViewEventReports(user: SessionUser): boolean {
+  if (!user) return false;
+  return canReviewEventReports(user) || isGeneralSecretary(user) || isExecutiveRole(user) || user.tier === 1;
 }
 
 /** Check if user holds Alumni role/tier. */
@@ -852,13 +868,19 @@ export function canRespondToHolidayApproval(task: TaskItem, user: SessionUser): 
 /**
  * Whether `user` currently holds the auto-generated event-lapse task
  * (event_social_post's group ask to the senior Head of Design + Core
- * Committee, or event_report_request's group ask to the General Secretary)
- * and may delegate it to a specific member — see delegateAutoTask in
- * local-data.ts. Blocked while a delegation is already pending sign-off.
+ * Committee, event_report_assignment's group ask to the Centre Head/Advisor/
+ * GG Campus Events Head to pick a student, or event_report_request's ask to
+ * that student) and may delegate it to a specific member — see
+ * delegateAutoTask in local-data.ts. Blocked while a delegation is already
+ * pending sign-off.
  */
 export function canDelegateAutoTask(task: TaskItem, user: SessionUser): boolean {
   if (!user) return false;
-  if (task.workflowType !== 'event_social_post' && task.workflowType !== 'event_report_request') return false;
+  if (
+    task.workflowType !== 'event_social_post' &&
+    task.workflowType !== 'event_report_assignment' &&
+    task.workflowType !== 'event_report_request'
+  ) return false;
   if (task.approvalStatus === 'pending_edit' || task.approvalStatus === 'pending_create') return false;
   const member = resolveMember(user);
   if (!member) return false;

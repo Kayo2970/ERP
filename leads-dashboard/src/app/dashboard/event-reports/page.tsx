@@ -24,10 +24,12 @@ import {
   deleteEventReport,
   isApprovedEvent,
   getTasks,
+  updateTaskStatus,
   EventItem,
   EventReportItem,
+  TaskItem,
 } from '@/lib/local-data';
-import { canSubmitEventReport, canReviewEventReports, isCentreHead, isEventsHeadGgCampus } from '@/lib/permissions';
+import { canSubmitEventReport, canReviewEventReports, canViewEventReports, isCentreHead, isEventsHeadGgCampus } from '@/lib/permissions';
 import { FileDropzone, FilePreviewRow, createProgressTracker } from '@/components/ui/file-dropzone';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -35,6 +37,7 @@ export default function EventReportsPage() {
   const [user, setUser] = useState<any>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [reports, setReports] = useState<EventReportItem[]>([]);
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
 
   const [eventId, setEventId] = useState('');
   const [file, setFile] = useState<File | null>(null);
@@ -61,6 +64,7 @@ export default function EventReportsPage() {
     const refresh = () => {
       setEvents(getEvents());
       setReports(getEventReports());
+      setTasks(getTasks());
     };
     refresh();
 
@@ -92,21 +96,34 @@ export default function EventReportsPage() {
     setTimeout(() => setErrorMsg(''), 4500);
   };
 
-  const canSubmit = canSubmitEventReport(user);
+  // A member with no standing module access (not Centre Head/Advisor, GG
+  // Campus Events Head, General Secretary, or leadership) can still submit —
+  // and only submit — while they personally hold the delegated
+  // 'event_report_request' task for a specific event (see
+  // spawnEventReportRequestTask in local-data.ts). That access is revoked
+  // the moment the task is marked Completed, which happens automatically
+  // the instant they upload their report — see handleSubmitReport below.
+  const myOpenReportTasks = tasks.filter(t =>
+    t.workflowType === 'event_report_request' &&
+    t.status !== 'Completed' &&
+    (t.assigneeId === user?.id || (t.assigneeIds || []).includes(user?.id))
+  );
+  const hasStandingAccess = canViewEventReports(user);
+  const canSubmit = canSubmitEventReport(user) || myOpenReportTasks.length > 0;
   const canReview = canReviewEventReports(user);
   const viewerIsCentreHead = isCentreHead(user);
   const viewerIsGgEventsHead = isEventsHeadGgCampus(user);
 
-  if (user && !canSubmit && !canReview) {
+  if (user && !hasStandingAccess && myOpenReportTasks.length === 0) {
     return (
       <div className="p-8 max-w-2xl mx-auto">
         <div className="glass-panel p-8 rounded-3xl border border-danger/30 text-center space-y-4 shadow-2xl">
           <div className="h-16 w-16 bg-danger/15 rounded-2xl flex items-center justify-center mx-auto text-danger border border-danger/25">
             <Lock className="h-8 w-8" />
           </div>
-          <h2 className="text-xl font-bold text-theme-text-primary">General Secretary Access Only</h2>
+          <h2 className="text-xl font-bold text-theme-text-primary">Restricted Access</h2>
           <p className="text-xs text-theme-text-secondary leading-relaxed">
-            The Event Report module is restricted to the General Secretary (for submissions) and the Centre Head / GG Campus Head of Events (for review).
+            The Event Report module is restricted to the Centre Head, Advisor, GG Campus Head of Events, General Secretary, and Chief Coordinator — plus anyone currently delegated a report to prepare.
           </p>
         </div>
       </div>
@@ -156,13 +173,23 @@ export default function EventReportsPage() {
         submittedBy: user?.name || 'General Secretary',
         submittedByEmail: user?.email || '',
       }, tracker);
+
+      // Uploading the report completes the delegated task, if any — this is
+      // what revokes a task-only submitter's module access going forward
+      // (see the myOpenReportTasks gate above).
+      const myTaskForEvent = tasks.find(t => t.workflowType === 'event_report_request' && t.eventId === eventId && t.status !== 'Completed' && (t.assigneeId === user?.id || (t.assigneeIds || []).includes(user?.id)));
+      if (myTaskForEvent) {
+        try { updateTaskStatus(myTaskForEvent.id, 'Completed', user?.name || 'User'); } catch (e) { console.error(e); }
+      }
+
       setReports(getEventReports());
+      setTasks(getTasks());
       setEventId('');
       setFile(null);
       setFileData('');
       setUploadProgress(0);
       setUploadEtaSeconds(null);
-      triggerSuccess('Report submitted — awaiting approval from the Centre Head and GG Campus Head of Events.');
+      triggerSuccess('Report submitted — awaiting approval from the Centre Head, Advisor, or GG Campus Head of Events.');
     } catch (err: any) {
       setFileError(err.message || 'Failed to submit the report.');
     } finally {
@@ -194,8 +221,8 @@ export default function EventReportsPage() {
     if (!result) { triggerError('Failed to record approval.'); return; }
     setReports(getEventReports());
     triggerSuccess(result.status === 'approved'
-      ? (result.emailSent ? 'Approved. Both sign-offs are in — the report has been emailed as an attachment.' : `Approved. Both sign-offs are in, but the email could not be sent${result.emailError ? `: ${result.emailError.split('\n')[0]}` : '.'}`)
-      : 'Approved your side — still waiting on the other reviewer.');
+      ? (result.emailSent ? 'Approved — the report has been accepted and emailed as an attachment.' : `Approved — the report has been accepted, but the email could not be sent${result.emailError ? `: ${result.emailError.split('\n')[0]}` : '.'}`)
+      : 'Approved your side.');
   };
 
   const handleConfirmReject = async () => {
@@ -222,7 +249,9 @@ export default function EventReportsPage() {
 
   const myReports = reports.filter(r => r.submittedByEmail === user?.email);
   const pendingForReview = reports.filter(r => r.status === 'pending_review');
-  const eligibleEvents = events.filter(ev => !ev.isHoliday && isApprovedEvent(ev, getTasks()));
+  const eligibleEvents = hasStandingAccess
+    ? events.filter(ev => !ev.isHoliday && isApprovedEvent(ev, tasks))
+    : events.filter(ev => myOpenReportTasks.some(t => t.eventId === ev.id));
 
   const statusBadge = (report: EventReportItem) => {
     if (report.status === 'approved') {
@@ -266,7 +295,7 @@ export default function EventReportsPage() {
         </div>
         <div>
           <h1 className="text-xl font-bold text-theme-text-primary">Event Reports</h1>
-          <p className="text-xs text-theme-text-secondary">Submit, review, and approve post-event reports — approved reports are emailed as an attachment to the Centre Head, GG Campus Head of Events, and President.</p>
+          <p className="text-xs text-theme-text-secondary">Submit, review, and approve post-event reports — a tick from any one of the Centre Head, Advisor, or GG Campus Head of Events accepts a report, which is then emailed as an attachment to all of them plus the President.</p>
         </div>
       </div>
 

@@ -927,6 +927,11 @@ export default function TasksPage() {
                       <Megaphone className="h-3 w-3" /> Post-Event Social Media
                     </span>
                   )}
+                  {task.workflowType === 'event_report_assignment' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-warning/15 border border-warning/30 text-warning text-[10px] font-bold rounded-full">
+                      <FileCheck2 className="h-3 w-3" /> Pick Who Prepares the Event Report
+                    </span>
+                  )}
                   {task.workflowType === 'event_report_request' && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent/15 border border-accent/30 text-accent text-[10px] font-bold rounded-full">
                       <FileCheck2 className="h-3 w-3" /> Event Report Request

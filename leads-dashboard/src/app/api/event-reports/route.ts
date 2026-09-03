@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { saveBase64File } from '@/lib/file-storage';
+import { fanOutAutoApproval } from '@/lib/approval-sync';
 
 export const maxDuration = 60; // 60s execution limit for large uploads (up to 25 MB)
 
@@ -35,6 +36,26 @@ export async function POST(request: Request) {
 
     const updated = await mutateCollection('eventReports', (current) => [newReport, ...(current || [])]);
     const created = updated.find((r: any) => r.id === id);
+
+    // A freshly submitted report needs a tick from the Centre Head, Advisor,
+    // or GG Campus Events Head — fan that out to the Approvals module.
+    if (created) {
+      try {
+        await fanOutAutoApproval({
+          entityType: 'event-report',
+          entityId: created.id,
+          entityTitle: created.eventTitle,
+          eventId: created.eventId,
+          requesterId: created.submittedBy || '',
+          requesterName: created.submittedBy || 'A member',
+          requesterEmail: created.submittedByEmail,
+          message: 'This event report needs your sign-off before it is accepted.',
+        });
+      } catch (approvalErr) {
+        console.error('[event-reports-api] Approval fan-out failed:', approvalErr);
+      }
+    }
+
     return NextResponse.json(created, { status: 201 });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 });
