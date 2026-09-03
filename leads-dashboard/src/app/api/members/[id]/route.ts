@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection } from '@/lib/server-db';
 import { deleteStoredFile, saveBase64File } from '@/lib/file-storage';
+import { normalizeAlumniFields } from '@/lib/local-data';
 
 const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
 
@@ -40,7 +41,7 @@ export async function PATCH(
           updates.tier = 1;
           updates.status = 'Active';
         }
-        return [...current, { id, ...updates }];
+        return [...current, normalizeAlumniFields({ id, ...updates })];
       }
       const next = [...current];
       const isSuper = id === 'm1' || next[idx].tier === 1 || next[idx].role === 'Super User';
@@ -54,6 +55,7 @@ export async function PATCH(
         next[idx].tier = 1;
         next[idx].status = 'Active';
       }
+      next[idx] = normalizeAlumniFields(next[idx]);
       return next;
     });
 

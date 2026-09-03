@@ -37,6 +37,7 @@ import {
   initialBudgets,
   initialIncomeSources,
   FEEDBACK_FORM_TEMPLATE_ID,
+  normalizeAlumniFields,
 } from './local-data';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -398,6 +399,99 @@ function ensureProductionRosterPruned(): Promise<void> {
 }
 
 /**
+ * One-time, idempotent cleanup: any member already marked Alumni (by division
+ * or by tier 7) before the automatic department/role clearing in
+ * normalizeAlumniFields (local-data.ts) shipped may still be carrying stale
+ * department/committee/program data from before they became Alumni. Runs
+ * once per boot; a permanent no-op once every existing Alumni record is
+ * clean, since every write path now normalizes on the way in.
+ */
+let alumniFieldsNormalizedPromise: Promise<void> | null = null;
+function ensureAlumniFieldsNormalized(): Promise<void> {
+  if (!alumniFieldsNormalizedPromise) {
+    alumniFieldsNormalizedPromise = (async () => {
+      try {
+        const raw = await fs.readFile(collectionPath('members'), 'utf-8');
+        const parsed = JSON.parse(raw);
+        let jsonContent: any = parsed;
+        if (isEncryptedPayload(parsed)) {
+          try {
+            jsonContent = JSON.parse(decryptData(parsed));
+          } catch {
+            return;
+          }
+        }
+        if (!Array.isArray(jsonContent)) return;
+
+        let changed = false;
+        const updated = jsonContent.map((m: any) => {
+          if (m?.division !== 'Alumni' && m?.tier !== 7) return m;
+          const normalized = normalizeAlumniFields({ ...m, division: 'Alumni' });
+          if (JSON.stringify(normalized) !== JSON.stringify(m)) changed = true;
+          return normalized;
+        });
+        if (changed) await writeCollectionFile('members', updated);
+      } catch (err: any) {
+        if (err?.code !== 'ENOENT') {
+          console.error('[server-db] Alumni fields normalization check failed:', err);
+        }
+      }
+    })();
+  }
+  return alumniFieldsNormalizedPromise;
+}
+
+/**
+ * One-time, idempotent split: Super User and Centre Head/Advisor used to
+ * share tier 1 (structurally clubbed as equals). Centre Head/Advisor now
+ * live at tier 1.5 — a genuinely lower rank than Super User, following the
+ * same fractional-tier precedent as tier 2.5 (GG Campus Events Head) — while
+ * every existing isCentreHead() check (permissions.ts) keeps working
+ * unchanged, since its `tier <= sectorHeadMaxTier` branch (default 2)
+ * already covers 1.5. Only the record identified as the REAL Super User
+ * (id 'm1', or role exactly 'Super User' — the same signal already used
+ * throughout local-data.ts's "Security Fail-Safe" checks) is left at tier 1;
+ * every other pre-existing tier-1 record is moved to 1.5. Runs once per
+ * boot; a permanent no-op afterward.
+ */
+let centreHeadTierSplitPromise: Promise<void> | null = null;
+function ensureCentreHeadTierSplit(): Promise<void> {
+  if (!centreHeadTierSplitPromise) {
+    centreHeadTierSplitPromise = (async () => {
+      try {
+        const raw = await fs.readFile(collectionPath('members'), 'utf-8');
+        const parsed = JSON.parse(raw);
+        let jsonContent: any = parsed;
+        if (isEncryptedPayload(parsed)) {
+          try {
+            jsonContent = JSON.parse(decryptData(parsed));
+          } catch {
+            return;
+          }
+        }
+        if (!Array.isArray(jsonContent)) return;
+
+        let changed = false;
+        const updated = jsonContent.map((m: any) => {
+          const isRealSuperUser = m?.id === 'm1' || m?.role === 'Super User';
+          if (m?.tier === 1 && !isRealSuperUser) {
+            changed = true;
+            return { ...m, tier: 1.5 };
+          }
+          return m;
+        });
+        if (changed) await writeCollectionFile('members', updated);
+      } catch (err: any) {
+        if (err?.code !== 'ENOENT') {
+          console.error('[server-db] Centre Head tier split check failed:', err);
+        }
+      }
+    })();
+  }
+  return centreHeadTierSplitPromise;
+}
+
+/**
  * One-time, idempotent cleanup: deleting a form used to leave its
  * submissions behind forever (fixed going forward — DELETE /api/forms/[id]
  * now cascades), but that fix only stops NEW orphans from being created —
@@ -578,6 +672,8 @@ async function readCollectionFile<T = any>(key: keyof DbSchema): Promise<T[]> {
   await ensureSubhadeepEmailFixed();
   await ensureStaleEmailsFixed();
   await ensureProductionRosterPruned();
+  await ensureAlumniFieldsNormalized();
+  await ensureCentreHeadTierSplit();
   await ensureOrphanedSubmissionsPruned();
   await ensureFeedbackFormTemplateSeeded();
   try {

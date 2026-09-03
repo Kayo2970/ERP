@@ -59,6 +59,107 @@ export interface Member {
   rejectionReason?: string;
 }
 
+// The five division values a Member can hold — the canonical list used by
+// both the manual Add/Edit dropdowns and the CSV-import/roster-scan
+// validators below.
+export const CANONICAL_MEMBER_DIVISIONS: MemberDivision[] = [
+  'Advisory Board', 'Core Committee', 'Training Associate', 'Alumni', 'Faculty',
+];
+
+// Departments assignable via the "Department Head"/Training Associate
+// dropdowns in the directory UI.
+export const STANDARDIZED_DEPARTMENTS = [
+  'Leadership & Development',
+  'Research & Development',
+  'Design & Social Media',
+  'Sustainability & Innovation',
+  'Finance & Sponsorships',
+  'Marketing & Branding',
+  'Operations & Logistics',
+];
+
+// Departments deriveMemberRoleAndDepartment (directory/page.tsx) legitimately
+// produces for non-"Department Head" positions (President, Centre Head,
+// Advisor, Faculty, ...) — canonical too, just not offered in the
+// Department-Head dropdown.
+export const SPECIAL_CANONICAL_DEPARTMENTS = [
+  'Executive Council', 'Secretariat', 'Coordination', 'Events',
+  'Industrial Connects', 'Faculty Oversight', 'Faculty Advisory', 'Faculty',
+];
+
+export function isCanonicalDepartment(dept: string): boolean {
+  const d = (dept || '').trim();
+  if (!d) return true; // no department is valid (e.g. Alumni)
+  return STANDARDIZED_DEPARTMENTS.includes(d) || SPECIAL_CANONICAL_DEPARTMENTS.includes(d);
+}
+
+export interface CsvRowValidationResult {
+  valid: boolean;
+  reason?: string;
+  division?: MemberDivision; // the matched canonical division, case-normalized
+}
+
+/**
+ * Validates a member's core fields against the canonical division/department
+ * lists — used both by CSV bulk import (skip-and-report bad rows) and by the
+ * Super User's "Scan Roster for Conflicts" audit (same rules, same source of
+ * truth, no duplicated logic).
+ */
+export function validateMemberCsvRow(row: {
+  name: string;
+  email: string;
+  division: string;
+  department?: string;
+  role?: string;
+}): CsvRowValidationResult {
+  if (!row.name?.trim()) return { valid: false, reason: 'missing name' };
+  if (!row.email?.trim() || !row.email.includes('@')) {
+    return { valid: false, reason: `invalid email '${row.email || ''}'` };
+  }
+
+  const divMatch = CANONICAL_MEMBER_DIVISIONS.find(
+    d => d.toLowerCase() === row.division?.trim().toLowerCase()
+  );
+  if (!divMatch) {
+    return { valid: false, reason: `unknown division '${row.division || ''}'` };
+  }
+
+  // Alumni rows have their department cleared automatically (see
+  // normalizeAlumniFields below) regardless of what was supplied.
+  if (divMatch !== 'Alumni' && row.department?.trim() && !isCanonicalDepartment(row.department)) {
+    return { valid: false, reason: `unknown department '${row.department}' for division '${divMatch}'` };
+  }
+
+  if (row.role && row.role.trim().length > 120) {
+    return { valid: false, reason: `designation '${row.role.slice(0, 30)}...' is unreasonably long` };
+  }
+
+  return { valid: true, division: divMatch };
+}
+
+export const ALUMNI_ROLE_LABEL = 'Alumni Member';
+export const ALUMNI_TIER = 7;
+
+/**
+ * Normalizes a member record into a clean Alumni state whenever its division
+ * is 'Alumni' — an alumnus has no department/committee/program, only a
+ * (kept, settable) batch. Called from every write path (manual add/edit,
+ * CSV import, direct API, and the one-time startup migration in
+ * server-db.ts) so a member can never end up Alumni with stale department
+ * data lingering, no matter which path set the division.
+ */
+export function normalizeAlumniFields<T extends Partial<Member>>(record: T): T {
+  if (record.division !== 'Alumni') return record;
+  return {
+    ...record,
+    tier: ALUMNI_TIER,
+    role: ALUMNI_ROLE_LABEL,
+    department: undefined,
+    committee: undefined,
+    program: undefined,
+  };
+}
+
 // A person encountered outside the org (event guest, sponsor contact, vendor,
 // etc.) — sourced from a visiting card, kept in a directory of its own,
 // separate from the Member roster and from the ad-hoc Guest Invites tool.
@@ -675,7 +776,11 @@ export interface AccessLevelSettings {
   id: string; // always 'default'
   baseLeadershipMaxTier: number; // tier <= this counts as "Base Leadership"
   coreCommitteeTier: number; // tier === this counts as "Core Committee"
-  sectorHeadMaxTier: number; // tier <= this counts as Sector/Centre Head outright
+  // tier <= this counts as Sector/Centre Head outright. Centre Head/Advisor
+  // records live at tier 1.5 (see server-db.ts's ensureCentreHeadTierSplit) —
+  // this value must NEVER be configured below 1.5, or every Centre
+  // Head/Advisor silently loses Centre Head access.
+  sectorHeadMaxTier: number;
   headKeyword: string; // whole-word, case-insensitive match against Member.role
   sectorHeadKeywords: string; // comma-separated phrases, e.g. "sector head, centre head, center head"
   financeKeyword: string; // whole-word, case-insensitive match against role or department
@@ -1155,11 +1260,11 @@ export async function addMember(member: Omit<Member, 'id'>): Promise<Member & { 
     throw new Error(`A member with email ${member.email} already exists in the roster.`);
   }
 
-  const newMember: Member = {
+  const newMember: Member = normalizeAlumniFields({
     ...member,
     mustSetupPassword: true,
     id: 'm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-  };
+  });
 
   const serverResult = await serverPost('/api/members', newMember);
   const createdMember: Member & { activationLink?: string; activationEmailSent?: boolean; activationEmailError?: string } = {
@@ -1194,14 +1299,14 @@ export async function submitMemberCreate(
     throw new Error(`A member with email ${member.email} already exists in the roster.`);
   }
 
-  const newMember: Member = {
+  const newMember: Member = normalizeAlumniFields({
     ...member,
     mustSetupPassword: true,
     approvalStatus: 'pending_create',
     submittedBy,
     submittedByEmail,
     id: 'm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-  };
+  });
 
   const serverResult = await serverPost('/api/members', newMember);
   const createdMember: Member = { ...newMember, ...(serverResult || {}) };
@@ -1333,13 +1438,14 @@ export function bulkUpdateMembers(
   const updated = current.map(m => {
     if (targetIdSet.has(m.id)) {
       updatedCount++;
-      const next = { ...m, ...updates };
+      let next = { ...m, ...updates };
       // Security Fail-Safe: Protect Super User status and tier
       if (m.id === 'm1' || m.tier === 1 || m.role === 'Super User') {
         next.tier = 1;
         next.role = 'Super User';
         next.status = 'Active';
       }
+      next = normalizeAlumniFields(next);
       return next;
     }
     return m;
@@ -1392,7 +1498,7 @@ export function updateMember(id: string, updates: Partial<Member>, actorName: st
     finalUpdates.status = 'Active';
   }
 
-  current[idx] = { ...current[idx], ...finalUpdates };
+  current[idx] = normalizeAlumniFields({ ...current[idx], ...finalUpdates });
   saveMembers(current);
   // Send the full merged member, not just the diff, so a server-side upsert (a
   // client-only sample member that was never POSTed) creates a complete record.
@@ -4544,6 +4650,12 @@ export function getAccessLevelSettings(): AccessLevelSettings {
 
 export function updateAccessLevelSettings(updates: Partial<AccessLevelSettings>, actorName: string): AccessLevelSettings {
   const current = getAccessLevelSettings();
+  // Floor guard: Centre Head/Advisor live at tier 1.5 (see server-db.ts's
+  // ensureCentreHeadTierSplit) — letting this drop below that would silently
+  // strip every Centre Head/Advisor of Centre Head access.
+  if (typeof updates.sectorHeadMaxTier === 'number' && updates.sectorHeadMaxTier < 1.5) {
+    throw new Error('Sector/Centre Head max tier cannot be set below 1.5 — that would lock out every Centre Head/Advisor.');
+  }
   const updated: AccessLevelSettings = {
     ...current,
     ...updates,

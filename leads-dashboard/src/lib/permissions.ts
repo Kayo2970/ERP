@@ -139,6 +139,18 @@ export function isCoreCommitteeTier(user: SessionUser): boolean {
   return !!user && user.tier === getAccessLevelSettings().coreCommitteeTier;
 }
 
+/**
+ * Strictly the Super User — never Centre Head, never Adviser. Super User
+ * (tier 1) outranks Centre Head/Adviser (tier 1.5); use this wherever a
+ * check must be exclusive to the Super User (see canManageBackup /
+ * canSetMemberPassword for the existing template this follows). For
+ * "Centre Head or above" (which a Super User also satisfies), use
+ * isCentreHead() instead.
+ */
+export function isSuperUser(user: SessionUser): boolean {
+  return !!user && user.tier === 1;
+}
+
 /** Check if user is Centre Head (Super User tier 1, or tier <= 2 / Centre Head / Advisor designation). */
 export function isCentreHead(user: SessionUser): boolean {
   if (!user) return false;
