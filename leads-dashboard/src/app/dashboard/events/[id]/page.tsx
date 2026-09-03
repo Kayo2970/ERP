@@ -72,6 +72,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
   const [taskCommitteeId, setTaskCommitteeId] = useState('');
   const [taskAssigneeId, setTaskAssigneeId] = useState('');
   const [taskDueDate, setTaskDueDate] = useState('');
+  const [taskReviewerId, setTaskReviewerId] = useState('');
 
   const [deletingCommitteeId, setDeletingCommitteeId] = useState<string | null>(null);
   const [rejectingCommitteeId, setRejectingCommitteeId] = useState<string | null>(null);
@@ -185,6 +186,10 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
 
     const assignedMember = members.find(m => m.id === taskAssigneeId);
     const assignedComm = event.committees.find(c => c.id === taskCommitteeId);
+    // A committee task can optionally require sign-off from a specific
+    // reviewer before it actually lands on the committee's students —
+    // the task stays hidden (pending_create) until that reviewer approves it.
+    const reviewer = !assignedMember ? members.find(m => m.id === taskReviewerId) : undefined;
 
     addTask({
       title: taskTitle,
@@ -197,17 +202,26 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
       assigneeEmail: assignedMember?.email,
       assigneeType: assignedMember ? 'individual' : 'committee',
       dueDate: taskDueDate,
-      creatorName: user?.name || 'Leadership'
+      creatorName: user?.name || 'Leadership',
+      ...(reviewer ? {
+        approvalStatus: 'pending_create' as const,
+        approverType: 'SPECIFIC_MEMBER' as const,
+        approverMemberId: reviewer.id,
+        approvalPolicyName: 'Committee Task Review',
+        submittedBy: user?.name,
+        submittedByEmail: user?.email,
+      } : {}),
     });
 
     setTaskTitle('');
     setTaskCommitteeId('');
     setTaskAssigneeId('');
     setTaskDueDate('');
+    setTaskReviewerId('');
     setIsAddTaskModalOpen(false);
 
     setTasks(getTasks().filter(t => t.eventId === eventId || t.event === event.title));
-    triggerSuccess('Event deliverable task assigned.');
+    triggerSuccess(reviewer ? `Task sent to ${reviewer.name} for review before it's assigned.` : 'Event deliverable task assigned.');
   };
 
   const isLeadership = canManageEvents(user);
@@ -834,6 +848,27 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                   className="w-full px-4 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                 />
               </div>
+
+              {!taskAssigneeId && (
+                <div className="space-y-1">
+                  <label className="block font-medium text-theme-text-secondary">Require Review From (optional)</label>
+                  <select
+                    value={taskReviewerId}
+                    onChange={(e) => setTaskReviewerId(e.target.value)}
+                    className="w-full px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  >
+                    <option value="">No review needed — assign immediately</option>
+                    {members.filter(m => m.status !== 'Terminated' && m.id !== (user?.id || '')).map(m => (
+                      <option key={m.id} value={m.id}>{m.name} ({m.role})</option>
+                    ))}
+                  </select>
+                  {taskReviewerId && (
+                    <p className="text-[10px] text-theme-text-secondary pt-0.5">
+                      The task stays hidden from the committee until this reviewer approves it.
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div className="flex justify-end gap-2 pt-2">
                 <button

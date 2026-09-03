@@ -866,6 +866,17 @@ export function canDelegateAutoTask(task: TaskItem, user: SessionUser): boolean 
   return task.assigneeId === member.id || (!!task.assigneeEmail && task.assigneeEmail.toLowerCase() === user.email.toLowerCase());
 }
 
+/**
+ * Who may see a task's full delegation trail — who it was submitted for
+ * review to, approved/rejected by, and reassigned/delegated to, in order
+ * (see TaskDelegationEvent in local-data.ts). Centre Head and GG Campus
+ * Events Head only, so leadership can audit how a committee task was routed
+ * without exposing that history to every viewer of the task.
+ */
+export function canViewTaskDelegationTrail(user: SessionUser): boolean {
+  return isCentreHead(user) || isEventsHeadGgCampus(user);
+}
+
 /** Task creation — leadership, Core Committee, any Head, or a TASKS_CREATE grant. */
 export function canCreateTask(user: SessionUser): boolean {
   return isBaseLeadership(user) || isCoreCommitteeTier(user) || isHeadRole(user) || hasCapability(user, 'TASKS_CREATE');

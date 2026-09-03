@@ -220,6 +220,26 @@ export interface TaskItem {
   submittedBy?: string;
   submittedByEmail?: string;
   rejectionReason?: string;
+  // Full history of who this task was routed through and in what order —
+  // submitted-for-review, approved/rejected, and delegated/reassigned steps
+  // each append an entry rather than overwriting the last one, so the whole
+  // chain stays visible even after several rounds (e.g. a committee task
+  // sent for review, approved, then later delegated to someone else and
+  // approved again). Visible to the Centre Head / GG Campus Events Head —
+  // see canViewTaskDelegationTrail in permissions.ts.
+  delegationTrail?: TaskDelegationEvent[];
+}
+
+export interface TaskDelegationEvent {
+  action: 'submitted_for_review' | 'approved' | 'rejected' | 'delegated';
+  actorName: string;
+  actorEmail?: string;
+  // The person the task was routed to (the requested reviewer on
+  // 'submitted_for_review'/'delegated') or reassigned to (on 'approved',
+  // when the approval merged a pending assignee change).
+  targetName?: string;
+  note?: string;
+  at: string;
 }
 
 /**
@@ -2199,10 +2219,27 @@ export function saveTasks(tasks: TaskItem[]): void {
 
 export function addTask(task: Omit<TaskItem, 'id' | 'status'> & { status?: TaskItem['status'] }): TaskItem {
   const tasks = getTasks();
+
+  // Creating the task with a specific-member review requirement already
+  // (e.g. a Super User assigning a committee task who also wants a chosen
+  // reviewer to sign off first) — start the delegation trail right away.
+  const trail: TaskDelegationEvent[] = [...(task.delegationTrail || [])];
+  if (task.approvalStatus === 'pending_create' && task.approverType === 'SPECIFIC_MEMBER' && task.approverMemberId) {
+    const reviewer = getMembers().find(m => m.id === task.approverMemberId);
+    trail.push({
+      action: 'submitted_for_review',
+      actorName: task.submittedBy || task.creatorName || 'User',
+      actorEmail: task.submittedByEmail,
+      targetName: reviewer?.name,
+      at: new Date().toISOString(),
+    });
+  }
+
   const newTask: TaskItem = {
     ...task,
     id: 't_' + Date.now(),
-    status: task.status || 'Assigned'
+    status: task.status || 'Assigned',
+    delegationTrail: trail.length > 0 ? trail : undefined,
   };
   tasks.unshift(newTask);
   saveTasks(tasks);
@@ -2384,6 +2421,19 @@ export function submitTaskEdit(
   const target = tasks.find(t => t.id === id);
   if (!target) return null;
 
+  // Only log a 'delegated' step when this edit actually reassigns the task
+  // to someone else — an unrelated field edit routed through approval
+  // (e.g. a due-date change) isn't a delegation.
+  const trail = (changes.assignee || changes.assigneeId)
+    ? [...(target.delegationTrail || []), {
+        action: 'delegated' as const,
+        actorName: submittedBy,
+        actorEmail: submittedByEmail,
+        targetName: changes.assignee,
+        at: new Date().toISOString(),
+      }]
+    : target.delegationTrail;
+
   const result = updateTask(id, {
     pendingChange: changes,
     approvalStatus: 'pending_edit',
@@ -2393,6 +2443,7 @@ export function submitTaskEdit(
     approvalPolicyName: approval.policyName,
     submittedBy,
     submittedByEmail,
+    delegationTrail: trail,
   }, submittedBy);
   logAuditEvent('TASK_EDIT_SUBMITTED', submittedBy, `Submitted an edit to task "${target.title}" for approval`, submittedByEmail);
   return result;
@@ -2407,12 +2458,19 @@ export function approveTask(id: string, actorName: string): TaskItem | null {
   if (!target) return null;
 
   const isEdit = target.approvalStatus === 'pending_edit';
+  const trail = [...(target.delegationTrail || []), {
+    action: 'approved' as const,
+    actorName,
+    targetName: isEdit ? target.pendingChange?.assignee : undefined,
+    at: new Date().toISOString(),
+  }];
   const result = updateTask(id, {
     ...(isEdit ? target.pendingChange : {}),
     approvalStatus: 'approved',
     pendingChange: undefined,
     decidedBy: actorName,
     decidedAt: new Date().toISOString(),
+    delegationTrail: trail,
   }, actorName);
   logAuditEvent('TASK_APPROVED', actorName, `Approved ${isEdit ? 'an edit to' : 'the creation of'} task "${target.title}"`);
   return result;
@@ -2428,12 +2486,19 @@ export function rejectTask(id: string, actorName: string, reason?: string): Task
   if (!target) return null;
 
   const isEdit = target.approvalStatus === 'pending_edit';
+  const trail = [...(target.delegationTrail || []), {
+    action: 'rejected' as const,
+    actorName,
+    note: reason,
+    at: new Date().toISOString(),
+  }];
   const result = updateTask(id, {
     approvalStatus: isEdit ? 'approved' : 'rejected',
     pendingChange: undefined,
     decidedBy: actorName,
     decidedAt: new Date().toISOString(),
     rejectionReason: reason,
+    delegationTrail: trail,
   }, actorName);
   logAuditEvent('TASK_REJECTED', actorName, `Rejected ${isEdit ? 'an edit to' : 'the creation of'} task "${target.title}"${reason ? `: ${reason}` : ''}`);
   return result;

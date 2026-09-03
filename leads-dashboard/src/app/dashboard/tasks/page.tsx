@@ -22,7 +22,11 @@ import {
   UserCheck,
   UserPlus,
   Megaphone,
-  FileCheck2
+  FileCheck2,
+  GitBranch,
+  ChevronDown,
+  ChevronUp,
+  ArrowRight,
 } from 'lucide-react';
 import {
   getTasks,
@@ -43,7 +47,7 @@ import {
   EventItem,
   Member
 } from '@/lib/local-data';
-import { canViewTaskExtended, canManageTasks, canCreateTask, canEditTask, canDeleteTask, canRequestTaskExtension, canDecideTaskExtension, isHeadRole, getTaskApprovalRequirement, canApprovePendingTask, canRespondToHolidayApproval, canDelegateAutoTask } from '@/lib/permissions';
+import { canViewTaskExtended, canManageTasks, canCreateTask, canEditTask, canDeleteTask, canRequestTaskExtension, canDecideTaskExtension, isHeadRole, getTaskApprovalRequirement, canApprovePendingTask, canRespondToHolidayApproval, canDelegateAutoTask, canViewTaskDelegationTrail } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 import { RequestApprovalModal } from '@/components/request-approval-modal';
@@ -65,6 +69,7 @@ export default function TasksPage() {
   const [rejectionReasonInput, setRejectionReasonInput] = useState('');
   const [approvalRequestTask, setApprovalRequestTask] = useState<TaskItem | null>(null);
   const [delegatingTask, setDelegatingTask] = useState<TaskItem | null>(null);
+  const [expandedTrailTaskId, setExpandedTrailTaskId] = useState<string | null>(null);
 
   // Form State
   const [title, setTitle] = useState('');
@@ -453,10 +458,12 @@ export default function TasksPage() {
   };
 
   // Visibility: a pending/rejected submission is only shown to its submitter, its
-  // resolved approver, and the Super User — everyone else sees nothing of it
-  // until it's approved, mirroring the same rule on the Events page.
+  // resolved approver, the Super User, and — so they can audit the delegation
+  // flow live, not just after the fact — the Centre Head / GG Campus Events
+  // Head. Everyone else sees nothing of it until it's approved, mirroring the
+  // same rule on the Events page.
   const canSeeTaskApprovalMeta = (task: TaskItem) =>
-    user?.tier === 1 || task.submittedByEmail === user?.email || canApprovePendingTask(task, user);
+    user?.tier === 1 || task.submittedByEmail === user?.email || canApprovePendingTask(task, user) || canViewTaskDelegationTrail(user);
 
   // Filter tasks based on shared permission helper, layered with the approval-visibility rule above
   const displayedTasks = tasks.filter(task => {
@@ -679,6 +686,42 @@ export default function TasksPage() {
                     </p>
                   )}
                 </div>
+
+                {canViewTaskDelegationTrail(user) && task.delegationTrail && task.delegationTrail.length > 0 && (
+                  <div className="pt-1">
+                    <button
+                      onClick={() => setExpandedTrailTaskId(expandedTrailTaskId === task.id ? null : task.id)}
+                      className="flex items-center gap-1 text-[10px] font-semibold text-accent hover:text-primary-light transition-all cursor-pointer"
+                    >
+                      <GitBranch className="h-3 w-3" />
+                      Delegation Flow ({task.delegationTrail.length})
+                      {expandedTrailTaskId === task.id ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                    </button>
+                    {expandedTrailTaskId === task.id && (
+                      <ol className="mt-2 space-y-1.5 border-l-2 border-accent/25 pl-3">
+                        {task.delegationTrail.map((step, i) => (
+                          <li key={i} className="text-[10px] text-theme-text-secondary">
+                            <span className={`font-semibold ${
+                              step.action === 'approved' ? 'text-success' :
+                              step.action === 'rejected' ? 'text-danger' :
+                              'text-theme-text-primary'
+                            }`}>
+                              {step.action === 'submitted_for_review' ? 'Submitted for review' :
+                               step.action === 'delegated' ? 'Delegated' :
+                               step.action === 'approved' ? 'Approved' : 'Rejected'}
+                            </span>
+                            {' '}by <span className="font-medium text-theme-text-primary">{step.actorName}</span>
+                            {step.targetName && (
+                              <> <ArrowRight className="inline h-2.5 w-2.5 mx-0.5" /> <span className="font-medium text-theme-text-primary">{step.targetName}</span></>
+                            )}
+                            {step.note && <span className="italic"> — {step.note}</span>}
+                            <span className="block text-[9px] opacity-70">{new Date(step.at).toLocaleString()}</span>
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Task Actions */}
