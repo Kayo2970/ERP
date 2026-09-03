@@ -34,8 +34,13 @@ export function RequestApprovalModal({
 
   if (!isOpen) return null;
 
+  // A manual approval request can only be addressed to a Faculty member or a
+  // Super User — never a fellow student/committee member, regardless of
+  // their tier or role. Faculty is a Member.division value; Super User is
+  // identified by tier 1.
   const candidates = members
     .filter(m => m.id !== currentUser.id && m.status !== 'Terminated')
+    .filter(m => m.division === 'Faculty' || m.tier === 1)
     .filter(m => !search.trim() || m.name.toLowerCase().includes(search.toLowerCase()) || (m.role || '').toLowerCase().includes(search.toLowerCase()));
 
   const handleClose = () => {
@@ -100,9 +105,10 @@ export function RequestApprovalModal({
                 className="w-full pl-8 pr-3 py-2 text-xs rounded-xl border border-theme-border/40 bg-theme-background/30 text-theme-text-primary focus:outline-none focus:ring-2 focus:ring-accent/40"
               />
             </div>
+            <p className="text-[10px] text-theme-text-secondary mb-2">Only Faculty members and the Super User can be asked for a manual approval.</p>
             <div className="max-h-44 overflow-y-auto rounded-xl border border-theme-border/30 divide-y divide-theme-border/20">
               {candidates.length === 0 && (
-                <p className="text-xs text-theme-text-secondary p-3 text-center">No members found.</p>
+                <p className="text-xs text-theme-text-secondary p-3 text-center">No Faculty member or Super User found.</p>
               )}
               {candidates.map(m => (
                 <button
