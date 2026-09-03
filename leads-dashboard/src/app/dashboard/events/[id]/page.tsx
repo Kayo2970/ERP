@@ -21,6 +21,7 @@ import {
   Check,
   X,
   Ban,
+  UserCheck,
 } from 'lucide-react';
 import {
   getEventById,
@@ -47,6 +48,7 @@ import {
 import { canManageEvents, isCommitteeApprover } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { StudentProfileModal } from '@/components/student-profile-modal';
+import { RequestApprovalModal } from '@/components/request-approval-modal';
 
 export default function EventDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -63,6 +65,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
 
   const [managingCommittee, setManagingCommittee] = useState<EventCommittee | null>(null);
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
+  const [approvalRequestCommittee, setApprovalRequestCommittee] = useState<EventCommittee | null>(null);
 
   const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
   const [taskTitle, setTaskTitle] = useState('');
@@ -468,15 +471,26 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                           <span className="text-[10px] text-theme-text-secondary">{assignedStudents.length} student members assigned</span>
                         )}
                       </div>
-                      {isLeadership && (
-                        <button
-                          onClick={() => setDeletingCommitteeId(committee.id)}
-                          className="p-1 text-danger hover:bg-danger/10 rounded cursor-pointer transition-all"
-                          title="Remove Committee"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      )}
+                      <div className="flex items-center gap-1">
+                        {user && !isPendingCreate && (
+                          <button
+                            onClick={() => setApprovalRequestCommittee(committee)}
+                            className="p-1 text-theme-text-secondary hover:text-accent hover:bg-theme-border/30 rounded cursor-pointer transition-all"
+                            title="Ask someone to approve this committee"
+                          >
+                            <UserCheck className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        {isLeadership && (
+                          <button
+                            onClick={() => setDeletingCommitteeId(committee.id)}
+                            className="p-1 text-danger hover:bg-danger/10 rounded cursor-pointer transition-all"
+                            title="Remove Committee"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {isPendingCreate ? (
@@ -851,6 +865,20 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
         onConfirm={handleConfirmDeleteCommittee}
         onCancel={() => setDeletingCommitteeId(null)}
       />
+
+      {approvalRequestCommittee && user && (
+        <RequestApprovalModal
+          isOpen={Boolean(approvalRequestCommittee)}
+          onClose={() => setApprovalRequestCommittee(null)}
+          entityType="committee"
+          entityId={approvalRequestCommittee.id}
+          entityTitle={approvalRequestCommittee.name}
+          eventId={eventId}
+          members={members}
+          currentUser={user}
+          onRequested={() => triggerSuccess('Approval request sent!')}
+        />
+      )}
 
       {/* Student Profile Modal */}
       <StudentProfileModal

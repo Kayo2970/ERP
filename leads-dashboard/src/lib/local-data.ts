@@ -253,6 +253,37 @@ export interface EventReportItem {
   emailError?: string;
 }
 
+/**
+ * An ad-hoc, requester-picks-anyone sign-off request: "please approve this
+ * Task/Committee/Event for me" sent to one specific member, distinct from the
+ * built-in Group Policy approval gates on TaskItem/EventItem/EventCommittee
+ * (approvalStatus/approverType/etc.), which only fire for members whose sole
+ * grant for that action came from an approval-required policy tag. This is a
+ * manual request any member can raise on any task/committee/event they can
+ * see, addressed to any other member of their choosing — it never blocks or
+ * gates the underlying record, it's purely a tracked ask-and-answer.
+ */
+export interface ApprovalRequest {
+  id: string;
+  entityType: 'task' | 'committee' | 'event';
+  entityId: string;
+  entityTitle: string;
+  // Set for 'task' (its parent event, if any) and 'committee' (its owning
+  // event) so the UI can deep-link back to where the item actually lives.
+  eventId?: string;
+  requesterId: string;
+  requesterName: string;
+  requesterEmail?: string;
+  targetMemberId: string;
+  targetMemberName: string;
+  targetMemberEmail?: string;
+  message?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
+  decidedAt?: string;
+  decisionNote?: string;
+}
+
 export interface RatingItem {
   id: string;
   taskId: string;
@@ -863,6 +894,7 @@ export async function syncWithServer(): Promise<boolean> {
       hydrateIfStale('leads_budgets', data.budgets, requestStartedAt);
       hydrateIfStale('leads_income_sources', data.incomeSources, requestStartedAt);
       hydrateIfStale('leads_audit_logs', data.auditLogs, requestStartedAt);
+      hydrateIfStale('leads_approval_requests', data.approvalRequests, requestStartedAt);
       // Notify every open page in this tab to re-read localStorage and re-render.
       // The native 'storage' event only fires in OTHER tabs/windows — it never
       // fires in the tab that made the write, so this custom event is the only
@@ -2032,6 +2064,104 @@ export async function deleteEventReport(id: string, actorName: string): Promise<
     logAuditEvent('EVENT_REPORT_DELETED', actorName, `Deleted event report${target ? ` for "${target.eventTitle}"` : ''}`);
   }
   return ok;
+}
+
+// -------------------------------------------------------------
+// Manual Approval Requests (ask a specific member to approve a
+// task/committee/event)
+// -------------------------------------------------------------
+
+export function getApprovalRequests(): ApprovalRequest[] {
+  if (typeof window === 'undefined') return [];
+  const saved = localStorage.getItem('leads_approval_requests');
+  if (saved) {
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  return [];
+}
+
+export function saveApprovalRequests(requests: ApprovalRequest[]): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem('leads_approval_requests', JSON.stringify(requests));
+  markLocalWrite('leads_approval_requests');
+  window.dispatchEvent(new CustomEvent('leads-data-sync'));
+}
+
+/** Ask a specific member to approve a task/committee/event. Purely a tracked
+ *  ask-and-answer — never gates or blocks the underlying record. */
+export function requestApproval(input: {
+  entityType: ApprovalRequest['entityType'];
+  entityId: string;
+  entityTitle: string;
+  eventId?: string;
+  requesterId: string;
+  requesterName: string;
+  requesterEmail?: string;
+  targetMemberId: string;
+  targetMemberName: string;
+  targetMemberEmail?: string;
+  message?: string;
+}): ApprovalRequest {
+  const requests = getApprovalRequests();
+  const newRequest: ApprovalRequest = {
+    ...input,
+    id: 'apr_' + Date.now(),
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+  };
+  requests.unshift(newRequest);
+  saveApprovalRequests(requests);
+  serverPost('/api/approval-requests', newRequest);
+  logAuditEvent(
+    'APPROVAL_REQUESTED',
+    input.requesterName,
+    `Asked ${input.targetMemberName} to approve ${input.entityType} "${input.entityTitle}"`,
+    input.requesterEmail
+  );
+  return newRequest;
+}
+
+/** The target member approves or rejects a pending request. */
+export function decideApprovalRequest(
+  id: string,
+  decision: 'approved' | 'rejected',
+  actorName: string,
+  decisionNote?: string
+): ApprovalRequest | null {
+  const requests = getApprovalRequests();
+  const idx = requests.findIndex(r => r.id === id);
+  if (idx === -1) return null;
+
+  requests[idx] = {
+    ...requests[idx],
+    status: decision,
+    decidedAt: new Date().toISOString(),
+    decisionNote,
+  };
+  saveApprovalRequests(requests);
+  serverPatch('/api/approval-requests', id, requests[idx]);
+  logAuditEvent(
+    decision === 'approved' ? 'APPROVAL_REQUEST_APPROVED' : 'APPROVAL_REQUEST_REJECTED',
+    actorName,
+    `${decision === 'approved' ? 'Approved' : 'Rejected'} the request to approve ${requests[idx].entityType} "${requests[idx].entityTitle}"`
+  );
+  return requests[idx];
+}
+
+/** Withdraw a request the current user sent (only meaningful while pending). */
+export function deleteApprovalRequest(id: string, actorName: string): boolean {
+  const requests = getApprovalRequests();
+  const target = requests.find(r => r.id === id);
+  if (!target) return false;
+
+  saveApprovalRequests(requests.filter(r => r.id !== id));
+  serverDelete('/api/approval-requests', id);
+  logAuditEvent('APPROVAL_REQUEST_WITHDRAWN', actorName, `Withdrew the approval request sent to ${target.targetMemberName} for "${target.entityTitle}"`);
+  return true;
 }
 
 // -------------------------------------------------------------

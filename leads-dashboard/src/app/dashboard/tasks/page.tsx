@@ -18,7 +18,8 @@ import {
   Search,
   PartyPopper,
   ThumbsUp,
-  ThumbsDown
+  ThumbsDown,
+  UserCheck
 } from 'lucide-react';
 import {
   getTasks,
@@ -42,6 +43,7 @@ import {
 import { canViewTaskExtended, canManageTasks, canCreateTask, canEditTask, canDeleteTask, canRequestTaskExtension, canDecideTaskExtension, isHeadRole, getTaskApprovalRequirement, canApprovePendingTask, canRespondToHolidayApproval } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
+import { RequestApprovalModal } from '@/components/request-approval-modal';
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
@@ -57,6 +59,7 @@ export default function TasksPage() {
   const [extensionReasonInput, setExtensionReasonInput] = useState('');
   const [rejectingTaskId, setRejectingTaskId] = useState<string | null>(null);
   const [rejectionReasonInput, setRejectionReasonInput] = useState('');
+  const [approvalRequestTask, setApprovalRequestTask] = useState<TaskItem | null>(null);
 
   // Form State
   const [title, setTitle] = useState('');
@@ -719,8 +722,17 @@ export default function TasksPage() {
                   )}
                 </div>
 
-                {(canEditTask(user) || canDeleteTask(user, task)) && (
+                {(canEditTask(user) || canDeleteTask(user, task) || user) && (
                   <div className="flex items-center gap-1">
+                    {user && (
+                      <button
+                        onClick={() => setApprovalRequestTask(task)}
+                        className="p-1 hover:bg-theme-border/30 rounded-md text-theme-text-secondary hover:text-accent transition-all cursor-pointer"
+                        title="Ask someone to approve this task"
+                      >
+                        <UserCheck className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                     {canEditTask(user) && (
                       <button
                         onClick={() => handleOpenEdit(task)}
@@ -1095,6 +1107,20 @@ export default function TasksPage() {
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeletingTaskId(null)}
       />
+
+      {approvalRequestTask && user && (
+        <RequestApprovalModal
+          isOpen={Boolean(approvalRequestTask)}
+          onClose={() => setApprovalRequestTask(null)}
+          entityType="task"
+          entityId={approvalRequestTask.id}
+          entityTitle={approvalRequestTask.title}
+          eventId={approvalRequestTask.eventId}
+          members={members}
+          currentUser={user}
+          onRequested={() => triggerSuccess('✔ Approval request sent!')}
+        />
+      )}
 
       {rejectingTaskId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">

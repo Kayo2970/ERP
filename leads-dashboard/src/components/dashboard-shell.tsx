@@ -41,7 +41,7 @@ import {
   Sparkles,
   FileCheck2
 } from 'lucide-react';
-import { getAnnouncements, getTasks, getDesigns, getMembers, getBudgets, getReimbursements, getEvents, logAuditEvent, Member, syncWithServer, getSystemSettings } from '@/lib/local-data';
+import { getAnnouncements, getTasks, getDesigns, getMembers, getBudgets, getReimbursements, getEvents, getApprovalRequests, logAuditEvent, Member, syncWithServer, getSystemSettings } from '@/lib/local-data';
 import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isFinanceHead, canAccessGuestDirectory, canVerifyBudgetCentreHead, canDecideBudget, canVerifyReimbursementCentreHead, canApproveAsSectorHead, canApproveAsFinanceHead, canSubmitEventReport, canReviewEventReports } from '@/lib/permissions';
 import { TermsModal } from '@/components/terms-modal';
 import { NotFoundScreen } from '@/components/not-found-screen';
@@ -77,6 +77,7 @@ const navSections: NavSection[] = [
       { name: 'Events', href: '/dashboard/events', icon: Calendar },
       { name: 'Festivals', href: '/dashboard/festivals', icon: Sparkles },
       { name: 'Tasks', href: '/dashboard/tasks', icon: CheckSquare },
+      { name: 'Approvals', href: '/dashboard/approvals', icon: FileCheck2 },
       { name: 'Ratings', href: '/dashboard/ratings', icon: Star },
       { name: 'Design Portal', href: '/dashboard/designs', icon: Palette },
       { name: 'Event Reports', href: '/dashboard/event-reports', icon: FileCheck2, eventReportsOnly: true },
@@ -273,8 +274,20 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         link: `/dashboard/events`,
       }));
 
+    // Ad-hoc manual approval requests addressed directly to this user.
+    const manualApprovalNotifs = getApprovalRequests()
+      .filter(r => r.status === 'pending' && r.targetMemberId === currentUser.id)
+      .map(r => ({
+        id: 'apr_' + r.id,
+        title: `Approval requested: ${r.entityTitle}`,
+        time: `From ${r.requesterName}`,
+        read: false,
+        actionNeeded: true,
+        link: `/dashboard/approvals`,
+      }));
+
     const dismissed = loadDismissedNotifIds();
-    return [...budgetNotifs, ...reimbursementNotifs, ...eventApprovalNotifs, ...proofreadNotifs, ...recentAnnounce, ...recentTasks]
+    return [...budgetNotifs, ...reimbursementNotifs, ...eventApprovalNotifs, ...manualApprovalNotifs, ...proofreadNotifs, ...recentAnnounce, ...recentTasks]
       .filter(n => !dismissed.has(n.id));
   };
 

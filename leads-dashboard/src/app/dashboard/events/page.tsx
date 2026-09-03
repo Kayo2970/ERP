@@ -19,13 +19,15 @@ import {
   Check,
   Ban,
   Handshake,
-  Sparkles
+  Sparkles,
+  UserCheck
 } from 'lucide-react';
-import { getEvents, addEvent, updateEvent, deleteEvent, approveEvent, rejectEvent, submitEventEdit, submitEventDelete, getEffectiveEventStatus, formatEventDateRange, getEventSortTime, getEventSponsors, getEventSponsorTotal, EventItem, EventSponsor } from '@/lib/local-data';
+import { getEvents, addEvent, updateEvent, deleteEvent, approveEvent, rejectEvent, submitEventEdit, submitEventDelete, getEffectiveEventStatus, formatEventDateRange, getEventSortTime, getEventSponsors, getEventSponsorTotal, getMembers, EventItem, EventSponsor, Member } from '@/lib/local-data';
 import { canCreateEvent, canEditEvent, canDeleteEvent, canManageEvents, canViewEvent, canApprovePendingEvent, getEventApprovalRequirement } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useDropTarget } from '@/components/ui/file-dropzone';
+import { RequestApprovalModal } from '@/components/request-approval-modal';
 
 type EventStatusFilter = 'ALL' | 'ONGOING' | 'COMPLETED' | 'ARCHIVED';
 
@@ -40,6 +42,8 @@ export default function EventsPage() {
   const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
   const [rejectingEventId, setRejectingEventId] = useState<string | null>(null);
   const [rejectionReasonInput, setRejectionReasonInput] = useState('');
+  const [members, setMembers] = useState<Member[]>([]);
+  const [approvalRequestEvent, setApprovalRequestEvent] = useState<EventItem | null>(null);
 
   // Form State
   const [title, setTitle] = useState('');
@@ -60,6 +64,7 @@ export default function EventsPage() {
   useEffect(() => {
     const refreshData = () => {
       setEvents(getEvents());
+      setMembers(getMembers());
     };
     refreshData();
 
@@ -646,8 +651,17 @@ export default function EventsPage() {
                     <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
                   </Link>
                   
-                  {(canEditEvent(user) || canDeleteEvent(user)) && (
+                  {(canEditEvent(user) || canDeleteEvent(user) || user) && (
                     <div className="flex items-center gap-1">
+                      {user && (
+                        <button
+                          onClick={() => setApprovalRequestEvent(event)}
+                          className="p-1.5 hover:bg-theme-border/30 rounded-lg transition-all text-theme-text-secondary hover:text-accent cursor-pointer"
+                          title="Ask someone to approve this event"
+                        >
+                          <UserCheck className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                       {canEditEvent(user) && (
                         <button
                           onClick={() => handleOpenEdit(event)}
@@ -866,6 +880,20 @@ export default function EventsPage() {
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeletingEventId(null)}
       />
+
+      {approvalRequestEvent && user && (
+        <RequestApprovalModal
+          isOpen={Boolean(approvalRequestEvent)}
+          onClose={() => setApprovalRequestEvent(null)}
+          entityType="event"
+          entityId={approvalRequestEvent.id}
+          entityTitle={approvalRequestEvent.title}
+          eventId={approvalRequestEvent.id}
+          members={members}
+          currentUser={user}
+          onRequested={() => triggerSuccess('✔ Approval request sent!')}
+        />
+      )}
 
       {/* Reject Pending Approval Modal */}
       {rejectingEventId && (

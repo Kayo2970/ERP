@@ -68,6 +68,7 @@ export interface DbSchema {
   budgets: any[];
   incomeSources: any[];
   eventReports: any[];
+  approvalRequests: any[];
   // One row per (memberId, date) a birthday email was actually sent for —
   // see src/lib/birthday-scheduler.ts. Purely an idempotency guard so a
   // PM2 restart near midnight (or two scheduler ticks landing on the same
@@ -100,6 +101,7 @@ const EMPTY_DB: DbSchema = {
   budgets: [],
   incomeSources: [],
   eventReports: [],
+  approvalRequests: [],
   birthdayEmailLog: [],
 };
 
@@ -147,6 +149,7 @@ const SEED_DB: DbSchema = {
   budgets: initialBudgets,
   incomeSources: initialIncomeSources,
   eventReports: [],
+  approvalRequests: [],
   birthdayEmailLog: [],
 };
 
