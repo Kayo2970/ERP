@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server';
 import { mutateCollection } from '@/lib/server-db';
 import { enqueueTaskEmailNotification } from '@/lib/task-email-queue';
 import { deleteStoredFilesForRecord } from '@/lib/file-storage';
+import { fanOutAutoApproval, cascadeCloseAutoApprovals } from '@/lib/approval-sync';
+
+const PENDING_APPROVAL_MESSAGE: Record<string, string> = {
+  pending_create: 'This task needs sign-off from the Centre Head, Advisor, or GG Campus Events Head before it is allotted.',
+  pending_edit: 'An edit to this task needs sign-off from the Centre Head, Advisor, or GG Campus Events Head.',
+};
+const PENDING_STATES = new Set(['pending_create', 'pending_edit']);
 
 export async function PATCH(
   request: Request,
@@ -23,6 +30,34 @@ export async function PATCH(
       return next;
     });
     const result = updated.find((t: any) => t.id === id);
+
+    if (result && (result.approverType === 'CENTER_HEAD' || !result.approverType)) {
+      const wasPending = previous && PENDING_STATES.has(previous.approvalStatus);
+      const isPending = PENDING_STATES.has(result.approvalStatus);
+
+      if (isPending && (!wasPending || previous.approvalStatus !== result.approvalStatus)) {
+        try {
+          await fanOutAutoApproval({
+            entityType: 'task',
+            entityId: result.id,
+            entityTitle: result.title,
+            eventId: result.eventId,
+            requesterId: result.submittedBy || '',
+            requesterName: result.submittedBy || 'A member',
+            requesterEmail: result.submittedByEmail,
+            message: PENDING_APPROVAL_MESSAGE[result.approvalStatus],
+          });
+        } catch (approvalErr) {
+          console.error('[tasks-api] Approval fan-out failed:', approvalErr);
+        }
+      } else if (wasPending && (result.approvalStatus === 'approved' || result.approvalStatus === 'rejected')) {
+        try {
+          await cascadeCloseAutoApprovals('task', result.id, result.approvalStatus, result.decidedBy);
+        } catch (approvalErr) {
+          console.error('[tasks-api] Approval cascade-close failed:', approvalErr);
+        }
+      }
+    }
 
     // A pending edit (e.g. a delegated task — see delegateAutoTask in
     // local-data.ts) just got approved and changed who it's assigned to —

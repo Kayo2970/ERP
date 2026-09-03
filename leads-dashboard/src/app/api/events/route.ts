@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { dispatchEmail, generateEventRosterEmailTemplate } from '@/lib/email-service';
+import { fanOutAutoApproval } from '@/lib/approval-sync';
+
+const PENDING_APPROVAL_MESSAGE: Record<string, string> = {
+  pending_create: 'This event was created and needs sign-off from the Centre Head, Advisor, or GG Campus Events Head before it goes live.',
+  pending_edit: 'An edit to this event needs sign-off from the Centre Head, Advisor, or GG Campus Events Head.',
+  pending_delete: 'A request to delete this event needs sign-off from the Centre Head, Advisor, or GG Campus Events Head.',
+};
 
 export async function GET() {
   const items = await readCollection('events');
@@ -20,6 +27,32 @@ export async function POST(request: Request) {
       return [item, ...current];
     });
     const created = updated.find((e: any) => e.id === item.id);
+
+    // Route the built-in Group Policy approval gate (approvalStatus/
+    // approverType — see EventItem's doc comment in local-data.ts) into the
+    // Approvals module too, so festivals and every other event this fires
+    // for actually shows up there. Only the default CENTER_HEAD panel is
+    // fanned out here — a SPECIFIC_MEMBER/POLICY_TAG approver was already
+    // deliberately narrowed by whoever set that up, so it's left alone.
+    if (
+      created &&
+      (created.approverType === 'CENTER_HEAD' || !created.approverType) &&
+      (created.approvalStatus === 'pending_create' || created.approvalStatus === 'pending_edit' || created.approvalStatus === 'pending_delete')
+    ) {
+      try {
+        await fanOutAutoApproval({
+          entityType: 'event',
+          entityId: created.id,
+          entityTitle: created.title,
+          requesterId: created.submittedBy || '',
+          requesterName: created.submittedBy || 'A member',
+          requesterEmail: created.submittedByEmail,
+          message: PENDING_APPROVAL_MESSAGE[created.approvalStatus],
+        });
+      } catch (approvalErr) {
+        console.error('[events-api] Approval fan-out failed:', approvalErr);
+      }
+    }
 
     // Automated Email Dispatch for Event Committee Roster
     if (created && Array.isArray(created.committees)) {
