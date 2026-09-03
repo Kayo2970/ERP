@@ -255,6 +255,10 @@ export default function DesignPortalPage() {
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<DesignSubmissionItem['category']>('Poster');
   const [eventId, setEventId] = useState('');
+  // Set when this submission is fulfilling a design-brief Task from the
+  // "Design Task Requests" queue below, rather than an ad-hoc upload — see
+  // handleOpenSubmitForTask.
+  const [sourceTaskId, setSourceTaskId] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [fileData, setFileData] = useState<string>('');
   const [fileError, setFileError] = useState<string>('');
@@ -625,6 +629,7 @@ export default function DesignPortalPage() {
         eventId: selectedEvent?.id,
         eventName: selectedEvent?.title,
         ocrScan: ocrScanResult || undefined,
+        sourceTaskId: sourceTaskId || undefined,
       }, tracker);
 
       refreshData();
@@ -635,6 +640,7 @@ export default function DesignPortalPage() {
       setDescription('');
       setCategory('Poster');
       setEventId('');
+      setSourceTaskId('');
       setFile(null);
       setFileData('');
       setFileError('');
@@ -649,6 +655,25 @@ export default function DesignPortalPage() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Opens the submission modal pre-filled to fulfill a design-brief Task
+  // from the "Design Task Requests" queue — carries sourceTaskId through so
+  // addDesign() links this submission back to that task (see local-data.ts's
+  // addDesign/syncDesignTask for the completion cascade on approval).
+  const handleOpenSubmitForTask = (task: TaskItem) => {
+    setSubmitError('');
+    setTitle(task.title.replace(/^\[.*?\]\s*/, ''));
+    setDescription(task.briefDescription || '');
+    setCategory('Poster');
+    setEventId(task.eventId || '');
+    setSourceTaskId(task.id);
+    setFile(null);
+    setFileData('');
+    setFileError('');
+    setOcrScanResult(null);
+    setScanError('');
+    setShowUploadModal(true);
   };
 
   const handleSaveReview = (e: React.FormEvent) => {
@@ -725,6 +750,17 @@ export default function DesignPortalPage() {
   const expiredCount = designs.filter(d => d.isExpired).length;
   const assignedToMeCount = designs.filter(d => d.proofreadRequested && d.assignedProofreaderEmail === user?.email && d.review?.status === 'Pending Proofread').length;
 
+  // Design-brief Tasks (Tasks module, taskCategory === 'design') waiting on
+  // a submission here — visible to the assigned designer, plus anyone who
+  // can see the whole portal (Centre Head / Design Head / etc). Stays in the
+  // queue until its status flips to 'Completed', which syncDesignTask() does
+  // automatically the moment the linked submission's proofread is approved.
+  const designTaskRequests = tasks.filter(t => {
+    if (t.taskCategory !== 'design' || t.status === 'Completed') return false;
+    if (canViewAllDesigns(user)) return true;
+    return t.assigneeId === user?.id || t.assigneeEmail === user?.email || (t.assigneeType === 'group' && t.assigneeIds?.includes(user?.id));
+  });
+
   return (
     <div className="p-6 md:p-8 space-y-6">
       {/* Header Banner */}
@@ -741,7 +777,7 @@ export default function DesignPortalPage() {
           </p>
         </div>
         <button
-          onClick={() => { setSubmitError(''); setShowUploadModal(true); }}
+          onClick={() => { setSubmitError(''); setSourceTaskId(''); setShowUploadModal(true); }}
           className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-accent hover:bg-primary-light text-white font-bold text-xs transition-all shadow-md shadow-accent/20 whitespace-nowrap cursor-pointer"
         >
           <UploadCloud className="h-4 w-4" />
@@ -787,6 +823,88 @@ export default function DesignPortalPage() {
           <p className="text-[11px] text-theme-text-secondary">Files purged & archived</p>
         </div>
       </div>
+
+      {/* Design Task Requests — design-brief Tasks created on the Tasks page
+          (taskCategory === 'design') waiting on a submission here. */}
+      {designTaskRequests.length > 0 && (
+        <div className="glass-panel p-5 rounded-3xl border border-accent/25 space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="p-2 rounded-xl bg-accent/15 text-accent border border-accent/25">
+              <Palette className="h-4 w-4" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-theme-text-primary">Design Task Requests</h2>
+              <p className="text-[11px] text-muted-foreground">Design briefs assigned to you, awaiting a submission.</p>
+            </div>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-3">
+            {designTaskRequests.map(task => {
+              const linkedSubmissions = designs.filter(d => d.sourceTaskId === task.id);
+              return (
+                <div key={task.id} className="p-3.5 bg-background/40 border border-border rounded-2xl space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-bold text-xs text-foreground leading-snug">{task.title}</p>
+                      <p className="text-[11px] text-muted-foreground">Assignee: {task.assignee} · Due {task.dueDate}</p>
+                    </div>
+                    <button
+                      onClick={() => handleOpenSubmitForTask(task)}
+                      className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-accent hover:bg-primary-light text-white text-[11px] font-bold transition-all cursor-pointer whitespace-nowrap"
+                    >
+                      <UploadCloud className="h-3.5 w-3.5" />
+                      Submit Design
+                    </button>
+                  </div>
+                  {task.briefDescription && (
+                    <p className="text-[11px] text-muted-foreground whitespace-pre-wrap line-clamp-2">{task.briefDescription}</p>
+                  )}
+                  {task.attachments && task.attachments.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {task.attachments.map((f, i) => (
+                        <a
+                          key={f.storageKey || f.url || i}
+                          href={f.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 px-2 py-1 bg-accent/10 hover:bg-accent/20 border border-accent/25 text-accent text-[10px] font-medium rounded-lg transition-all max-w-full"
+                          title={f.name}
+                        >
+                          <FileText className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{f.name}</span>
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                  {linkedSubmissions.length > 0 && (
+                    <div className="pt-1.5 border-t border-border/60 space-y-1">
+                      {linkedSubmissions.map(d => (
+                        <button
+                          key={d.id}
+                          onClick={() => openInspector(d)}
+                          className="w-full flex items-center justify-between gap-2 text-[11px] text-left hover:text-accent cursor-pointer"
+                        >
+                          <span className="truncate">{d.fileName}</span>
+                          <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                            d.review?.status === 'Proofread Approved'
+                              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                              : d.review?.status === 'Changes Requested'
+                              ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                              : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                          }`}>
+                            {d.review?.status || 'Pending Proofread'}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Filter Tabs & Search Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 glass-panel p-3 rounded-2xl border border-white/20">
@@ -1067,6 +1185,42 @@ export default function DesignPortalPage() {
                 Upload your graphic asset (<span className="font-semibold">Max 25 MB</span>). Files are stored for <span className="font-semibold">30 days</span> under automatic retention policy.
               </p>
             </div>
+
+            {sourceTaskId && (() => {
+              const sourceTask = tasks.find(t => t.id === sourceTaskId);
+              if (!sourceTask) return null;
+              return (
+                <div className="p-3.5 bg-accent/10 border border-accent/30 rounded-xl space-y-2">
+                  <div className="flex items-center gap-2 font-semibold text-foreground">
+                    <FileText className="h-4 w-4 text-accent" />
+                    Fulfilling Task: {sourceTask.title}
+                  </div>
+                  {sourceTask.briefDescription && (
+                    <p className="text-[11px] text-muted-foreground whitespace-pre-wrap">{sourceTask.briefDescription}</p>
+                  )}
+                  {sourceTask.attachments && sourceTask.attachments.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {sourceTask.attachments.map((f, i) => (
+                        <a
+                          key={f.storageKey || f.url || i}
+                          href={f.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-2 py-1 bg-accent/15 hover:bg-accent/25 border border-accent/30 text-accent text-[10px] font-medium rounded-lg transition-all max-w-full"
+                          title={f.name}
+                        >
+                          <FileText className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{f.name}</span>
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-[10px] text-muted-foreground">
+                    This task will be marked <span className="font-semibold text-foreground">Completed</span> automatically once your submission is approved.
+                  </p>
+                </div>
+              );
+            })()}
 
             <form onSubmit={handleUploadSubmit} className="space-y-4 text-xs">
               {/* Title */}

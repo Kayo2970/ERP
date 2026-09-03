@@ -602,6 +602,13 @@ export interface DesignSubmissionItem {
   // approvals (e.g. approved -> changes requested -> re-approved) reuse the
   // same task instead of creating a duplicate each time.
   linkedTaskId?: string;
+  // The design-brief Task (Tasks module, taskCategory === 'design') this
+  // submission was made in response to — set only when the designer
+  // submitted via the Design Portal's "Design Task Requests" queue rather
+  // than an ad-hoc upload. addDesign() seeds linkedTaskId from this so
+  // syncDesignTask() completes THIS same task on approval instead of
+  // spawning a new standalone "Design Approved: ..." task.
+  sourceTaskId?: string;
   workflowStage?: 'caption_required' | 'caption_approval' | 'posting_required' | 'completed';
   captionTaskId?: string;
   captionApprovalTaskId?: string;
@@ -4028,7 +4035,11 @@ export async function addDesign(design: Omit<DesignSubmissionItem, 'id' | 'submi
       proofreaderId: reviewer.id,
       proofreaderName: reviewer.name,
       status: 'Pending Proofread',
-    } : undefined
+    } : undefined,
+    // Reuse the design-brief task (if this submission fulfills one) as the
+    // task syncDesignTask() completes on approval, instead of spawning a new
+    // standalone one.
+    linkedTaskId: design.sourceTaskId || design.linkedTaskId,
   };
 
   // POST to server first so the file is written to disk and fileUrl/storageKey is generated without polluting localStorage with base64 data
@@ -4045,6 +4056,16 @@ export async function addDesign(design: Omit<DesignSubmissionItem, 'id' | 'submi
 
   current.unshift(createdDesign);
   saveDesigns(current);
+
+  // A submission against a design-brief task means work on it has started —
+  // move it out of 'Assigned' so it reads correctly on the Tasks page too.
+  // syncDesignTask() (triggered on approval) takes it to 'Completed'.
+  if (design.sourceTaskId) {
+    const sourceTask = getTasks().find(t => t.id === design.sourceTaskId);
+    if (sourceTask && sourceTask.status === 'Assigned') {
+      updateTask(design.sourceTaskId, { status: 'In Progress' }, design.designerName);
+    }
+  }
 
   const proofreadMsg = reviewer ? ` (routed to ${reviewer.name} for mandatory proofread)` : ' (no Centre Head, GG Campus Events Head, or Super User found to route proofreading to)';
   logAuditEvent('DESIGN_SUBMITTED', design.designerName, `Submitted design "${design.title}" (${(design.fileSize / (1024 * 1024)).toFixed(2)} MB)${proofreadMsg}`, design.designerEmail);
