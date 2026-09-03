@@ -831,9 +831,13 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                     className="w-full px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   >
                     <option value="">Select individual assignee...</option>
-                    {eventParticipants.map(p => (
-                      <option key={p.id} value={p.id}>{p.name} ({p.division})</option>
-                    ))}
+                    {members
+                      .filter(m => m.status !== 'Terminated')
+                      .slice()
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map(p => (
+                        <option key={p.id} value={p.id}>{p.name} ({p.division})</option>
+                      ))}
                   </select>
                 </div>
               </div>
