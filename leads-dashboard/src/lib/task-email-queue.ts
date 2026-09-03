@@ -2,6 +2,70 @@ import { dispatchEmail, wrapInMasterEmailTemplate } from './email-service';
 import { readCollection, mutateCollection } from './server-db';
 import { getAppBaseUrl } from './app-url';
 
+export interface TaskEmailRecipient {
+  email: string;
+  name: string;
+}
+
+/**
+ * Resolves who should actually be emailed for a task, across every
+ * assigneeType — not just 'individual'. Before this, the tasks API only ever
+ * looked at task.assigneeEmail / task.assigneeId / a name match against
+ * task.assignee, none of which are ever set on a 'committee' or 'group'
+ * task (those carry eventCommitteeId or assigneeIds instead), so assigning a
+ * task to a committee or a group of students silently never emailed anyone.
+ */
+export function resolveTaskEmailRecipients(
+  task: {
+    assigneeType?: 'individual' | 'committee' | 'group';
+    assignee?: string;
+    assigneeId?: string;
+    assigneeEmail?: string;
+    assigneeIds?: string[];
+    eventId?: string;
+    eventCommitteeId?: string;
+  },
+  members: Array<{ id: string; name: string; email?: string; status?: string }>,
+  events: Array<{ id: string; committees?: Array<{ id: string; memberIds: string[] }> }>
+): TaskEmailRecipient[] {
+  const activeMembers = members.filter(m => m.status !== 'Terminated' && m.email);
+  const byId = new Map(activeMembers.map(m => [m.id, m]));
+
+  if (task.assigneeType === 'group' && Array.isArray(task.assigneeIds) && task.assigneeIds.length > 0) {
+    return task.assigneeIds
+      .map(id => byId.get(id))
+      .filter((m): m is typeof activeMembers[number] => Boolean(m))
+      .map(m => ({ email: m.email!, name: m.name }));
+  }
+
+  if (task.assigneeType === 'committee' && task.eventId && task.eventCommitteeId) {
+    const event = events.find(e => e.id === task.eventId);
+    const committee = event?.committees?.find(c => c.id === task.eventCommitteeId);
+    return (committee?.memberIds || [])
+      .map(id => byId.get(id))
+      .filter((m): m is typeof activeMembers[number] => Boolean(m))
+      .map(m => ({ email: m.email!, name: m.name }));
+  }
+
+  // Individual, and the fallback for any legacy/unknown shape.
+  let email = task.assigneeEmail;
+  let name = task.assignee;
+  if (!email && task.assigneeId) {
+    const match = byId.get(task.assigneeId);
+    if (match) {
+      email = match.email;
+      name = match.name;
+    }
+  } else if (!email && task.assignee) {
+    const match = activeMembers.find(m => m.name.toLowerCase() === String(task.assignee).toLowerCase());
+    if (match) {
+      email = match.email;
+      name = match.name;
+    }
+  }
+  return email ? [{ email, name: name || 'Member' }] : [];
+}
+
 interface PendingTaskItem {
   id: string;
   title: string;

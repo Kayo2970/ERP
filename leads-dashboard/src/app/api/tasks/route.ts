@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
-import { enqueueTaskEmailNotification } from '@/lib/task-email-queue';
+import { enqueueTaskEmailNotification, resolveTaskEmailRecipients } from '@/lib/task-email-queue';
 
 export async function GET() {
   const items = await readCollection('tasks');
@@ -21,36 +21,24 @@ export async function POST(request: Request) {
     });
     const created = updated.find((t: any) => t.id === item.id);
 
-    // Queue task email notification with 10-minute quiet buffer
+    // Queue task email notification(s) with 10-minute quiet buffer — resolved
+    // per assigneeType so committee/group tasks reach every member on them,
+    // not just a single-assignee 'individual' task.
     if (created) {
       try {
         const members = await readCollection('members');
-        let targetEmail = created.assigneeEmail;
-        let targetName = created.assignee;
+        const events = await readCollection('events');
+        const recipients = resolveTaskEmailRecipients(created, members as any, events as any);
 
-        if (!targetEmail && created.assigneeId) {
-          const match = members.find((m: any) => m.id === created.assigneeId);
-          if (match) {
-            targetEmail = match.email;
-            targetName = match.name;
-          }
-        } else if (!targetEmail && created.assignee) {
-          const match = members.find((m: any) => m.name.toLowerCase() === created.assignee.toLowerCase());
-          if (match) {
-            targetEmail = match.email;
-            targetName = match.name;
-          }
-        }
-
-        if (targetEmail) {
+        for (const recipient of recipients) {
           await enqueueTaskEmailNotification({
             id: created.id,
             title: created.title,
             event: created.event || created.eventName,
             dueDate: created.dueDate,
             creatorName: created.creatorName || created.assignerName,
-            assigneeEmail: targetEmail,
-            assigneeName: targetName || 'Member',
+            assigneeEmail: recipient.email,
+            assigneeName: recipient.name,
           });
         }
       } catch (emailErr) {
