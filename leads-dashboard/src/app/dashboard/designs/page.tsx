@@ -28,6 +28,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { FileDropzone, FilePreviewRow, createProgressTracker } from '@/components/ui/file-dropzone';
+import { RequestApprovalModal } from '@/components/request-approval-modal';
 import {
   getDesigns,
   addDesign,
@@ -195,6 +196,8 @@ export default function DesignPortalPage() {
   // Modals
   const [showUploadModal, setShowUploadModal] = useState<boolean>(false);
   const [selectedDesign, setSelectedDesign] = useState<DesignSubmissionItem | null>(null);
+  const [approvalRequestDesign, setApprovalRequestDesign] = useState<DesignSubmissionItem | null>(null);
+  const [approvalRequestSuccessMsg, setApprovalRequestSuccessMsg] = useState('');
   const [showInspectorModal, setShowInspectorModal] = useState<boolean>(false);
 
   // Quick Event Creation Modal state
@@ -778,6 +781,12 @@ export default function DesignPortalPage() {
 
   return (
     <div className="p-6 md:p-8 space-y-6">
+      {approvalRequestSuccessMsg && (
+        <div className="flex items-center gap-3 p-4 bg-success/15 border border-success/20 rounded-2xl text-theme-text-primary text-xs animate-in fade-in duration-300">
+          <UserCheck className="h-5 w-5 text-success shrink-0" />
+          <span>{approvalRequestSuccessMsg}</span>
+        </div>
+      )}
       {/* Header Banner */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 glass-panel border border-white/30 p-6 md:p-8 rounded-3xl shadow-xl bg-gradient-to-r from-accent/15 via-primary/10 to-transparent">
         <div className="space-y-1">
@@ -1162,6 +1171,16 @@ export default function DesignPortalPage() {
                       <Eye className="h-3.5 w-3.5" />
                       Inspect & Review
                     </button>
+
+                    {user && (
+                      <button
+                        onClick={() => setApprovalRequestDesign(design)}
+                        className="p-1.5 rounded-xl text-theme-text-secondary hover:text-accent hover:bg-accent/10 transition-colors cursor-pointer"
+                        title="Ask a Faculty member or Super User to approve this design"
+                      >
+                        <UserCheck className="h-3.5 w-3.5" />
+                      </button>
+                    )}
 
                     {(design.designerEmail === user?.email || user?.tier <= 3 || hasCapability(user, 'DESIGN_DELETE')) && (
                       <button
@@ -2183,7 +2202,7 @@ export default function DesignPortalPage() {
               ) : (
                 <div className="p-3 bg-muted/20 rounded-lg text-xs text-muted-foreground flex items-center gap-2">
                   <Lock className="h-4 w-4 text-muted-foreground" />
-                  Only a member with the designation of Design Head or Centre Head can approve or reject designs based on design style.
+                  Only the Design Head, Centre Head, or Advisor can approve or reject designs based on design style.
                 </div>
               )}
             </div>
@@ -2207,6 +2226,24 @@ export default function DesignPortalPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {approvalRequestDesign && user && (
+        <RequestApprovalModal
+          isOpen={Boolean(approvalRequestDesign)}
+          onClose={() => setApprovalRequestDesign(null)}
+          entityType="design"
+          entityId={approvalRequestDesign.id}
+          entityTitle={approvalRequestDesign.title}
+          eventId={approvalRequestDesign.eventId}
+          members={members}
+          currentUser={user}
+          onRequested={() => {
+            setApprovalRequestDesign(null);
+            setApprovalRequestSuccessMsg('Approval request sent!');
+            setTimeout(() => setApprovalRequestSuccessMsg(''), 4000);
+          }}
+        />
       )}
     </div>
   );

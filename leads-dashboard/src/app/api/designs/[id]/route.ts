@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection, readCollection } from '@/lib/server-db';
 import { deleteStoredFile, deleteStoredFilesForRecord, saveBase64File, readStoredFile } from '@/lib/file-storage';
+import { cascadeCloseAutoApprovals } from '@/lib/approval-sync';
 
 export async function PATCH(
   request: Request,
@@ -23,6 +24,7 @@ export async function PATCH(
     }
 
     let justStyleApproved = false;
+    let justStyleRejected = false;
     let mergedRecord: any = null;
 
     // Upsert: if this id isn't in the server's collection yet (e.g. client-bundled
@@ -35,10 +37,15 @@ export async function PATCH(
       if (body.storageKey && next[idx].storageKey && next[idx].storageKey !== body.storageKey) {
         previousStorageKey = next[idx].storageKey;
       }
-      const wasStyleApproved = next[idx].styleStatus === 'Style Approved';
+      const previousStyleStatus = next[idx].styleStatus;
+      const wasStyleApproved = previousStyleStatus === 'Style Approved';
+      const wasStyleRejected = previousStyleStatus === 'Style Rejected';
       const merged = { ...next[idx], ...body };
       if (!wasStyleApproved && merged.styleStatus === 'Style Approved') {
         justStyleApproved = true;
+      }
+      if (!wasStyleRejected && merged.styleStatus === 'Style Rejected') {
+        justStyleRejected = true;
       }
       next[idx] = merged;
       mergedRecord = merged;
@@ -51,8 +58,23 @@ export async function PATCH(
       await deleteStoredFile(previousStorageKey);
     }
 
-    // Once Style Approved, email the design asset as an attachment to the
-    // Centre Head and GG Campus Head of Events.
+    // Resolve any still-pending fan-out rows this design's submission raised
+    // in the Approvals module — whichever of the Centre Head/Advisor/GG
+    // Campus Events Head made this style decision resolves it everywhere.
+    if (justStyleApproved || justStyleRejected) {
+      try {
+        await cascadeCloseAutoApprovals('design', id, justStyleApproved ? 'approved' : 'rejected', mergedRecord?.styleDecidedBy);
+      } catch (approvalErr) {
+        console.error('[designs-api] Approval cascade-close failed:', approvalErr);
+      }
+    }
+
+    // Once Style Approved — by the Centre Head, Advisor, or GG Campus Head of
+    // Events (see the isCentreHead(user)/isDesignHead(user) gate in
+    // dashboard/designs/page.tsx, which already treats Advisor as Centre
+    // Head) — email the design asset as an attachment to all three, using
+    // each member's own registered email address (Member.email, collected at
+    // account activation/registration — see findApprovalRecipients).
     if (justStyleApproved && mergedRecord?.storageKey) {
       try {
         const [members, { dispatchEmail, generateDesignApprovedEmailTemplate, findApprovalRecipients }] = await Promise.all([
@@ -60,7 +82,7 @@ export async function PATCH(
           import('@/lib/email-service'),
         ]);
         const recipients = findApprovalRecipients(members as any[]);
-        const to = [recipients.centreHead?.email, recipients.eventsHeadGg?.email].filter(Boolean) as string[];
+        const to = [recipients.centreHead?.email, recipients.advisor?.email, recipients.eventsHeadGg?.email].filter(Boolean) as string[];
 
         if (to.length > 0) {
           const fileBuffer = await readStoredFile(mergedRecord.storageKey);
@@ -80,7 +102,7 @@ export async function PATCH(
           ));
           mergedRecord = { ...mergedRecord, styleApprovalEmailSent: log.status === 'SENT', styleApprovalEmailError: log.errorMessage };
         } else {
-          const noRecipientsMsg = 'No Centre Head or GG Campus Head of Events found in the Directory to send the approved design to.';
+          const noRecipientsMsg = 'No Centre Head, Advisor, or GG Campus Head of Events found in the Directory to send the approved design to.';
           await mutateCollection('designs', (current) => (current || []).map((d: any) =>
             d.id === id ? { ...d, styleApprovalEmailSent: false, styleApprovalEmailError: noRecipientsMsg } : d
           ));

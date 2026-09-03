@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { saveBase64File } from '@/lib/file-storage';
+import { fanOutAutoApproval } from '@/lib/approval-sync';
 
 export const maxDuration = 60; // 60s execution limit for large uploads (up to 25 MB)
 
@@ -58,6 +59,28 @@ export async function POST(request: Request) {
     });
 
     const created = updated.find((d: any) => d.id === newDesign.id);
+
+    // Every design submission needs a style-approval/proofreading decision
+    // from the Centre Head, Advisor, or GG Campus Events Head — fan that
+    // ask out to the Approvals module as soon as it lands.
+    if (created) {
+      try {
+        await fanOutAutoApproval({
+          entityType: 'design',
+          entityId: created.id,
+          entityTitle: created.title,
+          eventId: created.eventId,
+          requesterId: created.designerId || '',
+          requesterName: created.designerName || 'A designer',
+          requesterEmail: created.designerEmail,
+          message: created.proofreadRequested
+            ? 'This design submission needs style approval and proofreading sign-off.'
+            : 'This design submission needs style approval sign-off.',
+        });
+      } catch (approvalErr) {
+        console.error('[designs-api] Approval fan-out failed:', approvalErr);
+      }
+    }
 
     // Proofread Request Email Dispatch for Professors / Reviewers
     if (created && (created.requestProofread || created.assignedProofreaderId)) {

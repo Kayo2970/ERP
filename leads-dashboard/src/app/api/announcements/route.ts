@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { dispatchAnnouncementEmails } from '@/lib/announcement-email';
+import { fanOutAutoApproval } from '@/lib/approval-sync';
 
 export async function GET() {
   const items = await readCollection('announcements');
@@ -16,6 +17,25 @@ export async function POST(request: Request) {
     // Dispatch emails ONLY if created directly with status 'Approved' (e.g. by Centre Head)
     if (created && created.status === 'Approved') {
       await dispatchAnnouncementEmails(created);
+    }
+
+    // An announcement created as 'Pending Approval' needs sign-off from the
+    // Centre Head, Advisor, or GG Campus Events Head — fan that out to the
+    // Approvals module.
+    if (created && created.status === 'Pending Approval') {
+      try {
+        await fanOutAutoApproval({
+          entityType: 'announcement',
+          entityId: created.id,
+          entityTitle: created.title,
+          requesterId: created.authorId || '',
+          requesterName: created.authorName || 'A member',
+          requesterEmail: created.authorEmail,
+          message: 'This announcement needs approval before it is published.',
+        });
+      } catch (approvalErr) {
+        console.error('[announcements-api] Approval fan-out failed:', approvalErr);
+      }
     }
 
     return NextResponse.json(created, { status: 201 });

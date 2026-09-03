@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection } from '@/lib/server-db';
 import { dispatchAnnouncementEmails } from '@/lib/announcement-email';
+import { cascadeCloseAutoApprovals } from '@/lib/approval-sync';
 
 export async function PATCH(
   request: Request,
@@ -10,6 +11,7 @@ export async function PATCH(
     const { id } = await params;
     const updates = await request.json();
     let isNewlyApproved = false;
+    let isNewlyRejected = false;
 
     const updated = await mutateCollection('announcements', (current) => {
       const idx = current.findIndex((item: any) => item.id === id);
@@ -18,6 +20,9 @@ export async function PATCH(
       const existing = current[idx];
       if (updates.status === 'Approved' && existing.status !== 'Approved' && !existing.emailSent) {
         isNewlyApproved = true;
+      }
+      if (updates.status === 'Rejected' && existing.status !== 'Rejected') {
+        isNewlyRejected = true;
       }
 
       const next = [...current];
@@ -30,6 +35,14 @@ export async function PATCH(
     // If Centre Head just approved the announcement, send automatic emails NOW!
     if (targetAnnouncement && (isNewlyApproved || (targetAnnouncement.status === 'Approved' && !targetAnnouncement.emailSent))) {
       await dispatchAnnouncementEmails(targetAnnouncement);
+    }
+
+    if (targetAnnouncement && (isNewlyApproved || isNewlyRejected)) {
+      try {
+        await cascadeCloseAutoApprovals('announcement', id, isNewlyApproved ? 'approved' : 'rejected', targetAnnouncement.approvedBy || targetAnnouncement.rejectedBy);
+      } catch (approvalErr) {
+        console.error('[announcements-api] Approval cascade-close failed:', approvalErr);
+      }
     }
 
     return NextResponse.json(targetAnnouncement);

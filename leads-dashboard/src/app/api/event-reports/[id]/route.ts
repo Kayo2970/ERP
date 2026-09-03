@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection, readCollection } from '@/lib/server-db';
 import { saveBase64File, deleteStoredFile, deleteStoredFilesForRecord, readStoredFile } from '@/lib/file-storage';
+import { cascadeCloseAutoApprovals } from '@/lib/approval-sync';
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
 
@@ -28,6 +29,7 @@ export async function PATCH(
     }
 
     let justFullyApproved = false;
+    let justRejected = false;
     let mergedRecord: any = null;
 
     const updated = await mutateCollection('eventReports', (current) => {
@@ -40,14 +42,19 @@ export async function PATCH(
       }
 
       const wasFullyApproved = next[idx].status === 'approved';
+      const wasRejected = next[idx].status === 'rejected';
       const merged = { ...next[idx], ...body };
 
-      // Dual sign-off: both the Centre Head and the GG Campus Head of Events
-      // must independently approve before this counts as approved — neither
-      // approval alone finalizes it.
-      if (!wasFullyApproved && merged.centreHeadApproved && merged.eventsHeadGgApproved) {
+      // Any ONE of the Centre Head, Advisor, or GG Campus Head of Events
+      // ticking it off is enough to finalize approval — Advisor's sign-off
+      // lands in centreHeadApproved too (isCentreHead already folds Advisor
+      // in, see permissions.ts), it isn't a fourth required signature.
+      if (!wasFullyApproved && (merged.centreHeadApproved || merged.eventsHeadGgApproved)) {
         merged.status = 'approved';
         justFullyApproved = true;
+      }
+      if (!wasFullyApproved && !wasRejected && merged.status === 'rejected') {
+        justRejected = true;
       }
 
       next[idx] = merged;
@@ -59,8 +66,17 @@ export async function PATCH(
       await deleteStoredFile(previousStorageKey);
     }
 
-    // Once fully approved, email the report file as an attachment to the
-    // Centre Head, GG Campus Head of Events, and President.
+    if (justFullyApproved || justRejected) {
+      try {
+        await cascadeCloseAutoApprovals('event-report', id, justFullyApproved ? 'approved' : 'rejected', mergedRecord?.centreHeadApprovedBy || mergedRecord?.eventsHeadGgApprovedBy || mergedRecord?.rejectedBy);
+      } catch (approvalErr) {
+        console.error('[event-reports-api] Approval cascade-close failed:', approvalErr);
+      }
+    }
+
+    // Once approved, email the report file as an attachment to the Centre
+    // Head, Advisor, GG Campus Head of Events, and President, and separately
+    // let the submitter know their report was accepted.
     if (justFullyApproved && mergedRecord?.storageKey) {
       try {
         const [members, { dispatchEmail, generateEventReportApprovedEmailTemplate, findApprovalRecipients }] = await Promise.all([
@@ -68,7 +84,7 @@ export async function PATCH(
           import('@/lib/email-service'),
         ]);
         const recipients = findApprovalRecipients(members as any[]);
-        const to = [recipients.centreHead?.email, recipients.eventsHeadGg?.email, recipients.president?.email].filter(Boolean) as string[];
+        const to = [recipients.centreHead?.email, recipients.advisor?.email, recipients.eventsHeadGg?.email, recipients.president?.email].filter(Boolean) as string[];
 
         if (to.length > 0) {
           const fileBuffer = await readStoredFile(mergedRecord.storageKey);
@@ -89,9 +105,27 @@ export async function PATCH(
           mergedRecord = { ...mergedRecord, emailSent: log.status === 'SENT', emailError: log.errorMessage };
         } else {
           await mutateCollection('eventReports', (current) => (current || []).map((r: any) =>
-            r.id === id ? { ...r, emailSent: false, emailError: 'No Centre Head, GG Campus Head of Events, or President found in the Directory to send the approved report to.' } : r
+            r.id === id ? { ...r, emailSent: false, emailError: 'No Centre Head, Advisor, GG Campus Head of Events, or President found in the Directory to send the approved report to.' } : r
           ));
-          mergedRecord = { ...mergedRecord, emailSent: false, emailError: 'No Centre Head, GG Campus Head of Events, or President found in the Directory to send the approved report to.' };
+          mergedRecord = { ...mergedRecord, emailSent: false, emailError: 'No Centre Head, Advisor, GG Campus Head of Events, or President found in the Directory to send the approved report to.' };
+        }
+
+        if (mergedRecord?.submittedByEmail) {
+          const { wrapInMasterEmailTemplate } = await import('@/lib/email-service');
+          await dispatchEmail({
+            to: mergedRecord.submittedByEmail,
+            subject: `Event Report Accepted: ${mergedRecord.eventTitle || 'Event'}`,
+            bodyText: `Hello ${mergedRecord.submittedBy || ''},\n\nThe report has been successfully submitted and accepted.\n\nRegards,\nLEADS Next Gen Centre, MSRUAS`,
+            bodyHtml: wrapInMasterEmailTemplate({
+              pageTitle: `Event Report Accepted`,
+              headerTitle: 'Report Accepted',
+              headerSubtitle: mergedRecord.eventTitle || 'Event',
+              badgeText: 'ACCEPTED',
+              badgeColor: '#15803d',
+              bodyContentHtml: `<p style="margin-top:0;color:#0f172a;font-size:14px;">Hello ${mergedRecord.submittedBy || ''},</p><p style="color:#334155;font-size:14px;line-height:1.6;">The report has been successfully submitted and accepted.</p>`,
+            }),
+            category: 'EVENT_REPORT_APPROVAL',
+          });
         }
       } catch (emailErr: any) {
         console.error('[event-reports-api] Approval email dispatch failed:', emailErr);

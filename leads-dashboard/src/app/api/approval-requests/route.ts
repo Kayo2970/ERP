@@ -23,7 +23,16 @@ export async function POST(request: Request) {
 
     if (created?.targetMemberEmail) {
       try {
-        const entityLabel = created.entityType === 'task' ? 'Task' : created.entityType === 'committee' ? 'Committee' : 'Event';
+        const entityLabelMap: Record<string, string> = {
+          task: 'Task',
+          committee: 'Committee',
+          event: 'Event',
+          member: 'Member',
+          design: 'Design',
+          'event-report': 'Event Report',
+          announcement: 'Announcement',
+        };
+        const entityLabel = entityLabelMap[created.entityType] || 'Event';
         const bodyHtml = `
           <p>Hello ${created.targetMemberName || 'there'},</p>
           <p><strong>${created.requesterName}</strong> is asking you to approve the following ${entityLabel.toLowerCase()}:</p>
