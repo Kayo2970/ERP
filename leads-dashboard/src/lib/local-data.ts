@@ -1294,8 +1294,8 @@ export function deleteMember(id: string, actorName: string = 'System / Admin', b
   const current = getMembers();
   const target = current.find(m => m.id === id);
   if (!target) return;
-  const isSuperUserTarget = id === 'm1' || target.tier === 1 || target.role === 'Super User';
-  if (isSuperUserTarget && !bypassSuperUserProtection) {
+  const isProtectedTarget = id === 'm1';
+  if (isProtectedTarget && !bypassSuperUserProtection) {
     throw new Error('The Super User account is protected and cannot be deleted.');
   }
 
@@ -1305,7 +1305,7 @@ export function deleteMember(id: string, actorName: string = 'System / Admin', b
   logAuditEvent(
     'MEMBER_DELETED',
     actorName,
-    `Removed member ${target.name} (${target.email})${isSuperUserTarget ? ' — Super User account, deleted via Kayomarz Pavri override' : ''}`
+    `Removed member ${target.name} (${target.email})${isProtectedTarget ? ' — Super User account, deleted via Kayomarz Pavri override' : ''}`
   );
 }
 
@@ -1358,8 +1358,8 @@ export function bulkUpdateMembers(
     if (targetIdSet.has(m.id)) {
       updatedCount++;
       const next = { ...m, ...updates };
-      // Security Fail-Safe: Protect Super User status and tier
-      if (m.id === 'm1' || m.tier === 1 || m.role === 'Super User') {
+      // Security: Only protect the root m1 account during bulk operations
+      if (m.id === 'm1') {
         next.tier = 1;
         next.role = 'Super User';
         next.status = 'Active';
@@ -1391,9 +1391,8 @@ export function bulkUpdateMembers(
 export function bulkDeleteMembers(ids: string[], actorName: string): Member[] {
   const current = getMembers();
   const targetIdSet = new Set(ids);
-  // Protect super user m1 and any Super User
+  // Protect super user m1
   targetIdSet.delete('m1');
-  current.filter(m => m.tier === 1 || m.role === 'Super User').forEach(m => targetIdSet.delete(m.id));
 
   const updated = current.filter(m => !targetIdSet.has(m.id));
   saveMembers(updated);
@@ -1407,14 +1406,7 @@ export function updateMember(id: string, updates: Partial<Member>, actorName: st
   const idx = current.findIndex(m => m.id === id);
   if (idx === -1) return null;
 
-  const isSuperUser = id === 'm1' || current[idx].tier === 1 || current[idx].role === 'Super User';
   const finalUpdates = { ...updates };
-  // Security Fail-Safe: Super User ALWAYS remains Super User (tier 1, Active)
-  if (isSuperUser) {
-    finalUpdates.role = 'Super User';
-    finalUpdates.tier = 1;
-    finalUpdates.status = 'Active';
-  }
 
   current[idx] = { ...current[idx], ...finalUpdates };
   saveMembers(current);
@@ -1450,7 +1442,7 @@ export function terminateMember(id: string, actorName: string): Member | null {
   const current = getMembers();
   const idx = current.findIndex(m => m.id === id);
   if (idx === -1) return null;
-  if (id === 'm1' || current[idx].tier === 1 || current[idx].role === 'Super User') {
+  if (id === 'm1') {
     throw new Error('The Super User account is protected and cannot be terminated.');
   }
 

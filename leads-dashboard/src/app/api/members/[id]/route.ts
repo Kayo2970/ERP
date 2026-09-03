@@ -34,26 +34,13 @@ export async function PATCH(
     const updated = await mutateCollection('members', (current) => {
       const idx = current.findIndex((m: any) => m.id === id);
       if (idx === -1) {
-        const isSuper = id === 'm1' || updates.tier === 1 || updates.role === 'Super User';
-        if (isSuper) {
-          updates.role = 'Super User';
-          updates.tier = 1;
-          updates.status = 'Active';
-        }
         return [...current, { id, ...updates }];
       }
       const next = [...current];
-      const isSuper = id === 'm1' || next[idx].tier === 1 || next[idx].role === 'Super User';
       if (updates.avatarStorageKey && next[idx].avatarStorageKey && next[idx].avatarStorageKey !== updates.avatarStorageKey) {
         previousStorageKey = next[idx].avatarStorageKey;
       }
       next[idx] = { ...next[idx], ...updates };
-      // Security Fail-Safe: Super User ALWAYS retains Super User role, tier 1, and Active status
-      if (isSuper) {
-        next[idx].role = 'Super User';
-        next[idx].tier = 1;
-        next[idx].status = 'Active';
-      }
       return next;
     });
 

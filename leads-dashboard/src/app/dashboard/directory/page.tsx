@@ -482,7 +482,7 @@ export default function DirectoryPage() {
     setEditEmail(member.email);
     const div = member.division || 'Faculty';
     setEditDivision(div);
-    setEditCustomRole(member.role || '');
+    setEditCustomRole(isKayomarzPavri(member) ? (member.role || '') : '');
     setEditProgram(member.program || '');
     setEditBatch(member.batch || '');
     setEditTierOverride(member.tier || 4);
@@ -549,7 +549,7 @@ export default function DirectoryPage() {
     }
 
     const isSuperUser = user?.tier === 1;
-    const isKayomarz = isKayomarzPavri(user);
+    const isTargetKayomarz = isKayomarzPavri(editingMember);
     const derived = deriveMemberRoleAndDepartment(editDivision, {
       facultyPosition: editFacultyPosition,
       campus: editCampus,
@@ -558,8 +558,8 @@ export default function DirectoryPage() {
       associatePosition: editAssociatePosition,
     });
 
-    // Kayomarz can type any designation freely — bypass the auto-derived role.
-    const finalRole = (isKayomarz && editCustomRole.trim()) ? editCustomRole.trim() : derived.role;
+    // Kayomarz can type any designation freely on his record — bypass the auto-derived role.
+    const finalRole = (isTargetKayomarz && editCustomRole.trim()) ? editCustomRole.trim() : derived.role;
     const finalTier = isSuperUser ? editTierOverride : derived.tier;
     const tierChanged = isSuperUser && finalTier !== editingMember.tier;
 
@@ -1914,7 +1914,18 @@ export default function DirectoryPage() {
                     <label className="block font-medium text-theme-text-secondary">Organization Division</label>
                     <select
                       value={editDivision}
-                      onChange={(e) => setEditDivision(e.target.value as MemberDivision)}
+                      onChange={(e) => {
+                        const newDiv = e.target.value as MemberDivision;
+                        setEditDivision(newDiv);
+                        const nextDerived = deriveMemberRoleAndDepartment(newDiv, {
+                          facultyPosition: editFacultyPosition,
+                          campus: editCampus,
+                          corePosition: editCorePosition,
+                          departmentSelect: editDepartmentSelect,
+                          associatePosition: editAssociatePosition,
+                        });
+                        setEditTierOverride(nextDerived.tier);
+                      }}
                       className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-semibold"
                     >
                       <option value="Faculty">Faculty</option>
@@ -1931,7 +1942,18 @@ export default function DirectoryPage() {
                       <label className="block font-medium text-theme-text-secondary">Faculty Position</label>
                       <select
                         value={editFacultyPosition}
-                        onChange={(e) => setEditFacultyPosition(e.target.value as FacultyPosition)}
+                        onChange={(e) => {
+                          const newPos = e.target.value as FacultyPosition;
+                          setEditFacultyPosition(newPos);
+                          const nextDerived = deriveMemberRoleAndDepartment('Faculty', {
+                            facultyPosition: newPos,
+                            campus: editCampus,
+                            corePosition: editCorePosition,
+                            departmentSelect: editDepartmentSelect,
+                            associatePosition: editAssociatePosition,
+                          });
+                          setEditTierOverride(nextDerived.tier);
+                        }}
                         className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                       >
                         <option value="Events Head">Events Head</option>
@@ -1948,7 +1970,18 @@ export default function DirectoryPage() {
                       <label className="block font-medium text-theme-text-secondary">Position / Role</label>
                       <select
                         value={editCorePosition}
-                        onChange={(e) => setEditCorePosition(e.target.value as CorePosition)}
+                        onChange={(e) => {
+                          const newPos = e.target.value as CorePosition;
+                          setEditCorePosition(newPos);
+                          const nextDerived = deriveMemberRoleAndDepartment(editDivision, {
+                            facultyPosition: editFacultyPosition,
+                            campus: editCampus,
+                            corePosition: newPos,
+                            departmentSelect: editDepartmentSelect,
+                            associatePosition: editAssociatePosition,
+                          });
+                          setEditTierOverride(nextDerived.tier);
+                        }}
                         className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                       >
                         <option value="Department Head">Department Head</option>
@@ -2024,7 +2057,7 @@ export default function DirectoryPage() {
                 )}
 
                 {/* Kayomarz-only: free-text designation override */}
-                {isKayomarzPavri(user) && (
+                {isKayomarzPavri(editingMember) && (
                   <div className="space-y-1.5 p-3 bg-warning/5 border border-warning/20 rounded-xl">
                     <label className="flex items-center gap-1.5 font-medium text-warning">
                       <ShieldAlert className="h-3.5 w-3.5" />
@@ -2046,11 +2079,11 @@ export default function DirectoryPage() {
                 {/* Live Derived Designation Preview Banner */}
                 <div className="p-3.5 bg-accent/10 border border-accent/30 rounded-2xl flex flex-col space-y-1">
                   <span className="text-[10px] uppercase font-bold tracking-wider text-accent">
-                    {isKayomarzPavri(user) && editCustomRole.trim() ? 'Manual Designation (Override Active)' : 'Auto-Generated Designation'}
+                    {isKayomarzPavri(editingMember) && editCustomRole.trim() ? 'Manual Designation (Override Active)' : 'Auto-Generated Designation'}
                   </span>
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-sm text-theme-text-primary">
-                      {isKayomarzPavri(user) && editCustomRole.trim() ? editCustomRole.trim() : preview.role}
+                      {isKayomarzPavri(editingMember) && editCustomRole.trim() ? editCustomRole.trim() : preview.role}
                     </span>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-accent/20 text-accent border border-accent/30">
                       Tier {user?.tier === 1 ? editTierOverride : preview.tier}
