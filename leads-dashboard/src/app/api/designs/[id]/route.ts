@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection, readCollection } from '@/lib/server-db';
 import { deleteStoredFile, deleteStoredFilesForRecord, saveBase64File, readStoredFile } from '@/lib/file-storage';
+import { cascadeCloseAutoApprovals } from '@/lib/approval-sync';
 
 export async function PATCH(
   request: Request,
@@ -23,6 +24,7 @@ export async function PATCH(
     }
 
     let justStyleApproved = false;
+    let justStyleRejected = false;
     let mergedRecord: any = null;
 
     // Upsert: if this id isn't in the server's collection yet (e.g. client-bundled
@@ -35,10 +37,15 @@ export async function PATCH(
       if (body.storageKey && next[idx].storageKey && next[idx].storageKey !== body.storageKey) {
         previousStorageKey = next[idx].storageKey;
       }
-      const wasStyleApproved = next[idx].styleStatus === 'Style Approved';
+      const previousStyleStatus = next[idx].styleStatus;
+      const wasStyleApproved = previousStyleStatus === 'Style Approved';
+      const wasStyleRejected = previousStyleStatus === 'Style Rejected';
       const merged = { ...next[idx], ...body };
       if (!wasStyleApproved && merged.styleStatus === 'Style Approved') {
         justStyleApproved = true;
+      }
+      if (!wasStyleRejected && merged.styleStatus === 'Style Rejected') {
+        justStyleRejected = true;
       }
       next[idx] = merged;
       mergedRecord = merged;
@@ -49,6 +56,17 @@ export async function PATCH(
     // accumulate on disk under a different filename than the new one.
     if (previousStorageKey) {
       await deleteStoredFile(previousStorageKey);
+    }
+
+    // Resolve any still-pending fan-out rows this design's submission raised
+    // in the Approvals module — whichever of the Centre Head/Advisor/GG
+    // Campus Events Head made this style decision resolves it everywhere.
+    if (justStyleApproved || justStyleRejected) {
+      try {
+        await cascadeCloseAutoApprovals('design', id, justStyleApproved ? 'approved' : 'rejected', mergedRecord?.styleDecidedBy);
+      } catch (approvalErr) {
+        console.error('[designs-api] Approval cascade-close failed:', approvalErr);
+      }
     }
 
     // Once Style Approved, email the design asset as an attachment to the
