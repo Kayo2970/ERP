@@ -771,7 +771,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     <div className="relative inline-flex items-center justify-center shrink-0" ref={wrapperRef}>
       <button
         onClick={handleToggleNotifications}
-        className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-xl hover:bg-theme-border/20 transition-all cursor-pointer relative shrink-0"
+        aria-label="Notifications"
+        className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-xl hover:bg-theme-border/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent transition-all cursor-pointer relative shrink-0"
         title="Notifications"
       >
         <Bell className="h-4.5 w-4.5" />
@@ -1226,8 +1227,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         {/* Collapse / expand toggle — straddles the sidebar's docked edge */}
         <button
           onClick={toggleSidebarCollapsed}
+          aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className="absolute top-20 -right-3 h-6 w-6 flex items-center justify-center rounded-full bg-theme-sidebar border border-theme-sidebar-border shadow-md text-theme-text-secondary hover:text-theme-text-primary hover:bg-theme-border/30 transition-all z-50 cursor-pointer"
+          className="absolute top-20 -right-3 h-6 w-6 flex items-center justify-center rounded-full bg-theme-sidebar border border-theme-sidebar-border shadow-md text-theme-text-secondary hover:text-theme-text-primary hover:bg-theme-border/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent transition-all z-50 cursor-pointer"
         >
           {isSidebarCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
         </button>
