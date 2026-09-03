@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { UserCheck, Check, X, Clock, Inbox, Send, CheckSquare, Calendar, Users } from 'lucide-react';
+import { UserCheck, Check, X, Clock, Inbox, Send, CheckSquare, Calendar, Users, Palette, FileText, Megaphone } from 'lucide-react';
 import {
   getApprovalRequests,
   decideApprovalRequest,
@@ -16,6 +16,9 @@ type Tab = 'inbox' | 'sent';
 const entityIcon = (type: ApprovalRequest['entityType']) => {
   if (type === 'task') return CheckSquare;
   if (type === 'event') return Calendar;
+  if (type === 'design') return Palette;
+  if (type === 'event-report') return FileText;
+  if (type === 'announcement') return Megaphone;
   return Users;
 };
 
@@ -23,6 +26,9 @@ const entityLink = (req: ApprovalRequest) => {
   if (req.entityType === 'task') return '/dashboard/tasks';
   if (req.entityType === 'event') return `/dashboard/events/${req.entityId}`;
   if (req.entityType === 'member') return '/dashboard/directory';
+  if (req.entityType === 'design') return '/dashboard/designs';
+  if (req.entityType === 'event-report') return '/dashboard/event-reports';
+  if (req.entityType === 'announcement') return '/dashboard/announcements';
   return req.eventId ? `/dashboard/events/${req.eventId}` : '/dashboard/events';
 };
 

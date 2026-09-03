@@ -855,11 +855,12 @@ export function generateBirthdayEmailTemplate(memberName: string): { subject: st
  */
 export interface ApprovalRecipients {
   centreHead?: { name: string; email: string };
+  advisor?: { name: string; email: string };
   eventsHeadGg?: { name: string; email: string };
   president?: { name: string; email: string };
 }
 
-export function findApprovalRecipients(members: Array<{ name: string; email?: string; role?: string; tier?: number; status?: string }>): ApprovalRecipients {
+export function findApprovalRecipients(members: Array<{ id?: string; name: string; email?: string; role?: string; tier?: number; status?: string }>): ApprovalRecipients {
   const active = members.filter(m => m.status !== 'Terminated' && m.email);
 
   // Titled "Centre Head" first — NOT tier === 1, which is Super User and
@@ -871,6 +872,10 @@ export function findApprovalRecipients(members: Array<{ name: string; email?: st
     const role = (m.role || '').toLowerCase();
     return role.includes('centre head') || role.includes('center head');
   }) || active.find(m => m.tier === 1);
+
+  // Whole-word "advisor" match, mirroring permissions.ts's isCentreHead()
+  // keyword check — deliberately excludes "Advisory Board Member" etc.
+  const advisor = active.find(m => /\badvisor\b/.test((m.role || '').toLowerCase()));
 
   const eventsHeadGg = active.find(m => {
     const role = (m.role || '').toLowerCase();
@@ -884,6 +889,7 @@ export function findApprovalRecipients(members: Array<{ name: string; email?: st
 
   return {
     centreHead: centreHead ? { name: centreHead.name, email: centreHead.email! } : undefined,
+    advisor: advisor ? { name: advisor.name, email: advisor.email! } : undefined,
     eventsHeadGg: eventsHeadGg ? { name: eventsHeadGg.name, email: eventsHeadGg.email! } : undefined,
     president: president ? { name: president.name, email: president.email! } : undefined,
   };
