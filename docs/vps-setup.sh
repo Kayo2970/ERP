@@ -112,12 +112,26 @@ pm2 startup systemd -u root --hp /root >/tmp/pm2-startup-output.txt 2>&1 || true
 # usually applied automatically, but check /tmp/pm2-startup-output.txt if
 # the app doesn't come back after a reboot.
 
-log "Writing Nginx config for $DOMAIN"
+log "Writing global Nginx upload-size config (survives Certbot rewrites)"
+# Certbot rewrites the per-site server block when it adds SSL, and may not
+# preserve every custom directive. Putting client_max_body_size in conf.d/
+# sets it at the http{} context level — included before any server block and
+# untouched by Certbot — so large uploads always work regardless of SSL state.
+cat > "/etc/nginx/conf.d/upload-size.conf" <<EOF
+# Raised to 100 MB so the LEADS Dashboard can accept large design file
+# uploads and base64-encoded OCR scan payloads without Nginx rejecting them
+# with a 413 before they reach the app.
+client_max_body_size 100M;
+EOF
+
+log "Writing Nginx site config for $DOMAIN"
 cat > "/etc/nginx/sites-available/leads-dashboard" <<EOF
 server {
     listen 80;
     server_name $DOMAIN www.$DOMAIN;
 
+    # Also set here so it's explicit in the site block even after Certbot
+    # clones this config into a new 443 server block.
     client_max_body_size 100M;
 
     location / {
