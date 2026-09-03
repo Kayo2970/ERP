@@ -18,6 +18,10 @@ npm run setup      # One-time superuser creation script (first deploy only)
 
 There is no test suite. Type-check + build passing is the acceptance bar.
 
+## Standing rule: always push to GitHub after any code change
+
+After every code change — no matter how small — run `npx tsc --noEmit` and `npm run build` (from `leads-dashboard/`), confirm both pass, then commit and push to `main`. The VPS deploys straight off `main`, so the branch must always reflect the live state of the app.
+
 ## Deployment workflow (standing instruction)
 
 `main` is the live deploy branch — the VPS runs `git pull` → `npm install` → `npm run build` → `pm2 restart leads-dashboard` off it directly.

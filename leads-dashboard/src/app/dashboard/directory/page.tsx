@@ -142,11 +142,11 @@ export default function DirectoryPage() {
       } else if (pos === 'Centre Head') {
         role = 'Centre Head';
         department = 'Faculty Oversight';
-        tier = 1;
+        tier = 2;
       } else if (pos === 'Advisor') {
         role = 'Advisor';
         department = 'Faculty Advisory';
-        tier = 1;
+        tier = 2;
       } else {
         role = 'Faculty Member';
         department = opts.departmentSelect || 'Faculty';
@@ -257,6 +257,7 @@ export default function DirectoryPage() {
   const [editCorePosition, setEditCorePosition] = useState<CorePosition>('Department Head');
   const [editDepartmentSelect, setEditDepartmentSelect] = useState<string>(STANDARDIZED_DEPARTMENTS[0]);
   const [editAssociatePosition, setEditAssociatePosition] = useState<AssociatePosition>('Associate');
+  const [editCustomRole, setEditCustomRole] = useState('');
   const [editProgram, setEditProgram] = useState('');
   const [editBatch, setEditBatch] = useState('');
   const [editTierOverride, setEditTierOverride] = useState<number>(4);
@@ -379,8 +380,8 @@ export default function DirectoryPage() {
   };
 
   const TIER_LABELS = [
-    { tier: 1, label: 'Super User / Centre Head / Advisor' },
-    { tier: 2, label: 'Executive Leadership' },
+    { tier: 1, label: 'Super User' },
+    { tier: 2, label: 'Centre Head / Advisor' },
     { tier: 2.5, label: 'GG Campus Events Head' },
     { tier: 3, label: 'RTC Events Head / Finance Head / Industrial Connects' },
     { tier: 4, label: 'Advisory Board / Faculty' },
@@ -481,6 +482,7 @@ export default function DirectoryPage() {
     setEditEmail(member.email);
     const div = member.division || 'Faculty';
     setEditDivision(div);
+    setEditCustomRole(member.role || '');
     setEditProgram(member.program || '');
     setEditBatch(member.batch || '');
     setEditTierOverride(member.tier || 4);
@@ -547,6 +549,7 @@ export default function DirectoryPage() {
     }
 
     const isSuperUser = user?.tier === 1;
+    const isKayomarz = isKayomarzPavri(user);
     const derived = deriveMemberRoleAndDepartment(editDivision, {
       facultyPosition: editFacultyPosition,
       campus: editCampus,
@@ -555,13 +558,15 @@ export default function DirectoryPage() {
       associatePosition: editAssociatePosition,
     });
 
+    // Kayomarz can type any designation freely — bypass the auto-derived role.
+    const finalRole = (isKayomarz && editCustomRole.trim()) ? editCustomRole.trim() : derived.role;
     const finalTier = isSuperUser ? editTierOverride : derived.tier;
     const tierChanged = isSuperUser && finalTier !== editingMember.tier;
 
     updateMember(editingMember.id, {
       name: editName.trim(),
       email: editEmail.toLowerCase().trim(),
-      role: derived.role,
+      role: finalRole,
       tier: finalTier,
       division: editDivision,
       department: derived.department,
@@ -2018,11 +2023,35 @@ export default function DirectoryPage() {
                   </div>
                 )}
 
+                {/* Kayomarz-only: free-text designation override */}
+                {isKayomarzPavri(user) && (
+                  <div className="space-y-1.5 p-3 bg-warning/5 border border-warning/20 rounded-xl">
+                    <label className="flex items-center gap-1.5 font-medium text-warning">
+                      <ShieldAlert className="h-3.5 w-3.5" />
+                      Manual Designation Override
+                    </label>
+                    <input
+                      type="text"
+                      value={editCustomRole}
+                      onChange={(e) => setEditCustomRole(e.target.value)}
+                      placeholder="Type any designation — overrides auto-generated role"
+                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-warning/30 rounded-xl text-theme-text-primary focus:outline-none focus:border-warning"
+                    />
+                    <p className="text-[11px] text-theme-text-secondary">
+                      Leave blank to use the auto-generated designation below.
+                    </p>
+                  </div>
+                )}
+
                 {/* Live Derived Designation Preview Banner */}
                 <div className="p-3.5 bg-accent/10 border border-accent/30 rounded-2xl flex flex-col space-y-1">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-accent">Auto-Generated Designation</span>
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-accent">
+                    {isKayomarzPavri(user) && editCustomRole.trim() ? 'Manual Designation (Override Active)' : 'Auto-Generated Designation'}
+                  </span>
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-sm text-theme-text-primary">{preview.role}</span>
+                    <span className="font-bold text-sm text-theme-text-primary">
+                      {isKayomarzPavri(user) && editCustomRole.trim() ? editCustomRole.trim() : preview.role}
+                    </span>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-accent/20 text-accent border border-accent/30">
                       Tier {user?.tier === 1 ? editTierOverride : preview.tier}
                     </span>
