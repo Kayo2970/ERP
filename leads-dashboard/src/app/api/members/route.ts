@@ -25,7 +25,10 @@ export async function POST(request: Request) {
     let activationLink = '';
     let activationEmailSent = false;
     let activationEmailError: string | undefined;
-    if (created && created.email) {
+    // A submission awaiting Centre Head sign-off (approvalStatus 'pending_create',
+    // see local-data.ts's submitMemberCreate) can't log in yet, so the welcome
+    // email is deliberately withheld until approveMemberCreate dispatches it.
+    if (created && created.email && created.approvalStatus !== 'pending_create') {
       try {
         const host = request.headers.get('host');
         const proto = request.headers.get('x-forwarded-proto') || (host?.includes('localhost') ? 'http' : 'https');

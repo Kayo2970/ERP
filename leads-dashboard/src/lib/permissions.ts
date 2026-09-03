@@ -1043,6 +1043,55 @@ export function canEditDirectory(user: SessionUser): boolean {
   return isBaseLeadership(user) || hasCapability(user, 'EDIT_DIRECTORY') || resolveModuleEditOverride(user, 'DIRECTORY') === 'ALL';
 }
 
+/**
+ * Whether `user` may open the Add Member flow at all — everything
+ * canEditDirectory already allows, PLUS an Executive role (President, Vice
+ * President, Chief Coordinator). Unlike canEditDirectory (which stays a hard
+ * "no" for Executives — they don't get CSV import/bulk tools/edit-any-row),
+ * this is deliberately wider: Executives ARE trusted to add a name to the
+ * roster and allot people to events/committees/tasks, the same as they're
+ * already trusted to create events/tasks and allot committee rosters. What
+ * keeps this safe is getMemberApprovalRequirement below — an Executive's
+ * addition never lands immediately, it always needs Centre Head sign-off
+ * first, exactly like their committee-roster and task/event submissions.
+ */
+export function canAddMember(user: SessionUser): boolean {
+  if (isAlumniRole(user)) return false;
+  return isExecutiveRole(user) || canEditDirectory(user);
+}
+
+/**
+ * Whether adding a new member to the roster lands immediately or needs
+ * Centre Head sign-off first — the Directory equivalent of
+ * getTaskApprovalRequirement/getEventApprovalRequirement. An Executive role
+ * (President, Vice President, Chief Coordinator) can add members — including
+ * one who separately happens to hold Super User access elsewhere, or any
+ * other actual performing member — to the roster, committees, events, and
+ * tasks, but that addition is never immediate: it always routes through
+ * Centre Head approval first, the same as it already does for their
+ * event/task/committee submissions. This check is about the ACTOR doing the
+ * adding, never about who is being added.
+ */
+export function getMemberApprovalRequirement(user: SessionUser): ApprovalRequirement {
+  if (isExecutiveRole(user) && !isCentreHead(user) && user?.tier !== 1) {
+    return {
+      requiresApproval: true,
+      approverType: 'CENTER_HEAD',
+      approverName: 'the Centre Head',
+      policyName: 'Executive Roster Addition Sign-off Requirement',
+    };
+  }
+  return getApprovalRequirement(user, 'EDIT_DIRECTORY', isBaseLeadership(user));
+}
+
+/** Whether `user` is the resolved approver for a specific pending member addition — Centre Head or Super User only, mirroring canApprovePendingTask's fixed CENTER_HEAD default. */
+export function canApprovePendingMember(member: Member, user: SessionUser): boolean {
+  if (!user) return false;
+  if (user.tier === 1) return true;
+  if (member.approvalStatus !== 'pending_create') return false;
+  return isCentreHead(user);
+}
+
 /** Check if user can terminate members (Centre Head or Super User only). */
 export function canTerminateMember(user: SessionUser): boolean {
   if (isExecutiveRole(user) || isAlumniRole(user)) return false;

@@ -43,6 +43,20 @@ export interface Member {
   createdBy?: string;
   createdAt?: string;
   selfEditUsedAt?: string; // set the moment a restricted editor spends their one edit
+  // Approval workflow for a roster addition submitted by an Executive role
+  // (President/Vice President/Chief Coordinator) who is trusted to add
+  // members but never bypasses Centre Head sign-off — see permissions.ts's
+  // getMemberApprovalRequirement. Absent/'approved' means a normal,
+  // immediately-effective member (every member before this feature, and any
+  // added directly by base leadership or an unconditional policy grant). The
+  // welcome/activation email is deliberately deferred until approval — see
+  // submitMemberCreate/approveMemberCreate below and /api/members's POST.
+  approvalStatus?: 'pending_create' | 'approved' | 'rejected';
+  submittedBy?: string;
+  submittedByEmail?: string;
+  decidedBy?: string;
+  decidedAt?: string;
+  rejectionReason?: string;
 }
 
 // A person encountered outside the org (event guest, sponsor contact, vendor,
@@ -1130,6 +1144,90 @@ export async function addMember(member: Omit<Member, 'id'>): Promise<Member & { 
   saveMembers(current);
   logAuditEvent('MEMBER_ADDED', 'System / Admin', `Added member ${createdMember.name} to ${createdMember.division}`);
   return createdMember;
+}
+
+/**
+ * Submit a new member for Centre Head sign-off instead of adding them to the
+ * roster immediately — used when the adder's access came from
+ * getMemberApprovalRequirement's approval-required path (every Executive
+ * role's addition, per that function's built-in rule). The record is created
+ * right away with approvalStatus 'pending_create' so it can be tracked and
+ * decided on, but the welcome/activation email is deliberately NOT sent yet
+ * (see /api/members's POST, which skips dispatch for a pending_create
+ * payload) — the member can't log in until a Centre Head approves.
+ */
+export async function submitMemberCreate(
+  member: Omit<Member, 'id'>,
+  submittedBy: string,
+  submittedByEmail: string
+): Promise<Member> {
+  const current = getMembers();
+  const existing = current.find(m => m.email.toLowerCase() === member.email.toLowerCase());
+  if (existing) {
+    throw new Error(`A member with email ${member.email} already exists in the roster.`);
+  }
+
+  const newMember: Member = {
+    ...member,
+    mustSetupPassword: true,
+    approvalStatus: 'pending_create',
+    submittedBy,
+    submittedByEmail,
+    id: 'm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+  };
+
+  const serverResult = await serverPost('/api/members', newMember);
+  const createdMember: Member = { ...newMember, ...(serverResult || {}) };
+
+  current.push(createdMember);
+  saveMembers(current);
+  logAuditEvent('MEMBER_CREATE_SUBMITTED', submittedBy, `Submitted new member "${createdMember.name}" for Centre Head approval before joining the roster`, submittedByEmail);
+  return createdMember;
+}
+
+/**
+ * Approve a pending member addition — marks the record approved and, only
+ * now, actually dispatches the welcome/activation email that submitMemberCreate
+ * deliberately withheld (reusing the same resend-activation endpoint the
+ * Directory page's "Resend Welcome Email" action already calls).
+ */
+export async function approveMemberCreate(id: string, actorName: string): Promise<Member | null> {
+  const current = getMembers();
+  const target = current.find(m => m.id === id);
+  if (!target || target.approvalStatus !== 'pending_create') return null;
+
+  const result = updateMember(id, {
+    approvalStatus: 'approved',
+    decidedBy: actorName,
+    decidedAt: new Date().toISOString(),
+  }, actorName);
+  logAuditEvent('MEMBER_APPROVED', actorName, `Approved the addition of "${target.name}" to the roster`);
+
+  try {
+    await fetch(`/api/members/${id}/resend-activation`, { method: 'POST' });
+  } catch (e) {
+    console.error('[approveMemberCreate] Failed to dispatch the welcome email:', e);
+  }
+  return result;
+}
+
+/** Reject a pending member addition. The record is kept (marked 'rejected') for
+ *  audit purposes rather than deleted, and stays hidden from the normal roster —
+ *  visible only to its submitter and the Centre Head, same visibility rule as a
+ *  rejected event/task. No welcome email is ever sent for a rejected addition. */
+export function rejectMemberCreate(id: string, actorName: string, reason?: string): Member | null {
+  const current = getMembers();
+  const target = current.find(m => m.id === id);
+  if (!target || target.approvalStatus !== 'pending_create') return null;
+
+  const result = updateMember(id, {
+    approvalStatus: 'rejected',
+    decidedBy: actorName,
+    decidedAt: new Date().toISOString(),
+    rejectionReason: reason,
+  }, actorName);
+  logAuditEvent('MEMBER_REJECTED', actorName, `Rejected the addition of "${target.name}" to the roster${reason ? `: ${reason}` : ''}`);
+  return result;
 }
 
 /**

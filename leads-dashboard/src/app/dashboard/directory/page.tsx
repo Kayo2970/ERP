@@ -33,13 +33,19 @@ import {
   EyeOff,
   Copy,
   Key,
-  CheckCircle2
+  CheckCircle2,
+  Clock,
+  Check,
+  Ban
 } from 'lucide-react';
 import { useDropTarget } from '@/components/ui/file-dropzone';
 import { parseCsvLine, splitCsvLines, toCsvRow, downloadCsv } from '@/lib/csv';
 import {
   getMembers,
   addMember,
+  submitMemberCreate,
+  approveMemberCreate,
+  rejectMemberCreate,
   updateMember,
   deleteMember,
   bulkUpdateMembers,
@@ -54,7 +60,7 @@ import {
 } from '@/lib/local-data';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { StudentProfileModal } from '@/components/student-profile-modal';
-import { canViewFullDirectory, canEditDirectory, canEditMemberRecordRow, isRestrictedDirectoryEditor, isCentreHead, canViewHiddenAccounts, canSetMemberPassword, isKayomarzPavri } from '@/lib/permissions';
+import { canViewFullDirectory, canEditDirectory, canAddMember, getMemberApprovalRequirement, canApprovePendingMember, canEditMemberRecordRow, isRestrictedDirectoryEditor, isCentreHead, canViewHiddenAccounts, canSetMemberPassword, isKayomarzPavri } from '@/lib/permissions';
 
 export default function DirectoryPage() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -76,6 +82,8 @@ export default function DirectoryPage() {
   const [isSettingPassword, setIsSettingPassword] = useState(false);
   const [setPasswordError, setSetPasswordError] = useState('');
   const [selectedStudentForProfile, setSelectedStudentForProfile] = useState<string | null>(null);
+  const [rejectingMemberId, setRejectingMemberId] = useState<string | null>(null);
+  const [rejectionReasonInput, setRejectionReasonInput] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { isDragOver: isCsvDragOver, dragHandlers: csvDragHandlers } = useDropTarget((files) => handleCsvFile(files[0]));
 
@@ -392,7 +400,7 @@ export default function DirectoryPage() {
         associatePosition,
       });
 
-      const created = await addMember({
+      const newMemberData = {
         name: name.trim(),
         email: email.toLowerCase().trim(),
         role: derived.role,
@@ -405,7 +413,17 @@ export default function DirectoryPage() {
         // see permissions.ts's canEditMemberRecordRow.
         createdBy: user?.email,
         createdAt: new Date().toISOString(),
-      });
+      };
+
+      // An Executive (President/Vice President/Chief Coordinator) is trusted to
+      // add names to the roster and allot them to events/committees/tasks, but
+      // — same as their committee-roster and task/event submissions — never
+      // bypasses Centre Head sign-off. See permissions.ts's
+      // getMemberApprovalRequirement.
+      const approval = getMemberApprovalRequirement(user);
+      const created = approval.requiresApproval
+        ? await submitMemberCreate(newMemberData, user?.name || 'User', user?.email || '')
+        : await addMember(newMemberData);
 
       setName('');
       setEmail('');
@@ -420,16 +438,39 @@ export default function DirectoryPage() {
       setIsModalOpen(false);
 
       setMembers(getMembers());
-      if (created.activationEmailSent === false) {
-        triggerError(`Member added, but the welcome email couldn't be delivered${created.activationEmailError ? ` (${created.activationEmailError.split('\n')[0]})` : ''} — copy the activation link below and send it to them directly.`);
+      if (approval.requiresApproval) {
+        triggerSuccess(`Submitted "${created.name}" for approval from ${approval.approverName || 'the Centre Head'} — they'll join the roster once approved.`);
+        return;
+      }
+      if ((created as any).activationEmailSent === false) {
+        triggerError(`Member added, but the welcome email couldn't be delivered${(created as any).activationEmailError ? ` (${(created as any).activationEmailError.split('\n')[0]})` : ''} — copy the activation link below and send it to them directly.`);
       } else {
         triggerSuccess('New member added to roster successfully.');
       }
 
-      handleOpenActivationModal(created, created.activationLink);
+      handleOpenActivationModal(created, (created as any).activationLink);
     } catch (err: any) {
       triggerError(err.message || 'Failed to add member.');
     }
+  };
+
+  const handleApproveMember = async (id: string) => {
+    try {
+      await approveMemberCreate(id, user?.name || 'User');
+      setMembers(getMembers());
+      triggerSuccess('Member approved and added to the roster — their welcome email has been sent.');
+    } catch (err: any) {
+      triggerError(err.message || 'Failed to approve member.');
+    }
+  };
+
+  const handleConfirmRejectMember = () => {
+    if (!rejectingMemberId) return;
+    rejectMemberCreate(rejectingMemberId, user?.name || 'User', rejectionReasonInput || undefined);
+    setMembers(getMembers());
+    triggerSuccess('Roster addition rejected.');
+    setRejectingMemberId(null);
+    setRejectionReasonInput('');
   };
 
   const startEdit = (member: Member) => {
@@ -819,9 +860,17 @@ export default function DirectoryPage() {
   };
 
   const isAdmin = canEditDirectory(user);
+  const canAdd = canAddMember(user);
   const canViewRoster = canViewFullDirectory(user);
 
   const isCurrentSuperUser = canViewHiddenAccounts(user);
+
+  // A pending/rejected roster addition is only shown to its submitter, the
+  // Centre Head (its resolved approver), and the Super User — everyone else
+  // sees nothing of it until it's approved, same visibility rule as a
+  // pending/rejected event or task.
+  const canSeeMemberApprovalMeta = (m: Member) =>
+    user?.tier === 1 || m.submittedByEmail === user?.email || canApprovePendingMember(m, user);
 
   // Security & Privacy: Super User profiles are hidden from the directory for everyone
   // except other Super Users and Kayomarz Pavri (see canViewHiddenAccounts) — this
@@ -829,7 +878,13 @@ export default function DirectoryPage() {
   // hidden account by identity, not just the ones his own current tier would unlock.
   const visibleMembers = members.filter(m => {
     if (isCurrentSuperUser) return true;
-    return m.id !== 'm1' && m.tier !== 1 && m.role !== 'Super User' && m.email?.toLowerCase() !== 'kayo2970@gmail.com';
+    if (m.id === 'm1' || m.tier === 1 || m.role === 'Super User' || m.email?.toLowerCase() === 'kayo2970@gmail.com') return false;
+    return true;
+  }).filter(m => {
+    if (m.approvalStatus === 'pending_create' || m.approvalStatus === 'rejected') {
+      return canSeeMemberApprovalMeta(m);
+    }
+    return true;
   });
 
   // Filter members list based on division tab and search query
@@ -1056,54 +1111,61 @@ export default function DirectoryPage() {
           <p className="text-xs text-theme-text-secondary">Explore center divisions: Advisory Board, Core Committee, Training Associates, and Alumni</p>
         </div>
 
-        {isAdmin && (
+        {(isAdmin || canAdd) && (
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={handleDownloadFullBackup}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-border/40"
-              title="Download a full CSV backup of every member in the directory"
-            >
-              <Download className="h-4 w-4" />
-              Download Backup (CSV)
-            </button>
+            {isAdmin && (
+              <>
+                <button
+                  onClick={handleDownloadFullBackup}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-border/40"
+                  title="Download a full CSV backup of every member in the directory"
+                >
+                  <Download className="h-4 w-4" />
+                  Download Backup (CSV)
+                </button>
 
-            <button
-              onClick={handleDownloadTemplate}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-border/40"
-              title="Download CSV Template"
-            >
-              <Download className="h-4 w-4" />
-              Download Template
-            </button>
+                <button
+                  onClick={handleDownloadTemplate}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-border/40"
+                  title="Download CSV Template"
+                >
+                  <Download className="h-4 w-4" />
+                  Download Template
+                </button>
 
-            <button
-              onClick={handleUploadClick}
-              {...csvDragHandlers}
-              className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer border ${
-                isCsvDragOver
-                  ? 'border-accent bg-accent/10 shadow-md shadow-accent/20 ring-2 ring-accent/20 text-accent'
-                  : 'border-theme-border/40 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary'
-              }`}
-              title="Upload Filled CSV File — click or drag and drop"
-            >
-              <Upload className="h-4 w-4" />
-              {isCsvDragOver ? 'Drop CSV here' : 'Upload Roster (CSV)'}
-            </button>
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              onChange={handleFileUpload} 
-              accept=".csv" 
-              className="hidden" 
-            />
+                <button
+                  onClick={handleUploadClick}
+                  {...csvDragHandlers}
+                  className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer border ${
+                    isCsvDragOver
+                      ? 'border-accent bg-accent/10 shadow-md shadow-accent/20 ring-2 ring-accent/20 text-accent'
+                      : 'border-theme-border/40 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary'
+                  }`}
+                  title="Upload Filled CSV File — click or drag and drop"
+                >
+                  <Upload className="h-4 w-4" />
+                  {isCsvDragOver ? 'Drop CSV here' : 'Upload Roster (CSV)'}
+                </button>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileUpload}
+                  accept=".csv"
+                  className="hidden"
+                />
+              </>
+            )}
 
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer"
-            >
-              <Plus className="h-4 w-4" />
-              Add Member
-            </button>
+            {canAdd && (
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer"
+                title={!isAdmin ? 'Adding a member requires Centre Head approval before they join the roster' : undefined}
+              >
+                <Plus className="h-4 w-4" />
+                Add Member
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -1351,7 +1413,25 @@ export default function DirectoryPage() {
                                 Terminated
                               </span>
                             )}
-                            {member.status !== 'Terminated' && !member.passwordHash && (
+                            {member.approvalStatus === 'pending_create' && (
+                              <span
+                                className="inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border bg-warning/15 text-warning border-warning/30"
+                                title={`Awaiting Centre Head approval${member.submittedBy ? ` — submitted by ${member.submittedBy}` : ''}`}
+                              >
+                                <Clock className="h-2.5 w-2.5" />
+                                Awaiting Approval
+                              </span>
+                            )}
+                            {member.approvalStatus === 'rejected' && (
+                              <span
+                                className="inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border bg-danger/15 text-danger border-danger/30"
+                                title={`Rejected by ${member.decidedBy || 'approver'}${member.rejectionReason ? `: ${member.rejectionReason}` : ''}`}
+                              >
+                                <Ban className="h-2.5 w-2.5" />
+                                Rejected
+                              </span>
+                            )}
+                            {member.status !== 'Terminated' && !member.passwordHash && member.approvalStatus !== 'pending_create' && member.approvalStatus !== 'rejected' && (
                               <span
                                 className="inline-flex items-center text-[9px] font-semibold px-1.5 py-0.5 rounded-full border bg-warning/15 text-warning border-warning/30"
                                 title="This member hasn't set up their password yet — they were sent a welcome email with an activation link."
@@ -1391,6 +1471,24 @@ export default function DirectoryPage() {
                       <td className="py-3.5 pr-4 text-theme-text-secondary">{member.program || '—'}</td>
                       <td className="py-3.5 text-right pr-2" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end items-center gap-1">
+                          {member.approvalStatus === 'pending_create' && canApprovePendingMember(member, user) && (
+                            <>
+                              <button
+                                onClick={() => handleApproveMember(member.id)}
+                                className="p-1.5 text-success hover:bg-success/15 rounded-lg transition-all cursor-pointer"
+                                title="Approve — add to roster and send welcome email"
+                              >
+                                <Check className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                onClick={() => setRejectingMemberId(member.id)}
+                                className="p-1.5 text-danger hover:bg-danger/15 rounded-lg transition-all cursor-pointer"
+                                title="Reject"
+                              >
+                                <Ban className="h-3.5 w-3.5" />
+                              </button>
+                            </>
+                          )}
                           <button
                             onClick={() => setSelectedStudentForProfile(member.id)}
                             className="p-1.5 text-accent hover:bg-accent/10 rounded-lg transition-all cursor-pointer flex items-center gap-1"
@@ -1400,7 +1498,7 @@ export default function DirectoryPage() {
                             <span className="text-[11px] font-semibold hidden sm:inline">Profile</span>
                           </button>
                           
-                          {canEditMemberRecordRow(member, user) && (
+                          {member.approvalStatus !== 'pending_create' && canEditMemberRecordRow(member, user) && (
                             <button
                               onClick={() => startEdit(member)}
                               className="p-1.5 text-theme-text-secondary hover:text-accent hover:bg-theme-border/20 rounded-lg transition-all cursor-pointer"
@@ -1414,7 +1512,7 @@ export default function DirectoryPage() {
                             </button>
                           )}
 
-                          {isAdmin && (
+                          {member.approvalStatus !== 'pending_create' && isAdmin && (
                             <>
                               {member.status !== 'Terminated' && (
                                 <button
@@ -1476,7 +1574,7 @@ export default function DirectoryPage() {
                             </>
                           )}
 
-                          {isCentreHead(user) && member.id !== 'm1' && (
+                          {member.approvalStatus !== 'pending_create' && isCentreHead(user) && member.id !== 'm1' && (
                             member.status === 'Terminated' ? (
                               <button
                                 onClick={() => setReactivatingMember(member)}
@@ -2385,6 +2483,45 @@ export default function DirectoryPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Pending Roster Addition Modal */}
+      {rejectingMemberId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="glass-panel w-full max-w-md rounded-3xl p-6 flex flex-col space-y-4 relative border border-white/15 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-theme-text-primary">Reject Roster Addition</h2>
+              <button
+                onClick={() => { setRejectingMemberId(null); setRejectionReasonInput(''); }}
+                className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="text-xs text-theme-text-secondary">Optionally explain why this member isn't being added to the roster. The submitter will see this reason.</p>
+            <textarea
+              value={rejectionReasonInput}
+              onChange={(e) => setRejectionReasonInput(e.target.value)}
+              placeholder="Reason (optional)"
+              rows={3}
+              className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary text-xs focus:outline-none focus:border-accent resize-none"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => { setRejectingMemberId(null); setRejectionReasonInput(''); }}
+                className="px-4 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmRejectMember}
+                className="px-4 py-2 bg-danger hover:bg-red-600 text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-danger/15 cursor-pointer"
+              >
+                Reject
+              </button>
+            </div>
           </div>
         </div>
       )}
