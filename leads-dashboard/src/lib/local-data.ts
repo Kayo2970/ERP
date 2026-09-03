@@ -1290,13 +1290,29 @@ export function rejectMemberCreate(id: string, actorName: string, reason?: strin
  * flag, matching how every other admin action in this app is gated
  * client-side rather than re-checked here.
  */
+export function isKayomarzPavriMember(member: { id?: string; name?: string; email?: string } | null | undefined): boolean {
+  if (!member) return false;
+  const name = (member.name || '').toLowerCase();
+  const email = (member.email || '').toLowerCase();
+  return member.id === 'm1' || name.includes('kayomarz') || email === 'kayo2970@gmail.com' || email === 'kayo2970@outlook.com';
+}
+
+export function countActiveSuperUsers(members: Array<{ id: string; tier?: number; role?: string; status?: string; name?: string; email?: string }>): number {
+  return members.filter(m => (m.tier === 1 || m.role === 'Super User' || isKayomarzPavriMember(m)) && m.status !== 'Terminated').length;
+}
+
 export function deleteMember(id: string, actorName: string = 'System / Admin', bypassSuperUserProtection: boolean = false): void {
   const current = getMembers();
   const target = current.find(m => m.id === id);
   if (!target) return;
-  const isProtectedTarget = id === 'm1';
+  const isProtectedTarget = isKayomarzPavriMember(target);
   if (isProtectedTarget && !bypassSuperUserProtection) {
-    throw new Error('The Super User account is protected and cannot be deleted.');
+    throw new Error('The primary Super User account (Kayomarz Pavri) is protected and cannot be deleted.');
+  }
+
+  const simulatedList = current.filter(m => m.id !== id);
+  if (countActiveSuperUsers(simulatedList) < 1) {
+    throw new Error('Action blocked: System must always maintain at least one active Super User (or Kayomarz Pavri).');
   }
 
   const updated = current.filter(m => m.id !== id);
@@ -1358,10 +1374,10 @@ export function bulkUpdateMembers(
     if (targetIdSet.has(m.id)) {
       updatedCount++;
       const next = { ...m, ...updates };
-      // Security: Only protect the root m1 account during bulk operations
-      if (m.id === 'm1') {
+      // Security: Kayomarz Pavri always remains Tier 1 Super User
+      if (isKayomarzPavriMember(m)) {
         next.tier = 1;
-        next.role = 'Super User';
+        next.role = m.role || 'Super User';
         next.status = 'Active';
       }
       return next;
@@ -1369,10 +1385,11 @@ export function bulkUpdateMembers(
     return m;
   });
 
+  if (countActiveSuperUsers(updated) < 1) {
+    throw new Error('Action blocked: System must always maintain at least one active Super User.');
+  }
+
   saveMembers(updated);
-  // Bulk: patch each member individually with its full merged record (not just the
-  // diff) so a member that only ever existed as bundled sample data gets a complete,
-  // non-corrupt row if the server has to upsert it.
   ids.forEach(id => {
     const full = updated.find(m => m.id === id);
     if (full) {
@@ -1391,10 +1408,14 @@ export function bulkUpdateMembers(
 export function bulkDeleteMembers(ids: string[], actorName: string): Member[] {
   const current = getMembers();
   const targetIdSet = new Set(ids);
-  // Protect super user m1
-  targetIdSet.delete('m1');
+  // Protect Kayomarz Pavri
+  current.filter(m => isKayomarzPavriMember(m)).forEach(m => targetIdSet.delete(m.id));
 
   const updated = current.filter(m => !targetIdSet.has(m.id));
+  if (countActiveSuperUsers(updated) < 1) {
+    throw new Error('Action blocked: System must always maintain at least one active Super User.');
+  }
+
   saveMembers(updated);
   Array.from(targetIdSet).forEach(id => serverDelete('/api/members', id));
   logAuditEvent('BULK_MEMBERS_DELETED', actorName, `Bulk removed ${current.length - updated.length} members`);
@@ -1406,7 +1427,22 @@ export function updateMember(id: string, updates: Partial<Member>, actorName: st
   const idx = current.findIndex(m => m.id === id);
   if (idx === -1) return null;
 
+  const target = current[idx];
   const finalUpdates = { ...updates };
+
+  // Safety Invariant 1: Kayomarz Pavri ALWAYS remains a Super User (Tier 1, Active)
+  if (isKayomarzPavriMember(target)) {
+    finalUpdates.tier = 1;
+    if (finalUpdates.status === 'Terminated') {
+      finalUpdates.status = 'Active';
+    }
+  }
+
+  // Safety Invariant 2: At least one active Super User (or Kayomarz Pavri) must always remain
+  const simulatedList = current.map((m, i) => i === idx ? { ...m, ...finalUpdates } : m);
+  if (countActiveSuperUsers(simulatedList) < 1) {
+    throw new Error('Action blocked: System must always maintain at least one active Super User (or Kayomarz Pavri).');
+  }
 
   current[idx] = { ...current[idx], ...finalUpdates };
   saveMembers(current);
@@ -1442,8 +1478,15 @@ export function terminateMember(id: string, actorName: string): Member | null {
   const current = getMembers();
   const idx = current.findIndex(m => m.id === id);
   if (idx === -1) return null;
-  if (id === 'm1') {
-    throw new Error('The Super User account is protected and cannot be terminated.');
+
+  const target = current[idx];
+  if (isKayomarzPavriMember(target)) {
+    throw new Error('The primary Super User account (Kayomarz Pavri) is protected and cannot be terminated.');
+  }
+
+  const simulatedList = current.map((m, i) => i === idx ? { ...m, status: 'Terminated' as const } : m);
+  if (countActiveSuperUsers(simulatedList) < 1) {
+    throw new Error('Action blocked: System must always maintain at least one active Super User.');
   }
 
   current[idx] = {

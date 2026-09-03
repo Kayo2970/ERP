@@ -4,6 +4,19 @@ import { deleteStoredFile, saveBase64File } from '@/lib/file-storage';
 
 const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
 
+function isKayomarzIdentity(m: any): boolean {
+  if (!m) return false;
+  const name = (m.name || '').toLowerCase();
+  const email = (m.email || '').toLowerCase();
+  return m.id === 'm1' || name.includes('kayomarz') || email === 'kayo2970@gmail.com' || email === 'kayo2970@outlook.com';
+}
+
+function countActiveSuperUsersServer(members: any[]): number {
+  return members.filter((m: any) =>
+    (m.tier === 1 || m.role === 'Super User' || isKayomarzIdentity(m)) && m.status !== 'Terminated'
+  ).length;
+}
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -40,7 +53,23 @@ export async function PATCH(
       if (updates.avatarStorageKey && next[idx].avatarStorageKey && next[idx].avatarStorageKey !== updates.avatarStorageKey) {
         previousStorageKey = next[idx].avatarStorageKey;
       }
-      next[idx] = { ...next[idx], ...updates };
+      const merged = { ...next[idx], ...updates };
+
+      // Invariant 1: Kayomarz Pavri ALWAYS remains a Super User (tier 1, Active)
+      if (isKayomarzIdentity(next[idx]) || isKayomarzIdentity(merged)) {
+        merged.tier = 1;
+        if (merged.status === 'Terminated') {
+          merged.status = 'Active';
+        }
+      }
+
+      next[idx] = merged;
+
+      // Invariant 2: Ensure at least one active Super User (or Kayomarz Pavri) remains
+      if (countActiveSuperUsersServer(next) < 1) {
+        throw new Error('Action blocked: System must always maintain at least one active Super User (or Kayomarz Pavri).');
+      }
+
       return next;
     });
 
@@ -60,22 +89,21 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    // `force=true` lifts the Super User protection below — the client only
-    // ever sets this after its own isKayomarzPavri() identity check (see
-    // local-data.ts's deleteMember), same client-trust model every other
-    // admin action in this app already uses; there's no server-side session
-    // to re-verify the caller's identity against.
     const force = new URL(request.url).searchParams.get('force') === 'true';
-    if (id === 'm1' && !force) {
-      return NextResponse.json({ error: 'The Super User account is protected and cannot be deleted.' }, { status: 403 });
-    }
     let found = false;
     await mutateCollection('members', (current) => {
       const target = current.find((m: any) => m.id === id);
-      if (target && (target.tier === 1 || target.role === 'Super User') && !force) {
-        return current;
+      if (!target) return current;
+
+      if (isKayomarzIdentity(target) && !force) {
+        throw new Error('The primary Super User account (Kayomarz Pavri) is protected and cannot be deleted.');
       }
+
       const filtered = current.filter((m: any) => m.id !== id);
+      if (countActiveSuperUsersServer(filtered) < 1) {
+        throw new Error('Action blocked: System must always maintain at least one active Super User (or Kayomarz Pavri).');
+      }
+
       found = filtered.length < current.length;
       return filtered;
     });
