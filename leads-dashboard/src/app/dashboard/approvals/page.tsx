@@ -22,6 +22,7 @@ const entityIcon = (type: ApprovalRequest['entityType']) => {
 const entityLink = (req: ApprovalRequest) => {
   if (req.entityType === 'task') return '/dashboard/tasks';
   if (req.entityType === 'event') return `/dashboard/events/${req.entityId}`;
+  if (req.entityType === 'member') return '/dashboard/directory';
   return req.eventId ? `/dashboard/events/${req.eventId}` : '/dashboard/events';
 };
 

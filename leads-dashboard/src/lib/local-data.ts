@@ -304,17 +304,23 @@ export interface EventReportItem {
 
 /**
  * An ad-hoc, requester-picks-anyone sign-off request: "please approve this
- * Task/Committee/Event for me" sent to one specific member, distinct from the
- * built-in Group Policy approval gates on TaskItem/EventItem/EventCommittee
- * (approvalStatus/approverType/etc.), which only fire for members whose sole
- * grant for that action came from an approval-required policy tag. This is a
- * manual request any member can raise on any task/committee/event they can
- * see, addressed to any other member of their choosing — it never blocks or
- * gates the underlying record, it's purely a tracked ask-and-answer.
+ * Task/Committee/Event/Member for me" sent to one specific member, distinct
+ * from the built-in Group Policy approval gates on TaskItem/EventItem/
+ * EventCommittee/Member (approvalStatus/approverType/etc.), which only fire
+ * for members whose sole grant for that action came from an
+ * approval-required policy tag. This is a manual request any member can
+ * raise on any task/committee/event/member they can see, addressed to any
+ * other member of their choosing (typically the Centre Head or GG Campus
+ * Events Head) — it never blocks or gates the underlying record, it's purely
+ * a tracked ask-and-answer AFTER the thing already exists. This is what
+ * covers a roster addition made by an Executive role (President/Vice
+ * President/Chief Coordinator): they add the member immediately by their own
+ * designation (see permissions.ts's getMemberApprovalRequirement), then can
+ * raise one of these afterward for oversight — never a pre-approval gate.
  */
 export interface ApprovalRequest {
   id: string;
-  entityType: 'task' | 'committee' | 'event';
+  entityType: 'task' | 'committee' | 'event' | 'member';
   entityId: string;
   entityTitle: string;
   // Set for 'task' (its parent event, if any) and 'committee' (its owning

@@ -1048,12 +1048,10 @@ export function canEditDirectory(user: SessionUser): boolean {
  * canEditDirectory already allows, PLUS an Executive role (President, Vice
  * President, Chief Coordinator). Unlike canEditDirectory (which stays a hard
  * "no" for Executives — they don't get CSV import/bulk tools/edit-any-row),
- * this is deliberately wider: Executives ARE trusted to add a name to the
- * roster and allot people to events/committees/tasks, the same as they're
- * already trusted to create events/tasks and allot committee rosters. What
- * keeps this safe is getMemberApprovalRequirement below — an Executive's
- * addition never lands immediately, it always needs Centre Head sign-off
- * first, exactly like their committee-roster and task/event submissions.
+ * this is deliberately wider: Executives ARE trusted, by their own
+ * designation, to add a name to the roster and allot people to events/
+ * committees/tasks immediately — see getMemberApprovalRequirement below,
+ * which does not gate this addition behind sign-off.
  */
 export function canAddMember(user: SessionUser): boolean {
   if (isAlumniRole(user)) return false;
@@ -1062,26 +1060,22 @@ export function canAddMember(user: SessionUser): boolean {
 
 /**
  * Whether adding a new member to the roster lands immediately or needs
- * Centre Head sign-off first — the Directory equivalent of
- * getTaskApprovalRequirement/getEventApprovalRequirement. An Executive role
- * (President, Vice President, Chief Coordinator) can add members — including
- * one who separately happens to hold Super User access elsewhere, or any
- * other actual performing member — to the roster, committees, events, and
- * tasks, but that addition is never immediate: it always routes through
- * Centre Head approval first, the same as it already does for their
- * event/task/committee submissions. This check is about the ACTOR doing the
- * adding, never about who is being added.
+ * sign-off first. An Executive role (President, Vice President, Chief
+ * Coordinator) is trusted BY their designation to add a member and allot
+ * them to the roster, committees, events, and tasks immediately — same as
+ * they're already trusted to create events/tasks and allot committee
+ * rosters — with no pre-approval gate blocking the addition from landing.
+ * Any oversight from the Centre Head or GG Campus Events Head happens AFTER
+ * the member is already added and visible, as a purely tracked, non-blocking
+ * ask-and-answer (see local-data.ts's requestApproval/ApprovalRequest and
+ * the Directory page's "Request Approval" action) — never before it. The
+ * only thing that can still gate a roster addition is an explicit,
+ * admin-configured Group Policy that grants EDIT_DIRECTORY with
+ * requiresApproval set — the same generic mechanism every other module's
+ * approval requirement already falls back to.
  */
 export function getMemberApprovalRequirement(user: SessionUser): ApprovalRequirement {
-  if (isExecutiveRole(user) && !isCentreHead(user) && user?.tier !== 1) {
-    return {
-      requiresApproval: true,
-      approverType: 'CENTER_HEAD',
-      approverName: 'the Centre Head',
-      policyName: 'Executive Roster Addition Sign-off Requirement',
-    };
-  }
-  return getApprovalRequirement(user, 'EDIT_DIRECTORY', isBaseLeadership(user));
+  return getApprovalRequirement(user, 'EDIT_DIRECTORY', isBaseLeadership(user) || isExecutiveRole(user));
 }
 
 /** Whether `user` is the resolved approver for a specific pending member addition — Centre Head or Super User only, mirroring canApprovePendingTask's fixed CENTER_HEAD default. */

@@ -60,6 +60,7 @@ import {
 } from '@/lib/local-data';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { StudentProfileModal } from '@/components/student-profile-modal';
+import { RequestApprovalModal } from '@/components/request-approval-modal';
 import { canViewFullDirectory, canEditDirectory, canAddMember, getMemberApprovalRequirement, canApprovePendingMember, canEditMemberRecordRow, isRestrictedDirectoryEditor, isCentreHead, canViewHiddenAccounts, canSetMemberPassword, isKayomarzPavri } from '@/lib/permissions';
 
 export default function DirectoryPage() {
@@ -84,6 +85,7 @@ export default function DirectoryPage() {
   const [selectedStudentForProfile, setSelectedStudentForProfile] = useState<string | null>(null);
   const [rejectingMemberId, setRejectingMemberId] = useState<string | null>(null);
   const [rejectionReasonInput, setRejectionReasonInput] = useState('');
+  const [approvalRequestMember, setApprovalRequestMember] = useState<Member | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { isDragOver: isCsvDragOver, dragHandlers: csvDragHandlers } = useDropTarget((files) => handleCsvFile(files[0]));
 
@@ -1489,6 +1491,15 @@ export default function DirectoryPage() {
                               </button>
                             </>
                           )}
+                          {member.approvalStatus !== 'pending_create' && member.id !== user?.id && (
+                            <button
+                              onClick={() => setApprovalRequestMember(member)}
+                              className="p-1.5 text-theme-text-secondary hover:text-accent hover:bg-theme-border/20 rounded-lg transition-all cursor-pointer"
+                              title="Ask someone (e.g. the Centre Head) to review this member"
+                            >
+                              <UserCheck className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                           <button
                             onClick={() => setSelectedStudentForProfile(member.id)}
                             className="p-1.5 text-accent hover:bg-accent/10 rounded-lg transition-all cursor-pointer flex items-center gap-1"
@@ -1497,7 +1508,7 @@ export default function DirectoryPage() {
                             <Eye className="h-4 w-4" />
                             <span className="text-[11px] font-semibold hidden sm:inline">Profile</span>
                           </button>
-                          
+
                           {member.approvalStatus !== 'pending_create' && canEditMemberRecordRow(member, user) && (
                             <button
                               onClick={() => startEdit(member)}
@@ -2485,6 +2496,19 @@ export default function DirectoryPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {approvalRequestMember && user && (
+        <RequestApprovalModal
+          isOpen={Boolean(approvalRequestMember)}
+          onClose={() => setApprovalRequestMember(null)}
+          entityType="member"
+          entityId={approvalRequestMember.id}
+          entityTitle={approvalRequestMember.name}
+          members={members}
+          currentUser={user}
+          onRequested={() => triggerSuccess('Approval request sent!')}
+        />
       )}
 
       {/* Reject Pending Roster Addition Modal */}
