@@ -938,6 +938,33 @@ function syncLabelFor(endpoint: string): string {
   return SYNC_LABELS[collection] || 'changes';
 }
 
+/**
+ * Build a detailed, technical error message from a failed fetch response —
+ * HTTP method, URL, status, and the server's own error text if the body is
+ * JSON with an `error`/`message` field (route handlers return that shape on
+ * failure). Falls back to the raw response text, then to just the status,
+ * so there's always something concrete to show and copy — never a blind
+ * "Failed to save X." with no way to tell what actually went wrong.
+ */
+async function describeFailedResponse(method: string, url: string, res: Response): Promise<string> {
+  let detail = '';
+  try {
+    const text = await res.text();
+    if (text) {
+      try {
+        const parsed = JSON.parse(text);
+        detail = parsed?.error || parsed?.message || text;
+      } catch {
+        detail = text;
+      }
+    }
+  } catch {
+    // response body already consumed or unreadable — fall through with no detail
+  }
+  const base = `${method} ${url} → ${res.status} ${res.statusText}`;
+  return detail ? `${base}: ${detail}` : base;
+}
+
 async function serverPost(endpoint: string, body: any, onProgress?: UploadProgressCallback): Promise<any> {
   if (typeof window === 'undefined') return null;
   if (onProgress) return xhrJson('POST', endpoint, body, onProgress);
@@ -945,18 +972,17 @@ async function serverPost(endpoint: string, body: any, onProgress?: UploadProgre
   // only plain background writes get the global sync-status pill, so the
   // same action is never narrated by two different pieces of UI at once.
   return trackSync(syncLabelFor(endpoint), 'Saving', async () => {
-    try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) console.warn(`[api] POST ${endpoint} failed:`, res.status);
-      return res.ok ? res.json() : null;
-    } catch (err) {
-      console.warn(`[api] POST ${endpoint} error:`, err);
-      return null;
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const detail = await describeFailedResponse('POST', endpoint, res);
+      console.warn(`[api] ${detail}`);
+      throw new Error(detail);
     }
+    return res.json();
   }, (result) => result !== null);
 }
 
@@ -964,33 +990,33 @@ async function serverPatch(endpoint: string, id: string, updates: any, onProgres
   if (typeof window === 'undefined') return null;
   if (onProgress) return xhrJson('PATCH', `${endpoint}/${id}`, updates, onProgress);
   return trackSync(syncLabelFor(endpoint), 'Updating', async () => {
-    try {
-      const res = await fetch(`${endpoint}/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-      });
-      if (!res.ok) console.warn(`[api] PATCH ${endpoint}/${id} failed:`, res.status);
-      return res.ok ? res.json() : null;
-    } catch (err) {
-      console.warn(`[api] PATCH ${endpoint}/${id} error:`, err);
-      return null;
+    const url = `${endpoint}/${id}`;
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) {
+      const detail = await describeFailedResponse('PATCH', url, res);
+      console.warn(`[api] ${detail}`);
+      throw new Error(detail);
     }
+    return res.json();
   }, (result) => result !== null);
 }
 
 async function serverDelete(endpoint: string, id: string, queryParams?: Record<string, string>): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   return trackSync(syncLabelFor(endpoint), 'Removing', async () => {
-    try {
-      const qs = queryParams ? `?${new URLSearchParams(queryParams).toString()}` : '';
-      const res = await fetch(`${endpoint}/${id}${qs}`, { method: 'DELETE' });
-      if (!res.ok) console.warn(`[api] DELETE ${endpoint}/${id} failed:`, res.status);
-      return res.ok;
-    } catch (err) {
-      console.warn(`[api] DELETE ${endpoint}/${id} error:`, err);
-      return false;
+    const qs = queryParams ? `?${new URLSearchParams(queryParams).toString()}` : '';
+    const url = `${endpoint}/${id}${qs}`;
+    const res = await fetch(url, { method: 'DELETE' });
+    if (!res.ok) {
+      const detail = await describeFailedResponse('DELETE', url, res);
+      console.warn(`[api] ${detail}`);
+      throw new Error(detail);
     }
+    return true;
   }, (result) => result === true);
 }
 
