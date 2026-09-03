@@ -849,6 +849,23 @@ export function canRespondToHolidayApproval(task: TaskItem, user: SessionUser): 
   return isCentreHead(user) || isEventsHeadGgCampus(user);
 }
 
+/**
+ * Whether `user` currently holds the auto-generated event-lapse task
+ * (event_social_post's group ask to the senior Head of Design + Core
+ * Committee, or event_report_request's group ask to the General Secretary)
+ * and may delegate it to a specific member — see delegateAutoTask in
+ * local-data.ts. Blocked while a delegation is already pending sign-off.
+ */
+export function canDelegateAutoTask(task: TaskItem, user: SessionUser): boolean {
+  if (!user) return false;
+  if (task.workflowType !== 'event_social_post' && task.workflowType !== 'event_report_request') return false;
+  if (task.approvalStatus === 'pending_edit' || task.approvalStatus === 'pending_create') return false;
+  const member = resolveMember(user);
+  if (!member) return false;
+  if (task.assigneeType === 'group') return (task.assigneeIds || []).includes(member.id);
+  return task.assigneeId === member.id || (!!task.assigneeEmail && task.assigneeEmail.toLowerCase() === user.email.toLowerCase());
+}
+
 /** Task creation — leadership, Core Committee, any Head, or a TASKS_CREATE grant. */
 export function canCreateTask(user: SessionUser): boolean {
   return isBaseLeadership(user) || isCoreCommitteeTier(user) || isHeadRole(user) || hasCapability(user, 'TASKS_CREATE');

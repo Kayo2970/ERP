@@ -19,7 +19,10 @@ import {
   PartyPopper,
   ThumbsUp,
   ThumbsDown,
-  UserCheck
+  UserCheck,
+  UserPlus,
+  Megaphone,
+  FileCheck2
 } from 'lucide-react';
 import {
   getTasks,
@@ -40,10 +43,11 @@ import {
   EventItem,
   Member
 } from '@/lib/local-data';
-import { canViewTaskExtended, canManageTasks, canCreateTask, canEditTask, canDeleteTask, canRequestTaskExtension, canDecideTaskExtension, isHeadRole, getTaskApprovalRequirement, canApprovePendingTask, canRespondToHolidayApproval } from '@/lib/permissions';
+import { canViewTaskExtended, canManageTasks, canCreateTask, canEditTask, canDeleteTask, canRequestTaskExtension, canDecideTaskExtension, isHeadRole, getTaskApprovalRequirement, canApprovePendingTask, canRespondToHolidayApproval, canDelegateAutoTask } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 import { RequestApprovalModal } from '@/components/request-approval-modal';
+import { DelegateTaskModal } from '@/components/delegate-task-modal';
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
@@ -60,6 +64,7 @@ export default function TasksPage() {
   const [rejectingTaskId, setRejectingTaskId] = useState<string | null>(null);
   const [rejectionReasonInput, setRejectionReasonInput] = useState('');
   const [approvalRequestTask, setApprovalRequestTask] = useState<TaskItem | null>(null);
+  const [delegatingTask, setDelegatingTask] = useState<TaskItem | null>(null);
 
   // Form State
   const [title, setTitle] = useState('');
@@ -648,6 +653,16 @@ export default function TasksPage() {
                       <PartyPopper className="h-3 w-3" /> Holiday Social Media
                     </span>
                   )}
+                  {task.workflowType === 'event_social_post' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent/15 border border-accent/30 text-accent text-[10px] font-bold rounded-full">
+                      <Megaphone className="h-3 w-3" /> Post-Event Social Media
+                    </span>
+                  )}
+                  {task.workflowType === 'event_report_request' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent/15 border border-accent/30 text-accent text-[10px] font-bold rounded-full">
+                      <FileCheck2 className="h-3 w-3" /> Event Report Request
+                    </span>
+                  )}
                   <h3 className="font-bold text-sm text-theme-text-primary leading-snug">{task.title}</h3>
                   <p className="text-[11px] text-theme-text-secondary flex items-center gap-1">
                     <Briefcase className="h-3 w-3" />
@@ -724,6 +739,15 @@ export default function TasksPage() {
 
                 {(canEditTask(user) || canDeleteTask(user, task) || user) && (
                   <div className="flex items-center gap-1">
+                    {user && canDelegateAutoTask(task, user) && (
+                      <button
+                        onClick={() => setDelegatingTask(task)}
+                        className="p-1 hover:bg-theme-border/30 rounded-md text-theme-text-secondary hover:text-accent transition-all cursor-pointer"
+                        title="Delegate this task to a specific member"
+                      >
+                        <UserPlus className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                     {user && (
                       <button
                         onClick={() => setApprovalRequestTask(task)}
@@ -1119,6 +1143,20 @@ export default function TasksPage() {
           members={members}
           currentUser={user}
           onRequested={() => triggerSuccess('✔ Approval request sent!')}
+        />
+      )}
+
+      {delegatingTask && user && (
+        <DelegateTaskModal
+          isOpen={Boolean(delegatingTask)}
+          onClose={() => setDelegatingTask(null)}
+          task={delegatingTask}
+          members={members}
+          currentUser={user}
+          onDelegated={() => {
+            setTasks(getTasks());
+            triggerSuccess('Delegation submitted — awaiting Centre Head / GG Campus Events Head approval.');
+          }}
         />
       )}
 

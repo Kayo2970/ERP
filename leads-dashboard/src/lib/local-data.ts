@@ -187,7 +187,15 @@ export interface TaskItem {
   // relying on a fragile title-string match.
   isDesignDeliverable?: boolean;
   workflowType?: 'design_caption_draft' | 'design_caption_review' | 'design_social_posting'
-    | 'holiday_social_approval' | 'holiday_design_social';
+    | 'holiday_social_approval' | 'holiday_design_social'
+    // Auto-created the day an event's dates lapse (see event-social-scheduler.ts) —
+    // assigned to the senior Head of Design + Core Committee, asking for social
+    // media coverage of the just-concluded event.
+    | 'event_social_post'
+    // Auto-created the moment an 'event_social_post' task is marked Completed
+    // (see updateTask below) — assigned to the General Secretary, requesting
+    // the formal event report (see EventReportItem) for the same event.
+    | 'event_report_request';
   // Only set on workflowType 'design_social_posting' tasks — distinguishes
   // the two separate posting tasks (one per platform) created once captions
   // are approved, so each can be assigned, viewed, and marked complete
@@ -2208,13 +2216,92 @@ export function updateTask(id: string, updates: Partial<TaskItem>, actorName: st
   const idx = tasks.findIndex(t => t.id === id);
   if (idx === -1) return null;
 
+  const previousStatus = tasks[idx].status;
   tasks[idx] = { ...tasks[idx], ...updates };
   saveTasks(tasks);
   // Send the full merged task, not just the diff, so a server-side upsert (a
   // client-only sample task that was never POSTed) creates a complete record.
   serverPatch('/api/tasks', id, tasks[idx]);
   logAuditEvent('TASK_UPDATED', actorName, `Updated task: ${tasks[idx].title}`);
+
+  // Chain reaction: the moment the event-lapse social media task is marked
+  // Completed, auto-generate the follow-on event report request for the
+  // General Secretary — see spawnEventReportRequestTask below.
+  if (
+    updates.status === 'Completed' &&
+    previousStatus !== 'Completed' &&
+    tasks[idx].workflowType === 'event_social_post' &&
+    tasks[idx].eventId
+  ) {
+    spawnEventReportRequestTask(tasks[idx].eventId!, tasks[idx].event, actorName);
+  }
+
   return tasks[idx];
+}
+
+/**
+ * Auto-creates the "please submit an event report" task for the General
+ * Secretary the moment the corresponding event_social_post task is completed
+ * — see updateTask above. Deterministic id keyed off the event, so a second
+ * completion (e.g. re-marking the same task Completed) never double-creates it.
+ */
+function spawnEventReportRequestTask(eventId: string, eventTitle: string | undefined, actorName: string): void {
+  const id = 'task_event_report_' + eventId;
+  const tasks = getTasks();
+  if (tasks.some(t => t.id === id)) return;
+
+  const members = getMembers().filter(m => m.status !== 'Terminated');
+  let pool = members.filter(m => {
+    const role = (m.role || '').toLowerCase();
+    return m.tier === 5 && role.includes('general secretary') && !role.includes('senior');
+  });
+  // Never leave the task with no one able to see/answer it.
+  if (pool.length === 0) pool = members.filter(m => m.tier <= 2);
+
+  const dueDate = new Date();
+  dueDate.setDate(dueDate.getDate() + 7);
+
+  const newTask: TaskItem = {
+    id,
+    title: `Submit event report for "${eventTitle || 'the event'}"`,
+    event: eventTitle,
+    eventId,
+    assignee: pool.map(m => m.name).join(', ') || 'General Secretary',
+    assigneeType: 'group',
+    assigneeIds: pool.map(m => m.id),
+    dueDate: dueDate.toISOString().slice(0, 10),
+    status: 'Assigned',
+    creatorName: 'Event Scheduler',
+    workflowType: 'event_report_request',
+  };
+  const next = [newTask, ...tasks];
+  saveTasks(next);
+  serverPost('/api/tasks', newTask);
+  logAuditEvent('EVENT_REPORT_TASK_CREATED', actorName, `Requested an event report for "${eventTitle}" from the General Secretary`);
+}
+
+/**
+ * Ask the Centre Head / GG Campus Events Head to reassign an auto-generated
+ * event-lapse task (the social post task or the event report request) to a
+ * specific member — used by whoever it's currently assigned to when they
+ * want to delegate it instead of doing it themselves. Goes through the same
+ * pending_edit / approveTask sign-off flow as any other task edit, and is
+ * deliberately always routed through approval (approverType: 'CENTER_HEAD')
+ * regardless of the delegator's own role.
+ */
+export function delegateAutoTask(
+  taskId: string,
+  target: { id: string; name: string; email: string },
+  actorName: string,
+  actorEmail: string
+): TaskItem | null {
+  return submitTaskEdit(
+    taskId,
+    { assignee: target.name, assigneeId: target.id, assigneeEmail: target.email, assigneeType: 'individual' },
+    actorName,
+    actorEmail,
+    { approverType: 'CENTER_HEAD', policyName: 'Auto-Generated Task Delegation' }
+  );
 }
 
 export function updateTaskStatus(id: string, status: TaskItem['status'], actorName?: string): TaskItem | null {
