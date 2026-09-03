@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection } from '@/lib/server-db';
 import { enqueueTaskEmailNotification } from '@/lib/task-email-queue';
+import { deleteStoredFilesForRecord } from '@/lib/file-storage';
 
 export async function PATCH(
   request: Request,
@@ -75,6 +76,10 @@ export async function DELETE(
       return filtered;
     });
     if (!found) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+    if (deleted?.attachments?.length) {
+      await deleteStoredFilesForRecord('tasks', id);
+    }
 
     // Deleting a scheduler-generated task is a deliberate "no, don't ask about
     // this one" — without this, the next scheduler run sees the event still

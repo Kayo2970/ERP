@@ -249,6 +249,20 @@ export interface TaskItem {
   // approved again). Visible to the Centre Head / GG Campus Events Head —
   // see canViewTaskDelegationTrail in permissions.ts.
   delegationTrail?: TaskDelegationEvent[];
+  // 'design' marks a task the creator (typically a Faculty member/professor)
+  // flagged as needing a real creative brief up front, rather than a title
+  // alone — see briefDescription/attachments below. Purely a UI/creation-time
+  // affordance: it doesn't change any approval or visibility rule.
+  taskCategory?: 'general' | 'design';
+  // Free-text brief of what the requester wants from the deliverable — only
+  // collected/shown when taskCategory === 'design', but stored generically
+  // in case a future task type wants the same field.
+  briefDescription?: string;
+  // Reference files (mockup examples, logos, style guides, past posters...)
+  // the requester attaches for the designer to work from. Stored server-side
+  // as real files under data/uploads/tasks/<taskId>/ (see saveBase64File) —
+  // this array only ever holds name/url/storageKey/type, never raw bytes.
+  attachments?: ReceiptFile[];
 }
 
 export interface TaskDelegationEvent {
@@ -2326,6 +2340,34 @@ export function saveTasks(tasks: TaskItem[]): void {
   localStorage.setItem('leads_tasks', JSON.stringify(tasks));
   markLocalWrite('leads_tasks');
   window.dispatchEvent(new CustomEvent('leads-data-sync'));
+}
+
+/**
+ * Uploads design-brief attachments to disk under data/uploads/tasks/<recordId>/
+ * and returns their real url/storageKey — awaited by the Tasks page BEFORE
+ * calling addTask/updateTask, so TaskItem.attachments only ever holds real
+ * file references, never inline base64 sitting in localStorage. `recordId`
+ * can be a client-generated placeholder at creation time (it only names the
+ * storage folder, it doesn't have to match the eventual task id); pass the
+ * count of attachments the task already has as `startIndex` when appending
+ * more files during an edit, so earlier files aren't overwritten on disk.
+ */
+export async function uploadTaskAttachments(
+  recordId: string,
+  files: { name: string; dataUrl: string; type?: string }[],
+  startIndex = 0
+): Promise<ReceiptFile[]> {
+  if (files.length === 0) return [];
+  const res = await fetch('/api/tasks/attachments', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ recordId, files, startIndex }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.error || 'Failed to upload attachment(s). Please check your connection and try again.');
+  }
+  return (data.files || []) as ReceiptFile[];
 }
 
 export function addTask(task: Omit<TaskItem, 'id' | 'status'> & { status?: TaskItem['status'] }): TaskItem {

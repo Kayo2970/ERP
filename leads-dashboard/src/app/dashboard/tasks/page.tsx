@@ -27,6 +27,9 @@ import {
   ChevronDown,
   ChevronUp,
   ArrowRight,
+  Paperclip,
+  Palette,
+  Download,
 } from 'lucide-react';
 import {
   getTasks,
@@ -43,15 +46,18 @@ import {
   respondToHolidayApproval,
   addEventCommittee,
   updateEventCommitteeMembers,
+  uploadTaskAttachments,
   TaskItem,
   EventItem,
-  Member
+  Member,
+  ReceiptFile
 } from '@/lib/local-data';
 import { canViewTaskExtended, canManageTasks, canCreateTask, canEditTask, canDeleteTask, canRequestTaskExtension, canDecideTaskExtension, canChangeTaskStatus, isHeadRole, getTaskApprovalRequirement, canApprovePendingTask, canRespondToHolidayApproval, canDelegateAutoTask, canViewTaskDelegationTrail } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 import { RequestApprovalModal } from '@/components/request-approval-modal';
 import { DelegateTaskModal } from '@/components/delegate-task-modal';
+import { FileDropzone, FilePreviewRow } from '@/components/ui/file-dropzone';
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
@@ -92,6 +98,15 @@ export default function TasksPage() {
   const [status, setStatus] = useState<TaskItem['status']>('Assigned');
   const [successMsg, setSuccessMsg] = useState('');
   const [formError, setFormError] = useState('');
+
+  // Design-brief task type — lets the requester (typically Faculty) attach
+  // reference files and write out exactly what they want from the deliverable,
+  // instead of a title alone.
+  const [taskCategory, setTaskCategory] = useState<'general' | 'design'>('general');
+  const [briefDescription, setBriefDescription] = useState('');
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [existingAttachments, setExistingAttachments] = useState<ReceiptFile[]>([]);
+  const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
 
   // Searchable assignee combobox
   const [assigneeQuery, setAssigneeQuery] = useState('');
@@ -202,6 +217,10 @@ export default function TasksPage() {
     setAssigneeQuery('');
     setIsAssigneeDropdownOpen(false);
     setFormError('');
+    setTaskCategory('general');
+    setBriefDescription('');
+    setAttachedFiles([]);
+    setExistingAttachments([]);
     setIsCreateModalOpen(true);
   };
 
@@ -228,12 +247,69 @@ export default function TasksPage() {
     setAssigneeQuery('');
     setIsAssigneeDropdownOpen(false);
     setFormError('');
+    setTaskCategory(task.taskCategory || 'general');
+    setBriefDescription(task.briefDescription || '');
+    setAttachedFiles([]);
+    setExistingAttachments(task.attachments || []);
   };
 
-  const handleSaveTask = (e: React.FormEvent) => {
+  const readFileAsDataUrl = (file: File): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => (typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Could not read that file.')));
+    reader.onerror = () => reject(new Error(`Could not read "${file.name}". Please try selecting it again.`));
+    reader.readAsDataURL(file);
+  });
+
+  const handleAttachmentFilesSelected = (files: File[]) => {
+    if (existingAttachments.length + attachedFiles.length + files.length > 5) {
+      setFormError('Maximum 5 attachments allowed per task.');
+      return;
+    }
+    setFormError('');
+    setAttachedFiles(prev => [...prev, ...files]);
+  };
+
+  const removeAttachedFile = (index: number) => {
+    setAttachedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removeExistingAttachment = (index: number) => {
+    setExistingAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSaveTask = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
     if (!title || !dueDate) return;
+    if (taskCategory === 'design' && !briefDescription.trim()) {
+      setFormError('Describe what you want from this design deliverable — the designer needs a real brief, not just a title.');
+      return;
+    }
+
+    // Upload any newly attached reference files first (awaited) so the task
+    // record only ever stores real url/storageKey values, never inline
+    // base64 sitting in localStorage.
+    let finalAttachments = existingAttachments;
+    if (taskCategory === 'design' && attachedFiles.length > 0) {
+      setIsUploadingAttachments(true);
+      try {
+        const filesPayload = await Promise.all(
+          attachedFiles.map(async (file) => ({
+            name: file.name,
+            dataUrl: await readFileAsDataUrl(file),
+            type: file.type,
+          }))
+        );
+        const recordId = editingTask?.id || `task_att_${Date.now()}`;
+        const uploaded = await uploadTaskAttachments(recordId, filesPayload, existingAttachments.length);
+        finalAttachments = [...existingAttachments, ...uploaded];
+      } catch (err: any) {
+        setIsUploadingAttachments(false);
+        setFormError(err?.message || 'Failed to upload attachment(s). Please try again.');
+        return;
+      }
+      setIsUploadingAttachments(false);
+    }
 
     let eventTitle = 'Standalone';
     let eventIdVal = undefined;
@@ -326,6 +402,9 @@ export default function TasksPage() {
         assigneeType,
         dueDate,
         status,
+        taskCategory,
+        briefDescription: taskCategory === 'design' ? briefDescription.trim() : undefined,
+        attachments: taskCategory === 'design' ? finalAttachments : undefined,
       };
       const approval = getTaskApprovalRequirement(user, 'EDIT');
       if (approval.requiresApproval) {
@@ -355,7 +434,10 @@ export default function TasksPage() {
         assigneeType,
         dueDate,
         status,
-        creatorName: user?.name || 'User'
+        creatorName: user?.name || 'User',
+        taskCategory,
+        briefDescription: taskCategory === 'design' ? briefDescription.trim() : undefined,
+        attachments: taskCategory === 'design' ? finalAttachments : undefined,
       };
       const approval = getTaskApprovalRequirement(user, 'CREATE');
       if (approval.requiresApproval) {
@@ -679,6 +761,11 @@ export default function TasksPage() {
                       <FileCheck2 className="h-3 w-3" /> Event Report Request
                     </span>
                   )}
+                  {task.taskCategory === 'design' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent/15 border border-accent/30 text-accent text-[10px] font-bold rounded-full">
+                      <Palette className="h-3 w-3" /> Design Task
+                    </span>
+                  )}
                   <h3 className="font-bold text-sm text-theme-text-primary leading-snug">{task.title}</h3>
                   <p className="text-[11px] text-theme-text-secondary flex items-center gap-1">
                     <Briefcase className="h-3 w-3" />
@@ -695,6 +782,34 @@ export default function TasksPage() {
                     </p>
                   )}
                 </div>
+
+                {task.taskCategory === 'design' && (task.briefDescription || (task.attachments && task.attachments.length > 0)) && (
+                  <div className="p-2.5 bg-theme-background/30 border border-theme-border/30 rounded-xl space-y-2">
+                    {task.briefDescription && (
+                      <p className="text-[11px] text-theme-text-secondary whitespace-pre-wrap">
+                        <span className="font-semibold text-theme-text-primary">Brief: </span>
+                        {task.briefDescription}
+                      </p>
+                    )}
+                    {task.attachments && task.attachments.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {task.attachments.map((f, i) => (
+                          <a
+                            key={f.storageKey || f.url || i}
+                            href={f.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2 py-1 bg-accent/10 hover:bg-accent/20 border border-accent/25 text-accent text-[10px] font-medium rounded-lg transition-all max-w-full"
+                            title={f.name}
+                          >
+                            <Paperclip className="h-3 w-3 shrink-0" />
+                            <span className="truncate max-w-[9rem]">{f.name}</span>
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {canViewTaskDelegationTrail(user) && task.delegationTrail && task.delegationTrail.length > 0 && (
                   <div className="pt-1">
@@ -881,6 +996,100 @@ export default function TasksPage() {
                   className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                 />
               </div>
+
+              <div className="space-y-2">
+                <label className="block font-medium text-theme-text-secondary">Task Type</label>
+                <div className="flex flex-wrap gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer font-medium text-theme-text-primary">
+                    <input
+                      type="radio"
+                      name="taskCategory"
+                      checked={taskCategory === 'general'}
+                      onChange={() => setTaskCategory('general')}
+                      className="accent-accent"
+                    />
+                    General Task
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer font-medium text-theme-text-primary">
+                    <input
+                      type="radio"
+                      name="taskCategory"
+                      checked={taskCategory === 'design'}
+                      onChange={() => setTaskCategory('design')}
+                      className="accent-accent"
+                    />
+                    <Palette className="h-3.5 w-3.5 text-accent" />
+                    Design Task
+                  </label>
+                </div>
+              </div>
+
+              {taskCategory === 'design' && (
+                <div className="space-y-3 p-3 bg-accent/5 border border-accent/20 rounded-xl">
+                  <div className="space-y-1.5">
+                    <label className="block font-medium text-theme-text-secondary">
+                      Design Brief — what do you want from this project? *
+                    </label>
+                    <textarea
+                      required={taskCategory === 'design'}
+                      value={briefDescription}
+                      onChange={(e) => setBriefDescription(e.target.value)}
+                      placeholder="Describe the deliverable in detail: purpose, dimensions/format, colors/theme, text/copy to include, deadline context, examples to follow..."
+                      rows={4}
+                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent resize-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block font-medium text-theme-text-secondary flex items-center gap-1.5">
+                      <Paperclip className="h-3.5 w-3.5" />
+                      Reference Attachments ({existingAttachments.length + attachedFiles.length}/5)
+                    </label>
+                    <FileDropzone
+                      onFilesSelected={handleAttachmentFilesSelected}
+                      multiple
+                      compact
+                      disabled={existingAttachments.length + attachedFiles.length >= 5}
+                      label="Click to upload or drag and drop reference files"
+                      hint="Mockups, logos, style guides, briefs — up to 5 files, 15 MB each"
+                    />
+
+                    {existingAttachments.length > 0 && (
+                      <div className="space-y-1.5 pt-1">
+                        {existingAttachments.map((f, i) => (
+                          <div key={f.storageKey || f.url || i} className="flex items-center justify-between gap-2 p-2.5 rounded-xl border border-theme-border/30 bg-theme-background/20 text-[11px]">
+                            <a href={f.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-accent hover:underline truncate">
+                              <Download className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{f.name}</span>
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => removeExistingAttachment(i)}
+                              className="h-5 w-5 flex items-center justify-center rounded-md text-theme-text-secondary hover:text-danger hover:bg-danger/10 transition-all cursor-pointer shrink-0"
+                              title="Remove attachment"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {attachedFiles.length > 0 && (
+                      <div className="space-y-1.5 pt-1">
+                        {attachedFiles.map((file, i) => (
+                          <FilePreviewRow
+                            key={`${file.name}-${i}`}
+                            file={file}
+                            status={isUploadingAttachments ? 'uploading' : 'idle'}
+                            onRemove={() => removeAttachedFile(i)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
@@ -1128,9 +1337,10 @@ export default function TasksPage() {
 
               <button
                 type="submit"
-                className="w-full py-3 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer mt-4"
+                disabled={isUploadingAttachments}
+                className="w-full py-3 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer mt-4 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {editingTask ? 'Save Task Updates' : 'Confirm Assignment'}
+                {isUploadingAttachments ? 'Uploading attachments...' : editingTask ? 'Save Task Updates' : 'Confirm Assignment'}
               </button>
             </form>
           </div>
