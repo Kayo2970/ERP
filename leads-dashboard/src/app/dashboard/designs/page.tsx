@@ -2202,7 +2202,7 @@ export default function DesignPortalPage() {
               ) : (
                 <div className="p-3 bg-muted/20 rounded-lg text-xs text-muted-foreground flex items-center gap-2">
                   <Lock className="h-4 w-4 text-muted-foreground" />
-                  Only a member with the designation of Design Head or Centre Head can approve or reject designs based on design style.
+                  Only the Design Head, Centre Head, or Advisor can approve or reject designs based on design style.
                 </div>
               )}
             </div>

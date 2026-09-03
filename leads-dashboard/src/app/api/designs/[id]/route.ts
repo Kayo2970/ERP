@@ -69,8 +69,12 @@ export async function PATCH(
       }
     }
 
-    // Once Style Approved, email the design asset as an attachment to the
-    // Centre Head and GG Campus Head of Events.
+    // Once Style Approved — by the Centre Head, Advisor, or GG Campus Head of
+    // Events (see the isCentreHead(user)/isDesignHead(user) gate in
+    // dashboard/designs/page.tsx, which already treats Advisor as Centre
+    // Head) — email the design asset as an attachment to all three, using
+    // each member's own registered email address (Member.email, collected at
+    // account activation/registration — see findApprovalRecipients).
     if (justStyleApproved && mergedRecord?.storageKey) {
       try {
         const [members, { dispatchEmail, generateDesignApprovedEmailTemplate, findApprovalRecipients }] = await Promise.all([
@@ -78,7 +82,7 @@ export async function PATCH(
           import('@/lib/email-service'),
         ]);
         const recipients = findApprovalRecipients(members as any[]);
-        const to = [recipients.centreHead?.email, recipients.eventsHeadGg?.email].filter(Boolean) as string[];
+        const to = [recipients.centreHead?.email, recipients.advisor?.email, recipients.eventsHeadGg?.email].filter(Boolean) as string[];
 
         if (to.length > 0) {
           const fileBuffer = await readStoredFile(mergedRecord.storageKey);
@@ -98,7 +102,7 @@ export async function PATCH(
           ));
           mergedRecord = { ...mergedRecord, styleApprovalEmailSent: log.status === 'SENT', styleApprovalEmailError: log.errorMessage };
         } else {
-          const noRecipientsMsg = 'No Centre Head or GG Campus Head of Events found in the Directory to send the approved design to.';
+          const noRecipientsMsg = 'No Centre Head, Advisor, or GG Campus Head of Events found in the Directory to send the approved design to.';
           await mutateCollection('designs', (current) => (current || []).map((d: any) =>
             d.id === id ? { ...d, styleApprovalEmailSent: false, styleApprovalEmailError: noRecipientsMsg } : d
           ));
