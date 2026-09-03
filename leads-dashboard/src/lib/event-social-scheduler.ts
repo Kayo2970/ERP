@@ -33,6 +33,7 @@ export async function runEventLapseSocialTasks(): Promise<{ created: number }> {
   const lapsedEvents = events.filter((e: any) =>
     !e.isHoliday &&
     !e.datesTBD &&
+    !e.socialTaskDismissed &&
     typeof e.endDate === 'string' && e.endDate.length > 0 && e.endDate < today &&
     e.approvalStatus !== 'pending_create' && e.approvalStatus !== 'rejected' && e.approvalStatus !== 'pending_delete'
   );
