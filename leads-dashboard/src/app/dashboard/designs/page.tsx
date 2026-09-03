@@ -566,7 +566,22 @@ export default function DesignPortalPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fileData: dataUrl, fileType }),
       });
-      const body = await res.json();
+
+      // Read as text first — a non-JSON body (an HTML error page) means the
+      // request never reached this app's own route handler (which always
+      // returns JSON) and was rejected by something in front of it, most
+      // commonly a reverse proxy's own upload size limit.
+      const responseText = await res.text();
+      let body: any = {};
+      try {
+        body = JSON.parse(responseText);
+      } catch {
+        throw new Error(
+          res.status === 413
+            ? 'This file is too large for the server proxy — it was rejected before reaching the app. Try a smaller file, or ask your server admin to raise the proxy\'s upload size limit.'
+            : 'The server returned an invalid response (connection timed out or a server proxy error) — you can still submit without scanning.'
+        );
+      }
       if (!res.ok) throw new Error(body.error || 'OCR scan failed.');
       setResult(body as OcrScanResult);
     } catch (err: any) {

@@ -996,7 +996,7 @@ export type UploadProgressCallback = (loaded: number, total: number) => void;
  * carries a file), so every other call site keeps the plain fetch() path.
  */
 function xhrJson(method: 'POST' | 'PATCH', url: string, body: any, onProgress: UploadProgressCallback): Promise<any> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open(method, url);
     xhr.setRequestHeader('Content-Type', 'application/json');
@@ -1008,16 +1008,33 @@ function xhrJson(method: 'POST' | 'PATCH', url: string, body: any, onProgress: U
         try {
           resolve(JSON.parse(xhr.responseText));
         } catch {
-          resolve(null);
+          reject(new Error(`${method} ${url} succeeded (${xhr.status}) but returned a non-JSON response — the upload may have been altered by a server proxy.`));
         }
-      } else {
-        console.warn(`[api] ${method} ${url} failed:`, xhr.status);
-        resolve(null);
+        return;
       }
+      console.warn(`[api] ${method} ${url} failed:`, xhr.status);
+      // A response body that isn't JSON here almost always means the request
+      // never reached this app's own route handler (which always returns
+      // JSON, even on failure) — something in front of it (a reverse proxy's
+      // own upload size limit, most commonly) rejected the request outright
+      // and sent back its own HTML error page instead.
+      let detail = '';
+      try {
+        const parsed = JSON.parse(xhr.responseText);
+        detail = parsed?.error || parsed?.message || '';
+      } catch {
+        // not JSON — a proxy/server error page, not this app's own response
+      }
+      if (!detail) {
+        detail = xhr.status === 413
+          ? 'The file was rejected as too large before it reached the app — this is a server/reverse-proxy upload size limit (separate from this app\'s own limit), not this app rejecting it. Ask whoever manages the server to raise it.'
+          : `${method} ${url} failed with status ${xhr.status || 'unknown'} and no readable response (server proxy limit, timeout, or connectivity issue).`;
+      }
+      reject(new Error(detail));
     };
     xhr.onerror = () => {
       console.warn(`[api] ${method} ${url} error`);
-      resolve(null);
+      reject(new Error(`${method} ${url} — the connection failed or was reset mid-upload (a large file may have been rejected by a server proxy before reaching the app).`));
     };
     xhr.send(JSON.stringify(body));
   });
