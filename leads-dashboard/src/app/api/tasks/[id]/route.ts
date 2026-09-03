@@ -55,6 +55,11 @@ export async function PATCH(
   }
 }
 
+// Scheduler-generated workflows (see holiday-scheduler.ts / event-social-scheduler.ts)
+// that recreate a deterministic-id task for an event on every boot/weekly/daily
+// catch-up run as long as the event still exists and no such task is present.
+const AUTO_RECREATED_WORKFLOWS = new Set(['holiday_social_approval', 'event_social_post']);
+
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -62,12 +67,31 @@ export async function DELETE(
   try {
     const { id } = await params;
     let found = false;
+    let deleted: any = null;
     await mutateCollection('tasks', (current) => {
       const filtered = current.filter((t: any) => t.id !== id);
       found = filtered.length < current.length;
+      if (found) deleted = current.find((t: any) => t.id === id);
       return filtered;
     });
     if (!found) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+    // Deleting a scheduler-generated task is a deliberate "no, don't ask about
+    // this one" — without this, the next scheduler run sees the event still
+    // there and no task for it, and recreates the exact task the user just
+    // deleted (it comes back like a zombie). Flag the event so the scheduler
+    // skips it going forward; a manual "Request Social Post" action elsewhere
+    // in the app is unaffected since it doesn't consult this flag.
+    if (deleted?.eventId && AUTO_RECREATED_WORKFLOWS.has(deleted.workflowType)) {
+      await mutateCollection('events', (current) => {
+        const idx = current.findIndex((e: any) => e.id === deleted.eventId);
+        if (idx === -1) return current;
+        const next = [...current];
+        next[idx] = { ...next[idx], socialTaskDismissed: true };
+        return next;
+      });
+    }
+
     return NextResponse.json({ success: true });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

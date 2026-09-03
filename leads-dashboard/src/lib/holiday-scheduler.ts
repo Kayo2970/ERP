@@ -150,14 +150,18 @@ export async function runHolidaySync(): Promise<{ fetched: number; upserted: num
  * `holiday_social_approval` task — assigned as a group to every Centre Head /
  * Events Head on the roster — asking whether a social media post is needed.
  * Skips any holiday that already has one (keyed by a deterministic task id),
- * so a re-run (or the boot catch-up) never creates duplicates.
+ * so a re-run (or the boot catch-up) never creates duplicates. Also skips any
+ * holiday flagged `socialTaskDismissed` — set when a user explicitly deletes
+ * this task (see DELETE /api/tasks/[id]) — so a deleted task stays deleted.
  */
 export async function runHolidayApprovalTasks(): Promise<{ created: number }> {
   const events = await readCollection<any>('events');
   const today = todayDateString();
   const windowEnd = addDaysDateString(today, 7);
 
-  const upcomingHolidays = events.filter((e: any) => e.isHoliday && e.startDate >= today && e.startDate <= windowEnd);
+  const upcomingHolidays = events.filter((e: any) =>
+    e.isHoliday && !e.socialTaskDismissed && e.startDate >= today && e.startDate <= windowEnd
+  );
   if (upcomingHolidays.length === 0) return { created: 0 };
 
   const tasks = await readCollection<any>('tasks');

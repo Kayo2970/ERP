@@ -148,6 +148,13 @@ export interface EventItem {
   // Calendar page badges these differently and they're excluded from
   // event-approval/committee/sponsor workflows.
   isHoliday?: boolean;
+  // Set server-side when a user explicitly deletes this event's auto-generated
+  // 'holiday_social_approval' or 'event_social_post' task (see DELETE
+  // /api/tasks/[id]) — tells holiday-scheduler.ts / event-social-scheduler.ts
+  // never to recreate that task for this same event on their next run, so a
+  // deleted task stays deleted instead of coming back as a "zombie" on the
+  // next boot/weekly/daily catch-up.
+  socialTaskDismissed?: boolean;
   // External sponsor contributions. In the Budget module, sponsor money is
   // drawn down against an event's actual spend before the Centre's own
   // budget is counted as used — see getEventSponsorTotal() and the Budget
