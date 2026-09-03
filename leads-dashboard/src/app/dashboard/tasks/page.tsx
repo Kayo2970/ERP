@@ -475,18 +475,27 @@ export default function TasksPage() {
   const canManage = canManageTasks(user);
 
   const selectedAssigneeMember = members.find(m => m.id === selectedAssigneeId);
-  const filteredAssignees = members.filter(m => {
-    const q = assigneeQuery.toLowerCase();
-    const matchesQuery = !q || m.name.toLowerCase().includes(q) || m.role.toLowerCase().includes(q) || m.email.toLowerCase().includes(q);
-    if (!matchesQuery) return false;
-
-    // For Department Heads (tier > 3), prioritize department members and training associates
-    if (user && isHeadRole(user) && user.tier > 3) {
-      const dept = user.department;
-      return m.tier === 6 || m.department === dept;
-    }
-    return true;
-  });
+  // The full member roster is always searchable here — a Department Head used
+  // to have this list hard-filtered down to just their own department/tier-6
+  // members, which on a lot of real rosters (mismatched department strings,
+  // no tier-6 members at all) meant the dropdown showed nobody. Now everyone
+  // is shown; a Department Head's own department/tier-6 members are simply
+  // sorted first for convenience, exactly like the "prioritize" comment
+  // always intended, instead of being the only ones shown.
+  const filteredAssignees = members
+    .filter(m => {
+      const q = assigneeQuery.toLowerCase();
+      return !q || m.name.toLowerCase().includes(q) || m.role.toLowerCase().includes(q) || m.email.toLowerCase().includes(q);
+    })
+    .sort((a, b) => {
+      if (user && isHeadRole(user) && user.tier > 3) {
+        const dept = user.department;
+        const aPriority = a.tier === 6 || a.department === dept ? 0 : 1;
+        const bPriority = b.tier === 6 || b.department === dept ? 0 : 1;
+        if (aPriority !== bPriority) return aPriority - bPriority;
+      }
+      return a.name.localeCompare(b.name);
+    });
 
   const handleSelectAssignee = (member: Member) => {
     setSelectedAssigneeId(member.id);
