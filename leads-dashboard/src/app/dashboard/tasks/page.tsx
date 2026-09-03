@@ -47,7 +47,7 @@ import {
   EventItem,
   Member
 } from '@/lib/local-data';
-import { canViewTaskExtended, canManageTasks, canCreateTask, canEditTask, canDeleteTask, canRequestTaskExtension, canDecideTaskExtension, isHeadRole, getTaskApprovalRequirement, canApprovePendingTask, canRespondToHolidayApproval, canDelegateAutoTask, canViewTaskDelegationTrail } from '@/lib/permissions';
+import { canViewTaskExtended, canManageTasks, canCreateTask, canEditTask, canDeleteTask, canRequestTaskExtension, canDecideTaskExtension, canChangeTaskStatus, isHeadRole, getTaskApprovalRequirement, canApprovePendingTask, canRespondToHolidayApproval, canDelegateAutoTask, canViewTaskDelegationTrail } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 import { RequestApprovalModal } from '@/components/request-approval-modal';
@@ -756,21 +756,29 @@ export default function TasksPage() {
                       <span className="text-[11px] text-theme-text-secondary italic">Awaiting Centre Head / Events Head decision</span>
                     )
                   ) : task.status === 'Assigned' && (
-                    <button
-                      onClick={() => handleStatusChange(task.id, 'In Progress')}
-                      className="px-2.5 py-1 bg-accent hover:bg-primary-light text-white font-semibold rounded-lg transition-all text-[11px] cursor-pointer"
-                    >
-                      Acknowledge
-                    </button>
+                    canChangeTaskStatus(task, user) ? (
+                      <button
+                        onClick={() => handleStatusChange(task.id, 'In Progress')}
+                        className="px-2.5 py-1 bg-accent hover:bg-primary-light text-white font-semibold rounded-lg transition-all text-[11px] cursor-pointer"
+                      >
+                        Acknowledge
+                      </button>
+                    ) : (
+                      <span className="text-[11px] text-theme-text-secondary italic">Awaiting acknowledgement from {task.assignee}</span>
+                    )
                   )}
                   {task.status === 'In Progress' && (
                     <>
-                      <button
-                        onClick={() => handleStatusChange(task.id, 'Completed')}
-                        className="px-2.5 py-1 bg-success hover:bg-success/90 text-white font-semibold rounded-lg transition-all text-[11px] cursor-pointer"
-                      >
-                        Complete
-                      </button>
+                      {canChangeTaskStatus(task, user) ? (
+                        <button
+                          onClick={() => handleStatusChange(task.id, 'Completed')}
+                          className="px-2.5 py-1 bg-success hover:bg-success/90 text-white font-semibold rounded-lg transition-all text-[11px] cursor-pointer"
+                        >
+                          Complete
+                        </button>
+                      ) : (
+                        <span className="text-[11px] text-theme-text-secondary italic">In progress — {task.assignee}</span>
+                      )}
                       {canRequestTaskExtension(task, user) && (
                         <button
                           onClick={() => setExtensionTask(task)}

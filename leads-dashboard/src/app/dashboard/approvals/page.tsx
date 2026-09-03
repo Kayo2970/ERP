@@ -211,12 +211,35 @@ export default function ApprovalsPage() {
         </div>
       )}
 
-      {decisionNoteFor && (
+      {decisionNoteFor && (() => {
+        const reviewing = requests.find(r => r.id === decisionNoteFor.id);
+        return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="glass-panel w-full max-w-md rounded-3xl p-6 flex flex-col space-y-4 relative border border-white/15 shadow-2xl">
             <h2 className="text-base font-bold text-theme-text-primary">
               {decisionNoteFor.decision === 'approved' ? 'Approve Request' : 'Reject Request'}
             </h2>
+
+            {reviewing && (
+              <div className="space-y-2 text-xs">
+                <div className="p-3 bg-theme-background/30 border border-theme-border/30 rounded-xl space-y-1">
+                  <p className="text-[10px] uppercase tracking-wide text-theme-text-secondary font-bold">{reviewing.entityType}</p>
+                  <p className="font-semibold text-theme-text-primary">{reviewing.entityTitle}</p>
+                </div>
+                <div className="p-3 bg-theme-background/30 border border-theme-border/30 rounded-xl space-y-1">
+                  <p className="text-[10px] uppercase tracking-wide text-theme-text-secondary font-bold">Requested By</p>
+                  <p className="font-semibold text-theme-text-primary">{reviewing.requesterName}</p>
+                  {reviewing.requesterEmail && <p className="text-theme-text-secondary">{reviewing.requesterEmail}</p>}
+                </div>
+                {reviewing.message && (
+                  <div className="p-3 bg-theme-background/30 border-l-2 border-accent/40 rounded-xl">
+                    <p className="text-[10px] uppercase tracking-wide text-theme-text-secondary font-bold mb-1">What They Told You</p>
+                    <p className="text-theme-text-primary italic">"{reviewing.message}"</p>
+                  </div>
+                )}
+              </div>
+            )}
+
             <textarea
               value={decisionNoteInput}
               onChange={(e) => setDecisionNoteInput(e.target.value)}
@@ -240,7 +263,8 @@ export default function ApprovalsPage() {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

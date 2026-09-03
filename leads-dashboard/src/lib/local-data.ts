@@ -2665,6 +2665,42 @@ export function canViewTask(
   );
 }
 
+/**
+ * True only if `user` IS the task's assignee — the individual assignee, or a
+ * member of the assigned committee/group. Unlike canViewTask, this grants no
+ * broad read-only visibility to leadership/Advisory Board/Executive roles —
+ * it's used to gate ACTING on a task (acknowledge/complete it), not just
+ * seeing it. See permissions.ts's canChangeTaskStatus, which additionally
+ * lets the Centre Head, the Heads of Events, and the Super User act on any
+ * task regardless of assignment.
+ */
+export function isTaskAssignee(
+  task: TaskItem,
+  user: { id?: string; name: string; email: string } | null
+): boolean {
+  if (!user) return false;
+  const memberId = user.id || getMembers().find(m => m.email.toLowerCase() === user.email.toLowerCase())?.id;
+
+  if (task.assigneeType === 'committee') {
+    if (!memberId) return false;
+    const events = getEvents();
+    const targetEvents = task.eventId ? events.filter(e => e.id === task.eventId) : events;
+    return targetEvents.some(e =>
+      e.committees.some(c =>
+        (c.id === task.eventCommitteeId || c.name.toLowerCase() === (task.assignee || '').toLowerCase()) &&
+        (c.memberIds.includes(memberId) || c.leadMemberId === memberId)
+      )
+    );
+  }
+
+  return Boolean(
+    (task.assignee && task.assignee.toLowerCase() === user.name.toLowerCase()) ||
+    (task.assigneeEmail && task.assigneeEmail.toLowerCase() === user.email.toLowerCase()) ||
+    (task.assigneeId && task.assigneeId === memberId) ||
+    (memberId && task.assigneeIds && task.assigneeIds.includes(memberId))
+  );
+}
+
 // -------------------------------------------------------------
 // Ratings (Tied to Task Performance)
 // -------------------------------------------------------------

@@ -66,6 +66,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
   const [managingCommittee, setManagingCommittee] = useState<EventCommittee | null>(null);
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [approvalRequestCommittee, setApprovalRequestCommittee] = useState<EventCommittee | null>(null);
+  const [reviewingCommittee, setReviewingCommittee] = useState<EventCommittee | null>(null);
 
   const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
   const [taskTitle, setTaskTitle] = useState('');
@@ -168,6 +169,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
     if (!event) return;
     approveEventCommittee(event.id, committeeId, user?.name || 'User');
     setEvent(getEventById(eventId));
+    setReviewingCommittee(null);
     triggerSuccess('Approved. The change is now live.');
   };
 
@@ -549,7 +551,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                     {(isPendingCreate || isPendingMembers) && canBypassCommitteeApproval && (
                       <div className="flex items-center gap-2 pt-1">
                         <button
-                          onClick={() => handleApproveCommittee(committee.id)}
+                          onClick={() => setReviewingCommittee(committee)}
                           className="flex-1 py-1.5 bg-success/15 hover:bg-success/25 text-success border border-success/30 text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5"
                         >
                           <Check className="h-3 w-3" />
@@ -776,6 +778,79 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
       )}
+
+      {/* Review & Approve Committee Modal — shows exactly what's being
+          approved (the committee, who submitted it, and the actual proposed
+          roster) instead of approving blind off a bare "Approve" click. */}
+      {reviewingCommittee && (() => {
+        const isReviewingPendingCreate = reviewingCommittee.approvalStatus === 'pending_create';
+        const proposedStudents = members.filter(m => (reviewingCommittee.pendingMemberIds || []).includes(m.id));
+        const currentStudents = members.filter(m => reviewingCommittee.memberIds.includes(m.id));
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="glass-panel w-full max-w-md rounded-3xl p-6 flex flex-col space-y-4 relative border border-white/15 shadow-2xl">
+              <div>
+                <h2 className="text-base font-bold text-theme-text-primary">Review Before Approving</h2>
+                <p className="text-xs text-theme-text-secondary mt-0.5">
+                  {isReviewingPendingCreate ? 'A new committee, submitted for approval' : 'A roster update, submitted for approval'}
+                </p>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <div className="p-3 bg-theme-background/30 border border-theme-border/30 rounded-xl space-y-1">
+                  <p className="text-[10px] uppercase tracking-wide text-theme-text-secondary font-bold">Committee</p>
+                  <p className="font-semibold text-theme-text-primary">{reviewingCommittee.name}</p>
+                </div>
+
+                <div className="p-3 bg-theme-background/30 border border-theme-border/30 rounded-xl space-y-1">
+                  <p className="text-[10px] uppercase tracking-wide text-theme-text-secondary font-bold">Submitted By</p>
+                  <p className="font-semibold text-theme-text-primary">{reviewingCommittee.submittedBy || 'Unknown'}</p>
+                  {reviewingCommittee.submittedByEmail && (
+                    <p className="text-theme-text-secondary">{reviewingCommittee.submittedByEmail}</p>
+                  )}
+                </div>
+
+                {isReviewingPendingCreate ? (
+                  <p className="text-theme-text-secondary italic">No student roster proposed yet — this only creates the committee itself.</p>
+                ) : (
+                  <div className="p-3 bg-warning/10 border border-warning/25 rounded-xl space-y-1.5">
+                    <p className="text-[10px] uppercase tracking-wide text-warning font-bold">Proposed Roster ({proposedStudents.length})</p>
+                    {proposedStudents.length === 0 ? (
+                      <p className="text-theme-text-secondary italic">Empty — this clears the committee's roster.</p>
+                    ) : (
+                      <ul className="space-y-1">
+                        {proposedStudents.map(s => (
+                          <li key={s.id} className="text-theme-text-primary font-medium">{s.name} <span className="text-theme-text-secondary font-normal">({s.division})</span></li>
+                        ))}
+                      </ul>
+                    )}
+                    {currentStudents.length > 0 && (
+                      <p className="text-theme-text-secondary pt-1">Currently: {currentStudents.map(s => s.name).join(', ')}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-theme-border/20">
+                <button
+                  type="button"
+                  onClick={() => setReviewingCommittee(null)}
+                  className="px-4 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary font-semibold rounded-xl text-xs cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApproveCommittee(reviewingCommittee.id)}
+                  className="px-4 py-2 bg-success hover:bg-success/90 text-white font-semibold rounded-xl text-xs shadow-md shadow-success/15 cursor-pointer"
+                >
+                  Confirm Approval
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Modal 3: Assign Event Task */}
       {isAddTaskModalOpen && (

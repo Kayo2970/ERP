@@ -12,7 +12,7 @@
  * There is no session-scoped "current user" object here; every function takes the
  * user explicitly so it works the same in pages, modals, and background sync code.
  */
-import { Member, Guest, TaskItem, RatingItem, ReimbursementItem, BudgetItem, GroupPolicy, EventItem, PublicFormItem, ModuleAccessKey, getMembers, getGroupPolicies, getAccessLevelSettings, canViewTask } from './local-data';
+import { Member, Guest, TaskItem, RatingItem, ReimbursementItem, BudgetItem, GroupPolicy, EventItem, PublicFormItem, ModuleAccessKey, getMembers, getGroupPolicies, getAccessLevelSettings, canViewTask, isTaskAssignee } from './local-data';
 
 export type SessionUser = {
   id?: string;
@@ -1230,6 +1230,23 @@ export function canRequestTaskExtension(task: TaskItem, user: SessionUser): bool
 /** Task extension approval/rejection: base leadership, or Faculty. */
 export function canDecideTaskExtension(user: SessionUser): boolean {
   return isBaseLeadership(user) || isFaculty(user) || hasCapability(user, 'DECIDE_TASK_EXTENSION');
+}
+
+/**
+ * Who may actually change a task's status — acknowledge it (Assigned →
+ * In Progress) or mark it complete. Deliberately narrower than canViewTask/
+ * canEditTask: the assignee themselves (isTaskAssignee — individual, or a
+ * member of the assigned committee/group), the Centre Head, either campus's
+ * Head of Events, or the Super User. Nobody else — not Core Committee, not
+ * Executive roles, not other Heads — can act on a task they aren't assigned
+ * to just because they can see or manage it.
+ */
+export function canChangeTaskStatus(task: TaskItem, user: SessionUser): boolean {
+  if (!user) return false;
+  if (user.tier === 1) return true;
+  if (isCentreHead(user)) return true;
+  if (isHeadOfEvents(user) || isEventsHeadGgCampus(user) || isEventsHeadRtcCampus(user)) return true;
+  return isTaskAssignee(task, user);
 }
 
 /** Guest Invites mail-merge tool — Centre Head/Super User by default, or a MANAGE_GUEST_INVITES/moduleAccess grant. */
