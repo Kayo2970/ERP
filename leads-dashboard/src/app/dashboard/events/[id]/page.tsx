@@ -226,8 +226,14 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
   const allEventMemberIds = Array.from(new Set(event.committees.flatMap(c => c.memberIds)));
   const eventParticipants = members.filter(m => allEventMemberIds.includes(m.id));
 
-  // Eligible students for committees (Core Committee and Training Associates)
-  const eligibleStudents = members.filter(m => m.division === 'Core Committee' || m.division === 'Training Associate');
+  // Eligible students for committees (Core Committee and Training Associates) —
+  // plus the Super User themselves, so they can attach to an event's committee
+  // (and, from there, be assigned event tasks) even though tier 1 normally
+  // sits outside the student divisions this list is built from.
+  const selfMember = user?.tier === 1 ? members.find(m => m.id === user.id || m.email?.toLowerCase() === (user.email || '').toLowerCase()) : undefined;
+  const eligibleStudents = members
+    .filter(m => m.division === 'Core Committee' || m.division === 'Training Associate')
+    .concat(selfMember && !members.some(m => (m.division === 'Core Committee' || m.division === 'Training Associate') && m.id === selfMember.id) ? [selfMember] : []);
 
   return (
     <div className="p-6 md:p-8 space-y-6">
