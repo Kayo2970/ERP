@@ -98,6 +98,17 @@ export default function EmailManagementPage() {
   // Toast notifications
   const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // SMTP Configuration re-auth — the tab is only fully usable after the
+  // viewer re-confirms their own account password for this visit (a fresh
+  // page load resets smtpUnlocked). pendingSmtpAction tracks what triggered
+  // the confirm modal ('view' opening the tab, 'save' saving credentials
+  // that were edited before this visit was unlocked).
+  const [smtpUnlocked, setSmtpUnlocked] = useState(false);
+  const [pendingSmtpAction, setPendingSmtpAction] = useState<null | 'view' | 'save'>(null);
+  const [smtpReauthPassword, setSmtpReauthPassword] = useState('');
+  const [smtpReauthError, setSmtpReauthError] = useState('');
+  const [isVerifyingSmtpReauth, setIsVerifyingSmtpReauth] = useState(false);
+
   useEffect(() => {
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
@@ -253,12 +264,23 @@ export default function EmailManagementPage() {
 
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!smtpUnlocked) {
+      // Shouldn't normally happen (the tab itself is gated), but if the
+      // session's confirmation lapsed, re-prompt before saving anything.
+      setSmtpReauthError('');
+      setPendingSmtpAction('save');
+      return;
+    }
+    await saveSmtpSettings();
+  };
+
+  const saveSmtpSettings = async () => {
     setIsSavingSettings(true);
     try {
       const res = await fetch('/api/email/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settings, actorName: user?.name || 'Super User' }),
+        body: JSON.stringify({ settings, actorName: user?.name || 'Super User', actorEmail: user?.email }),
       });
       if (res.ok) {
         const updated = await res.json();
@@ -272,6 +294,40 @@ export default function EmailManagementPage() {
       triggerToast('error', err?.message || 'Error saving settings.');
     } finally {
       setIsSavingSettings(false);
+    }
+  };
+
+  const handleConfirmSmtpReauth = async () => {
+    if (!smtpReauthPassword) {
+      setSmtpReauthError('Please enter your password.');
+      return;
+    }
+    setIsVerifyingSmtpReauth(true);
+    setSmtpReauthError('');
+    try {
+      const res = await fetch('/api/auth/verify-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user?.email, password: smtpReauthPassword }),
+      });
+      if (!res.ok) {
+        setSmtpReauthError('Incorrect password.');
+        return;
+      }
+      setSmtpUnlocked(true);
+      setSmtpReauthPassword('');
+      const action = pendingSmtpAction;
+      setPendingSmtpAction(null);
+      if (action === 'view') {
+        setActiveTab('settings');
+        fetchSettings();
+      } else if (action === 'save') {
+        await saveSmtpSettings();
+      }
+    } catch {
+      setSmtpReauthError('Failed to verify password. Please try again.');
+    } finally {
+      setIsVerifyingSmtpReauth(false);
     }
   };
 
@@ -365,7 +421,10 @@ export default function EmailManagementPage() {
   const sentCount = outboxLogs.filter(l => l.status === 'SENT').length;
   const failedCount = outboxLogs.filter(l => l.status === 'FAILED').length;
 
-  const isSuperUser = user && (user.tier === 1 || user.role === 'Super User' || user.id === 'm1' || user.email?.toLowerCase() === 'kayo2970@gmail.com');
+  // SMTP Configuration tab visibility — anyone allowed to manage email
+  // settings (Super User, Centre Head/Advisor, or an explicit Group Policy
+  // grant), same rule as the access guard below.
+  const canSeeSmtpTab = user && canManageEmailSettings(user);
 
   // Access Guard — Centre Head / Super User, or an explicit Group Policy grant
   const isAuthorized = user && canManageEmailSettings(user);
@@ -466,15 +525,20 @@ export default function EmailManagementPage() {
           Compose Broadcast
         </button>
 
-        {isSuperUser && (
+        {canSeeSmtpTab && (
           <button
             onClick={() => {
+              if (!smtpUnlocked) {
+                setSmtpReauthError('');
+                setPendingSmtpAction('view');
+                return;
+              }
               setActiveTab('settings');
               fetchSettings();
             }}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all cursor-pointer ${
               activeTab === 'settings'
-                ? 'bg-accent text-white shadow-md shadow-accent/20' 
+                ? 'bg-accent text-white shadow-md shadow-accent/20'
                 : 'text-theme-text-secondary hover:bg-theme-border/20'
             }`}
           >
@@ -1248,6 +1312,70 @@ export default function EmailManagementPage() {
           onConfirm={handleExecuteDispatch}
           onCancel={() => setShowDispatchConfirm(false)}
         />
+      )}
+
+      {/* SMTP Configuration Re-Authentication Modal */}
+      {pendingSmtpAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="glass-panel w-full max-w-md rounded-3xl p-6 flex flex-col space-y-5 relative border border-danger/30 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-danger/15 text-danger">
+                  <ShieldAlert className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-theme-text-primary">Confirm Your Password</h3>
+                  <p className="text-xs text-theme-text-secondary mt-0.5">Re-authentication required</p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setPendingSmtpAction(null); setSmtpReauthPassword(''); setSmtpReauthError(''); }}
+                className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-danger leading-relaxed bg-danger/10 p-3.5 rounded-xl border border-danger/25 font-medium">
+              Warning: SMTP configuration controls how this organization sends and receives email for everyone.
+              Misconfiguring it can break email access org-wide. Re-enter your account password to continue.
+            </p>
+
+            <form
+              onSubmit={(e) => { e.preventDefault(); handleConfirmSmtpReauth(); }}
+              className="space-y-3"
+            >
+              <input
+                type="password"
+                autoFocus
+                required
+                value={smtpReauthPassword}
+                onChange={(e) => setSmtpReauthPassword(e.target.value)}
+                placeholder="Your account password"
+                className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary text-xs focus:outline-none focus:border-danger"
+              />
+              {smtpReauthError && (
+                <p className="text-[11px] text-danger font-medium">{smtpReauthError}</p>
+              )}
+              <div className="flex items-center justify-end gap-2.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => { setPendingSmtpAction(null); setSmtpReauthPassword(''); setSmtpReauthError(''); }}
+                  className="px-4 py-2.5 text-xs font-semibold text-theme-text-primary bg-theme-border/30 hover:bg-theme-border/50 rounded-xl transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isVerifyingSmtpReauth}
+                  className="px-4 py-2.5 text-xs font-semibold rounded-xl transition-all shadow-md cursor-pointer bg-danger text-white hover:bg-danger/90 disabled:opacity-60"
+                >
+                  {isVerifyingSmtpReauth ? 'Verifying...' : 'Confirm'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* Inspect Email Log Modal */}

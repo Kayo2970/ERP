@@ -55,13 +55,15 @@ import {
   reactivateMember,
   requestMemberPasswordReset,
   adminSetMemberPassword,
+  validateMemberCsvRow,
+  STANDARDIZED_DEPARTMENTS,
   Member,
   MemberDivision
 } from '@/lib/local-data';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { StudentProfileModal } from '@/components/student-profile-modal';
 import { RequestApprovalModal } from '@/components/request-approval-modal';
-import { canViewFullDirectory, canEditDirectory, canAddMember, getMemberApprovalRequirement, canApprovePendingMember, canEditMemberRecordRow, isRestrictedDirectoryEditor, isCentreHead, canViewHiddenAccounts, canSetMemberPassword, isKayomarzPavri } from '@/lib/permissions';
+import { canViewFullDirectory, canEditDirectory, canAddMember, getMemberApprovalRequirement, canApprovePendingMember, canEditMemberRecordRow, isRestrictedDirectoryEditor, isCentreHead, isSuperUser, canViewHiddenAccounts, canSetMemberPassword, isKayomarzPavri } from '@/lib/permissions';
 
 export default function DirectoryPage() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -94,16 +96,6 @@ export default function DirectoryPage() {
   const [pageSize, setPageSize] = useState(15);
   const [sortField, setSortField] = useState<keyof Member>('tier');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-
-  const STANDARDIZED_DEPARTMENTS = [
-    'Leadership & Development',
-    'Research & Development',
-    'Design & Social Media',
-    'Sustainability & Innovation',
-    'Finance & Sponsorships',
-    'Marketing & Branding',
-    'Operations & Logistics',
-  ];
 
   type FacultyPosition = 'Events Head' | 'Industrial Connects' | 'Finance Head' | 'Centre Head' | 'Advisor';
   type CorePosition = 'President' | 'Vice President' | 'General Secretary' | 'Chief Coordinator' | 'Department Head';
@@ -142,11 +134,11 @@ export default function DirectoryPage() {
       } else if (pos === 'Centre Head') {
         role = 'Centre Head';
         department = 'Faculty Oversight';
-        tier = 1;
+        tier = 1.5;
       } else if (pos === 'Advisor') {
         role = 'Advisor';
         department = 'Faculty Advisory';
-        tier = 1;
+        tier = 1.5;
       } else {
         role = 'Faculty Member';
         department = opts.departmentSelect || 'Faculty';
@@ -228,7 +220,14 @@ export default function DirectoryPage() {
   const [associatePosition, setAssociatePosition] = useState<AssociatePosition>('Associate');
   const [program, setProgram] = useState('');
   const [batch, setBatch] = useState('');
-  
+
+  // Custom designation override (Centre Head / Super User only) — lets them
+  // type a free-text designation/department instead of the derived preset,
+  // for cases the standard dropdowns don't fit.
+  const [useCustomDesignation, setUseCustomDesignation] = useState(false);
+  const [customRoleInput, setCustomRoleInput] = useState('');
+  const [customDepartmentInput, setCustomDepartmentInput] = useState('');
+
   // Notification Alert State
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -260,6 +259,9 @@ export default function DirectoryPage() {
   const [editProgram, setEditProgram] = useState('');
   const [editBatch, setEditBatch] = useState('');
   const [editTierOverride, setEditTierOverride] = useState<number>(4);
+  const [editUseCustomDesignation, setEditUseCustomDesignation] = useState(false);
+  const [editCustomRoleInput, setEditCustomRoleInput] = useState('');
+  const [editCustomDepartmentInput, setEditCustomDepartmentInput] = useState('');
 
   useEffect(() => {
     const refreshData = () => {
@@ -290,6 +292,17 @@ export default function DirectoryPage() {
   // download them, fix the email, and re-upload rather than losing track of
   // which rows didn't make it in.
   const [emailConflicts, setEmailConflicts] = useState<{ name: string; email: string; division: string; role: string; department: string; program: string; batch: string }[]>([]);
+
+  // Rows skipped during the last CSV import because their division/department
+  // failed validation against the canonical lists (see validateMemberCsvRow
+  // in local-data.ts) — nothing was created for these; the admin fixes and
+  // re-enters them manually (Add Member supports a custom designation for
+  // cases the canonical lists don't cover).
+  const [skippedCsvRows, setSkippedCsvRows] = useState<{ row: number; name: string; email: string; division: string; department: string; reason: string }[]>([]);
+
+  // Super User's "Scan Roster for Conflicts" audit results — existing members
+  // whose stored division/department don't match the canonical lists.
+  const [rosterConflicts, setRosterConflicts] = useState<{ id: string; name: string; email: string; division: string; department: string; reason: string }[]>([]);
 
   const triggerSuccess = (msg: string) => {
     setSuccessMsg(msg);
@@ -379,7 +392,8 @@ export default function DirectoryPage() {
   };
 
   const TIER_LABELS = [
-    { tier: 1, label: 'Super User / Centre Head / Advisor' },
+    { tier: 1, label: 'Super User' },
+    { tier: 1.5, label: 'Centre Head / Advisor' },
     { tier: 2, label: 'Executive Leadership' },
     { tier: 2.5, label: 'GG Campus Events Head' },
     { tier: 3, label: 'RTC Events Head / Finance Head / Industrial Connects' },
@@ -402,13 +416,14 @@ export default function DirectoryPage() {
         associatePosition,
       });
 
+      const useCustom = useCustomDesignation && division !== 'Alumni' && isCentreHead(user);
       const newMemberData = {
         name: name.trim(),
         email: email.toLowerCase().trim(),
-        role: derived.role,
+        role: useCustom ? customRoleInput.trim() : derived.role,
         tier: derived.tier,
         division,
-        department: derived.department,
+        department: useCustom ? (customDepartmentInput.trim() || undefined) : derived.department,
         program: program.trim() || undefined,
         batch: division === 'Alumni' ? batch.trim() : undefined,
         // Powers the restricted "uploader" edit rule for non-admin editors —
@@ -437,6 +452,9 @@ export default function DirectoryPage() {
       setAssociatePosition('Associate');
       setProgram('');
       setBatch('');
+      setUseCustomDesignation(false);
+      setCustomRoleInput('');
+      setCustomDepartmentInput('');
       setIsModalOpen(false);
 
       setMembers(getMembers());
@@ -484,6 +502,9 @@ export default function DirectoryPage() {
     setEditProgram(member.program || '');
     setEditBatch(member.batch || '');
     setEditTierOverride(member.tier || 4);
+    setEditUseCustomDesignation(false);
+    setEditCustomRoleInput(member.role || '');
+    setEditCustomDepartmentInput(member.department || '');
 
     const r = member.role || '';
     const d = member.department || '';
@@ -546,7 +567,7 @@ export default function DirectoryPage() {
       return;
     }
 
-    const isSuperUser = user?.tier === 1;
+    const isSuper = isSuperUser(user);
     const derived = deriveMemberRoleAndDepartment(editDivision, {
       facultyPosition: editFacultyPosition,
       campus: editCampus,
@@ -555,16 +576,17 @@ export default function DirectoryPage() {
       associatePosition: editAssociatePosition,
     });
 
-    const finalTier = isSuperUser ? editTierOverride : derived.tier;
-    const tierChanged = isSuperUser && finalTier !== editingMember.tier;
+    const finalTier = isSuper ? editTierOverride : derived.tier;
+    const tierChanged = isSuper && finalTier !== editingMember.tier;
+    const useCustom = editUseCustomDesignation && editDivision !== 'Alumni' && isCentreHead(user);
 
     updateMember(editingMember.id, {
       name: editName.trim(),
       email: editEmail.toLowerCase().trim(),
-      role: derived.role,
+      role: useCustom ? editCustomRoleInput.trim() : derived.role,
       tier: finalTier,
       division: editDivision,
-      department: derived.department,
+      department: useCustom ? (editCustomDepartmentInput.trim() || undefined) : derived.department,
       program: editProgram.trim() || undefined,
       batch: editDivision === 'Alumni' ? editBatch.trim() : undefined,
       // A restricted (non-admin) editor spends their one-time edit the moment
@@ -588,11 +610,11 @@ export default function DirectoryPage() {
 
   const handleDownloadTemplate = () => {
     const csvContent = 'Name,Email,Division,Role,Department,Program,Batch\n' +
-      'John Doe,john.doe@msruas.ac.in,Training Associate,Junior Coordinator,Operations and Logistics,B.Tech Computer Science Engineering,\n' +
+      'John Doe,john.doe@msruas.ac.in,Training Associate,Junior Coordinator,Operations & Logistics,B.Tech Computer Science Engineering,\n' +
       'Jane Smith,jane.smith@msruas.ac.in,Core Committee,Vice President,Executive Council,B.Tech Electronics and Communication,\n' +
       'Dr. Sharath Kumar,sharath.kumar@msruas.ac.in,Advisory Board,Advisory Member,Faculty Advisory,,\n' +
       'Dr. Ajay Rao,ajay.rao@msruas.ac.in,Faculty,Assistant Professor,Faculty Advisory,,\n' +
-      'Kayomarz M Pavri,kayo2970@gmail.com,Alumni,Alumni Mentor,Design and Social Media,,Class of 2024';
+      'Kayomarz M Pavri,kayo2970@gmail.com,Alumni,Alumni Mentor,,,Class of 2024';
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -651,6 +673,7 @@ export default function DirectoryPage() {
         let importCount = 0;
         let duplicateCount = 0;
         const conflicts: typeof emailConflicts = [];
+        const skipped: typeof skippedCsvRows = [];
 
         for (let i = 1; i < lines.length; i++) {
           const values = parseCsvLine(lines[i]);
@@ -672,28 +695,19 @@ export default function DirectoryPage() {
             continue;
           }
 
-          let mDivision: MemberDivision = 'Training Associate';
-          const divLower = mDivStr.toLowerCase();
-          const roleLower = mRole.toLowerCase();
-
-          if (divLower.includes('faculty') || roleLower.includes('professor') || roleLower.includes('faculty')) {
-            mDivision = 'Faculty';
-          } else if (divLower.includes('advisor') || divLower.includes('board')) {
-            mDivision = 'Advisory Board';
-          } else if (
-            divLower.includes('core') ||
-            roleLower.startsWith('head') ||
-            roleLower.includes('president') ||
-            roleLower.includes('secretary') ||
-            roleLower.includes('chief coordinator')
-          ) {
-            mDivision = 'Core Committee';
-          } else if (divLower.includes('alumni')) {
-            mDivision = 'Alumni';
-          } else {
-            mDivision = 'Training Associate';
+          // Validate against the canonical division/department lists before
+          // attempting anything else — an invalid row is skipped entirely
+          // (no member is created for it), while every other valid row in
+          // the file still goes through. The admin fixes and re-enters
+          // skipped rows manually afterward (Add Member's custom-designation
+          // override covers cases the canonical lists don't).
+          const validation = validateMemberCsvRow({ name: mName, email: mEmail, division: mDivStr, department: mDept, role: mRole });
+          if (!validation.valid) {
+            skipped.push({ row: i, name: mName, email: mEmail, division: mDivStr, department: mDept, reason: validation.reason || 'invalid row' });
+            continue;
           }
 
+          const mDivision = validation.division as MemberDivision; // case-normalized match from validateMemberCsvRow
           const mTier = deriveMemberRoleAndDepartment(mDivision, { customRole: mRole, departmentSelect: mDept }).tier;
 
           // Awaited — addMember is async (it reaches the server before
@@ -720,12 +734,17 @@ export default function DirectoryPage() {
         }
 
         setEmailConflicts(conflicts);
+        setSkippedCsvRows(skipped);
 
         if (importCount > 0) {
           setMembers(getMembers());
-          triggerSuccess(`Successfully imported ${importCount} new members. ${duplicateCount > 0 ? `(${duplicateCount} email conflicts skipped — see below)` : ''}`);
-        } else if (duplicateCount > 0) {
-          triggerError(`No new members imported. ${duplicateCount} email conflicts found in file — see below.`);
+          const extras = [
+            duplicateCount > 0 ? `${duplicateCount} email conflicts` : '',
+            skipped.length > 0 ? `${skipped.length} invalid rows` : '',
+          ].filter(Boolean).join(', ');
+          triggerSuccess(`Successfully imported ${importCount} new members. ${extras ? `(${extras} skipped — see below)` : ''}`);
+        } else if (duplicateCount > 0 || skipped.length > 0) {
+          triggerError(`No new members imported. ${duplicateCount > 0 ? `${duplicateCount} email conflicts` : ''}${duplicateCount > 0 && skipped.length > 0 ? ' and ' : ''}${skipped.length > 0 ? `${skipped.length} invalid rows` : ''} found — see below.`);
         } else {
           triggerError('No valid member rows found in the CSV.');
         }
@@ -740,6 +759,32 @@ export default function DirectoryPage() {
     const header = toCsvRow(['Name', 'Email', 'Division', 'Role', 'Department', 'Program', 'Batch', 'Conflict Reason']);
     const rows = emailConflicts.map(c => toCsvRow([c.name, c.email, c.division, c.role, c.department, c.program, c.batch, 'Email already exists in the roster']));
     downloadCsv(`leads_members_email_conflicts_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows].join('\n'));
+  };
+
+  const handleDownloadSkippedRows = () => {
+    const header = toCsvRow(['Row', 'Name', 'Email', 'Division', 'Department', 'Reason']);
+    const rows = skippedCsvRows.map(r => toCsvRow([String(r.row), r.name, r.email, r.division, r.department, r.reason]));
+    downloadCsv(`leads_members_skipped_rows_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows].join('\n'));
+  };
+
+  // Super User only: scans every existing member against the same canonical
+  // division/department lists CSV import validates against, surfacing any
+  // that were entered (by any path) with a value that doesn't match.
+  const handleScanRosterConflicts = () => {
+    const found = getMembers()
+      .map(m => ({ m, result: validateMemberCsvRow({ name: m.name, email: m.email, division: m.division, department: m.department, role: m.role }) }))
+      .filter(x => !x.result.valid)
+      .map(x => ({ id: x.m.id, name: x.m.name, email: x.m.email, division: x.m.division, department: x.m.department || '', reason: x.result.reason! }));
+    setRosterConflicts(found);
+    if (found.length === 0) {
+      triggerSuccess('No conflicts found — every member matches the canonical division/department lists.');
+    }
+  };
+
+  const handleDownloadRosterConflicts = () => {
+    const header = toCsvRow(['Name', 'Email', 'Division', 'Department', 'Reason']);
+    const rows = rosterConflicts.map(c => toCsvRow([c.name, c.email, c.division, c.department, c.reason]));
+    downloadCsv(`leads_members_roster_conflicts_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows].join('\n'));
   };
 
   const handleDownloadFullBackup = () => {
@@ -1106,6 +1151,74 @@ export default function DirectoryPage() {
         </div>
       )}
 
+      {skippedCsvRows.length > 0 && (
+        <div className="flex flex-col gap-3 p-4 bg-danger/15 border border-danger/30 rounded-2xl text-xs animate-in fade-in duration-300">
+          <div className="flex items-start sm:items-center justify-between gap-3 flex-col sm:flex-row">
+            <div className="flex items-start sm:items-center gap-3">
+              <ShieldAlert className="h-5 w-5 text-danger shrink-0" />
+              <span className="text-theme-text-primary">
+                {skippedCsvRows.length} row{skippedCsvRows.length === 1 ? '' : 's'} skipped during the last import — invalid division/department/designation. None of these were created; fix and add them manually.
+              </span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={handleDownloadSkippedRows}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-danger/20 hover:bg-danger/30 text-danger text-xs font-semibold rounded-xl transition-all cursor-pointer border border-danger/40"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download Skipped Rows Report
+              </button>
+              <button
+                onClick={() => setSkippedCsvRows([])}
+                className="p-1.5 text-theme-text-secondary hover:text-theme-text-primary hover:bg-theme-border/20 rounded-lg transition-all cursor-pointer"
+                title="Dismiss"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+          <ul className="text-[11px] text-theme-text-secondary list-disc pl-8 space-y-0.5">
+            {skippedCsvRows.map(r => (
+              <li key={r.row}>Row {r.row}: &apos;{r.name}&apos; — {r.reason}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {rosterConflicts.length > 0 && (
+        <div className="flex flex-col gap-3 p-4 bg-danger/15 border border-danger/30 rounded-2xl text-xs animate-in fade-in duration-300">
+          <div className="flex items-start sm:items-center justify-between gap-3 flex-col sm:flex-row">
+            <div className="flex items-start sm:items-center gap-3">
+              <ShieldAlert className="h-5 w-5 text-danger shrink-0" />
+              <span className="text-theme-text-primary">
+                {rosterConflicts.length} existing member{rosterConflicts.length === 1 ? '' : 's'} in the roster {rosterConflicts.length === 1 ? 'has' : 'have'} a division/department that doesn&apos;t match the canonical lists.
+              </span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={handleDownloadRosterConflicts}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-danger/20 hover:bg-danger/30 text-danger text-xs font-semibold rounded-xl transition-all cursor-pointer border border-danger/40"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download Conflict Report
+              </button>
+              <button
+                onClick={() => setRosterConflicts([])}
+                className="p-1.5 text-theme-text-secondary hover:text-theme-text-primary hover:bg-theme-border/20 rounded-lg transition-all cursor-pointer"
+                title="Dismiss"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+          <ul className="text-[11px] text-theme-text-secondary list-disc pl-8 space-y-0.5">
+            {rosterConflicts.map(c => (
+              <li key={c.id}>{c.name} ({c.email}) — {c.reason}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Header section with actions */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
@@ -1134,6 +1247,17 @@ export default function DirectoryPage() {
                   <Download className="h-4 w-4" />
                   Download Template
                 </button>
+
+                {isSuperUser(user) && (
+                  <button
+                    onClick={handleScanRosterConflicts}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-border/40"
+                    title="Scan every member for a division/department that doesn't match the canonical lists"
+                  >
+                    <ShieldAlert className="h-4 w-4" />
+                    Scan Roster for Conflicts
+                  </button>
+                )}
 
                 <button
                   onClick={handleUploadClick}
@@ -1819,6 +1943,48 @@ export default function DirectoryPage() {
                   )}
                 </div>
 
+                {isCentreHead(user) && division !== 'Alumni' && (
+                  <div className="space-y-2 p-3 bg-warning/5 border border-warning/20 rounded-xl">
+                    <label className="flex items-center gap-2 cursor-pointer text-warning font-medium">
+                      <input
+                        type="checkbox"
+                        checked={useCustomDesignation}
+                        onChange={(e) => setUseCustomDesignation(e.target.checked)}
+                        className="accent-warning"
+                      />
+                      Use custom designation
+                    </label>
+                    <p className="text-[11px] text-theme-text-secondary">
+                      Type the designation/department yourself instead of using the auto-generated preset above.
+                    </p>
+                    {useCustomDesignation && (
+                      <div className="grid grid-cols-2 gap-3 pt-1">
+                        <div className="space-y-1.5">
+                          <label className="block font-medium text-theme-text-secondary">Custom Designation *</label>
+                          <input
+                            type="text"
+                            required={useCustomDesignation}
+                            value={customRoleInput}
+                            onChange={(e) => setCustomRoleInput(e.target.value)}
+                            placeholder="e.g. Community Outreach Lead"
+                            className="w-full px-4 py-2.5 bg-theme-background/30 border border-warning/30 rounded-xl text-theme-text-primary focus:outline-none focus:border-warning"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="block font-medium text-theme-text-secondary">Custom Department</label>
+                          <input
+                            type="text"
+                            value={customDepartmentInput}
+                            onChange={(e) => setCustomDepartmentInput(e.target.value)}
+                            placeholder="Optional"
+                            className="w-full px-4 py-2.5 bg-theme-background/30 border border-warning/30 rounded-xl text-theme-text-primary focus:outline-none focus:border-warning"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="space-y-1.5">
                   <label className="block font-medium text-theme-text-secondary">Program (Optional)</label>
                   <input
@@ -2032,6 +2198,48 @@ export default function DirectoryPage() {
                   )}
                 </div>
 
+                {isCentreHead(user) && editDivision !== 'Alumni' && (
+                  <div className="space-y-2 p-3 bg-warning/5 border border-warning/20 rounded-xl">
+                    <label className="flex items-center gap-2 cursor-pointer text-warning font-medium">
+                      <input
+                        type="checkbox"
+                        checked={editUseCustomDesignation}
+                        onChange={(e) => setEditUseCustomDesignation(e.target.checked)}
+                        className="accent-warning"
+                      />
+                      Use custom designation
+                    </label>
+                    <p className="text-[11px] text-theme-text-secondary">
+                      Type the designation/department yourself instead of using the auto-generated preset above.
+                    </p>
+                    {editUseCustomDesignation && (
+                      <div className="grid grid-cols-2 gap-3 pt-1">
+                        <div className="space-y-1.5">
+                          <label className="block font-medium text-theme-text-secondary">Custom Designation *</label>
+                          <input
+                            type="text"
+                            required={editUseCustomDesignation}
+                            value={editCustomRoleInput}
+                            onChange={(e) => setEditCustomRoleInput(e.target.value)}
+                            placeholder="e.g. Community Outreach Lead"
+                            className="w-full px-4 py-2.5 bg-theme-background/30 border border-warning/30 rounded-xl text-theme-text-primary focus:outline-none focus:border-warning"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="block font-medium text-theme-text-secondary">Custom Department</label>
+                          <input
+                            type="text"
+                            value={editCustomDepartmentInput}
+                            onChange={(e) => setEditCustomDepartmentInput(e.target.value)}
+                            placeholder="Optional"
+                            className="w-full px-4 py-2.5 bg-theme-background/30 border border-warning/30 rounded-xl text-theme-text-primary focus:outline-none focus:border-warning"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="space-y-1.5">
                   <label className="block font-medium text-theme-text-secondary">Program (Optional)</label>
                   <input
@@ -2051,7 +2259,7 @@ export default function DirectoryPage() {
                     </label>
                     <select
                       value={editTierOverride}
-                      onChange={(e) => setEditTierOverride(parseInt(e.target.value, 10))}
+                      onChange={(e) => setEditTierOverride(parseFloat(e.target.value))}
                       className="w-full px-4 py-2.5 bg-theme-background/30 border border-warning/30 rounded-xl text-theme-text-primary focus:outline-none focus:border-warning"
                     >
                       {TIER_LABELS.map(({ tier, label }) => (

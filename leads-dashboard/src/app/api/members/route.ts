@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { createActivationTokenAndSendEmail } from '@/lib/account-activation';
+import { normalizeAlumniFields } from '@/lib/local-data';
 
 export async function GET() {
   const members = await readCollection('members');
@@ -10,10 +11,10 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const member = await request.json();
-    const newMemberPayload = {
+    const newMemberPayload = normalizeAlumniFields({
       ...member,
       mustSetupPassword: true,
-    };
+    });
     const updated = await mutateCollection('members', (current) => {
       if ((current || []).some((m: any) => m.email?.toLowerCase() === member.email?.toLowerCase())) {
         throw new Error(`Member with email ${member.email} already exists`);

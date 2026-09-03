@@ -91,6 +91,7 @@ export default function GroupPoliciesPage() {
   const [accessSettings, setAccessSettings] = useState<AccessLevelSettings>(DEFAULT_ACCESS_LEVEL_SETTINGS);
   const [isSavingAccessSettings, setIsSavingAccessSettings] = useState(false);
   const [accessSettingsMsg, setAccessSettingsMsg] = useState('');
+  const [accessSettingsError, setAccessSettingsError] = useState('');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<GroupPolicy | null>(null);
@@ -367,21 +368,27 @@ export default function GroupPoliciesPage() {
 
   const handleSaveAccessSettings = () => {
     setIsSavingAccessSettings(true);
-    const updated = updateAccessLevelSettings(
-      {
-        baseLeadershipMaxTier: accessSettings.baseLeadershipMaxTier,
-        coreCommitteeTier: accessSettings.coreCommitteeTier,
-        sectorHeadMaxTier: accessSettings.sectorHeadMaxTier,
-        headKeyword: accessSettings.headKeyword,
-        sectorHeadKeywords: accessSettings.sectorHeadKeywords,
-        financeKeyword: accessSettings.financeKeyword,
-      },
-      user?.name || 'Super User'
-    );
-    setAccessSettings(updated);
-    setIsSavingAccessSettings(false);
-    setAccessSettingsMsg('Saved — these thresholds now apply to every account across the platform immediately.');
-    setTimeout(() => setAccessSettingsMsg(''), 5000);
+    setAccessSettingsError('');
+    try {
+      const updated = updateAccessLevelSettings(
+        {
+          baseLeadershipMaxTier: accessSettings.baseLeadershipMaxTier,
+          coreCommitteeTier: accessSettings.coreCommitteeTier,
+          sectorHeadMaxTier: accessSettings.sectorHeadMaxTier,
+          headKeyword: accessSettings.headKeyword,
+          sectorHeadKeywords: accessSettings.sectorHeadKeywords,
+          financeKeyword: accessSettings.financeKeyword,
+        },
+        user?.name || 'Super User'
+      );
+      setAccessSettings(updated);
+      setAccessSettingsMsg('Saved — these thresholds now apply to every account across the platform immediately.');
+      setTimeout(() => setAccessSettingsMsg(''), 5000);
+    } catch (err: any) {
+      setAccessSettingsError(err.message || 'Failed to save access level settings.');
+    } finally {
+      setIsSavingAccessSettings(false);
+    }
   };
 
   const handleResetAccessSettings = () => {
@@ -652,6 +659,13 @@ export default function GroupPoliciesPage() {
               <div className="flex items-center gap-2 p-3 bg-success/10 border border-success/20 rounded-xl text-[11px] text-theme-text-primary">
                 <CheckCircle2 className="h-4 w-4 text-success shrink-0" />
                 <span>{accessSettingsMsg}</span>
+              </div>
+            )}
+
+            {accessSettingsError && (
+              <div className="flex items-center gap-2 p-3 bg-danger/10 border border-danger/20 rounded-xl text-[11px] text-theme-text-primary">
+                <ShieldAlert className="h-4 w-4 text-danger shrink-0" />
+                <span>{accessSettingsError}</span>
               </div>
             )}
 
