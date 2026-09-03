@@ -117,6 +117,15 @@ export default function TasksPage() {
   const [highlightTaskId, setHighlightTaskId] = useState<string | null>(null);
   const [hasScrolledToHighlight, setHasScrolledToHighlight] = useState(false);
 
+  // Filters & sorting — the board groups every visible task under its event
+  // (Standalone last), and these narrow/reorder within that grouping instead
+  // of flattening it back out.
+  const [filterStudentId, setFilterStudentId] = useState('ALL');
+  const [filterEventKey, setFilterEventKey] = useState('ALL');
+  const [filterDueFrom, setFilterDueFrom] = useState('');
+  const [filterDueTo, setFilterDueTo] = useState('');
+  const [sortBy, setSortBy] = useState<'dueDateAsc' | 'dueDateDesc' | 'titleAsc' | 'status'>('dueDateAsc');
+
   useEffect(() => {
     const refreshData = () => {
       setTasks(getTasks());
@@ -556,6 +565,69 @@ export default function TasksPage() {
   });
   const canManage = canManageTasks(user);
 
+  // Distinct events actually present in the visible task list, in the order
+  // they first appear — populates the Event filter without listing events
+  // that have no tasks a viewer can see.
+  const eventGroupOptions: { key: string; label: string }[] = [];
+  displayedTasks.forEach(t => {
+    const key = t.eventId || 'standalone';
+    if (!eventGroupOptions.some(g => g.key === key)) {
+      eventGroupOptions.push({ key, label: t.event || 'Standalone' });
+    }
+  });
+
+  const taskMatchesStudent = (task: TaskItem, studentId: string) =>
+    task.assigneeId === studentId || (task.assigneeIds || []).includes(studentId);
+
+  const filteredTasks = displayedTasks.filter(task => {
+    if (filterStudentId !== 'ALL' && !taskMatchesStudent(task, filterStudentId)) return false;
+    if (filterEventKey !== 'ALL' && (task.eventId || 'standalone') !== filterEventKey) return false;
+    if (filterDueFrom && task.dueDate < filterDueFrom) return false;
+    if (filterDueTo && task.dueDate > filterDueTo) return false;
+    return true;
+  });
+
+  const sortedTasks = [...filteredTasks].sort((a, b) => {
+    switch (sortBy) {
+      case 'dueDateDesc':
+        return b.dueDate.localeCompare(a.dueDate);
+      case 'titleAsc':
+        return a.title.localeCompare(b.title);
+      case 'status':
+        return a.status.localeCompare(b.status) || a.dueDate.localeCompare(b.dueDate);
+      case 'dueDateAsc':
+      default:
+        return a.dueDate.localeCompare(b.dueDate);
+    }
+  });
+
+  // Group into per-event sections so the board reads as "what's due for this
+  // event" instead of one long undifferentiated wall of cards — Standalone
+  // tasks are pushed to the end since they have no event to group under.
+  const taskGroups: { key: string; label: string; tasks: TaskItem[] }[] = [];
+  sortedTasks.forEach(task => {
+    const key = task.eventId || 'standalone';
+    let group = taskGroups.find(g => g.key === key);
+    if (!group) {
+      group = { key, label: task.event || 'Standalone', tasks: [] };
+      taskGroups.push(group);
+    }
+    group.tasks.push(task);
+  });
+  taskGroups.sort((a, b) => {
+    if (a.key === 'standalone') return 1;
+    if (b.key === 'standalone') return -1;
+    return a.label.localeCompare(b.label);
+  });
+
+  const hasActiveFilters = filterStudentId !== 'ALL' || filterEventKey !== 'ALL' || filterDueFrom || filterDueTo;
+  const clearFilters = () => {
+    setFilterStudentId('ALL');
+    setFilterEventKey('ALL');
+    setFilterDueFrom('');
+    setFilterDueTo('');
+  };
+
   const selectedAssigneeMember = members.find(m => m.id === selectedAssigneeId);
   // The full member roster is always searchable here — a Department Head used
   // to have this list hard-filtered down to just their own department/tier-6
@@ -678,7 +750,84 @@ export default function TasksPage() {
         </div>
       )}
 
-      {/* Grid of Tasks Card */}
+      {/* Filters & Sorting */}
+      {displayedTasks.length > 0 && (
+        <div className="glass-panel rounded-2xl p-4 flex flex-wrap items-end gap-3 text-xs">
+          <div className="space-y-1">
+            <label className="block font-medium text-theme-text-secondary">Student</label>
+            <select
+              value={filterStudentId}
+              onChange={(e) => setFilterStudentId(e.target.value)}
+              className="px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent min-w-[10rem]"
+            >
+              <option value="ALL">All Students</option>
+              {members.slice().sort((a, b) => a.name.localeCompare(b.name)).map(m => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="block font-medium text-theme-text-secondary">Event</label>
+            <select
+              value={filterEventKey}
+              onChange={(e) => setFilterEventKey(e.target.value)}
+              className="px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent min-w-[10rem]"
+            >
+              <option value="ALL">All Events</option>
+              {eventGroupOptions.map(g => (
+                <option key={g.key} value={g.key}>{g.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="block font-medium text-theme-text-secondary">Due From</label>
+            <input
+              type="date"
+              value={filterDueFrom}
+              onChange={(e) => setFilterDueFrom(e.target.value)}
+              className="px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="block font-medium text-theme-text-secondary">Due To</label>
+            <input
+              type="date"
+              value={filterDueTo}
+              onChange={(e) => setFilterDueTo(e.target.value)}
+              className="px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="block font-medium text-theme-text-secondary">Sort By</label>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+              className="px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent min-w-[9rem]"
+            >
+              <option value="dueDateAsc">Due Date (Soonest)</option>
+              <option value="dueDateDesc">Due Date (Latest)</option>
+              <option value="titleAsc">Title (A-Z)</option>
+              <option value="status">Status</option>
+            </select>
+          </div>
+
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="px-3 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary font-semibold rounded-lg transition-all cursor-pointer"
+            >
+              Clear Filters
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Task Board — grouped by event so it doesn't read as one undifferentiated wall of cards */}
       {displayedTasks.length === 0 ? (
         <EmptyState
           icon={CheckCircle2}
@@ -687,9 +836,31 @@ export default function TasksPage() {
           actionLabel={canManage ? "Assign Task" : undefined}
           onAction={canManage ? handleOpenCreate : undefined}
         />
+      ) : sortedTasks.length === 0 ? (
+        <EmptyState
+          icon={CheckCircle2}
+          title="No tasks match your filters"
+          description="Try widening the student, event, or due date filters."
+          actionLabel="Clear Filters"
+          onAction={clearFilters}
+        />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {displayedTasks.map((task) => (
+        <div className="space-y-4">
+          {taskGroups.map(group => (
+            <details key={group.key} open className="group glass-panel rounded-2xl p-4">
+              <summary className="flex items-center justify-between cursor-pointer list-none select-none">
+                <span className="flex items-center gap-2 text-sm font-bold text-theme-text-primary">
+                  <Briefcase className="h-4 w-4 text-accent" />
+                  {group.label}
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-theme-border/30 text-theme-text-secondary">
+                    {group.tasks.length}
+                  </span>
+                </span>
+                <ChevronDown className="h-4 w-4 text-theme-text-secondary transition-transform group-open:rotate-180" />
+              </summary>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pt-4">
+                {group.tasks.map((task) => (
             <div
               key={task.id}
               id={`task-${task.id}`}
@@ -954,6 +1125,9 @@ export default function TasksPage() {
                 )}
               </div>
             </div>
+                ))}
+              </div>
+            </details>
           ))}
         </div>
       )}

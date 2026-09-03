@@ -30,6 +30,7 @@ import {
   getBudgets,
   getReimbursements,
   addTask,
+  deleteTask,
   addEventCommittee,
   updateEventCommitteeMembers,
   deleteEventCommittee,
@@ -45,7 +46,7 @@ import {
   Member,
   TaskItem
 } from '@/lib/local-data';
-import { canManageEvents, isCommitteeApprover } from '@/lib/permissions';
+import { canManageEvents, isCommitteeApprover, canDeleteTask } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { StudentProfileModal } from '@/components/student-profile-modal';
 import { RequestApprovalModal } from '@/components/request-approval-modal';
@@ -76,6 +77,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
   const [taskReviewerId, setTaskReviewerId] = useState('');
 
   const [deletingCommitteeId, setDeletingCommitteeId] = useState<string | null>(null);
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [rejectingCommitteeId, setRejectingCommitteeId] = useState<string | null>(null);
   const [committeeRejectionReasonInput, setCommitteeRejectionReasonInput] = useState('');
   const [selectedStudentForProfile, setSelectedStudentForProfile] = useState<string | null>(null);
@@ -163,6 +165,15 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
     setDeletingCommitteeId(null);
     setEvent(getEventById(eventId));
     triggerSuccess('Removed committee from event.');
+  };
+
+  const handleConfirmDeleteTask = () => {
+    if (!event || !deletingTaskId) return;
+
+    deleteTask(deletingTaskId, user?.name || 'User');
+    setDeletingTaskId(null);
+    setTasks(getTasks().filter(t => t.eventId === eventId || t.event === event.title));
+    triggerSuccess('Task deleted successfully.');
   };
 
   const handleApproveCommittee = (committeeId: string) => {
@@ -611,6 +622,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                       <th className="pb-2.5 font-semibold">Due Date</th>
                       <th className="pb-2.5 font-semibold">Status</th>
                       <th className="pb-2.5 font-semibold">Performance Rating</th>
+                      <th className="pb-2.5 font-semibold text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-theme-border/20">
@@ -642,6 +654,17 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                             </span>
                           ) : (
                             <span className="text-[10px] text-theme-text-secondary italic">Awaiting evaluation</span>
+                          )}
+                        </td>
+                        <td className="py-3 text-right">
+                          {canDeleteTask(user, t) && (
+                            <button
+                              onClick={() => setDeletingTaskId(t.id)}
+                              className="p-1 hover:bg-danger/10 rounded-md text-danger transition-all cursor-pointer"
+                              title="Delete Task"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
                           )}
                         </td>
                       </tr>
@@ -969,6 +992,17 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
         variant="danger"
         onConfirm={handleConfirmDeleteCommittee}
         onCancel={() => setDeletingCommitteeId(null)}
+      />
+
+      {/* Delete Task Modal */}
+      <ConfirmModal
+        isOpen={Boolean(deletingTaskId)}
+        title="Delete Task"
+        message="Are you sure you want to delete this task deliverable? This action cannot be undone."
+        confirmLabel="Delete Task"
+        variant="danger"
+        onConfirm={handleConfirmDeleteTask}
+        onCancel={() => setDeletingTaskId(null)}
       />
 
       {approvalRequestCommittee && user && (
