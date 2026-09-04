@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection } from '@/lib/server-db';
 import { deleteStoredFile, saveBase64File } from '@/lib/file-storage';
-import { requireSession, sessionErrorStatus } from '@/lib/session';
+import { requireSession } from '@/lib/session';
 import { getAccessLevelSettingsServer, canEditDirectory, canTerminateMember } from '@/lib/permissions-server';
 import { invalidateAllSessionsForMember } from '@/lib/session';
 import { isKayomarzIdentity, countActiveSuperUsersServer, PRIVILEGED_FIELDS } from '@/lib/member-guard';
+import { parseJsonBody, MemberWriteSchema } from '@/lib/validation';
+import { apiError } from '@/lib/api-error';
 
 const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
 
@@ -15,7 +17,7 @@ export async function PATCH(
   try {
     const actor = await requireSession(request);
     const { id } = await params;
-    const updates = await request.json();
+    const updates: any = await parseJsonBody(request, MemberWriteSchema);
 
     delete updates.passwordHash; // never settable through this route
 
@@ -92,8 +94,7 @@ export async function PATCH(
 
     return NextResponse.json(updated.find((m: any) => m.id === id));
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 400 });
+    return apiError(err, 'members-id-api-patch', 400);
   }
 }
 
@@ -130,7 +131,6 @@ export async function DELETE(
     await invalidateAllSessionsForMember(id);
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 500 });
+    return apiError(err, 'members-id-api-delete');
   }
 }

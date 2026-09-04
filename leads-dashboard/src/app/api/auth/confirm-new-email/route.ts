@@ -1,6 +1,15 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { readCollection, mutateCollection } from '@/lib/server-db';
-import { requireSession, sessionErrorStatus } from '@/lib/session';
+import { requireSession } from '@/lib/session';
+import { recordAuthFailure, recordAuthSuccess } from '@/lib/rate-limit';
+import { parseJsonBody } from '@/lib/validation';
+import { apiError } from '@/lib/api-error';
+
+const ConfirmNewEmailSchema = z.object({
+  memberId: z.string().trim().min(1).max(128),
+  otp: z.string().trim().min(4).max(12),
+}).strict();
 
 /**
  * Self-service email change, step 3 of 3 — the final step. Verifies the OTP
@@ -12,10 +21,7 @@ import { requireSession, sessionErrorStatus } from '@/lib/session';
 export async function POST(request: Request) {
   try {
     const actor = await requireSession(request);
-    const { memberId, otp } = await request.json();
-    if (!memberId || !otp) {
-      return NextResponse.json({ error: 'Verification code is required.' }, { status: 400 });
-    }
+    const { memberId, otp } = await parseJsonBody(request, ConfirmNewEmailSchema);
     if (actor.id !== memberId) {
       return NextResponse.json({ error: 'You can only confirm an email change for your own account.' }, { status: 403 });
     }
@@ -23,8 +29,10 @@ export async function POST(request: Request) {
     const changes = await readCollection<any>('emailChanges');
     const matchedChange = changes.find((r: any) => r.memberId === memberId && r.oldVerified && r.otp === String(otp).trim());
     if (!matchedChange) {
+      recordAuthFailure(memberId);
       return NextResponse.json({ error: 'Invalid verification code. Please check your new email and try again.' }, { status: 400 });
     }
+    recordAuthSuccess(memberId);
     if (Date.now() > matchedChange.expiresAt) {
       return NextResponse.json({ error: 'The 5-minute verification code has expired. Please start over.' }, { status: 400 });
     }
@@ -68,9 +76,6 @@ export async function POST(request: Request) {
       newEmail: matchedChange.newEmail,
     });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    if (status) return NextResponse.json({ error: err.message }, { status });
-    console.error('[confirm-new-email-api] Error:', err);
-    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
+    return apiError(err, 'confirm-new-email-api');
   }
 }

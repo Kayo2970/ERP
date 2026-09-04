@@ -2,11 +2,20 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { z } from 'zod';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { hashPassword } from '@/lib/password';
+import { parseJsonBody } from '@/lib/validation';
+import { apiError } from '@/lib/api-error';
 
 const FALLBACK_KEY = 'LEADS_ERP_MASTER_SECRET_KEY_2026';
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const SetupSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  email: z.string().trim().min(1).max(254).email(),
+  password: z.string().min(8).max(256),
+  encryptionKey: z.string().trim().max(512).optional(),
+}).strict();
 
 function writeEncryptionKeyToEnv(key: string) {
   const envPath = path.join(process.cwd(), '.env');
@@ -49,8 +58,7 @@ export async function GET() {
       suggestedKey: crypto.randomBytes(32).toString('hex'),
     });
   } catch (err: any) {
-    console.error('[setup-api] GET Error:', err);
-    return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });
+    return apiError(err, 'setup-api-get');
   }
 }
 
@@ -67,21 +75,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const body = await request.json();
-    const { name, email, password, encryptionKey } = body;
-
-    // Validate inputs
-    if (!name || typeof name !== 'string' || !name.trim()) {
-      return NextResponse.json({ error: 'Please enter a valid full name.' }, { status: 400 });
-    }
-
-    if (!email || typeof email !== 'string' || !EMAIL_RE.test(email.trim())) {
-      return NextResponse.json({ error: 'Please enter a valid email address.' }, { status: 400 });
-    }
-
-    if (!password || typeof password !== 'string' || password.length < 8) {
-      return NextResponse.json({ error: 'Password must be at least 8 characters long.' }, { status: 400 });
-    }
+    const { name, email, password, encryptionKey } = await parseJsonBody(request, SetupSchema);
 
     // Step 2: Resolve or update DATA_ENCRYPTION_KEY
     let finalKey = (process.env.DATA_ENCRYPTION_KEY || '').trim();
@@ -134,7 +128,6 @@ export async function POST(request: Request) {
       message: 'Super User account initialized and encryption key configured successfully.',
     });
   } catch (err: any) {
-    console.error('[setup-api] POST Error:', err);
-    return NextResponse.json({ error: err.message || 'Setup initialization failed' }, { status: 500 });
+    return apiError(err, 'setup-api-post');
   }
 }

@@ -1,8 +1,17 @@
 import { NextResponse } from 'next/server';
 import { randomInt } from 'crypto';
+import { z } from 'zod';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { dispatchEmail, generateEmailChangeOtpTemplate } from '@/lib/email-service';
-import { requireSession, sessionErrorStatus } from '@/lib/session';
+import { requireSession } from '@/lib/session';
+import { parseJsonBody } from '@/lib/validation';
+import { apiError } from '@/lib/api-error';
+
+const RequestEmailChangeSchema = z.object({
+  memberId: z.string().trim().min(1).max(128),
+  currentEmail: z.string().trim().min(1).max(254).email(),
+  newEmail: z.string().trim().min(1).max(254).email(),
+}).strict();
 
 /**
  * Self-service email change, step 1 of 3. Anyone who knows the account's
@@ -17,10 +26,7 @@ import { requireSession, sessionErrorStatus } from '@/lib/session';
 export async function POST(request: Request) {
   try {
     const actor = await requireSession(request);
-    const { memberId, currentEmail, newEmail } = await request.json();
-    if (!memberId || !currentEmail || !newEmail || typeof newEmail !== 'string') {
-      return NextResponse.json({ error: 'Current account and a new email address are required.' }, { status: 400 });
-    }
+    const { memberId, currentEmail, newEmail } = await parseJsonBody(request, RequestEmailChangeSchema);
     if (actor.id !== memberId) {
       return NextResponse.json({ error: 'You can only request an email change for your own account.' }, { status: 403 });
     }
@@ -28,9 +34,6 @@ export async function POST(request: Request) {
     const trimmedCurrent = currentEmail.trim().toLowerCase();
     const trimmedNew = newEmail.trim().toLowerCase();
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedNew)) {
-      return NextResponse.json({ error: 'Enter a valid new email address.' }, { status: 400 });
-    }
     if (trimmedNew === trimmedCurrent) {
       return NextResponse.json({ error: 'New email must be different from your current email.' }, { status: 400 });
     }
@@ -79,9 +82,6 @@ export async function POST(request: Request) {
       expiresAt,
     });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    if (status) return NextResponse.json({ error: err.message }, { status });
-    console.error('[request-email-change-api] Error:', err);
-    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
+    return apiError(err, 'request-email-change-api');
   }
 }

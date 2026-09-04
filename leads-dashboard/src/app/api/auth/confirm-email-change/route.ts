@@ -1,8 +1,17 @@
 import { NextResponse } from 'next/server';
 import { randomInt } from 'crypto';
+import { z } from 'zod';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { dispatchEmail, generateNewEmailConfirmationOtpTemplate } from '@/lib/email-service';
-import { requireSession, sessionErrorStatus } from '@/lib/session';
+import { requireSession } from '@/lib/session';
+import { recordAuthFailure, recordAuthSuccess } from '@/lib/rate-limit';
+import { parseJsonBody } from '@/lib/validation';
+import { apiError } from '@/lib/api-error';
+
+const ConfirmEmailChangeSchema = z.object({
+  memberId: z.string().trim().min(1).max(128),
+  otp: z.string().trim().min(4).max(12),
+}).strict();
 
 /**
  * Self-service email change, step 2 of 3. Verifies the OTP that was sent to
@@ -14,10 +23,7 @@ import { requireSession, sessionErrorStatus } from '@/lib/session';
 export async function POST(request: Request) {
   try {
     const actor = await requireSession(request);
-    const { memberId, otp } = await request.json();
-    if (!memberId || !otp) {
-      return NextResponse.json({ error: 'Verification code is required.' }, { status: 400 });
-    }
+    const { memberId, otp } = await parseJsonBody(request, ConfirmEmailChangeSchema);
     if (actor.id !== memberId) {
       return NextResponse.json({ error: 'You can only confirm an email change for your own account.' }, { status: 403 });
     }
@@ -25,8 +31,10 @@ export async function POST(request: Request) {
     const changes = await readCollection<any>('emailChanges');
     const matchedChange = changes.find((r: any) => r.memberId === memberId && !r.oldVerified && r.otp === String(otp).trim());
     if (!matchedChange) {
+      recordAuthFailure(memberId);
       return NextResponse.json({ error: 'Invalid verification code. Please check your email and try again.' }, { status: 400 });
     }
+    recordAuthSuccess(memberId);
     if (Date.now() > matchedChange.expiresAt) {
       return NextResponse.json({ error: 'The 5-minute verification code has expired. Please request a new one.' }, { status: 400 });
     }
@@ -68,9 +76,6 @@ export async function POST(request: Request) {
       expiresAt: newExpiresAt,
     });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    if (status) return NextResponse.json({ error: err.message }, { status });
-    console.error('[confirm-email-change-api] Error:', err);
-    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
+    return apiError(err, 'confirm-email-change-api');
   }
 }

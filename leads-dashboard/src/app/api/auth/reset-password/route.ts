@@ -1,27 +1,30 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { hashPassword } from '@/lib/password';
 import { invalidateAllSessionsForMember } from '@/lib/session';
+import { recordAuthFailure, recordAuthSuccess } from '@/lib/rate-limit';
+import { parseJsonBody } from '@/lib/validation';
+import { apiError } from '@/lib/api-error';
+
+const ResetPasswordSchema = z.object({
+  email: z.string().trim().min(1).max(254).email(),
+  otp: z.string().trim().min(4).max(12),
+  newPassword: z.string().min(4).max(256),
+}).strict();
 
 export async function POST(request: Request) {
   try {
-    const { email, otp, newPassword } = await request.json();
-
-    if (!email || !otp || !newPassword) {
-      return NextResponse.json({ error: 'Email, OTP code, and new password are required.' }, { status: 400 });
-    }
-
-    if (newPassword.length < 4) {
-      return NextResponse.json({ error: 'New password must be at least 4 characters.' }, { status: 400 });
-    }
-
+    const { email, otp, newPassword } = await parseJsonBody(request, ResetPasswordSchema);
     const trimmedEmail = email.trim().toLowerCase();
     const resets = await readCollection('passwordResets');
     const matchedReset = resets.find((r: any) => r.email === trimmedEmail && r.otp === otp.trim());
 
     if (!matchedReset) {
+      recordAuthFailure(trimmedEmail);
       return NextResponse.json({ error: 'Invalid verification code. Please check your email and try again.' }, { status: 400 });
     }
+    recordAuthSuccess(trimmedEmail);
 
     // 5-minute validity check
     const now = Date.now();
@@ -85,7 +88,6 @@ export async function POST(request: Request) {
       message: 'Password reset successfully! You can now log in with your new password.',
     });
   } catch (err: any) {
-    console.error('[reset-password-api] Error:', err);
-    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
+    return apiError(err, 'reset-password-api');
   }
 }

@@ -1,6 +1,15 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { hashPassword } from '@/lib/password';
+import { parseJsonBody } from '@/lib/validation';
+import { apiError } from '@/lib/api-error';
+
+const ActivateAccountSchema = z.object({
+  token: z.string().trim().min(1).max(256),
+  newPassword: z.string().min(4).max(256),
+  dateOfBirth: z.union([z.literal(''), z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date of birth is not in a valid format.')]).optional(),
+}).strict();
 
 /** Validates an activation token and returns who it belongs to, without consuming it — lets the /activate page greet the member by name before they submit a password. */
 export async function GET(request: Request) {
@@ -34,17 +43,7 @@ export async function GET(request: Request) {
 /** Consumes an activation token — sets the member's first real password and deletes the token. */
 export async function POST(request: Request) {
   try {
-    const { token, newPassword, dateOfBirth } = await request.json();
-
-    if (!token || !newPassword) {
-      return NextResponse.json({ error: 'Activation token and a new password are required.' }, { status: 400 });
-    }
-    if (newPassword.length < 4) {
-      return NextResponse.json({ error: 'Password must be at least 4 characters.' }, { status: 400 });
-    }
-    if (dateOfBirth && !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
-      return NextResponse.json({ error: 'Date of birth is not in a valid format.' }, { status: 400 });
-    }
+    const { token, newPassword, dateOfBirth } = await parseJsonBody(request, ActivateAccountSchema);
 
     const activations = await readCollection('accountActivations');
     const matched = activations.find((a: any) => a.token === token);
@@ -99,7 +98,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, message: 'Account activated! You can now sign in with your new password.' });
   } catch (err: any) {
-    console.error('[activate-account-api] Error:', err);
-    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
+    return apiError(err, 'activate-account-api');
   }
 }

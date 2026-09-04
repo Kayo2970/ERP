@@ -1,12 +1,21 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { readCollection } from '@/lib/server-db';
 import { verifyPassword } from '@/lib/password';
 import { createSession } from '@/lib/session';
+import { recordAuthFailure, recordAuthSuccess } from '@/lib/rate-limit';
+import { parseJsonBody } from '@/lib/validation';
+import { apiError } from '@/lib/api-error';
 
 // Same message for "no account" and "wrong password" — a distinct message
 // for each lets anyone probe which emails have accounts on this system
 // (submit a guaranteed-wrong password for any address and read the error).
 const INVALID_CREDENTIALS_MESSAGE = "Incorrect email or password. If you forgot your password, click 'Forgot Password?' below.";
+
+const LoginSchema = z.object({
+  email: z.string().trim().min(1).max(254).email(),
+  password: z.string().min(1).max(256),
+}).strict();
 
 /**
  * Real server-side login check. Password verification (scrypt + timing-safe
@@ -16,16 +25,13 @@ const INVALID_CREDENTIALS_MESSAGE = "Incorrect email or password. If you forgot 
  */
 export async function POST(request: Request) {
   try {
-    const { email, password } = await request.json();
-    if (!email || !password || typeof email !== 'string' || typeof password !== 'string') {
-      return NextResponse.json({ error: 'Email and password are required.' }, { status: 400 });
-    }
-
+    const { email, password } = await parseJsonBody(request, LoginSchema);
     const trimmedEmail = email.trim().toLowerCase();
     const members = await readCollection<any>('members');
     const matchedUser = members.find(m => m.email.toLowerCase() === trimmedEmail);
 
     if (!matchedUser) {
+      recordAuthFailure(trimmedEmail);
       return NextResponse.json({ error: INVALID_CREDENTIALS_MESSAGE }, { status: 401 });
     }
 
@@ -60,15 +66,16 @@ export async function POST(request: Request) {
     }
 
     if (!verifyPassword(password, matchedUser.passwordHash)) {
+      recordAuthFailure(trimmedEmail);
       return NextResponse.json({ error: INVALID_CREDENTIALS_MESSAGE }, { status: 401 });
     }
 
+    recordAuthSuccess(trimmedEmail);
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- stripped from the response on purpose
     const { passwordHash, ...safeUser } = matchedUser;
     const token = await createSession(matchedUser.id);
     return NextResponse.json({ user: safeUser, token });
   } catch (err: any) {
-    console.error('[login-api] Error:', err);
-    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
+    return apiError(err, 'login-api');
   }
 }

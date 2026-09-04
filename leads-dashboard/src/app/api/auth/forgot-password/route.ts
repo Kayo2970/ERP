@@ -1,15 +1,18 @@
 import { NextResponse } from 'next/server';
 import { randomInt } from 'crypto';
+import { z } from 'zod';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { dispatchEmail, generateOtpEmailTemplate } from '@/lib/email-service';
+import { parseJsonBody } from '@/lib/validation';
+import { apiError } from '@/lib/api-error';
+
+const ForgotPasswordSchema = z.object({
+  email: z.string().trim().min(1).max(254).email(),
+}).strict();
 
 export async function POST(request: Request) {
   try {
-    const { email } = await request.json();
-    if (!email || typeof email !== 'string') {
-      return NextResponse.json({ error: 'Valid email address is required.' }, { status: 400 });
-    }
-
+    const { email } = await parseJsonBody(request, ForgotPasswordSchema);
     const trimmedEmail = email.trim().toLowerCase();
     const members = await readCollection('members');
     const member = members.find((m: any) => m.email.toLowerCase() === trimmedEmail);
@@ -75,7 +78,6 @@ export async function POST(request: Request) {
       expiresAt,
     });
   } catch (err: any) {
-    console.error('[forgot-password-api] Error:', err);
-    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
+    return apiError(err, 'forgot-password-api');
   }
 }

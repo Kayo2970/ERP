@@ -1,20 +1,27 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { createActivationTokenAndSendEmail } from '@/lib/account-activation';
-import { requireSession, sessionErrorStatus } from '@/lib/session';
+import { requireSession } from '@/lib/session';
 import { getAccessLevelSettingsServer, canAddMember } from '@/lib/permissions-server';
+import { parseJsonBody, MemberWriteSchema } from '@/lib/validation';
+import { apiError } from '@/lib/api-error';
+
+const MemberCreateSchema = MemberWriteSchema.extend({
+  id: MemberWriteSchema.shape.id.unwrap(),
+  name: MemberWriteSchema.shape.name.unwrap(),
+  email: MemberWriteSchema.shape.email.unwrap(),
+});
 
 export async function GET(request: Request) {
   try {
     await requireSession(request);
+    const members = await readCollection<any>('members');
+    // passwordHash must never leave the server — this endpoint returned it to
+    // any caller (and any caller at all, before the requireSession above).
+    return NextResponse.json(members.map(({ passwordHash, ...safe }: any) => safe));
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 401 });
+    return apiError(err, 'members-api-get');
   }
-  const members = await readCollection<any>('members');
-  // passwordHash must never leave the server — this endpoint returned it to
-  // any caller (and any caller at all, before the requireSession above).
-  return NextResponse.json(members.map(({ passwordHash, ...safe }: any) => safe));
 }
 
 export async function POST(request: Request) {
@@ -24,7 +31,7 @@ export async function POST(request: Request) {
     if (!canAddMember(actor, settings)) {
       return NextResponse.json({ error: "You don't have permission to add members." }, { status: 403 });
     }
-    const member = await request.json();
+    const member = await parseJsonBody(request, MemberCreateSchema);
     const newMemberPayload = {
       ...member,
       mustSetupPassword: true,
@@ -61,7 +68,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ...created, activationLink, activationEmailSent, activationEmailError }, { status: 201 });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 400 });
+    return apiError(err, 'members-api-post', 400);
   }
 }

@@ -1,23 +1,22 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { hashPassword } from '@/lib/password';
 import { createSession, invalidateAllSessionsForMember } from '@/lib/session';
+import { parseJsonBody } from '@/lib/validation';
+import { apiError } from '@/lib/api-error';
+
+const OverridePasswordSchema = z.object({
+  email: z.string().trim().min(1).max(254).email(),
+  newPassword: z.string().min(4).max(256),
+}).strict();
 
 /**
  * Super User Admin Override: Consume admin override and set member's new password directly without OTP.
  */
 export async function POST(request: Request) {
   try {
-    const { email, newPassword } = await request.json();
-
-    if (!email || !newPassword) {
-      return NextResponse.json({ error: 'Email address and new password are required.' }, { status: 400 });
-    }
-
-    if (newPassword.length < 4) {
-      return NextResponse.json({ error: 'New password must be at least 4 characters long.' }, { status: 400 });
-    }
-
+    const { email, newPassword } = await parseJsonBody(request, OverridePasswordSchema);
     const trimmedEmail = email.trim().toLowerCase();
     const members = await readCollection('members');
     const member = members.find((m: any) => m.email.toLowerCase() === trimmedEmail);
@@ -84,7 +83,6 @@ export async function POST(request: Request) {
       message: 'New password set successfully! Signing you in...',
     });
   } catch (err: any) {
-    console.error('[override-password-api] Error:', err);
-    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
+    return apiError(err, 'override-password-api');
   }
 }

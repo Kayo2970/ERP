@@ -1,7 +1,16 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { mutateCollection, readCollection } from '@/lib/server-db';
 import { hashPassword, verifyPassword } from '@/lib/password';
-import { requireSession, sessionErrorStatus, invalidateAllSessionsForMember, createSession } from '@/lib/session';
+import { requireSession, invalidateAllSessionsForMember, createSession } from '@/lib/session';
+import { parseJsonBody } from '@/lib/validation';
+import { apiError } from '@/lib/api-error';
+
+const ChangePasswordSchema = z.object({
+  email: z.string().trim().min(1).max(254).email(),
+  currentPassword: z.string().min(1).max(256),
+  newPassword: z.string().min(4).max(256),
+}).strict();
 
 /**
  * Self-service password change from Settings. Verifying currentPassword
@@ -12,14 +21,7 @@ import { requireSession, sessionErrorStatus, invalidateAllSessionsForMember, cre
 export async function POST(request: Request) {
   try {
     const actor = await requireSession(request);
-    const { email, currentPassword, newPassword } = await request.json();
-    if (!email || !currentPassword || !newPassword) {
-      return NextResponse.json({ error: 'Current password and new password are required.' }, { status: 400 });
-    }
-    if (newPassword.length < 4) {
-      return NextResponse.json({ error: 'New password must be at least 4 characters.' }, { status: 400 });
-    }
-
+    const { email, currentPassword, newPassword } = await parseJsonBody(request, ChangePasswordSchema);
     const trimmedEmail = email.trim().toLowerCase();
     // Only ever act on the signed-in caller's own record — a request body
     // naming a different email must never be able to change someone else's
@@ -53,9 +55,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, token });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    if (status) return NextResponse.json({ error: err.message }, { status });
-    console.error('[change-password-api] Error:', err);
-    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
+    return apiError(err, 'change-password-api');
   }
 }
