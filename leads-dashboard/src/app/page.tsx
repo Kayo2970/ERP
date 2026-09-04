@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { ShieldAlert, LogIn, Mail, Lock, Eye, EyeOff, KeyRound, CheckCircle2, Clock, ArrowLeft, Send, Quote } from 'lucide-react';
 import { logAuditEvent, requestPasswordReset, submitPasswordReset, submitAdminOverridePasswordReset, setSessionToken } from '@/lib/local-data';
 import { TermsModal } from '@/components/terms-modal';
+import { IosInstallPrompt } from '@/components/ios-install-prompt';
 import { LoadingScreen } from '@/components/loading-screen';
 import { SetupWizard } from '@/components/setup-wizard';
 import { GhostFibers } from '@/components/ui/ghost-fibers';
@@ -948,6 +949,10 @@ export default function LoginPage() {
 
       {/* Terms & Conditions Modal */}
       <TermsModal isOpen={isTermsOpen} onClose={() => setIsTermsOpen(false)} />
+
+      {/* iOS "Add to Home Screen" nudge, shown here too so it reaches someone
+          visiting on an iPhone/iPad before they've even logged in. */}
+      <IosInstallPrompt />
     </div>
   );
 }

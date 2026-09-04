@@ -44,6 +44,7 @@ import {
 import { getAnnouncements, getTasks, getDesigns, getMembers, getBudgets, getReimbursements, getEvents, getApprovalRequests, logAuditEvent, Member, syncWithServer, getSystemSettings, signOutClient } from '@/lib/local-data';
 import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isFinanceHead, canAccessGuestDirectory, canVerifyBudgetCentreHead, canDecideBudget, canVerifyReimbursementCentreHead, canApproveAsSectorHead, canApproveAsFinanceHead, canSubmitEventReport, canReviewEventReports } from '@/lib/permissions';
 import { TermsModal } from '@/components/terms-modal';
+import { IosInstallPrompt } from '@/components/ios-install-prompt';
 import { NotFoundScreen } from '@/components/not-found-screen';
 import { LoadingScreen } from '@/components/loading-screen';
 import { OnboardingTour } from '@/components/onboarding-tour';
@@ -1487,6 +1488,10 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
       {/* Global save/sync feedback for every background write app-wide */}
       <SyncStatusPill />
+
+      {/* iOS "Add to Home Screen" nudge — Safari has no install-prompt API,
+          so this is the only way an iPhone/iPad visitor discovers it. */}
+      <IosInstallPrompt />
     </div>
   );
 }

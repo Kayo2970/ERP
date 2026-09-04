@@ -22,6 +22,17 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "LEADS All-in-One Dashboard",
   description: "Private internal management system for the LEADS Next Gen Centre at MSRUAS, Bengaluru.",
+  // Lets iOS Safari's "Add to Home Screen" open this as a standalone app
+  // (own icon, no browser chrome/URL bar) instead of just a bookmark that
+  // reopens in a normal Safari tab — see components/ios-install-prompt.tsx
+  // for the banner that tells iOS visitors this option exists at all (iOS
+  // has no install-prompt API like Android/Chrome's beforeinstallprompt, so
+  // nothing surfaces this on its own).
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "LEADS Dashboard",
+  },
 };
 
 export default function RootLayout({
