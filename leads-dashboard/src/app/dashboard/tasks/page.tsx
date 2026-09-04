@@ -84,6 +84,7 @@ export default function TasksPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskItem | null>(null);
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
+  const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
   const [extensionTask, setExtensionTask] = useState<TaskItem | null>(null);
   const [extensionReasonInput, setExtensionReasonInput] = useState('');
   const [rejectingTaskId, setRejectingTaskId] = useState<string | null>(null);
@@ -554,6 +555,12 @@ export default function TasksPage() {
     updateTaskStatus(id, newStatus);
     setTasks(getTasks());
     triggerSuccess(`Task status changed to ${newStatus}.`);
+  };
+
+  const handleConfirmComplete = () => {
+    if (!completingTaskId) return;
+    handleStatusChange(completingTaskId, 'Completed');
+    setCompletingTaskId(null);
   };
 
   const handleHolidayApprovalResponse = (id: string, approved: boolean) => {
@@ -1297,7 +1304,7 @@ export default function TasksPage() {
                         <span className="text-[11px] text-theme-text-secondary italic">Use the caption panel above to complete this task</span>
                       ) : canChangeTaskStatus(task, user) ? (
                         <button
-                          onClick={() => handleStatusChange(task.id, 'Completed')}
+                          onClick={() => setCompletingTaskId(task.id)}
                           className="px-2.5 py-1 bg-success hover:bg-success/90 text-white font-semibold rounded-lg transition-all text-[11px] cursor-pointer"
                         >
                           Complete
@@ -1814,6 +1821,20 @@ export default function TasksPage() {
         variant="danger"
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeletingTaskId(null)}
+      />
+
+      {/* Complete Confirmation Modal — guards against accidental clicks, since
+          Complete is a one-way status change that immediately queues the task
+          for rating/evaluation. */}
+      <ConfirmModal
+        isOpen={Boolean(completingTaskId)}
+        title="Mark Task Complete"
+        message="Are you sure you want to mark this task as completed? This will close it out and cannot be undone from here."
+        confirmLabel="Yes, Mark Complete"
+        cancelLabel="No, Go Back"
+        variant="primary"
+        onConfirm={handleConfirmComplete}
+        onCancel={() => setCompletingTaskId(null)}
       />
 
       {approvalRequestTask && user && (
