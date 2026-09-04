@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
-import { mutateCollection } from '@/lib/server-db';
+import { mutateCollection, readCollection } from '@/lib/server-db';
 import { deleteStoredFile, deleteStoredFilesForRecord, saveBase64File } from '@/lib/file-storage';
+import { requireSession, sessionErrorStatus, ForbiddenError } from '@/lib/session';
+import { getAccessLevelSettingsServer, canEditGuestRecord, canRemoveGuestContact } from '@/lib/permissions-server';
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -9,7 +11,12 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const actor = await requireSession(request);
     const { id } = await params;
+    const settings = await getAccessLevelSettingsServer();
+    const existingGuests = await readCollection<any>('guests');
+    const existingGuest = existingGuests.find((g: any) => g.id === id);
+    if (!canEditGuestRecord(existingGuest, actor, settings)) throw new ForbiddenError();
     const body = await request.json();
 
     let previousFrontStorageKey: string | undefined;
@@ -69,15 +76,19 @@ export async function PATCH(
     const target = updated.find((g: any) => g.id === id);
     return NextResponse.json(target);
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 500 });
   }
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const actor = await requireSession(request);
+    const settings = await getAccessLevelSettingsServer();
+    if (!canRemoveGuestContact(actor, settings)) throw new ForbiddenError();
     const { id } = await params;
     let found = false;
     await mutateCollection('guests', (current) => {
@@ -89,6 +100,7 @@ export async function DELETE(
     await deleteStoredFilesForRecord('guests', id);
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 500 });
   }
 }

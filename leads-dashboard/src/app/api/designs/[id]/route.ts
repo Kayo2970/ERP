@@ -2,14 +2,33 @@ import { NextResponse } from 'next/server';
 import { mutateCollection, readCollection } from '@/lib/server-db';
 import { deleteStoredFile, deleteStoredFilesForRecord, saveBase64File, readStoredFile } from '@/lib/file-storage';
 import { cascadeCloseAutoApprovals } from '@/lib/approval-sync';
+import { requireSession, sessionErrorStatus, ForbiddenError } from '@/lib/session';
+import { getAccessLevelSettingsServer, canReviewDesignProofread, canViewAllDesigns } from '@/lib/permissions-server';
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const actor = await requireSession(request);
     const { id } = await params;
     const body = await request.json();
+
+    // Two branches share this one merge-patch handler: a style-approve/reject
+    // or proofread-review decision (identified by the presence of these
+    // fields), vs a plain edit by the design's own submitter. Gate each
+    // separately rather than one blanket check.
+    const settings = await getAccessLevelSettingsServer();
+    const isReviewAction = Object.prototype.hasOwnProperty.call(body, 'styleStatus')
+      || Object.prototype.hasOwnProperty.call(body, 'review');
+    if (isReviewAction) {
+      if (!canReviewDesignProofread(actor, settings)) throw new ForbiddenError();
+    } else {
+      const existingDesigns = await readCollection<any>('designs');
+      const existing = existingDesigns.find((d: any) => d.id === id);
+      const isOwner = !!existing && actor.id === existing.designerId;
+      if (!isOwner && !canViewAllDesigns(actor, settings)) throw new ForbiddenError();
+    }
 
     // A replaced file arrives the same way a brand-new submission's does —
     // a base64 data URL — so it needs the same on-disk treatment POST gives
@@ -142,22 +161,32 @@ export async function PATCH(
 
     return NextResponse.json(mergedRecord || updated.find((d: any) => d.id === id));
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 500 });
   }
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const actor = await requireSession(request);
     const { id } = await params;
+    const settings = await getAccessLevelSettingsServer();
+    const existingDesigns = await readCollection<any>('designs');
+    const existing = existingDesigns.find((d: any) => d.id === id);
+    const isOwner = !!existing && actor.id === existing.designerId;
+    if (!isOwner && !canViewAllDesigns(actor, settings) && actor.tier !== 1) {
+      throw new ForbiddenError();
+    }
     const updated = await mutateCollection('designs', (current) =>
       current.filter((d: any) => d.id !== id)
     );
     await deleteStoredFilesForRecord('designs', id);
     return NextResponse.json({ success: true, count: updated.length });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 500 });
   }
 }

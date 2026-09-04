@@ -1,19 +1,28 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { saveBase64File } from '@/lib/file-storage';
+import { requireSession, sessionErrorStatus } from '@/lib/session';
 
 export const maxDuration = 60; // 60s execution limit for large uploads
 
 const MAX_RECEIPT_FILE_BYTES = 10 * 1024 * 1024; // 10 MB per file
 const MAX_RECEIPT_FILES = 3;
 
-export async function GET() {
-  const items = await readCollection('reimbursements');
-  return NextResponse.json(items);
+export async function GET(request: Request) {
+  try {
+    await requireSession(request);
+    const items = await readCollection('reimbursements');
+    return NextResponse.json(items);
+  } catch (err: any) {
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 500 });
+  }
 }
 
 export async function POST(request: Request) {
   try {
+    // Any signed-in member may submit their own expense claim.
+    await requireSession(request);
     const item = await request.json();
 
     const files = Array.isArray(item.receiptFiles) ? item.receiptFiles : [];
@@ -52,6 +61,7 @@ export async function POST(request: Request) {
     const created = updated.find((r: any) => r.id === item.id);
     return NextResponse.json(created, { status: 201 });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 400 });
   }
 }

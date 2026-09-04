@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ShieldAlert, LogIn, Mail, Lock, Eye, EyeOff, KeyRound, CheckCircle2, Clock, ArrowLeft, Send, Quote } from 'lucide-react';
-import { logAuditEvent, requestPasswordReset, submitPasswordReset, submitAdminOverridePasswordReset } from '@/lib/local-data';
+import { logAuditEvent, requestPasswordReset, submitPasswordReset, submitAdminOverridePasswordReset, setSessionToken } from '@/lib/local-data';
 import { TermsModal } from '@/components/terms-modal';
 import { LoadingScreen } from '@/components/loading-screen';
 import { SetupWizard } from '@/components/setup-wizard';
@@ -282,8 +282,9 @@ export default function LoginPage() {
         return;
       }
 
-      // Save logged-in user to localStorage
+      // Save logged-in user + session token to localStorage
       localStorage.setItem('user', JSON.stringify(data.user));
+      setSessionToken(data.token);
       logAuditEvent('USER_LOGIN', data.user.name, `Logged in successfully with role ${data.user.role} (Tier ${data.user.tier})`);
 
       setIsLoading(false);
@@ -407,6 +408,7 @@ export default function LoginPage() {
     setOverrideSuccess('Password set successfully! Signing you in...');
     if (res.user) {
       localStorage.setItem('user', JSON.stringify(res.user));
+      setSessionToken(res.token);
       logAuditEvent('USER_LOGIN', res.user.name, `Logged in after admin override password setup with role ${res.user.role}`);
       setTimeout(() => {
         setShowAdminOverrideModal(false);

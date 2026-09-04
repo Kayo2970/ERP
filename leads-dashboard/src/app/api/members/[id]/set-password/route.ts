@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection } from '@/lib/server-db';
 import { hashPassword } from '@/lib/password';
+import { requireSession, sessionErrorStatus, invalidateAllSessionsForMember } from '@/lib/session';
+import { canSetMemberPassword } from '@/lib/permissions-server';
 
 /**
  * Super User Admin Override: directly set a member's password. Unlike
@@ -14,6 +16,10 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const actor = await requireSession(request);
+    if (!canSetMemberPassword(actor)) {
+      return NextResponse.json({ error: 'You do not have permission to set this member\'s password directly.' }, { status: 403 });
+    }
     const { id } = await params;
     const body = await request.json().catch(() => ({}));
     const newPassword = typeof body.newPassword === 'string' ? body.newPassword : '';
@@ -64,11 +70,17 @@ export async function POST(
       ...(current || []),
     ]);
 
+    // Kill any existing session for this account — they'll need to sign in
+    // again with the new password.
+    await invalidateAllSessionsForMember(id);
+
     return NextResponse.json({
       success: true,
       message: `Password updated for ${memberName}. They can log in immediately with the new password.`,
     });
   } catch (err: any) {
+    const status = sessionErrorStatus(err);
+    if (status) return NextResponse.json({ error: err.message }, { status });
     console.error('[set-password-api] Error:', err);
     return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
   }

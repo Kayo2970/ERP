@@ -55,7 +55,8 @@ import {
   EventItem,
   Member,
   ReceiptFile,
-  DesignSubmissionItem
+  DesignSubmissionItem,
+  authHeaders
 } from '@/lib/local-data';
 import { canViewTaskExtended, canManageTasks, canCreateTask, canEditTask, canDeleteTask, canRequestTaskExtension, canDecideTaskExtension, canChangeTaskStatus, isHeadRole, getTaskApprovalRequirement, canApprovePendingTask, canRespondToHolidayApproval, canDelegateAutoTask, canViewTaskDelegationTrail, canViewAllDesigns } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
@@ -194,7 +195,7 @@ export default function TasksPage() {
     if (ackParam) {
       fetch('/api/tasks/ack', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           taskIds: ackParam.split(','),
           email: emailParam || user?.email,

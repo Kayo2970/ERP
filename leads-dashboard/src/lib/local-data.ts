@@ -1,5 +1,45 @@
 import { trackSync } from './sync-status';
 
+// -------------------------------------------------------------
+// Session token — attached to every authenticated API call so the server
+// can resolve who's actually calling (see src/lib/session.ts). Previously
+// no identity was sent at all; routes trusted whatever the request body said.
+// -------------------------------------------------------------
+const SESSION_TOKEN_KEY = 'leads_session_token';
+
+export function getSessionToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(SESSION_TOKEN_KEY);
+}
+
+export function setSessionToken(token: string | null | undefined): void {
+  if (typeof window === 'undefined') return;
+  if (token) localStorage.setItem(SESSION_TOKEN_KEY, token);
+  else localStorage.removeItem(SESSION_TOKEN_KEY);
+}
+
+/**
+ * Real sign-out: invalidates the session token server-side (best-effort,
+ * fire-and-forget — a network hiccup here shouldn't block the local logout
+ * the user is already mid-action on) before clearing it locally. Previously
+ * "logout" only ever cleared localStorage, so a copied token kept working
+ * indefinitely even after the user who copied it signed out.
+ */
+export function signOutClient(): void {
+  if (typeof window === 'undefined') return;
+  const token = getSessionToken();
+  if (token) {
+    fetch('/api/auth/logout', { method: 'POST', headers: authHeaders() }).catch(() => {});
+  }
+  setSessionToken(null);
+  localStorage.removeItem('user');
+}
+
+export function authHeaders(extra?: Record<string, string>): Record<string, string> {
+  const token = getSessionToken();
+  return { ...(extra || {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+}
+
 export type MemberDivision = 'Advisory Board' | 'Core Committee' | 'Training Associate' | 'Alumni' | 'Faculty';
 
 export interface Member {
@@ -963,7 +1003,7 @@ export async function syncWithServer(): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   const requestStartedAt = Date.now();
   try {
-    const res = await fetch('/api/data', { cache: 'no-store' });
+    const res = await fetch('/api/data', { cache: 'no-store', headers: authHeaders() });
     if (!res.ok) return false;
     const data = await res.json();
     if (data && typeof data === 'object') {
@@ -1014,6 +1054,8 @@ function xhrJson(method: 'POST' | 'PATCH', url: string, body: any, onProgress: U
     const xhr = new XMLHttpRequest();
     xhr.open(method, url);
     xhr.setRequestHeader('Content-Type', 'application/json');
+    const token = getSessionToken();
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     xhr.upload.onprogress = (ev) => {
       if (ev.lengthComputable) onProgress(ev.loaded, ev.total);
     };
@@ -1113,7 +1155,7 @@ async function serverPost(endpoint: string, body: any, onProgress?: UploadProgre
   return trackSync(syncLabelFor(endpoint), 'Saving', async () => {
     const res = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(body),
     });
     if (!res.ok) {
@@ -1132,7 +1174,7 @@ async function serverPatch(endpoint: string, id: string, updates: any, onProgres
     const url = `${endpoint}/${id}`;
     const res = await fetch(url, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(updates),
     });
     if (!res.ok) {
@@ -1149,7 +1191,7 @@ async function serverDelete(endpoint: string, id: string, queryParams?: Record<s
   return trackSync(syncLabelFor(endpoint), 'Removing', async () => {
     const qs = queryParams ? `?${new URLSearchParams(queryParams).toString()}` : '';
     const url = `${endpoint}/${id}${qs}`;
-    const res = await fetch(url, { method: 'DELETE' });
+    const res = await fetch(url, { method: 'DELETE', headers: authHeaders() });
     if (!res.ok) {
       const detail = await describeFailedResponse('DELETE', url, res);
       console.warn(`[api] ${detail}`);
@@ -1269,7 +1311,7 @@ export async function approveMemberCreate(id: string, actorName: string): Promis
   logAuditEvent('MEMBER_APPROVED', actorName, `Approved the addition of "${target.name}" to the roster`);
 
   try {
-    await fetch(`/api/members/${id}/resend-activation`, { method: 'POST' });
+    await fetch(`/api/members/${id}/resend-activation`, { method: 'POST', headers: authHeaders() });
   } catch (e) {
     console.error('[approveMemberCreate] Failed to dispatch the welcome email:', e);
   }
@@ -2433,7 +2475,7 @@ export async function uploadTaskAttachments(
   if (files.length === 0) return [];
   const res = await fetch('/api/tasks/attachments', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ recordId, files, startIndex }),
   });
   const data = await res.json().catch(() => ({}));
@@ -4856,7 +4898,7 @@ export async function confirmNewEmailChange(memberId: string, otp: string): Prom
  */
 export async function getEmailLogs(): Promise<any[]> {
   try {
-    const res = await fetch('/api/email');
+    const res = await fetch('/api/email', { headers: authHeaders() });
     if (!res.ok) return [];
     return await res.json();
   } catch (e) {
@@ -4872,7 +4914,7 @@ export async function requestMemberPasswordReset(memberId: string, mustReset: bo
   try {
     const res = await fetch(`/api/members/${memberId}/require-password-reset`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ mustReset }),
     });
     const data = await res.json();
@@ -4894,7 +4936,7 @@ export async function adminSetMemberPassword(memberId: string, newPassword: stri
   try {
     const res = await fetch(`/api/members/${memberId}/set-password`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ newPassword, actorName }),
     });
     const data = await res.json();
@@ -4911,7 +4953,7 @@ export async function adminSetMemberPassword(memberId: string, newPassword: stri
 /**
  * Client Helper: Submit new password via Super User Admin Override (no OTP required)
  */
-export async function submitAdminOverridePasswordReset(email: string, newPassword: string): Promise<{ success: boolean; message?: string; user?: any; error?: string }> {
+export async function submitAdminOverridePasswordReset(email: string, newPassword: string): Promise<{ success: boolean; message?: string; user?: any; token?: string; error?: string }> {
   try {
     const res = await fetch('/api/auth/override-password', {
       method: 'POST',
@@ -4923,7 +4965,7 @@ export async function submitAdminOverridePasswordReset(email: string, newPasswor
       return { success: false, error: data.error || 'Failed to update password via admin override.' };
     }
     await syncWithServer();
-    return { success: true, message: data.message, user: data.user };
+    return { success: true, message: data.message, user: data.user, token: data.token };
   } catch (err: any) {
     return { success: false, error: err.message || 'Network error submitting admin override password reset.' };
   }

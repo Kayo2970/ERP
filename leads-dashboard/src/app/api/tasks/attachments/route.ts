@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { saveBase64File } from '@/lib/file-storage';
+import { requireSession, sessionErrorStatus } from '@/lib/session';
 
 export const maxDuration = 60; // 60s execution limit for large uploads
 
@@ -16,6 +17,10 @@ const MAX_ATTACHMENTS = 5;
  */
 export async function POST(request: Request) {
   try {
+    // Any signed-in member may attach a file to a task they're working with —
+    // the underlying task's own edit permission already gates whether they
+    // can touch that task in the first place elsewhere.
+    await requireSession(request);
     const { recordId, files, startIndex } = await request.json();
     if (!recordId || typeof recordId !== 'string') {
       return NextResponse.json({ error: 'Missing recordId.' }, { status: 400 });
@@ -47,6 +52,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ files: stored }, { status: 201 });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 400 });
   }
 }

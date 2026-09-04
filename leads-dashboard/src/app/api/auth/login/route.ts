@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
 import { readCollection } from '@/lib/server-db';
 import { verifyPassword } from '@/lib/password';
+import { createSession } from '@/lib/session';
+
+// Same message for "no account" and "wrong password" — a distinct message
+// for each lets anyone probe which emails have accounts on this system
+// (submit a guaranteed-wrong password for any address and read the error).
+const INVALID_CREDENTIALS_MESSAGE = "Incorrect email or password. If you forgot your password, click 'Forgot Password?' below.";
 
 /**
  * Real server-side login check. Password verification (scrypt + timing-safe
@@ -20,10 +26,7 @@ export async function POST(request: Request) {
     const matchedUser = members.find(m => m.email.toLowerCase() === trimmedEmail);
 
     if (!matchedUser) {
-      return NextResponse.json(
-        { error: "We couldn't find an account with that email. Contact your committee head if you believe this is a mistake." },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: INVALID_CREDENTIALS_MESSAGE }, { status: 401 });
     }
 
     if (matchedUser.status === 'Terminated') {
@@ -57,15 +60,13 @@ export async function POST(request: Request) {
     }
 
     if (!verifyPassword(password, matchedUser.passwordHash)) {
-      return NextResponse.json(
-        { error: "Incorrect password. If you forgot your password, click 'Forgot Password?' below." },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: INVALID_CREDENTIALS_MESSAGE }, { status: 401 });
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- stripped from the response on purpose
     const { passwordHash, ...safeUser } = matchedUser;
-    return NextResponse.json({ user: safeUser });
+    const token = await createSession(matchedUser.id);
+    return NextResponse.json({ user: safeUser, token });
   } catch (err: any) {
     console.error('[login-api] Error:', err);
     return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });

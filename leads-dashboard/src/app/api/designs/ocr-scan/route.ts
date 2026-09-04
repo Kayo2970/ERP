@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { parseDataUrl } from '@/lib/file-storage';
 import { scanForTextIssues } from '@/lib/ocr-spellcheck';
+import { requireSession, sessionErrorStatus } from '@/lib/session';
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB, matches the Design Portal upload cap
 
@@ -13,6 +14,7 @@ const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB, matches the Design Porta
  */
 export async function POST(request: Request) {
   try {
+    await requireSession(request);
     const { fileData, fileType } = await request.json();
 
     if (typeof fileData !== 'string' || !fileData.startsWith('data:')) {
@@ -33,6 +35,8 @@ export async function POST(request: Request) {
     const result = await scanForTextIssues(buffer, effectiveMime);
     return NextResponse.json(result);
   } catch (err: any) {
+    const status = sessionErrorStatus(err);
+    if (status) return NextResponse.json({ error: err.message }, { status });
     console.error('[ocr-scan] Scan failed:', err);
     return NextResponse.json({ error: err?.message || 'OCR scan failed.' }, { status: 500 });
   }

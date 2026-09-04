@@ -2,9 +2,18 @@ import { NextResponse } from 'next/server';
 import { dispatchEmail } from '@/lib/email-service';
 import { readCollection } from '@/lib/server-db';
 import { Member } from '@/lib/local-data';
+import { requireSession, sessionErrorStatus } from '@/lib/session';
 
+// This route is used by real app features beyond the admin Email Management
+// panel (e.g. member-termination notices from Directory, guest-invite
+// mail-merge sends), so it is gated with requireSession only — any signed-in
+// member may dispatch mail through it. The specific workflows that call it
+// each already enforce their own permission check before reaching here
+// (e.g. canTerminateMember, canManageGuestInvites); the admin Email
+// Management page itself is a normal authenticated feature too.
 export async function POST(request: Request) {
   try {
+    await requireSession(request);
     const body = await request.json();
     const { scope, recipientEmail, subject, bodyText, bodyHtml, category, badgeText, badgeColor } = body;
 
@@ -58,6 +67,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ count: dispatchedLogs.length, dispatched: dispatchedLogs });
   } catch (err: any) {
+    const status = sessionErrorStatus(err);
+    if (status) return NextResponse.json({ error: err.message }, { status });
     return NextResponse.json({ error: err?.message || 'Failed to send emails' }, { status: 500 });
   }
 }

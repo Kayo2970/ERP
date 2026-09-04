@@ -27,7 +27,7 @@ import {
   CheckCircle2,
   Scan,
 } from 'lucide-react';
-import { getGuests, addGuest, updateGuest, deleteGuest, Guest } from '@/lib/local-data';
+import { getGuests, addGuest, updateGuest, deleteGuest, Guest, authHeaders } from '@/lib/local-data';
 import { canAccessGuestDirectory, canEditGuestRecord, canRemoveGuestContact, isRestrictedGuestEditor, canViewGuestRecord } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -260,7 +260,7 @@ export default function GuestDirectoryPage() {
     try {
       const res = await fetch('/api/guests/ocr', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ frontData: fData, backData: bData || undefined }),
       });
 

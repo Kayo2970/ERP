@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { randomInt } from 'crypto';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { dispatchEmail, generateEmailChangeOtpTemplate } from '@/lib/email-service';
+import { requireSession, sessionErrorStatus } from '@/lib/session';
 
 /**
  * Self-service email change, step 1 of 3. Anyone who knows the account's
@@ -15,9 +16,13 @@ import { dispatchEmail, generateEmailChangeOtpTemplate } from '@/lib/email-servi
  */
 export async function POST(request: Request) {
   try {
+    const actor = await requireSession(request);
     const { memberId, currentEmail, newEmail } = await request.json();
     if (!memberId || !currentEmail || !newEmail || typeof newEmail !== 'string') {
       return NextResponse.json({ error: 'Current account and a new email address are required.' }, { status: 400 });
+    }
+    if (actor.id !== memberId) {
+      return NextResponse.json({ error: 'You can only request an email change for your own account.' }, { status: 403 });
     }
 
     const trimmedCurrent = currentEmail.trim().toLowerCase();
@@ -74,6 +79,8 @@ export async function POST(request: Request) {
       expiresAt,
     });
   } catch (err: any) {
+    const status = sessionErrorStatus(err);
+    if (status) return NextResponse.json({ error: err.message }, { status });
     console.error('[request-email-change-api] Error:', err);
     return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
   }

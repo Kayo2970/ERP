@@ -13,7 +13,7 @@ import {
   AlertTriangle,
   FileQuestion,
 } from 'lucide-react';
-import { logAuditEvent, getSystemSettings, updateSystemSettings } from '@/lib/local-data';
+import { logAuditEvent, getSystemSettings, updateSystemSettings, authHeaders } from '@/lib/local-data';
 import { canManageBackup } from '@/lib/permissions';
 import { EmptyState } from '@/components/ui/empty-state';
 import { FileDropzone, FilePreviewRow, createProgressTracker, uploadFormData } from '@/components/ui/file-dropzone';
@@ -80,7 +80,7 @@ export default function BackupRestorePage() {
     try {
       const res = await fetch('/api/backup', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ passphrase: backupPassphrase }),
       });
       if (!res.ok) {

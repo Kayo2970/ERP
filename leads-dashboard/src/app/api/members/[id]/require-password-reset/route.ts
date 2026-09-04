@@ -1,16 +1,28 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection } from '@/lib/server-db';
+import { requireSession, sessionErrorStatus } from '@/lib/session';
+import { getAccessLevelSettingsServer, isCentreHead } from '@/lib/permissions-server';
 
 /**
  * Super User Admin Override: Request or cancel password reset requirement for a member.
  * When set to true, the member will be prompted to set up a new password upon entering
  * their email on the login page, without needing an OTP code.
+ *
+ * This just flips the mustSetupPassword flag (asks the member to choose their
+ * own new password on next login) rather than setting a password directly, so
+ * it's gated as the Centre-Head-can-request-reset action, not the Super-User-
+ * only canSetMemberPassword action.
  */
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const actor = await requireSession(request);
+    const settings = await getAccessLevelSettingsServer();
+    if (!(isCentreHead(actor, settings) || actor.tier === 1)) {
+      return NextResponse.json({ error: 'You do not have permission to request a password reset for this member.' }, { status: 403 });
+    }
     const { id } = await params;
     const body = await request.json().catch(() => ({}));
     const mustReset = body.mustReset !== undefined ? Boolean(body.mustReset) : true;
@@ -61,6 +73,8 @@ export async function POST(
         : `Password setup request cleared for ${memberName}.`,
     });
   } catch (err: any) {
+    const status = sessionErrorStatus(err);
+    if (status) return NextResponse.json({ error: err.message }, { status });
     console.error('[require-password-reset-api] Error:', err);
     return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
   }

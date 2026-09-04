@@ -1,11 +1,16 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection } from '@/lib/server-db';
+import { requireSession, sessionErrorStatus, ForbiddenError } from '@/lib/session';
+import { getAccessLevelSettingsServer, canBuildForms, canDeleteForms } from '@/lib/permissions-server';
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const actor = await requireSession(request);
+    const settings = await getAccessLevelSettingsServer();
+    if (!canBuildForms(actor, settings)) throw new ForbiddenError();
     const { id } = await params;
     const updates = await request.json();
     // Upsert: if this id isn't in the server's collection yet (e.g. client-bundled
@@ -20,15 +25,19 @@ export async function PATCH(
     });
     return NextResponse.json(updated.find((f: any) => f.id === id));
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 400 });
   }
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const actor = await requireSession(request);
+    const settings = await getAccessLevelSettingsServer();
+    if (!canDeleteForms(actor, settings)) throw new ForbiddenError();
     const { id } = await params;
     let found = false;
     let deletedSlug: string | undefined;
@@ -52,6 +61,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 500 });
   }
 }

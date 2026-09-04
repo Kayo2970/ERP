@@ -1,15 +1,32 @@
 import { NextResponse } from 'next/server';
-import { mutateCollection } from '@/lib/server-db';
+import { mutateCollection, readCollection } from '@/lib/server-db';
 import { dispatchAnnouncementEmails } from '@/lib/announcement-email';
 import { cascadeCloseAutoApprovals } from '@/lib/approval-sync';
+import { requireSession, sessionErrorStatus, ForbiddenError } from '@/lib/session';
+import { getAccessLevelSettingsServer, canCreateAnnouncement, canApproveAnnouncement, isCentreHead } from '@/lib/permissions-server';
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const actor = await requireSession(request);
     const { id } = await params;
     const updates = await request.json();
+    const settings = await getAccessLevelSettingsServer();
+
+    // The approve/reject decision (status flipping to Approved/Rejected) is
+    // gated separately from a plain pre-approval edit by the author.
+    const isApprovalAction = updates.status === 'Approved' || updates.status === 'Rejected';
+    if (isApprovalAction) {
+      if (!canApproveAnnouncement(actor, settings)) throw new ForbiddenError();
+    } else {
+      const existingAnnouncements = await readCollection<any>('announcements');
+      const existing = existingAnnouncements.find((a: any) => a.id === id);
+      const isAuthor = !!existing && actor.id === existing.authorId;
+      if (!isAuthor && !canCreateAnnouncement(actor, settings)) throw new ForbiddenError();
+    }
+
     let isNewlyApproved = false;
     let isNewlyRejected = false;
 
@@ -47,15 +64,19 @@ export async function PATCH(
 
     return NextResponse.json(targetAnnouncement);
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 400 });
   }
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const actor = await requireSession(request);
+    const settings = await getAccessLevelSettingsServer();
+    if (!isCentreHead(actor, settings) && actor.tier !== 1) throw new ForbiddenError();
     const { id } = await params;
     let found = false;
     await mutateCollection('announcements', (current) => {
@@ -66,6 +87,7 @@ export async function DELETE(
     if (!found) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 500 });
   }
 }

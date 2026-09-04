@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { dispatchEmail, generateEventRosterEmailTemplate } from '@/lib/email-service';
 import { fanOutAutoApproval } from '@/lib/approval-sync';
+import { requireSession, sessionErrorStatus } from '@/lib/session';
 
 const PENDING_APPROVAL_MESSAGE: Record<string, string> = {
   pending_create: 'This event was created and needs sign-off from the Centre Head, Advisor, or GG Campus Events Head before it goes live.',
@@ -9,13 +10,24 @@ const PENDING_APPROVAL_MESSAGE: Record<string, string> = {
   pending_delete: 'A request to delete this event needs sign-off from the Centre Head, Advisor, or GG Campus Events Head.',
 };
 
-export async function GET() {
-  const items = await readCollection('events');
-  return NextResponse.json(items);
+export async function GET(request: Request) {
+  try {
+    await requireSession(request);
+    const items = await readCollection('events');
+    return NextResponse.json(items);
+  } catch (err: any) {
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 500 });
+  }
 }
 
 export async function POST(request: Request) {
   try {
+    // Route already branches into a pending-approval path (approvalStatus /
+    // approverType computed by the client) when the actor isn't fully
+    // trusted — see the fan-out block below — so the gate here is just
+    // "must be a real signed-in member," not a hard canCreateEvent check.
+    await requireSession(request);
     const item = await request.json();
     const updated = await mutateCollection('events', (current) => {
       const idx = current.findIndex((e: any) => e.id === item.id);
@@ -87,6 +99,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(created, { status: 201 });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 400 });
   }
 }

@@ -1,12 +1,22 @@
 import { NextResponse } from 'next/server';
-import { mutateCollection } from '@/lib/server-db';
+import { mutateCollection, readCollection } from '@/lib/server-db';
+import { requireSession, requirePermission, sessionErrorStatus } from '@/lib/session';
+import { canEditRating, getAccessLevelSettingsServer } from '@/lib/permissions-server';
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const actor = await requireSession(request);
     const { id } = await params;
+    const settings = await getAccessLevelSettingsServer();
+    const existing = await readCollection<any>('ratings');
+    const target = existing.find((r: any) => r.id === id) || null;
+    // A not-yet-existent id (client-bundled sample/seed data never POSTed)
+    // has no author to check ownership against — canEditRating then only
+    // allows the Super User/Centre Head, which is the safe default here.
+    requirePermission(canEditRating(target, actor, settings), 'You do not have permission to edit this rating.');
     const updates = await request.json();
     // Upsert: if this id isn't in the server's collection yet (e.g. client-bundled
     // sample/seed data never POSTed), create it instead of 404ing and silently
@@ -21,16 +31,23 @@ export async function PATCH(
     });
     return NextResponse.json(updated.find((r: any) => r.id === id));
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 400 });
   }
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const actor = await requireSession(request);
     const { id } = await params;
+    const settings = await getAccessLevelSettingsServer();
+    const existing = await readCollection<any>('ratings');
+    const target = existing.find((r: any) => r.id === id);
+    if (!target) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    requirePermission(canEditRating(target, actor, settings), 'You do not have permission to delete this rating.');
     let found = false;
     await mutateCollection('ratings', (current) => {
       const filtered = current.filter((r: any) => r.id !== id);
@@ -40,6 +57,7 @@ export async function DELETE(
     if (!found) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 500 });
   }
 }

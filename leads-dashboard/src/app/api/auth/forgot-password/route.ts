@@ -15,10 +15,15 @@ export async function POST(request: Request) {
     const member = members.find((m: any) => m.email.toLowerCase() === trimmedEmail);
 
     if (!member) {
-      return NextResponse.json(
-        { error: "No registered account found with that email address. Please contact your committee head." },
-        { status: 440 }
-      );
+      // Deliberately indistinguishable from the "OTP sent" success response
+      // below — a distinct "no account found" message here would let anyone
+      // enumerate which emails have accounts by submitting them one at a time.
+      return NextResponse.json({
+        success: true,
+        message: `If an account exists for ${trimmedEmail}, a verification code has been sent to it. Valid for 5 minutes.`,
+        email: trimmedEmail,
+        expiresAt: Date.now() + 5 * 60 * 1000,
+      });
     }
 
     if (member.mustSetupPassword) {

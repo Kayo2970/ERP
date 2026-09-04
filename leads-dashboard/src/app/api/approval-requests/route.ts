@@ -1,14 +1,24 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { dispatchEmail, wrapInMasterEmailTemplate } from '@/lib/email-service';
+import { requireSession, sessionErrorStatus } from '@/lib/session';
 
-export async function GET() {
-  const items = await readCollection('approvalRequests');
-  return NextResponse.json(items);
+export async function GET(request: Request) {
+  try {
+    await requireSession(request);
+    const items = await readCollection('approvalRequests');
+    return NextResponse.json(items);
+  } catch (err: any) {
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 500 });
+  }
 }
 
 export async function POST(request: Request) {
   try {
+    // Any signed-in member may ask another member to approve something they
+    // own/created; the target member's own consent is enforced at decide time.
+    await requireSession(request);
     const item = await request.json();
     const updated = await mutateCollection('approvalRequests', (current) => {
       const idx = current.findIndex((r: any) => r.id === item.id);
@@ -63,6 +73,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(created, { status: 201 });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 400 });
   }
 }

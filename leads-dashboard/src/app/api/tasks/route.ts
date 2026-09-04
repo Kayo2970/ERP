@@ -2,19 +2,31 @@ import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { enqueueTaskEmailNotification, resolveTaskEmailRecipients } from '@/lib/task-email-queue';
 import { fanOutAutoApproval } from '@/lib/approval-sync';
+import { requireSession, sessionErrorStatus } from '@/lib/session';
 
 const PENDING_APPROVAL_MESSAGE: Record<string, string> = {
   pending_create: 'This task needs sign-off from the Centre Head, Advisor, or GG Campus Events Head before it is allotted.',
   pending_edit: 'An edit to this task needs sign-off from the Centre Head, Advisor, or GG Campus Events Head.',
 };
 
-export async function GET() {
-  const items = await readCollection('tasks');
-  return NextResponse.json(items);
+export async function GET(request: Request) {
+  try {
+    await requireSession(request);
+    const items = await readCollection('tasks');
+    return NextResponse.json(items);
+  } catch (err: any) {
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 500 });
+  }
 }
 
 export async function POST(request: Request) {
   try {
+    // Route already branches into a pending-approval path (approvalStatus /
+    // approverType computed by the client) when the actor isn't fully
+    // trusted — see the fan-out block below — so the gate here is just
+    // "must be a real signed-in member," not a hard canCreateTask check.
+    await requireSession(request);
     const item = await request.json();
     const updated = await mutateCollection('tasks', (current) => {
       const idx = current.findIndex((t: any) => t.id === item.id);
@@ -78,6 +90,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(created, { status: 201 });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 400 });
   }
 }
