@@ -51,7 +51,7 @@ import {
   TaskItem,
   OcrScanResult
 } from '@/lib/local-data';
-import { canViewAllDesigns, isDesignHead, isCentreHead, hasCapability } from '@/lib/permissions';
+import { canViewAllDesigns, isDesignHead, isCentreHead, hasCapability, canReviewDesignProofread } from '@/lib/permissions';
 
 /** Renders an OCR scan's flagged spelling issues + extracted text preview. Advisory only. */
 function OcrScanPanel({
@@ -747,15 +747,17 @@ export default function DesignPortalPage() {
       return d.designerEmail === user?.email;
     }
     if (activeTab === 'proofread') {
-      return d.assignedProofreaderEmail === user?.email || canViewAllDesigns(user);
+      return d.assignedProofreaderEmail === user?.email || canReviewDesignProofread(user) || canViewAllDesigns(user);
     }
     if (activeTab === 'expired') {
       return d.isExpired;
     }
 
-    // Default "all" tab: plain designers only see their own + anything assigned to them
+    // Default "all" tab: plain designers only see their own + anything assigned to
+    // them or actionable by them (Centre Head/Advisor/GG Campus Events Head, any
+    // one of whom can act on a pending proofread regardless of who it was routed to)
     if (!canViewAllDesigns(user)) {
-      return d.designerEmail === user?.email || d.assignedProofreaderEmail === user?.email;
+      return d.designerEmail === user?.email || d.assignedProofreaderEmail === user?.email || canReviewDesignProofread(user);
     }
 
     return true;
@@ -766,7 +768,14 @@ export default function DesignPortalPage() {
   const pendingProofreads = designs.filter(d => d.proofreadRequested && d.review?.status === 'Pending Proofread').length;
   const approvedDesigns = designs.filter(d => d.review?.status === 'Proofread Approved').length;
   const expiredCount = designs.filter(d => d.isExpired).length;
-  const assignedToMeCount = designs.filter(d => d.proofreadRequested && d.assignedProofreaderEmail === user?.email && d.review?.status === 'Pending Proofread').length;
+  // "Assigned to me" now means any design awaiting proofread that THIS viewer can
+  // actually act on — either they're the routed assignedProofreader, or they hold
+  // one of the three eligible reviewer roles (Centre Head/Advisor/GG Events Head).
+  const assignedToMeCount = designs.filter(d =>
+    d.proofreadRequested &&
+    d.review?.status === 'Pending Proofread' &&
+    (d.assignedProofreaderEmail === user?.email || canReviewDesignProofread(user))
+  ).length;
 
   // Design-brief Tasks (Tasks module, taskCategory === 'design') waiting on
   // a submission here — visible to the assigned designer, plus anyone who
@@ -1035,7 +1044,10 @@ export default function DesignPortalPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredDesigns.map(design => {
             const daysRemaining = getDaysRemaining(design.expiresAt);
-            const isAssignedToMe = design.assignedProofreaderEmail === user?.email;
+            // Any one of the three eligible reviewers (Centre Head/Advisor/GG Campus
+            // Events Head) can act on a pending proofread, not just whoever it was
+            // routed to — see canReviewDesignProofread.
+            const isAssignedToMe = design.assignedProofreaderEmail === user?.email || canReviewDesignProofread(user);
 
             return (
               <div
@@ -1872,7 +1884,7 @@ export default function DesignPortalPage() {
                       )}
                     </div>
 
-                    {(selectedDesign.assignedProofreaderEmail === user?.email || canViewAllDesigns(user)) ? (
+                    {(selectedDesign.assignedProofreaderEmail === user?.email || canReviewDesignProofread(user) || canViewAllDesigns(user)) ? (
                       <form onSubmit={handleReviewCaptions} className="space-y-3 pt-1">
                         <div className="flex items-center gap-4">
                           <label className="flex items-center gap-2 cursor-pointer font-medium">
@@ -2052,8 +2064,10 @@ export default function DesignPortalPage() {
                 </div>
               )}
 
-              {/* Reviewer Action Controls */}
-              {(selectedDesign.assignedProofreaderEmail === user?.email || canViewAllDesigns(user)) ? (
+              {/* Reviewer Action Controls — any one of the Centre Head, Advisor, or GG
+                  Campus Events Head can act on a pending proofread, not just whoever
+                  it happens to be routed to (see canReviewDesignProofread). */}
+              {(selectedDesign.assignedProofreaderEmail === user?.email || canReviewDesignProofread(user) || canViewAllDesigns(user)) ? (
                 <form onSubmit={handleSaveReview} className="space-y-3 text-xs bg-muted/20 p-4 rounded-xl border border-border">
                   <p className="font-medium text-foreground">Update Proofreading Decision:</p>
 

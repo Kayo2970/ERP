@@ -70,6 +70,15 @@ export function canReviewEventReports(user: SessionUser): boolean {
   return isCentreHead(user) || isEventsHeadGgCampus(user);
 }
 
+/** Who may act on a design's pending proofread request — Centre Head (which
+ *  already folds in Advisor, see isCentreHead) or the GG Campus Events Head;
+ *  any one of the three acting is sufficient, not all of them. Mirrors
+ *  canReviewEventReports and the design's own Style Approval gate, which
+ *  already treats this trio as interchangeable reviewers. */
+export function canReviewDesignProofread(user: SessionUser): boolean {
+  return isCentreHead(user) || isEventsHeadGgCampus(user);
+}
+
 /**
  * Full standing access to the Event Report module (submit for anyone, review
  * every submission, see every past report) — Centre Head/Advisor, GG Campus

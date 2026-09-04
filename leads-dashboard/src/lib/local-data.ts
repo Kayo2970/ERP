@@ -4096,6 +4096,11 @@ export function resolveDesignReviewer(): { id: string; name: string; email: stri
   });
   if (centreHead) return { id: centreHead.id, name: centreHead.name, email: centreHead.email };
 
+  // Whole-word "advisor" match, mirroring isCentreHead()/findApprovalRecipients()
+  // — deliberately excludes "Advisory Board Member" (division) etc.
+  const advisor = members.find(m => /\badvisor\b/.test((m.role || '').toLowerCase()));
+  if (advisor) return { id: advisor.id, name: advisor.name, email: advisor.email };
+
   const ggEventsHead = members.find(m => {
     const role = (m.role || '').toLowerCase();
     const committee = (m.committee || '').toLowerCase();

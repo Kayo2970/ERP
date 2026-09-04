@@ -25,6 +25,8 @@ export async function PATCH(
 
     let justStyleApproved = false;
     let justStyleRejected = false;
+    let justProofreadApproved = false;
+    let justProofreadRejected = false;
     let mergedRecord: any = null;
 
     // Upsert: if this id isn't in the server's collection yet (e.g. client-bundled
@@ -40,12 +42,21 @@ export async function PATCH(
       const previousStyleStatus = next[idx].styleStatus;
       const wasStyleApproved = previousStyleStatus === 'Style Approved';
       const wasStyleRejected = previousStyleStatus === 'Style Rejected';
+      const previousReviewStatus = next[idx].review?.status;
+      const wasProofreadApproved = previousReviewStatus === 'Proofread Approved';
+      const wasProofreadRejected = previousReviewStatus === 'Changes Requested';
       const merged = { ...next[idx], ...body };
       if (!wasStyleApproved && merged.styleStatus === 'Style Approved') {
         justStyleApproved = true;
       }
       if (!wasStyleRejected && merged.styleStatus === 'Style Rejected') {
         justStyleRejected = true;
+      }
+      if (!wasProofreadApproved && merged.review?.status === 'Proofread Approved') {
+        justProofreadApproved = true;
+      }
+      if (!wasProofreadRejected && merged.review?.status === 'Changes Requested') {
+        justProofreadRejected = true;
       }
       next[idx] = merged;
       mergedRecord = merged;
@@ -66,6 +77,17 @@ export async function PATCH(
         await cascadeCloseAutoApprovals('design', id, justStyleApproved ? 'approved' : 'rejected', mergedRecord?.styleDecidedBy);
       } catch (approvalErr) {
         console.error('[designs-api] Approval cascade-close failed:', approvalErr);
+      }
+    }
+
+    // Same cascade-close for the proofread decision — whichever of the Centre
+    // Head/Advisor/GG Campus Events Head approved or requested changes resolves
+    // the pending fan-out for the other two panel members as well.
+    if (justProofreadApproved || justProofreadRejected) {
+      try {
+        await cascadeCloseAutoApprovals('design', id, justProofreadApproved ? 'approved' : 'rejected', mergedRecord?.review?.proofreaderName);
+      } catch (approvalErr) {
+        console.error('[designs-api] Proofread approval cascade-close failed:', approvalErr);
       }
     }
 
