@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection } from '@/lib/server-db';
 import { hashPassword } from '@/lib/password';
-import { requireSession, sessionErrorStatus, invalidateAllSessionsForMember } from '@/lib/session';
+import { requireSession, invalidateAllSessionsForMember } from '@/lib/session';
 import { canSetMemberPassword } from '@/lib/permissions-server';
+import { apiError } from '@/lib/api-error';
 
 /**
  * Super User Admin Override: directly set a member's password. Unlike
@@ -79,9 +80,6 @@ export async function POST(
       message: `Password updated for ${memberName}. They can log in immediately with the new password.`,
     });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    if (status) return NextResponse.json({ error: err.message }, { status });
-    console.error('[set-password-api] Error:', err);
-    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
+    return apiError(err, 'members-id-set-password-api-post', 500);
   }
 }

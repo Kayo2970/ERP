@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { dispatchEmail } from '@/lib/email-service';
 import { readCollection } from '@/lib/server-db';
 import { Member } from '@/lib/local-data';
-import { requireSession, sessionErrorStatus } from '@/lib/session';
+import { requireSession } from '@/lib/session';
+import { apiError } from '@/lib/api-error';
 
 // This route is used by real app features beyond the admin Email Management
 // panel (e.g. member-termination notices from Directory, guest-invite
@@ -67,8 +68,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ count: dispatchedLogs.length, dispatched: dispatchedLogs });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    if (status) return NextResponse.json({ error: err.message }, { status });
-    return NextResponse.json({ error: err?.message || 'Failed to send emails' }, { status: 500 });
+    return apiError(err, 'email-send-api-post', 500);
   }
 }

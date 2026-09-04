@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createEncryptedBackup } from '@/lib/backup';
-import { requireSession, sessionErrorStatus } from '@/lib/session';
+import { requireSession } from '@/lib/session';
 import { canManageBackup } from '@/lib/permissions-server';
+import { apiError } from '@/lib/api-error';
 
 export async function POST(request: Request) {
   try {
@@ -26,8 +27,6 @@ export async function POST(request: Request) {
       },
     });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    if (status) return NextResponse.json({ error: err.message }, { status });
-    return NextResponse.json({ error: err.message || 'Failed to create backup.' }, { status: 500 });
+    return apiError(err, 'backup-api-post', 500);
   }
 }

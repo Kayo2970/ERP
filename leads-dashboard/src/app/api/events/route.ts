@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { dispatchEmail, generateEventRosterEmailTemplate } from '@/lib/email-service';
 import { fanOutAutoApproval } from '@/lib/approval-sync';
-import { requireSession, sessionErrorStatus } from '@/lib/session';
+import { requireSession } from '@/lib/session';
+import { apiError } from '@/lib/api-error';
 
 const PENDING_APPROVAL_MESSAGE: Record<string, string> = {
   pending_create: 'This event was created and needs sign-off from the Centre Head, Advisor, or GG Campus Events Head before it goes live.',
@@ -16,8 +17,7 @@ export async function GET(request: Request) {
     const items = await readCollection('events');
     return NextResponse.json(items);
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 500 });
+    return apiError(err, 'events-api-get', 500);
   }
 }
 
@@ -99,7 +99,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json(created, { status: 201 });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 400 });
+    return apiError(err, 'events-api-post', 400);
   }
 }

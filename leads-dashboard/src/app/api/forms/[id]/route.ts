@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection } from '@/lib/server-db';
-import { requireSession, sessionErrorStatus, ForbiddenError } from '@/lib/session';
+import { requireSession, ForbiddenError } from '@/lib/session';
 import { getAccessLevelSettingsServer, canBuildForms, canDeleteForms } from '@/lib/permissions-server';
+import { apiError } from '@/lib/api-error';
 
 export async function PATCH(
   request: Request,
@@ -25,8 +26,7 @@ export async function PATCH(
     });
     return NextResponse.json(updated.find((f: any) => f.id === id));
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 400 });
+    return apiError(err, 'forms-id-api-patch', 400);
   }
 }
 
@@ -61,7 +61,6 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 500 });
+    return apiError(err, 'forms-id-api-delete', 500);
   }
 }

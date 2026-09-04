@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection } from '@/lib/server-db';
-import { requireSession, sessionErrorStatus, ForbiddenError } from '@/lib/session';
+import { requireSession, ForbiddenError } from '@/lib/session';
 import { getAccessLevelSettingsServer, canBuildForms } from '@/lib/permissions-server';
+import { apiError } from '@/lib/api-error';
 
 export async function DELETE(
   request: Request,
@@ -21,7 +22,6 @@ export async function DELETE(
     if (!found) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 500 });
+    return apiError(err, 'form-templates-id-api-delete', 500);
   }
 }

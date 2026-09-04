@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
-import { requireSession, sessionErrorStatus } from '@/lib/session';
+import { requireSession } from '@/lib/session';
 import { canChangeTaskStatus, getAccessLevelSettingsServer } from '@/lib/permissions-server';
+import { apiError } from '@/lib/api-error';
 
 export async function POST(request: Request) {
   try {
@@ -54,8 +55,7 @@ export async function POST(request: Request) {
       tasks: updatedTasks,
     });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message || 'Failed to acknowledge tasks.' }, { status: status || 500 });
+    return apiError(err, 'tasks-ack-api-post', 500);
   }
 }
 
@@ -106,7 +106,6 @@ export async function GET(request: Request) {
       tasks: updatedTasks,
     });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message || 'Failed to acknowledge tasks.' }, { status: status || 500 });
+    return apiError(err, 'tasks-ack-api-get', 500);
   }
 }

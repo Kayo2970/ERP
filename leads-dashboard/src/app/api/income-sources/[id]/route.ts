@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection } from '@/lib/server-db';
-import { requireSession, requirePermission, sessionErrorStatus } from '@/lib/session';
+import { requireSession, requirePermission } from '@/lib/session';
 import { getAccessLevelSettingsServer, isCentreHead, isFinanceHead } from '@/lib/permissions-server';
+import { apiError } from '@/lib/api-error';
 
 async function canManageIncomeSources(actor: any) {
   const settings = await getAccessLevelSettingsServer();
@@ -35,8 +36,7 @@ export async function PATCH(
 
     return NextResponse.json(updatedItem);
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 500 });
+    return apiError(err, 'income-sources-id-api-patch', 500);
   }
 }
 
@@ -52,7 +52,6 @@ export async function DELETE(
     await mutateCollection('incomeSources', (current) => current.filter((i: any) => i.id !== id));
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 500 });
+    return apiError(err, 'income-sources-id-api-delete', 500);
   }
 }

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import { restoreEncryptedBackup, InvalidPassphraseError } from '@/lib/backup';
-import { requireSession, sessionErrorStatus } from '@/lib/session';
+import { restoreEncryptedBackup } from '@/lib/backup';
+import { requireSession } from '@/lib/session';
 import { canManageBackup } from '@/lib/permissions-server';
+import { apiError } from '@/lib/api-error';
 
 export async function POST(request: Request) {
   try {
@@ -24,11 +25,6 @@ export async function POST(request: Request) {
     const summary = await restoreEncryptedBackup(buffer, passphrase);
     return NextResponse.json(summary);
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    if (status) return NextResponse.json({ error: err.message }, { status });
-    if (err instanceof InvalidPassphraseError) {
-      return NextResponse.json({ error: err.message }, { status: 400 });
-    }
-    return NextResponse.json({ error: err.message || 'Failed to restore backup.' }, { status: 500 });
+    return apiError(err, 'backup-restore-api-post', 400);
   }
 }

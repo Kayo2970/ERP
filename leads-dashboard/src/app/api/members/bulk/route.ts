@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection } from '@/lib/server-db';
 import { createActivationTokenAndSendEmail } from '@/lib/account-activation';
-import { requireSession, sessionErrorStatus, invalidateAllSessionsForMember } from '@/lib/session';
+import { requireSession, invalidateAllSessionsForMember } from '@/lib/session';
 import { getAccessLevelSettingsServer, canAddMember, canEditDirectory, canTerminateMember } from '@/lib/permissions-server';
 import { isKayomarzIdentity, countActiveSuperUsersServer, PRIVILEGED_FIELDS } from '@/lib/member-guard';
+import { apiError } from '@/lib/api-error';
 
 /**
  * Bulk member create/update/delete — one read-modify-write of members.json
@@ -85,8 +86,7 @@ export async function POST(request: Request) {
       skipped,
     }, { status: 201 });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 400 });
+    return apiError(err, 'members-bulk-api-post', 400);
   }
 }
 
@@ -138,8 +138,7 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json(updated.filter((m: any) => idSet.has(m.id)));
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 400 });
+    return apiError(err, 'members-bulk-api-patch', 400);
   }
 }
 
@@ -178,7 +177,6 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ success: true, deletedIds });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 500 });
+    return apiError(err, 'members-bulk-api-delete', 500);
   }
 }

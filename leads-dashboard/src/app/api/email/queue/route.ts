@@ -5,8 +5,9 @@ import {
   cancelTaskEmailQueue,
   cancelAllTaskEmailQueues
 } from '@/lib/task-email-queue';
-import { requireSession, sessionErrorStatus } from '@/lib/session';
+import { requireSession } from '@/lib/session';
 import { getAccessLevelSettingsServer, canManageEmailSettings } from '@/lib/permissions-server';
+import { apiError } from '@/lib/api-error';
 
 export async function GET(request: Request) {
   try {
@@ -18,9 +19,7 @@ export async function GET(request: Request) {
     const queues = getPendingTaskQueues();
     return NextResponse.json({ count: queues.length, queues });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    if (status) return NextResponse.json({ error: err.message }, { status });
-    return NextResponse.json({ error: err?.message || 'Failed to fetch pending queues' }, { status: 500 });
+    return apiError(err, 'email-queue-api-get', 500);
   }
 }
 
@@ -39,9 +38,7 @@ export async function POST(request: Request) {
     await flushTaskEmailDigest(email);
     return NextResponse.json({ success: true, message: `Successfully flushed task queue for ${email}` });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    if (status) return NextResponse.json({ error: err.message }, { status });
-    return NextResponse.json({ error: err?.message || 'Failed to flush queue' }, { status: 500 });
+    return apiError(err, 'email-queue-api-post', 500);
   }
 }
 
@@ -72,8 +69,6 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: `No active queue found for ${email}` }, { status: 404 });
     }
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    if (status) return NextResponse.json({ error: err.message }, { status });
-    return NextResponse.json({ error: err?.message || 'Failed to cancel queue' }, { status: 500 });
+    return apiError(err, 'email-queue-api-delete', 500);
   }
 }

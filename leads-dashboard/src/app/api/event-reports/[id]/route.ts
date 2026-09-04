@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { mutateCollection, readCollection } from '@/lib/server-db';
 import { saveBase64File, deleteStoredFile, deleteStoredFilesForRecord, readStoredFile } from '@/lib/file-storage';
 import { cascadeCloseAutoApprovals } from '@/lib/approval-sync';
-import { requireSession, sessionErrorStatus, ForbiddenError } from '@/lib/session';
+import { requireSession, ForbiddenError } from '@/lib/session';
 import { getAccessLevelSettingsServer, canReviewEventReports } from '@/lib/permissions-server';
+import { apiError } from '@/lib/api-error';
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
 
@@ -168,8 +169,7 @@ export async function PATCH(
 
     return NextResponse.json(mergedRecord || updated.find((r: any) => r.id === id));
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 500 });
+    return apiError(err, 'event-reports-id-api-patch', 500);
   }
 }
 
@@ -196,7 +196,6 @@ export async function DELETE(
     await deleteStoredFilesForRecord('event-reports', id);
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 500 });
+    return apiError(err, 'event-reports-id-api-delete', 500);
   }
 }

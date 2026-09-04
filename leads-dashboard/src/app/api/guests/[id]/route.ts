@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection, readCollection } from '@/lib/server-db';
 import { deleteStoredFile, deleteStoredFilesForRecord, saveBase64File } from '@/lib/file-storage';
-import { requireSession, sessionErrorStatus, ForbiddenError } from '@/lib/session';
+import { requireSession, ForbiddenError } from '@/lib/session';
 import { getAccessLevelSettingsServer, canEditGuestRecord, canRemoveGuestContact } from '@/lib/permissions-server';
+import { apiError } from '@/lib/api-error';
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -76,8 +77,7 @@ export async function PATCH(
     const target = updated.find((g: any) => g.id === id);
     return NextResponse.json(target);
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 500 });
+    return apiError(err, 'guests-id-api-patch', 500);
   }
 }
 
@@ -100,7 +100,6 @@ export async function DELETE(
     await deleteStoredFilesForRecord('guests', id);
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 500 });
+    return apiError(err, 'guests-id-api-delete', 500);
   }
 }

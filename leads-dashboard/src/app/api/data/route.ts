@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { readDb } from '@/lib/server-db';
-import { requireSession, sessionErrorStatus } from '@/lib/session';
+import { requireSession } from '@/lib/session';
+import { apiError } from '@/lib/api-error';
 
 // This route is the one every signed-in client polls every ~7s for live
 // cross-session sync — it's the prime suspect for a "single dependency
@@ -41,8 +42,6 @@ export async function GET(request: Request) {
       },
     });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    if (status) return NextResponse.json({ error: err.message }, { status });
-    return NextResponse.json({ error: err.message || 'Failed to read database' }, { status: 500 });
+    return apiError(err, 'data-api-get');
   }
 }

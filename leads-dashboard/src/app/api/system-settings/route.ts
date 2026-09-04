@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
-import { requireSession, requirePermission, sessionErrorStatus } from '@/lib/session';
+import { requireSession, requirePermission } from '@/lib/session';
 import { isSuperUser } from '@/lib/permissions-server';
+import { apiError } from '@/lib/api-error';
 
 // Every signed-in member's client reads this (dashboard-shell.tsx polls it to
 // know whether site-wide lockdown is on), so GET only needs a valid session —
@@ -12,8 +13,7 @@ export async function GET(request: Request) {
     const items = await readCollection('systemSettings');
     return NextResponse.json(items);
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 500 });
+    return apiError(err, 'system-settings-api-get', 500);
   }
 }
 
@@ -28,7 +28,6 @@ export async function POST(request: Request) {
     const updated = await mutateCollection('systemSettings', () => [{ ...item, id: 'default' }]);
     return NextResponse.json(updated[0], { status: 200 });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 400 });
+    return apiError(err, 'system-settings-api-post', 400);
   }
 }

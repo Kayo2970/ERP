@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection, readCollection } from '@/lib/server-db';
-import { requireSession, requirePermission, sessionErrorStatus } from '@/lib/session';
+import { requireSession, requirePermission } from '@/lib/session';
 import { canEditRating, getAccessLevelSettingsServer } from '@/lib/permissions-server';
+import { apiError } from '@/lib/api-error';
 
 export async function PATCH(
   request: Request,
@@ -31,8 +32,7 @@ export async function PATCH(
     });
     return NextResponse.json(updated.find((r: any) => r.id === id));
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 400 });
+    return apiError(err, 'ratings-id-api-patch', 400);
   }
 }
 
@@ -57,7 +57,6 @@ export async function DELETE(
     if (!found) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 500 });
+    return apiError(err, 'ratings-id-api-delete', 500);
   }
 }

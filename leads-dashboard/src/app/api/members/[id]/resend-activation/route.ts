@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { readCollection } from '@/lib/server-db';
 import { createActivationTokenAndSendEmail } from '@/lib/account-activation';
-import { requireSession, sessionErrorStatus } from '@/lib/session';
+import { requireSession } from '@/lib/session';
 import { getAccessLevelSettingsServer, isCentreHead } from '@/lib/permissions-server';
+import { apiError } from '@/lib/api-error';
 
 /** Re-sends the "set up your account" welcome email for a member who hasn't activated yet. */
 export async function POST(
@@ -41,9 +42,6 @@ export async function POST(
         : `Could not deliver the welcome email to ${member.email} — the activation link below still works, so copy and send it to them directly.`,
     });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    if (status) return NextResponse.json({ error: err.message }, { status });
-    console.error('[resend-activation-api] Error:', err);
-    return NextResponse.json({ error: err.message || 'Failed to resend the welcome email.' }, { status: 500 });
+    return apiError(err, 'members-id-resend-activation-api-post', 500);
   }
 }

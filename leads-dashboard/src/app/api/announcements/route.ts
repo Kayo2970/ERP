@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { dispatchAnnouncementEmails } from '@/lib/announcement-email';
 import { fanOutAutoApproval } from '@/lib/approval-sync';
-import { requireSession, sessionErrorStatus, ForbiddenError } from '@/lib/session';
+import { requireSession, ForbiddenError } from '@/lib/session';
 import { getAccessLevelSettingsServer, canCreateAnnouncement } from '@/lib/permissions-server';
+import { apiError } from '@/lib/api-error';
 
 export async function GET(request: Request) {
   try {
@@ -11,8 +12,7 @@ export async function GET(request: Request) {
     const items = await readCollection('announcements');
     return NextResponse.json(items);
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 500 });
+    return apiError(err, 'announcements-api-get', 500);
   }
 }
 
@@ -51,7 +51,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json(created, { status: 201 });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 400 });
+    return apiError(err, 'announcements-api-post', 400);
   }
 }

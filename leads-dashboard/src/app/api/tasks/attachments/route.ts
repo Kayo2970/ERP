@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { saveBase64File } from '@/lib/file-storage';
-import { requireSession, sessionErrorStatus } from '@/lib/session';
+import { requireSession } from '@/lib/session';
+import { apiError } from '@/lib/api-error';
 
 export const maxDuration = 60; // 60s execution limit for large uploads
 
@@ -52,7 +53,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ files: stored }, { status: 201 });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 400 });
+    return apiError(err, 'tasks-attachments-api-post', 400);
   }
 }

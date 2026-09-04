@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { saveBase64File } from '@/lib/file-storage';
-import { requireSession, sessionErrorStatus, ForbiddenError } from '@/lib/session';
+import { requireSession, ForbiddenError } from '@/lib/session';
 import { getAccessLevelSettingsServer, canAccessGuestDirectory } from '@/lib/permissions-server';
+import { apiError } from '@/lib/api-error';
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -12,8 +13,7 @@ export async function GET(request: Request) {
     const guests = await readCollection('guests');
     return NextResponse.json(guests);
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 500 });
+    return apiError(err, 'guests-api-get', 500);
   }
 }
 
@@ -72,7 +72,6 @@ export async function POST(request: Request) {
     const created = updated.find((g: any) => g.id === guest.id);
     return NextResponse.json(created, { status: 201 });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 500 });
+    return apiError(err, 'guests-api-post', 500);
   }
 }

@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection } from '@/lib/server-db';
 import { fanOutAutoApproval, cascadeCloseAutoApprovals } from '@/lib/approval-sync';
-import { requireSession, requirePermission, sessionErrorStatus } from '@/lib/session';
+import { requireSession, requirePermission } from '@/lib/session';
 import { canDeleteEvent, getAccessLevelSettingsServer } from '@/lib/permissions-server';
+import { apiError } from '@/lib/api-error';
 
 const PENDING_APPROVAL_MESSAGE: Record<string, string> = {
   pending_create: 'This event was created and needs sign-off from the Centre Head, Advisor, or GG Campus Events Head before it goes live.',
@@ -65,8 +66,7 @@ export async function PATCH(
 
     return NextResponse.json(result);
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 400 });
+    return apiError(err, 'events-id-api-patch', 400);
   }
 }
 
@@ -88,7 +88,6 @@ export async function DELETE(
     if (!found) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 500 });
+    return apiError(err, 'events-id-api-delete', 500);
   }
 }

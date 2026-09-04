@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
-import { requireSession, requirePermission, sessionErrorStatus } from '@/lib/session';
+import { requireSession, requirePermission } from '@/lib/session';
 import { getAccessLevelSettingsServer, isCentreHead } from '@/lib/permissions-server';
+import { apiError } from '@/lib/api-error';
 
 // The audit trail is sensitive (it can reveal who did what across the whole
 // app), so reading it is restricted to leadership — but writing to it is not:
@@ -19,8 +20,7 @@ export async function GET(request: Request) {
     const items = await readCollection('auditLogs');
     return NextResponse.json(items);
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 500 });
+    return apiError(err, 'auditlogs-api-get', 500);
   }
 }
 
@@ -35,7 +35,6 @@ export async function POST(request: Request) {
     const created = updated.find((l: any) => l.id === item.id);
     return NextResponse.json(created, { status: 201 });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 400 });
+    return apiError(err, 'auditlogs-api-post', 400);
   }
 }

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection } from '@/lib/server-db';
-import { requireSession, sessionErrorStatus } from '@/lib/session';
+import { requireSession } from '@/lib/session';
 import { getAccessLevelSettingsServer, isCentreHead } from '@/lib/permissions-server';
+import { apiError } from '@/lib/api-error';
 
 /**
  * Super User Admin Override: Request or cancel password reset requirement for a member.
@@ -73,9 +74,6 @@ export async function POST(
         : `Password setup request cleared for ${memberName}.`,
     });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    if (status) return NextResponse.json({ error: err.message }, { status });
-    console.error('[require-password-reset-api] Error:', err);
-    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
+    return apiError(err, 'members-id-require-password-reset-api-post', 500);
   }
 }

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getEmailSettings, updateEmailSettings } from '@/lib/email-service';
-import { requireSession, sessionErrorStatus } from '@/lib/session';
+import { requireSession } from '@/lib/session';
 import { getAccessLevelSettingsServer, canManageEmailSettings } from '@/lib/permissions-server';
+import { apiError } from '@/lib/api-error';
 
 export async function GET(request: Request) {
   try {
@@ -13,9 +14,7 @@ export async function GET(request: Request) {
     const emailSettings = await getEmailSettings();
     return NextResponse.json(emailSettings);
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    if (status) return NextResponse.json({ error: err.message }, { status });
-    return NextResponse.json({ error: err?.message || 'Failed to fetch email settings' }, { status: 500 });
+    return apiError(err, 'email-settings-api-get', 500);
   }
 }
 
@@ -36,8 +35,6 @@ export async function POST(request: Request) {
     const updated = await updateEmailSettings(newSettings, actorName || 'Super User');
     return NextResponse.json(updated);
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    if (status) return NextResponse.json({ error: err.message }, { status });
-    return NextResponse.json({ error: err?.message || 'Failed to update email settings' }, { status: 500 });
+    return apiError(err, 'email-settings-api-post', 500);
   }
 }

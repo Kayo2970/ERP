@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
-import { requireSession, requirePermission, sessionErrorStatus } from '@/lib/session';
+import { requireSession, requirePermission } from '@/lib/session';
 import { getAccessLevelSettingsServer, isCentreHead, isFinanceHead } from '@/lib/permissions-server';
+import { apiError } from '@/lib/api-error';
 
 async function canManageIncomeSources(actor: any) {
   const settings = await getAccessLevelSettingsServer();
@@ -15,8 +16,7 @@ export async function GET(request: Request) {
     const items = await readCollection('incomeSources');
     return NextResponse.json(items);
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 500 });
+    return apiError(err, 'income-sources-api-get', 500);
   }
 }
 
@@ -42,7 +42,6 @@ export async function POST(request: Request) {
     const created = updated.find((i: any) => i.id === item.id);
     return NextResponse.json(created, { status: 201 });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 500 });
+    return apiError(err, 'income-sources-api-post', 500);
   }
 }

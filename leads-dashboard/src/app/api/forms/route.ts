@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
-import { requireSession, sessionErrorStatus, ForbiddenError } from '@/lib/session';
+import { requireSession, ForbiddenError } from '@/lib/session';
 import { getAccessLevelSettingsServer, canBuildForms } from '@/lib/permissions-server';
+import { apiError } from '@/lib/api-error';
 
 export async function GET(request: Request) {
   try {
@@ -9,8 +10,7 @@ export async function GET(request: Request) {
     const items = await readCollection('forms');
     return NextResponse.json(items);
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 500 });
+    return apiError(err, 'forms-api-get', 500);
   }
 }
 
@@ -29,7 +29,6 @@ export async function POST(request: Request) {
     const created = updated.find((f: any) => f.id === item.id);
     return NextResponse.json(created, { status: 201 });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 400 });
+    return apiError(err, 'forms-api-post', 400);
   }
 }

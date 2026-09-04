@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { mutateCollection, readCollection } from '@/lib/server-db';
 import { deleteStoredFile, deleteStoredFilesForRecord, saveBase64File, readStoredFile } from '@/lib/file-storage';
 import { cascadeCloseAutoApprovals } from '@/lib/approval-sync';
-import { requireSession, sessionErrorStatus, ForbiddenError } from '@/lib/session';
+import { requireSession, ForbiddenError } from '@/lib/session';
 import { getAccessLevelSettingsServer, canReviewDesignProofread, canViewAllDesigns } from '@/lib/permissions-server';
+import { apiError } from '@/lib/api-error';
 
 export async function PATCH(
   request: Request,
@@ -161,8 +162,7 @@ export async function PATCH(
 
     return NextResponse.json(mergedRecord || updated.find((d: any) => d.id === id));
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 500 });
+    return apiError(err, 'designs-id-api-patch', 500);
   }
 }
 
@@ -186,7 +186,6 @@ export async function DELETE(
     await deleteStoredFilesForRecord('designs', id);
     return NextResponse.json({ success: true, count: updated.length });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 500 });
+    return apiError(err, 'designs-id-api-delete', 500);
   }
 }

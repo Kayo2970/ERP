@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { mutateCollection, readCollection } from '@/lib/server-db';
 import { dispatchAnnouncementEmails } from '@/lib/announcement-email';
 import { cascadeCloseAutoApprovals } from '@/lib/approval-sync';
-import { requireSession, sessionErrorStatus, ForbiddenError } from '@/lib/session';
+import { requireSession, ForbiddenError } from '@/lib/session';
 import { getAccessLevelSettingsServer, canCreateAnnouncement, canApproveAnnouncement, isCentreHead } from '@/lib/permissions-server';
+import { apiError } from '@/lib/api-error';
 
 export async function PATCH(
   request: Request,
@@ -64,8 +65,7 @@ export async function PATCH(
 
     return NextResponse.json(targetAnnouncement);
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 400 });
+    return apiError(err, 'announcements-id-api-patch', 400);
   }
 }
 
@@ -87,7 +87,6 @@ export async function DELETE(
     if (!found) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 500 });
+    return apiError(err, 'announcements-id-api-delete', 500);
   }
 }

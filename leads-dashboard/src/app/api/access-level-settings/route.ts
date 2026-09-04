@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
-import { requireSession, requirePermission, sessionErrorStatus } from '@/lib/session';
+import { requireSession, requirePermission } from '@/lib/session';
 import { isSuperUser } from '@/lib/permissions-server';
+import { apiError } from '@/lib/api-error';
 
 export async function GET(request: Request) {
   try {
@@ -10,8 +11,7 @@ export async function GET(request: Request) {
     const items = await readCollection('accessLevelSettings');
     return NextResponse.json(items);
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 500 });
+    return apiError(err, 'access-level-settings-api-get', 500);
   }
 }
 
@@ -26,7 +26,6 @@ export async function POST(request: Request) {
     const updated = await mutateCollection('accessLevelSettings', () => [{ ...item, id: 'default' }]);
     return NextResponse.json(updated[0], { status: 200 });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 400 });
+    return apiError(err, 'access-level-settings-api-post', 400);
   }
 }

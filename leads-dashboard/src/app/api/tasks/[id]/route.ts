@@ -3,8 +3,9 @@ import { mutateCollection, readCollection } from '@/lib/server-db';
 import { enqueueTaskEmailNotification } from '@/lib/task-email-queue';
 import { deleteStoredFilesForRecord } from '@/lib/file-storage';
 import { fanOutAutoApproval, cascadeCloseAutoApprovals } from '@/lib/approval-sync';
-import { requireSession, requirePermission, sessionErrorStatus } from '@/lib/session';
+import { requireSession, requirePermission } from '@/lib/session';
 import { canDeleteTask, getAccessLevelSettingsServer } from '@/lib/permissions-server';
+import { apiError } from '@/lib/api-error';
 
 const PENDING_APPROVAL_MESSAGE: Record<string, string> = {
   pending_create: 'This task needs sign-off from the Centre Head, Advisor, or GG Campus Events Head before it is allotted.',
@@ -93,8 +94,7 @@ export async function PATCH(
 
     return NextResponse.json(result);
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 400 });
+    return apiError(err, 'tasks-id-api-patch', 400);
   }
 }
 
@@ -147,7 +147,6 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    const status = sessionErrorStatus(err);
-    return NextResponse.json({ error: err.message }, { status: status || 500 });
+    return apiError(err, 'tasks-id-api-delete', 500);
   }
 }
