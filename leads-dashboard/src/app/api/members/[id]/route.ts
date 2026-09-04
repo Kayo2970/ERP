@@ -4,27 +4,9 @@ import { deleteStoredFile, saveBase64File } from '@/lib/file-storage';
 import { requireSession, sessionErrorStatus } from '@/lib/session';
 import { getAccessLevelSettingsServer, canEditDirectory, canTerminateMember } from '@/lib/permissions-server';
 import { invalidateAllSessionsForMember } from '@/lib/session';
+import { isKayomarzIdentity, countActiveSuperUsersServer, PRIVILEGED_FIELDS } from '@/lib/member-guard';
 
 const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
-
-// Fields that change a member's standing/access in the system — changing any
-// of these on ANYONE (including yourself) requires directory-edit access.
-// passwordHash is never settable through this route at all (dedicated
-// set-password/activation/reset routes own that, and hash it themselves).
-const PRIVILEGED_FIELDS = ['tier', 'role', 'status', 'division', 'department', 'approvalStatus', 'mustSetupPassword'];
-
-function isKayomarzIdentity(m: any): boolean {
-  if (!m) return false;
-  const name = (m.name || '').toLowerCase();
-  const email = (m.email || '').toLowerCase();
-  return m.id === 'm1' || name.includes('kayomarz') || email === 'kayo2970@gmail.com' || email === 'kayo2970@outlook.com';
-}
-
-function countActiveSuperUsersServer(members: any[]): number {
-  return members.filter((m: any) =>
-    (m.tier === 1 || m.role === 'Super User' || isKayomarzIdentity(m)) && m.status !== 'Terminated'
-  ).length;
-}
 
 export async function PATCH(
   request: Request,

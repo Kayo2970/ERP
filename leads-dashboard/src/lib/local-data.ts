@@ -1186,6 +1186,30 @@ async function serverPatch(endpoint: string, id: string, updates: any, onProgres
   }, (result) => result !== null);
 }
 
+/**
+ * One request that acts on many records at once (bulk create/update/delete),
+ * instead of a loop of per-record serverPost/serverPatch/serverDelete calls
+ * — see /api/members/bulk's doc comment for why that loop was a real
+ * problem (N sequential round trips + N full-collection rewrites for what
+ * should be one of each).
+ */
+async function serverBulkRequest(method: 'POST' | 'PATCH' | 'DELETE', endpoint: string, body: any): Promise<any> {
+  if (typeof window === 'undefined') return null;
+  return trackSync(syncLabelFor(endpoint), method === 'DELETE' ? 'Removing' : method === 'POST' ? 'Saving' : 'Updating', async () => {
+    const res = await fetch(endpoint, {
+      method,
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const detail = await describeFailedResponse(method, endpoint, res);
+      console.warn(`[api] ${detail}`);
+      throw new Error(detail);
+    }
+    return res.json();
+  }, (result) => result !== null);
+}
+
 async function serverDelete(endpoint: string, id: string, queryParams?: Record<string, string>): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   return trackSync(syncLabelFor(endpoint), 'Removing', async () => {
@@ -1446,12 +1470,14 @@ export function bulkUpdateMembers(
   }
 
   saveMembers(updated);
+  // One PATCH for the whole selection instead of one per member — see
+  // /api/members/bulk's doc comment.
+  serverBulkRequest('PATCH', '/api/members/bulk', { ids, updates }).catch(err =>
+    console.warn('[api] Bulk member update failed to sync to server:', err)
+  );
   ids.forEach(id => {
     const full = updated.find(m => m.id === id);
-    if (full) {
-      serverPatch('/api/members', id, full);
-      syncActiveSessionUser(full);
-    }
+    if (full) syncActiveSessionUser(full);
   });
   const changeSummary = Object.entries(updates)
     .filter(([, v]) => v !== undefined && v !== '')
@@ -1473,9 +1499,51 @@ export function bulkDeleteMembers(ids: string[], actorName: string): Member[] {
   }
 
   saveMembers(updated);
-  Array.from(targetIdSet).forEach(id => serverDelete('/api/members', id));
+  // One DELETE for the whole selection instead of one per member — see
+  // /api/members/bulk's doc comment.
+  serverBulkRequest('DELETE', '/api/members/bulk', { ids: Array.from(targetIdSet) }).catch(err =>
+    console.warn('[api] Bulk member delete failed to sync to server:', err)
+  );
   logAuditEvent('BULK_MEMBERS_DELETED', actorName, `Bulk removed ${current.length - updated.length} members`);
   return updated;
+}
+
+/**
+ * Bulk member creation — used by the CSV roster importer so N new members
+ * cost one round trip and one members.json rewrite instead of N of each
+ * (each with its own sequential activation-email send blocking the next
+ * row). Activation emails still go out per member, but in parallel — see
+ * /api/members/bulk's POST handler.
+ */
+export async function bulkAddMembers(
+  members: Omit<Member, 'id'>[]
+): Promise<{ created: (Member & { activationEmailSent?: boolean; activationEmailError?: string })[]; skipped: { email: string; reason: string }[] }> {
+  const current = getMembers();
+  const seenEmails = new Set(current.map(m => m.email.toLowerCase()));
+  const payload = members
+    .filter(m => {
+      const email = (m.email || '').toLowerCase();
+      if (!email || seenEmails.has(email)) return false;
+      seenEmails.add(email);
+      return true;
+    })
+    .map(m => ({ ...m, mustSetupPassword: true, id: 'm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5) }));
+
+  const clientSkipped = members
+    .filter(m => !payload.some(p => p.email.toLowerCase() === m.email.toLowerCase()))
+    .map(m => ({ email: m.email, reason: 'Email already exists.' }));
+
+  if (payload.length === 0) {
+    return { created: [], skipped: clientSkipped };
+  }
+
+  const result = await serverBulkRequest('POST', '/api/members/bulk', { members: payload });
+  const created: Member[] = result?.created || [];
+  const skipped: { email: string; reason: string }[] = [...clientSkipped, ...(result?.skipped || [])];
+
+  saveMembers([...current, ...created]);
+  logAuditEvent('MEMBERS_BULK_IMPORTED', 'System / Admin', `Bulk imported ${created.length} new members${skipped.length ? ` (${skipped.length} skipped)` : ''}`);
+  return { created, skipped };
 }
 
 export function updateMember(id: string, updates: Partial<Member>, actorName: string): Member | null {

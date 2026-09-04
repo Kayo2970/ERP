@@ -50,6 +50,7 @@ import {
   deleteMember,
   bulkUpdateMembers,
   bulkDeleteMembers,
+  bulkAddMembers,
   logAuditEvent,
   terminateMember,
   reactivateMember,
@@ -648,15 +649,15 @@ export default function DirectoryPage() {
           return;
         }
 
-        // Track emails seen so far (existing roster + rows already imported this
-        // pass) so both cross-roster AND within-file duplicates are caught, while
-        // each new row still goes through addMember() so it actually reaches the
-        // server — a manual push + single saveMembers() call at the end (the old
-        // approach) only ever wrote localStorage, never the server.
+        // Track emails seen so far (existing roster + rows already parsed this
+        // pass) so both cross-roster AND within-file duplicates are caught before
+        // anything is sent to the server. All valid rows are collected first and
+        // sent as ONE bulk request (bulkAddMembers) — one round trip and one
+        // members.json rewrite for the whole file, instead of one of each per
+        // row (which is what made importing a large roster slow).
         const seenEmails = new Set(getMembers().map(m => m.email.toLowerCase()));
-        let importCount = 0;
-        let duplicateCount = 0;
         const conflicts: typeof emailConflicts = [];
+        const rowsToImport: (Omit<Member, 'id'> & { _csvRow: { division: string; role: string; department: string; program: string; batch: string } })[] = [];
 
         for (let i = 1; i < lines.length; i++) {
           const values = parseCsvLine(lines[i]);
@@ -673,10 +674,10 @@ export default function DirectoryPage() {
           if (!mName || !mEmail) continue;
 
           if (seenEmails.has(mEmail)) {
-            duplicateCount++;
             conflicts.push({ name: mName, email: mEmail, division: mDivStr, role: mRole, department: mDept, program: mProgram, batch: mBatch });
             continue;
           }
+          seenEmails.add(mEmail);
 
           let mDivision: MemberDivision = 'Training Associate';
           const divLower = mDivStr.toLowerCase();
@@ -702,26 +703,37 @@ export default function DirectoryPage() {
 
           const mTier = deriveMemberRoleAndDepartment(mDivision, { customRole: mRole, departmentSelect: mDept }).tier;
 
-          // Awaited — addMember is async (it reaches the server before
-          // resolving), so an unawaited call here would let a real failure
-          // slip past this try/catch as an unhandled rejection instead of
-          // being counted as skipped.
-          try {
-            await addMember({
-              name: mName,
-              email: mEmail,
-              role: mRole || mDivision,
-              tier: mTier,
-              division: mDivision,
-              department: mDept || undefined,
-              program: mProgram || undefined,
-              batch: mDivision === 'Alumni' ? mBatch : undefined
+          rowsToImport.push({
+            name: mName,
+            email: mEmail,
+            role: mRole || mDivision,
+            tier: mTier,
+            division: mDivision,
+            department: mDept || undefined,
+            program: mProgram || undefined,
+            batch: mDivision === 'Alumni' ? mBatch : undefined,
+            _csvRow: { division: mDivStr, role: mRole, department: mDept, program: mProgram, batch: mBatch },
+          });
+        }
+
+        let importCount = 0;
+        let duplicateCount = conflicts.length;
+
+        if (rowsToImport.length > 0) {
+          const { created, skipped } = await bulkAddMembers(rowsToImport.map(({ _csvRow, ...m }) => m));
+          importCount = created.length;
+          duplicateCount += skipped.length;
+          for (const s of skipped) {
+            const row = rowsToImport.find(r => r.email.toLowerCase() === s.email.toLowerCase());
+            conflicts.push({
+              name: row?.name || s.email,
+              email: s.email,
+              division: row?._csvRow.division || '',
+              role: row?._csvRow.role || '',
+              department: row?._csvRow.department || '',
+              program: row?._csvRow.program || '',
+              batch: row?._csvRow.batch || '',
             });
-            seenEmails.add(mEmail);
-            importCount++;
-          } catch {
-            duplicateCount++;
-            conflicts.push({ name: mName, email: mEmail, division: mDivStr, role: mRole, department: mDept, program: mProgram, batch: mBatch });
           }
         }
 
@@ -735,8 +747,8 @@ export default function DirectoryPage() {
         } else {
           triggerError('No valid member rows found in the CSV.');
         }
-      } catch {
-        triggerError('Error parsing CSV file. Please verify formatting.');
+      } catch (err: any) {
+        triggerError(err?.message ? `Bulk import failed: ${err.message}` : 'Error parsing CSV file. Please verify formatting.');
       }
     };
     reader.readAsText(file);
