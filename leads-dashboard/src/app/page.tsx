@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { ShieldAlert, LogIn, Mail, Lock, Eye, EyeOff, KeyRound, CheckCircle2, Clock, ArrowLeft, Send, Quote } from 'lucide-react';
 import { logAuditEvent, requestPasswordReset, submitPasswordReset, submitAdminOverridePasswordReset, setSessionToken } from '@/lib/local-data';
 import { TermsModal } from '@/components/terms-modal';
+import { PrivacyPolicyModal } from '@/components/privacy-policy-modal';
 import { IosInstallPrompt } from '@/components/ios-install-prompt';
 import { LoadingScreen } from '@/components/loading-screen';
 import { SetupWizard } from '@/components/setup-wizard';
@@ -130,6 +131,7 @@ export default function LoginPage() {
   const [showLoginSplash, setShowLoginSplash] = useState(false);
   const [themeLoaded, setThemeLoaded] = useState(false);
   const [isTermsOpen, setIsTermsOpen] = useState(false);
+  const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
 
   // Dynamic Quotes state
   const [quoteIndex, setQuoteIndex] = useState(0);
@@ -939,6 +941,13 @@ export default function LoginPage() {
             className="font-semibold text-accent underline hover:text-primary-light transition-colors cursor-pointer"
           >
             Terms & Conditions
+          </button>{' '}and{' '}
+          <button
+            type="button"
+            onClick={() => setIsPrivacyOpen(true)}
+            className="font-semibold text-accent underline hover:text-primary-light transition-colors cursor-pointer"
+          >
+            Privacy Policy
           </button>.
         </p>
         <p className="text-[10px]">
@@ -949,6 +958,8 @@ export default function LoginPage() {
 
       {/* Terms & Conditions Modal */}
       <TermsModal isOpen={isTermsOpen} onClose={() => setIsTermsOpen(false)} />
+      {/* Privacy Policy Modal */}
+      <PrivacyPolicyModal isOpen={isPrivacyOpen} onClose={() => setIsPrivacyOpen(false)} />
 
       {/* iOS "Add to Home Screen" nudge, shown here too so it reaches someone
           visiting on an iPhone/iPad before they've even logged in. */}

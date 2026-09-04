@@ -44,6 +44,7 @@ import {
 import { getAnnouncements, getTasks, getDesigns, getMembers, getBudgets, getReimbursements, getEvents, getApprovalRequests, logAuditEvent, Member, syncWithServer, getSystemSettings, signOutClient } from '@/lib/local-data';
 import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isFinanceHead, canAccessGuestDirectory, canVerifyBudgetCentreHead, canDecideBudget, canVerifyReimbursementCentreHead, canApproveAsSectorHead, canApproveAsFinanceHead, canSubmitEventReport, canReviewEventReports } from '@/lib/permissions';
 import { TermsModal } from '@/components/terms-modal';
+import { PrivacyPolicyModal } from '@/components/privacy-policy-modal';
 import { IosInstallPrompt } from '@/components/ios-install-prompt';
 import { NotFoundScreen } from '@/components/not-found-screen';
 import { LoadingScreen } from '@/components/loading-screen';
@@ -139,6 +140,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   // actually opening the panel, never by a rebuild of the underlying list.
   const [seenActionIds, setSeenActionIds] = useState<Set<string>>(new Set());
   const [isTermsOpen, setIsTermsOpen] = useState(false);
+  const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const notifRefMobile = useRef<HTMLDivElement>(null);
 
@@ -1464,6 +1466,14 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             >
               Terms & Conditions
             </button>
+            <span>and</span>
+            <button
+              type="button"
+              onClick={() => setIsPrivacyOpen(true)}
+              className="font-semibold text-accent underline hover:text-primary-light transition-colors cursor-pointer"
+            >
+              Privacy Policy
+            </button>
             <span className="hidden sm:inline">&middot;</span>
             <span className="text-[11px]">All Intellectual Property, Copyrights & Development Licensing belong exclusively to <strong>Kayomarz Pavri</strong>.</span>
           </div>
@@ -1474,6 +1484,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
         {/* Terms & Conditions Modal */}
         <TermsModal isOpen={isTermsOpen} onClose={() => setIsTermsOpen(false)} />
+        {/* Privacy Policy Modal */}
+        <PrivacyPolicyModal isOpen={isPrivacyOpen} onClose={() => setIsPrivacyOpen(false)} />
 
         {/* Interactive Role-Tailored Onboarding Tour */}
         <OnboardingTour user={user} isOpen={isTourOpen} onClose={() => setIsTourOpen(false)} />

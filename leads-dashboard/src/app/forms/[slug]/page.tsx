@@ -5,6 +5,7 @@ import { CheckCircle2, ChevronLeft, Send, Sparkles, AlertTriangle, ShieldCheck }
 import Link from 'next/link';
 import { getForms, addSubmission, syncWithServer, PublicFormItem } from '@/lib/local-data';
 import { TermsModal } from '@/components/terms-modal';
+import { PrivacyPolicyModal } from '@/components/privacy-policy-modal';
 import { GhostFibers } from '@/components/ui/ghost-fibers';
 
 export default function PublicFormPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -18,6 +19,7 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [isTermsOpen, setIsTermsOpen] = useState(false);
+  const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
 
   // Public form links are opened standalone (shared via QR code, email, etc.)
   // outside the dashboard's own theme toggle, so they'd otherwise inherit
@@ -372,6 +374,13 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
             className="font-semibold text-accent underline hover:text-accent/80 transition-colors cursor-pointer"
           >
             Terms & Conditions
+          </button>{' '}and{' '}
+          <button
+            type="button"
+            onClick={() => setIsPrivacyOpen(true)}
+            className="font-semibold text-accent underline hover:text-accent/80 transition-colors cursor-pointer"
+          >
+            Privacy Policy
           </button>.
         </p>
         <p className="text-[10px]">
@@ -382,6 +391,8 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
 
       {/* Terms & Conditions Modal */}
       <TermsModal isOpen={isTermsOpen} onClose={() => setIsTermsOpen(false)} />
+      {/* Privacy Policy Modal */}
+      <PrivacyPolicyModal isOpen={isPrivacyOpen} onClose={() => setIsPrivacyOpen(false)} />
     </div>
   );
 }

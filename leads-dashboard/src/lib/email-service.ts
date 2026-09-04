@@ -431,6 +431,11 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
   });
 
   const bodyHtml = payload.bodyHtml || defaultFormattedHtml;
+  // Reassigned inside the try block below for bulk categories, so the stored
+  // email log (newEmail, further down) reflects exactly what was sent,
+  // unsubscribe line included — not just the pre-unsubscribe template.
+  let finalBodyHtml = bodyHtml;
+  let finalBodyText = payload.bodyText;
   let status: 'SENT' | 'FAILED' = 'FAILED';
   let errorMessage: string | undefined;
   let smtpResponse: string | undefined;
@@ -458,12 +463,25 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
       headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
     }
 
+    // A List-Unsubscribe header alone is invisible unless the mail client
+    // happens to surface it — bulk mail (announcements, event rosters, guest
+    // invites) also gets a plain, visible unsubscribe line in the email body
+    // itself, in both the HTML and plain-text versions actually sent.
+    if (isBulkCategory && unsubscribeAddress) {
+      const unsubscribeMailto = `mailto:${unsubscribeAddress}?subject=Unsubscribe`;
+      const unsubscribeHtml = `<div style="text-align:center;padding:12px 20px 4px;font-size:10px;color:#94a3b8;">Don't want these emails? <a href="${unsubscribeMailto}" style="color:#0284c7;">Unsubscribe</a>.</div>`;
+      finalBodyHtml = finalBodyHtml.includes('</body>')
+        ? finalBodyHtml.replace('</body>', `${unsubscribeHtml}</body>`)
+        : `${finalBodyHtml}${unsubscribeHtml}`;
+      finalBodyText = `${finalBodyText}\n\n---\nDon't want these emails? Unsubscribe: ${unsubscribeMailto}`;
+    }
+
     const info = await t.sendMail({
       from,
       to: payload.to,
       subject: payload.subject,
-      text: payload.bodyText,
-      html: bodyHtml,
+      text: finalBodyText,
+      html: finalBodyHtml,
       replyTo: settings.replyTo || settings.fromEmail,
       xMailer: false,
       headers,
@@ -493,8 +511,8 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
     id: `email-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     to: payload.to,
     subject: payload.subject,
-    bodyText: payload.bodyText,
-    bodyHtml,
+    bodyText: finalBodyText,
+    bodyHtml: finalBodyHtml,
     category: payload.category,
     status,
     sentAt: new Date().toISOString(),
