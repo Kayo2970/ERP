@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { readCollection } from '@/lib/server-db';
 import { createActivationTokenAndSendEmail } from '@/lib/account-activation';
+import { requireSession, sessionErrorStatus } from '@/lib/session';
+import { getAccessLevelSettingsServer, isCentreHead } from '@/lib/permissions-server';
 
 /** Re-sends the "set up your account" welcome email for a member who hasn't activated yet. */
 export async function POST(
@@ -8,6 +10,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const actor = await requireSession(request);
+    const settings = await getAccessLevelSettingsServer();
+    if (!(isCentreHead(actor, settings) || actor.tier === 1)) {
+      return NextResponse.json({ error: 'You do not have permission to resend the activation email.' }, { status: 403 });
+    }
     const { id } = await params;
     const members = await readCollection('members');
     const member = members.find((m: any) => m.id === id);
@@ -34,6 +41,8 @@ export async function POST(
         : `Could not deliver the welcome email to ${member.email} — the activation link below still works, so copy and send it to them directly.`,
     });
   } catch (err: any) {
+    const status = sessionErrorStatus(err);
+    if (status) return NextResponse.json({ error: err.message }, { status });
     console.error('[resend-activation-api] Error:', err);
     return NextResponse.json({ error: err.message || 'Failed to resend the welcome email.' }, { status: 500 });
   }

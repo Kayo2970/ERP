@@ -1,9 +1,21 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
+import { requireSession, sessionErrorStatus } from '@/lib/session';
 
-export async function GET() {
-  const items = await readCollection('submissions');
-  return NextResponse.json(items);
+// GET (listing collected responses) is member-only. POST is deliberately left
+// ungated: forms are filled out publicly at src/app/forms/[slug]/page.tsx by
+// non-members with no session at all (addSubmission() in local-data.ts even
+// logs the actor as "Public Respondent") — this is a genuine public form
+// intake endpoint, not an oversight.
+export async function GET(request: Request) {
+  try {
+    await requireSession(request);
+    const items = await readCollection('submissions');
+    return NextResponse.json(items);
+  } catch (err: any) {
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 500 });
+  }
 }
 
 export async function POST(request: Request) {

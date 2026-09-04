@@ -1,11 +1,21 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection } from '@/lib/server-db';
+import { requireSession, requirePermission, sessionErrorStatus } from '@/lib/session';
+import { getAccessLevelSettingsServer, isCentreHead, isFinanceHead } from '@/lib/permissions-server';
+
+async function canManageIncomeSources(actor: any) {
+  const settings = await getAccessLevelSettingsServer();
+  return isCentreHead(actor, settings) || isFinanceHead(actor, settings) || actor?.tier === 1;
+}
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const actor = await requireSession(request);
+    requirePermission(await canManageIncomeSources(actor), 'You do not have permission to update income sources.');
+
     const { id } = await params;
     const updates = await request.json();
 
@@ -25,19 +35,24 @@ export async function PATCH(
 
     return NextResponse.json(updatedItem);
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 500 });
   }
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const actor = await requireSession(request);
+    requirePermission(await canManageIncomeSources(actor), 'You do not have permission to delete income sources.');
+
     const { id } = await params;
     await mutateCollection('incomeSources', (current) => current.filter((i: any) => i.id !== id));
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 500 });
   }
 }

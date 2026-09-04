@@ -3,6 +3,12 @@ import { readCollection } from '@/lib/server-db';
 import { fillFeedbackFormDocx } from '@/lib/docx-fill';
 import { FEEDBACK_FORM_TEMPLATE_ID } from '@/lib/local-data';
 
+// NOTE: intentionally NOT gated with requireSession. The Forms dashboard
+// triggers this download via `window.open(...)` (src/app/dashboard/forms/page.tsx),
+// a plain browser navigation that cannot attach an Authorization header —
+// gating this route would break the download outright. Same pattern/tradeoff
+// as src/app/api/files/[...key]/route.ts. Its only real protection is the
+// unguessability of the submission id in the URL.
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }

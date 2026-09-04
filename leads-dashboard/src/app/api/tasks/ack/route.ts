@@ -16,14 +16,25 @@ export async function POST(request: Request) {
     const now = new Date().toISOString();
     const updatedTasks: any[] = [];
 
-    await mutateCollection('tasks', async (current: any[]) => {
-      const idSet = new Set(taskIds.map(id => String(id).trim()));
-      const next: any[] = [];
-      for (const task of current) {
+    // mutateCollection's mutator must be synchronous, but canChangeTaskStatus
+    // (committee-assignee branch) needs to read the events collection — so
+    // resolve which of the requested ids the caller may actually act on
+    // first, then apply that precomputed allow-set inside the mutator.
+    const idSet = new Set(taskIds.map(id => String(id).trim()));
+    const existingTasks = await readCollection<any>('tasks');
+    const allowedIds = new Set<string>();
+    for (const task of existingTasks) {
+      if (idSet.has(task.id) && await canChangeTaskStatus(task, actor, settings)) {
+        allowedIds.add(task.id);
+      }
+    }
+
+    await mutateCollection('tasks', (current: any[]) => {
+      return current.map(task => {
         // Only acknowledge tasks the caller is actually allowed to act on —
         // requested ids that aren't theirs pass through unchanged rather than
         // failing the whole batch.
-        if (idSet.has(task.id) && await canChangeTaskStatus(task, actor, settings)) {
+        if (allowedIds.has(task.id)) {
           const updated = {
             ...task,
             acknowledged: true,
@@ -31,12 +42,10 @@ export async function POST(request: Request) {
             acknowledgedByEmail: email || task.assigneeEmail || task.acknowledgedByEmail,
           };
           updatedTasks.push(updated);
-          next.push(updated);
-        } else {
-          next.push(task);
+          return updated;
         }
-      }
-      return next;
+        return task;
+      });
     });
 
     return NextResponse.json({
@@ -66,11 +75,18 @@ export async function GET(request: Request) {
     const now = new Date().toISOString();
     const updatedTasks: any[] = [];
 
-    await mutateCollection('tasks', async (current: any[]) => {
-      const idSet = new Set(taskIds);
-      const next: any[] = [];
-      for (const task of current) {
-        if (idSet.has(task.id) && await canChangeTaskStatus(task, actor, settings)) {
+    const idSet = new Set(taskIds);
+    const existingTasks = await readCollection<any>('tasks');
+    const allowedIds = new Set<string>();
+    for (const task of existingTasks) {
+      if (idSet.has(task.id) && await canChangeTaskStatus(task, actor, settings)) {
+        allowedIds.add(task.id);
+      }
+    }
+
+    await mutateCollection('tasks', (current: any[]) => {
+      return current.map(task => {
+        if (allowedIds.has(task.id)) {
           const updated = {
             ...task,
             acknowledged: true,
@@ -78,12 +94,10 @@ export async function GET(request: Request) {
             acknowledgedByEmail: email || task.assigneeEmail || task.acknowledgedByEmail,
           };
           updatedTasks.push(updated);
-          next.push(updated);
-        } else {
-          next.push(task);
+          return updated;
         }
-      }
-      return next;
+        return task;
+      });
     });
 
     return NextResponse.json({

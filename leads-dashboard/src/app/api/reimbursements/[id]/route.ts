@@ -1,14 +1,58 @@
 import { NextResponse } from 'next/server';
-import { mutateCollection } from '@/lib/server-db';
+import { mutateCollection, readCollection } from '@/lib/server-db';
 import { deleteStoredFilesForRecord } from '@/lib/file-storage';
+import { requireSession, requirePermission, sessionErrorStatus } from '@/lib/session';
+import {
+  getAccessLevelSettingsServer,
+  canApproveAsSectorHead,
+  canVerifyReimbursementCentreHead,
+  canApproveAsFinanceHead,
+  isCentreHead,
+} from '@/lib/permissions-server';
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const actor = await requireSession(request);
     const { id } = await params;
     const updates = await request.json();
+    const settings = await getAccessLevelSettingsServer();
+
+    const existing = (await readCollection<any>('reimbursements')).find((r: any) => r.id === id);
+    const isClaimant = !!(
+      existing?.memberEmail &&
+      actor?.email &&
+      String(existing.memberEmail).toLowerCase() === String(actor.email).toLowerCase()
+    );
+
+    // Figure out which stage this PATCH is actioning from the body shape —
+    // see updateReimbursementStatus()/verifyReimbursementByCentreHead() in
+    // local-data.ts, the only two client write paths that hit this route.
+    const isCentreHeadVerifyAction = updates.status === 'Verified by Centre Head' || updates.centreHeadVerified === true;
+    const isFinanceDecision = updates.status === 'Approved' || (updates.status === 'Denied' && !!updates.finalApprover);
+    const isFirstPassReject = updates.status === 'Denied' && !!updates.firstPassReviewer && !updates.finalApprover;
+
+    let allowed = false;
+    if (isCentreHeadVerifyAction || isFirstPassReject) {
+      allowed = allowed || canApproveAsSectorHead(actor, settings) || canVerifyReimbursementCentreHead(actor, settings);
+    }
+    if (isFinanceDecision) {
+      allowed = allowed || canApproveAsFinanceHead(actor, settings, existing);
+    }
+    if (!isCentreHeadVerifyAction && !isFinanceDecision && !isFirstPassReject) {
+      // No recognized stage transition (e.g. a minor field edit) — allow the
+      // claimant editing their own claim, or anyone who could act on it at
+      // any stage, but not an unrelated member.
+      allowed =
+        isClaimant ||
+        canApproveAsSectorHead(actor, settings) ||
+        canVerifyReimbursementCentreHead(actor, settings) ||
+        canApproveAsFinanceHead(actor, settings, existing);
+    }
+    requirePermission(allowed, 'You do not have permission to update this reimbursement claim.');
+
     // Upsert: if this id isn't in the server's collection yet — e.g. it's one of the
     // client-bundled sample/seed records that was never POSTed — create it instead of
     // 404ing and silently dropping the edit (that used to leave the sample data stuck
@@ -22,16 +66,30 @@ export async function PATCH(
     });
     return NextResponse.json(updated.find((r: any) => r.id === id));
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 400 });
   }
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const actor = await requireSession(request);
     const { id } = await params;
+    const settings = await getAccessLevelSettingsServer();
+    const existing = (await readCollection<any>('reimbursements')).find((r: any) => r.id === id);
+    const isClaimant = !!(
+      existing?.memberEmail &&
+      actor?.email &&
+      String(existing.memberEmail).toLowerCase() === String(actor.email).toLowerCase()
+    );
+    requirePermission(
+      isClaimant || isCentreHead(actor, settings) || actor.tier === 1,
+      'You do not have permission to delete this reimbursement claim.'
+    );
+
     let found = false;
     await mutateCollection('reimbursements', (current) => {
       const filtered = current.filter((r: any) => r.id !== id);
@@ -42,6 +100,7 @@ export async function DELETE(
     await deleteStoredFilesForRecord('reimbursements', id);
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 500 });
   }
 }

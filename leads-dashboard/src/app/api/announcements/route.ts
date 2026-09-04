@@ -2,14 +2,25 @@ import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { dispatchAnnouncementEmails } from '@/lib/announcement-email';
 import { fanOutAutoApproval } from '@/lib/approval-sync';
+import { requireSession, sessionErrorStatus, ForbiddenError } from '@/lib/session';
+import { getAccessLevelSettingsServer, canCreateAnnouncement } from '@/lib/permissions-server';
 
-export async function GET() {
-  const items = await readCollection('announcements');
-  return NextResponse.json(items);
+export async function GET(request: Request) {
+  try {
+    await requireSession(request);
+    const items = await readCollection('announcements');
+    return NextResponse.json(items);
+  } catch (err: any) {
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 500 });
+  }
 }
 
 export async function POST(request: Request) {
   try {
+    const actor = await requireSession(request);
+    const settings = await getAccessLevelSettingsServer();
+    if (!canCreateAnnouncement(actor, settings)) throw new ForbiddenError();
     const item = await request.json();
     const updated = await mutateCollection('announcements', (current) => [item, ...current]);
     const created = updated.find((a: any) => a.id === item.id);
@@ -40,6 +51,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(created, { status: 201 });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 400 });
   }
 }

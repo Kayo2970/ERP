@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
+import { requireSession, sessionErrorStatus } from '@/lib/session';
 
 /**
  * Self-service email change, step 3 of 3 — the final step. Verifies the OTP
@@ -10,9 +11,13 @@ import { readCollection, mutateCollection } from '@/lib/server-db';
  */
 export async function POST(request: Request) {
   try {
+    const actor = await requireSession(request);
     const { memberId, otp } = await request.json();
     if (!memberId || !otp) {
       return NextResponse.json({ error: 'Verification code is required.' }, { status: 400 });
+    }
+    if (actor.id !== memberId) {
+      return NextResponse.json({ error: 'You can only confirm an email change for your own account.' }, { status: 403 });
     }
 
     const changes = await readCollection<any>('emailChanges');
@@ -63,6 +68,8 @@ export async function POST(request: Request) {
       newEmail: matchedChange.newEmail,
     });
   } catch (err: any) {
+    const status = sessionErrorStatus(err);
+    if (status) return NextResponse.json({ error: err.message }, { status });
     console.error('[confirm-new-email-api] Error:', err);
     return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
   }

@@ -1,16 +1,27 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { saveBase64File } from '@/lib/file-storage';
+import { requireSession, sessionErrorStatus, ForbiddenError } from '@/lib/session';
+import { getAccessLevelSettingsServer, canAccessGuestDirectory } from '@/lib/permissions-server';
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
-export async function GET() {
-  const guests = await readCollection('guests');
-  return NextResponse.json(guests);
+export async function GET(request: Request) {
+  try {
+    await requireSession(request);
+    const guests = await readCollection('guests');
+    return NextResponse.json(guests);
+  } catch (err: any) {
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 500 });
+  }
 }
 
 export async function POST(request: Request) {
   try {
+    const actor = await requireSession(request);
+    const settings = await getAccessLevelSettingsServer();
+    if (!canAccessGuestDirectory(actor, settings)) throw new ForbiddenError();
     const guest = await request.json();
 
     if (!guest.name || !guest.id) {
@@ -61,6 +72,7 @@ export async function POST(request: Request) {
     const created = updated.find((g: any) => g.id === guest.id);
     return NextResponse.json(created, { status: 201 });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 500 });
   }
 }
