@@ -11,7 +11,10 @@ import {
   Edit2,
   Trash2,
   CheckSquare,
-  Palette
+  Palette,
+  ChevronDown,
+  Briefcase,
+  ListFilter
 } from 'lucide-react';
 import {
   getRatings,
@@ -49,6 +52,11 @@ export default function RatingsPage() {
   const [taskSearchQuery, setTaskSearchQuery] = useState('');
   const [historySearchQuery, setHistorySearchQuery] = useState('');
   const [periodFilter, setPeriodFilter] = useState<PeriodFilterValue>({ mode: 'ALL' });
+
+  // Task Evaluation Queue — student/event filters, sort, and event grouping
+  const [queueStudentFilter, setQueueStudentFilter] = useState('ALL');
+  const [queueEventFilter, setQueueEventFilter] = useState('ALL');
+  const [queueSortBy, setQueueSortBy] = useState<'pendingFirst' | 'titleAsc' | 'assigneeAsc' | 'eventAsc'>('pendingFirst');
 
   // Evaluation Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -248,17 +256,81 @@ export default function RatingsPage() {
 
   const isAdmin = user && (user.tier <= 3 || user.tier === 5); // Tiers 1-3 & 5 can evaluate tasks
 
-  // Ratable Tasks Queue (Completed or In Progress tasks awaiting performance rating)
-  const ratableTasks = tasks
-    .filter(t => t.status === 'Completed' || t.status === 'In Progress')
-    .filter(t => {
-      const q = taskSearchQuery.toLowerCase();
-      return (
-        t.title.toLowerCase().includes(q) ||
-        t.assignee.toLowerCase().includes(q) ||
-        (t.event && t.event.toLowerCase().includes(q))
-      );
-    });
+  // Whether the CURRENT viewer's own reviewer slot (Centre Head / GG Head / Design
+  // Head) has already scored this task — used both for the "pending first" sort
+  // and to decide whether a queue card offers "Evaluate" or "Edit My Review".
+  const hasMyRating = (task: TaskItem): boolean => {
+    const reviewerRole = resolveRatingReviewerRole(user, isDesignTask(task));
+    if (!reviewerRole) return false;
+    const targetId = getRatingTargetId(task);
+    return ratings.some(r => r.taskId === task.id && r.targetId === targetId && r.reviewerRole === reviewerRole);
+  };
+
+  // Task Evaluation Queue only ever surfaces fully Completed deliverables — a task
+  // still 'In Progress' isn't a finished body of work yet, so it's excluded until
+  // the assignee (or the design caption workflow) marks it Completed exactly once.
+  const completedTasks = tasks.filter(t => t.status === 'Completed');
+
+  const searchedQueueTasks = completedTasks.filter(t => {
+    const q = taskSearchQuery.toLowerCase();
+    return (
+      t.title.toLowerCase().includes(q) ||
+      t.assignee.toLowerCase().includes(q) ||
+      (t.event && t.event.toLowerCase().includes(q))
+    );
+  });
+
+  // Filter option lists are derived from the currently search-matched tasks, so a
+  // dropdown never offers a student/event with nothing left to evaluate.
+  const queueStudentOptions = Array.from(new Set(searchedQueueTasks.map(t => t.assignee))).sort((a, b) => a.localeCompare(b));
+  const queueEventOptions = Array.from(new Set(searchedQueueTasks.map(t => t.event || 'Standalone Deliverable'))).sort((a, b) => a.localeCompare(b));
+
+  const filteredQueueTasks = searchedQueueTasks.filter(t => {
+    if (queueStudentFilter !== 'ALL' && t.assignee !== queueStudentFilter) return false;
+    if (queueEventFilter !== 'ALL' && (t.event || 'Standalone Deliverable') !== queueEventFilter) return false;
+    return true;
+  });
+
+  const sortedQueueTasks = [...filteredQueueTasks].sort((a, b) => {
+    switch (queueSortBy) {
+      case 'titleAsc':
+        return a.title.localeCompare(b.title);
+      case 'assigneeAsc':
+        return a.assignee.localeCompare(b.assignee);
+      case 'eventAsc':
+        return (a.event || 'Standalone Deliverable').localeCompare(b.event || 'Standalone Deliverable');
+      case 'pendingFirst':
+      default: {
+        const aPending = hasMyRating(a) ? 1 : 0;
+        const bPending = hasMyRating(b) ? 1 : 0;
+        if (aPending !== bPending) return aPending - bPending;
+        return a.title.localeCompare(b.title);
+      }
+    }
+  });
+
+  const queueGroups: { key: string; label: string; tasks: TaskItem[] }[] = [];
+  sortedQueueTasks.forEach(task => {
+    const key = task.eventId || 'standalone';
+    let group = queueGroups.find(g => g.key === key);
+    if (!group) {
+      group = { key, label: task.event || 'Standalone Deliverables', tasks: [] };
+      queueGroups.push(group);
+    }
+    group.tasks.push(task);
+  });
+  queueGroups.sort((a, b) => {
+    if (a.key === 'standalone') return 1;
+    if (b.key === 'standalone') return -1;
+    return a.label.localeCompare(b.label);
+  });
+
+  const hasActiveQueueFilters = queueStudentFilter !== 'ALL' || queueEventFilter !== 'ALL' || taskSearchQuery !== '';
+  const clearQueueFilters = () => {
+    setQueueStudentFilter('ALL');
+    setQueueEventFilter('ALL');
+    setTaskSearchQuery('');
+  };
 
   // Filtered ratings history
   const filteredRatingsHistory = ratings.filter(r => {
@@ -316,123 +388,187 @@ export default function RatingsPage() {
               className="w-full pl-8 pr-3 py-1.5 bg-theme-background/40 border border-theme-border/40 rounded-xl text-xs text-theme-text-primary placeholder-theme-text-secondary focus:outline-none focus:border-accent"
             />
           </div>
-          
+
+          {/* Student / event filters + sort — mirrors the Tasks page filter bar */}
+          <div className="space-y-1.5">
+            <div className="grid grid-cols-2 gap-1.5">
+              <select
+                value={queueStudentFilter}
+                onChange={(e) => setQueueStudentFilter(e.target.value)}
+                className="w-full px-2 py-1.5 bg-theme-background/40 border border-theme-border/40 rounded-lg text-[11px] text-theme-text-primary focus:outline-none focus:border-accent"
+              >
+                <option value="ALL">All Students</option>
+                {queueStudentOptions.map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+              <select
+                value={queueEventFilter}
+                onChange={(e) => setQueueEventFilter(e.target.value)}
+                className="w-full px-2 py-1.5 bg-theme-background/40 border border-theme-border/40 rounded-lg text-[11px] text-theme-text-primary focus:outline-none focus:border-accent"
+              >
+                <option value="ALL">All Events</option>
+                {queueEventOptions.map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="flex-1 flex items-center gap-1.5 px-2 py-1.5 bg-theme-background/40 border border-theme-border/40 rounded-lg">
+                <ListFilter className="h-3 w-3 text-theme-text-secondary shrink-0" />
+                <select
+                  value={queueSortBy}
+                  onChange={(e) => setQueueSortBy(e.target.value as typeof queueSortBy)}
+                  className="w-full bg-transparent text-[11px] text-theme-text-primary focus:outline-none"
+                >
+                  <option value="pendingFirst">Sort: Pending My Review First</option>
+                  <option value="titleAsc">Sort: Task Title (A-Z)</option>
+                  <option value="assigneeAsc">Sort: Student (A-Z)</option>
+                  <option value="eventAsc">Sort: Event (A-Z)</option>
+                </select>
+              </div>
+              {hasActiveQueueFilters && (
+                <button
+                  onClick={clearQueueFilters}
+                  className="px-2 py-1.5 text-[11px] font-semibold text-theme-text-secondary hover:text-theme-text-primary bg-theme-border/30 hover:bg-theme-border/50 rounded-lg transition-all cursor-pointer shrink-0"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+
           <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-            {ratableTasks.length === 0 ? (
+            {sortedQueueTasks.length === 0 ? (
               <div className="text-center py-8 text-theme-text-secondary text-xs bg-theme-border/5 rounded-xl border border-theme-border/20">
-                No active or completed deliverables currently queued.
+                {hasActiveQueueFilters ? 'No completed deliverables match the selected filters.' : 'No completed deliverables currently queued for evaluation.'}
               </div>
             ) : (
-              ratableTasks.map(task => {
-                const linkedEvent = events.find(ev => ev.id === task.eventId || ev.title === task.event);
-                const eventCampus = linkedEvent?.campus || task.eventCampus || 'GG Campus';
-                const isDesignDeliverable = isDesignTask(task);
-                const canEval = canEvaluateEventStudent(user, eventCampus, isDesignDeliverable);
-                const reviewerRole = resolveRatingReviewerRole(user, isDesignDeliverable);
-                const targetId = getRatingTargetId(task);
-                const dualReview = reviewerRole === 'CENTRE_HEAD' || reviewerRole === 'GG_HEAD';
-                const myExistingRating = reviewerRole
-                  ? ratings.find(r => r.taskId === task.id && r.targetId === targetId && r.reviewerRole === reviewerRole)
-                  : undefined;
-                const hasCentreHeadReview = ratings.some(r => r.taskId === task.id && r.targetId === targetId && r.reviewerRole === 'CENTRE_HEAD');
-                const hasGgHeadReview = ratings.some(r => r.taskId === task.id && r.targetId === targetId && r.reviewerRole === 'GG_HEAD');
-
-                return (
-                  <div 
-                    key={task.id} 
-                    className={`p-3.5 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2 hover:bg-theme-border/15 transition-all text-xs ${!canEval ? 'opacity-75' : ''}`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <h4 className="font-bold text-xs text-theme-text-primary line-clamp-1">{task.title}</h4>
-                        <p className="text-[10px] text-theme-text-secondary mt-0.5">
-                          Assignee: <strong className="text-theme-text-primary">{task.assignee}</strong>
-                        </p>
-                        <div className="flex items-center flex-wrap gap-1.5 mt-1">
-                          {task.event ? (
-                            <span className="text-[10px] text-accent font-semibold">{task.event}</span>
-                          ) : (
-                            <span className="text-[9px] font-medium px-1.5 py-0.5 bg-theme-border/20 text-theme-text-secondary rounded">
-                              Standalone Deliverable
-                            </span>
-                          )}
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 bg-accent/10 text-accent rounded border border-accent/20">
-                            {eventCampus}
-                          </span>
-                          {isDesignDeliverable && (
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-purple-500/15 text-purple-400 rounded border border-purple-500/20 flex items-center gap-1">
-                              <Palette className="h-2.5 w-2.5" /> Design Deliverable
-                            </span>
-                          )}
-                          {(task.assigneeType === 'committee' || task.eventCommitteeId) && (
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-warning/15 text-warning rounded border border-warning/20 flex items-center gap-1">
-                              <Users className="h-2.5 w-2.5" /> Committee Task
-                            </span>
-                          )}
-                          {task.assigneeType === 'group' && (
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-warning/15 text-warning rounded border border-warning/20 flex items-center gap-1">
-                              <Users className="h-2.5 w-2.5" /> Group Task
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
-                        task.status === 'Completed' ? 'bg-success/15 text-success' : 'bg-primary/15 text-primary-light'
-                      }`}>
-                        {task.status}
+              queueGroups.map(group => (
+                <details key={group.key} open className="group">
+                  <summary className="flex items-center justify-between cursor-pointer list-none select-none py-1">
+                    <span className="flex items-center gap-1.5 text-[11px] font-bold text-theme-text-primary">
+                      <Briefcase className="h-3 w-3 text-accent" />
+                      {group.label}
+                      <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-theme-border/30 text-theme-text-secondary">
+                        {group.tasks.length}
                       </span>
-                    </div>
+                    </span>
+                    <ChevronDown className="h-3.5 w-3.5 text-theme-text-secondary transition-transform group-open:rotate-180" />
+                  </summary>
 
-                    {task.ratingScore ? (
-                      <div className="pt-1 border-t border-theme-border/20 space-y-1">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="text-theme-text-secondary">
-                            {dualReview ? 'Average Score:' : 'Evaluated Score:'}
-                          </span>
-                          <span className="font-bold text-accent flex items-center gap-1">
-                            <Star className="h-3 w-3 fill-accent" />
-                            {task.ratingScore.toFixed(1)}/5.0
-                          </span>
-                        </div>
-                        {dualReview && (
-                          <div className="flex items-center gap-1.5 text-[9px] text-theme-text-secondary">
-                            <span className={hasCentreHeadReview ? 'text-success font-semibold' : 'opacity-60'}>
-                              {hasCentreHeadReview ? '✓' : '○'} Centre Head
-                            </span>
-                            <span className={hasGgHeadReview ? 'text-success font-semibold' : 'opacity-60'}>
-                              {hasGgHeadReview ? '✓' : '○'} GG Head
+                  <div className="space-y-3 pt-2 pb-1">
+                    {group.tasks.map(task => {
+                      const linkedEvent = events.find(ev => ev.id === task.eventId || ev.title === task.event);
+                      const eventCampus = linkedEvent?.campus || task.eventCampus || 'GG Campus';
+                      const isDesignDeliverable = isDesignTask(task);
+                      const canEval = canEvaluateEventStudent(user, eventCampus, isDesignDeliverable);
+                      const reviewerRole = resolveRatingReviewerRole(user, isDesignDeliverable);
+                      const targetId = getRatingTargetId(task);
+                      const dualReview = reviewerRole === 'CENTRE_HEAD' || reviewerRole === 'GG_HEAD';
+                      const myExistingRating = reviewerRole
+                        ? ratings.find(r => r.taskId === task.id && r.targetId === targetId && r.reviewerRole === reviewerRole)
+                        : undefined;
+                      const hasCentreHeadReview = ratings.some(r => r.taskId === task.id && r.targetId === targetId && r.reviewerRole === 'CENTRE_HEAD');
+                      const hasGgHeadReview = ratings.some(r => r.taskId === task.id && r.targetId === targetId && r.reviewerRole === 'GG_HEAD');
+
+                      return (
+                        <div
+                          key={task.id}
+                          className={`p-3.5 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2 hover:bg-theme-border/15 transition-all text-xs ${!canEval ? 'opacity-75' : ''}`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <h4 className="font-bold text-xs text-theme-text-primary line-clamp-1">{task.title}</h4>
+                              <p className="text-[10px] text-theme-text-secondary mt-0.5">
+                                Assignee: <strong className="text-theme-text-primary">{task.assignee}</strong>
+                              </p>
+                              <div className="flex items-center flex-wrap gap-1.5 mt-1">
+                                {task.event ? (
+                                  <span className="text-[10px] text-accent font-semibold">{task.event}</span>
+                                ) : (
+                                  <span className="text-[9px] font-medium px-1.5 py-0.5 bg-theme-border/20 text-theme-text-secondary rounded">
+                                    Standalone Deliverable
+                                  </span>
+                                )}
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 bg-accent/10 text-accent rounded border border-accent/20">
+                                  {eventCampus}
+                                </span>
+                                {isDesignDeliverable && (
+                                  <span className="text-[9px] font-bold px-1.5 py-0.5 bg-purple-500/15 text-purple-400 rounded border border-purple-500/20 flex items-center gap-1">
+                                    <Palette className="h-2.5 w-2.5" /> Design Deliverable
+                                  </span>
+                                )}
+                                {(task.assigneeType === 'committee' || task.eventCommitteeId) && (
+                                  <span className="text-[9px] font-bold px-1.5 py-0.5 bg-warning/15 text-warning rounded border border-warning/20 flex items-center gap-1">
+                                    <Users className="h-2.5 w-2.5" /> Committee Task
+                                  </span>
+                                )}
+                                {task.assigneeType === 'group' && (
+                                  <span className="text-[9px] font-bold px-1.5 py-0.5 bg-warning/15 text-warning rounded border border-warning/20 flex items-center gap-1">
+                                    <Users className="h-2.5 w-2.5" /> Group Task
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 bg-success/15 text-success">
+                              {task.status}
                             </span>
                           </div>
-                        )}
-                      </div>
-                    ) : null}
 
-                    <div className="pt-1 border-t border-theme-border/20 flex items-center justify-between gap-2">
-                      {!canEval ? (
-                        <span className="text-[10px] text-warning font-medium italic">
-                          {isDesignDeliverable
-                            ? 'Evaluations restricted to Centre Head, Head of Events (GG Campus), or Design Head'
-                            : 'Evaluations restricted to Centre Head or Head of Events (GG Campus)'}
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-theme-text-secondary">
-                          {myExistingRating
-                            ? 'You already reviewed this'
-                            : task.assigneeType === 'committee' ? 'Rates entire committee' : task.assigneeType === 'group' ? 'Rates entire group' : 'Pending Evaluation'}
-                        </span>
-                      )}
-                      {canEval && (
-                        <button
-                          onClick={() => myExistingRating ? openEditEvaluation(myExistingRating) : openEvaluationForTask(task)}
-                          className="px-3 py-1 text-[11px] font-medium rounded-lg cursor-pointer transition-all bg-accent/15 text-accent hover:bg-accent/25 border border-accent/20"
-                        >
-                          {myExistingRating ? 'Edit My Review' : 'Evaluate Performance'}
-                        </button>
-                      )}
-                    </div>
+                          {task.ratingScore ? (
+                            <div className="pt-1 border-t border-theme-border/20 space-y-1">
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="text-theme-text-secondary">
+                                  {dualReview ? 'Average Score:' : 'Evaluated Score:'}
+                                </span>
+                                <span className="font-bold text-accent flex items-center gap-1">
+                                  <Star className="h-3 w-3 fill-accent" />
+                                  {task.ratingScore.toFixed(1)}/5.0
+                                </span>
+                              </div>
+                              {dualReview && (
+                                <div className="flex items-center gap-1.5 text-[9px] text-theme-text-secondary">
+                                  <span className={hasCentreHeadReview ? 'text-success font-semibold' : 'opacity-60'}>
+                                    {hasCentreHeadReview ? '✓' : '○'} Centre Head
+                                  </span>
+                                  <span className={hasGgHeadReview ? 'text-success font-semibold' : 'opacity-60'}>
+                                    {hasGgHeadReview ? '✓' : '○'} GG Head
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          ) : null}
+
+                          <div className="pt-1 border-t border-theme-border/20 flex items-center justify-between gap-2">
+                            {!canEval ? (
+                              <span className="text-[10px] text-warning font-medium italic">
+                                {isDesignDeliverable
+                                  ? 'Evaluations restricted to Centre Head, Head of Events (GG Campus), or Design Head'
+                                  : 'Evaluations restricted to Centre Head or Head of Events (GG Campus)'}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-theme-text-secondary">
+                                {myExistingRating
+                                  ? 'You already reviewed this'
+                                  : task.assigneeType === 'committee' ? 'Rates entire committee' : task.assigneeType === 'group' ? 'Rates entire group' : 'Pending Evaluation'}
+                              </span>
+                            )}
+                            {canEval && (
+                              <button
+                                onClick={() => myExistingRating ? openEditEvaluation(myExistingRating) : openEvaluationForTask(task)}
+                                className="px-3 py-1 text-[11px] font-medium rounded-lg cursor-pointer transition-all bg-accent/15 text-accent hover:bg-accent/25 border border-accent/20"
+                              >
+                                {myExistingRating ? 'Edit My Review' : 'Evaluate Performance'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })
+                </details>
+              ))
             )}
           </div>
         </div>
