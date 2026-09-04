@@ -776,6 +776,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         onClick={handleToggleNotifications}
         className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-xl hover:bg-theme-border/20 transition-all cursor-pointer relative shrink-0"
         title="Notifications"
+        aria-label="Notifications"
+        aria-expanded={isNotificationsOpen}
       >
         <Bell className="h-4.5 w-4.5" />
         {unseenActionCount > 0 && (
@@ -1230,6 +1232,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         <button
           onClick={toggleSidebarCollapsed}
           title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-expanded={!isSidebarCollapsed}
           className="absolute top-20 -right-3 h-6 w-6 flex items-center justify-center rounded-full bg-theme-sidebar border border-theme-sidebar-border shadow-md text-theme-text-secondary hover:text-theme-text-primary hover:bg-theme-border/30 transition-all z-50 cursor-pointer"
         >
           {isSidebarCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
@@ -1258,6 +1262,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             onClick={toggleTheme}
             className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-lg hover:bg-theme-border/20 transition-all cursor-pointer"
             title="Toggle Theme"
+            aria-label="Toggle Theme"
           >
             {isDarkTheme ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </button>
@@ -1267,6 +1272,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-lg hover:bg-theme-border/20 transition-all cursor-pointer"
+            aria-label={isMobileMenuOpen ? 'Close mobile menu' : 'Open mobile menu'}
+            aria-expanded={isMobileMenuOpen}
           >
             {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
@@ -1379,6 +1386,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
               onClick={toggleTheme}
               className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-xl hover:bg-theme-border/20 transition-all cursor-pointer shrink-0"
               title="Toggle Light/Dark Theme"
+              aria-label="Toggle Light/Dark Theme"
             >
               {isDarkTheme ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
             </button>
