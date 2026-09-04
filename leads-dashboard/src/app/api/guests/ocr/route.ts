@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { performCardOcr } from '@/lib/visiting-card-ocr';
 import { parseDataUrl } from '@/lib/file-storage';
+import { requireSession, sessionErrorStatus, ForbiddenError } from '@/lib/session';
+import { getAccessLevelSettingsServer, canAccessGuestDirectory } from '@/lib/permissions-server';
 
 export const maxDuration = 60; // 60 seconds Next.js route execution timeout
 
@@ -8,6 +10,9 @@ const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 export async function POST(request: Request) {
   try {
+    const actor = await requireSession(request);
+    const settings = await getAccessLevelSettingsServer();
+    if (!canAccessGuestDirectory(actor, settings)) throw new ForbiddenError();
     const body = await request.json();
 
     if (!body.frontData || typeof body.frontData !== 'string') {
@@ -33,6 +38,8 @@ export async function POST(request: Request) {
     const extracted = await performCardOcr(frontBuffer, backBuffer);
     return NextResponse.json(extracted);
   } catch (err: any) {
+    const status = sessionErrorStatus(err);
+    if (status) return NextResponse.json({ error: err.message }, { status });
     console.error('OCR Card Scan Error:', err);
     return NextResponse.json({ error: err.message || 'Failed to scan visiting card image.' }, { status: 500 });
   }

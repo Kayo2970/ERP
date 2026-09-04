@@ -2,19 +2,48 @@ import { NextResponse } from 'next/server';
 import { mutateCollection, readCollection } from '@/lib/server-db';
 import { saveBase64File, deleteStoredFile, deleteStoredFilesForRecord, readStoredFile } from '@/lib/file-storage';
 import { cascadeCloseAutoApprovals } from '@/lib/approval-sync';
+import { requireSession, sessionErrorStatus, ForbiddenError } from '@/lib/session';
+import { getAccessLevelSettingsServer, canReviewEventReports } from '@/lib/permissions-server';
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
+
+function isEventReportAuthor(existing: any, actor: any): boolean {
+  if (!existing || !actor) return false;
+  if (existing.submittedBy && actor.id === existing.submittedBy) return true;
+  if (existing.submittedByEmail && actor.email && actor.email.toLowerCase() === existing.submittedByEmail.toLowerCase()) return true;
+  if (existing.submittedBy && actor.name && actor.name === existing.submittedBy) return true;
+  return false;
+}
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const actor = await requireSession(request);
     const { id } = await params;
     const body = await request.json();
 
     if (typeof body.fileSize === 'number' && body.fileSize > MAX_FILE_SIZE_BYTES) {
       return NextResponse.json({ error: 'File size exceeds the maximum limit of 25 MB.' }, { status: 400 });
+    }
+
+    // The centre_head/gg_events_head approve-or-reject branch is identified
+    // by these approval fields; anything else is treated as a resubmit by
+    // the report's own author.
+    const settings = await getAccessLevelSettingsServer();
+    const isApprovalAction = Object.prototype.hasOwnProperty.call(body, 'centreHeadApproved')
+      || Object.prototype.hasOwnProperty.call(body, 'eventsHeadGgApproved')
+      || body.status === 'approved'
+      || body.status === 'rejected';
+    if (isApprovalAction) {
+      if (!canReviewEventReports(actor, settings)) throw new ForbiddenError();
+    } else {
+      const existingReports = await readCollection<any>('eventReports');
+      const existing = existingReports.find((r: any) => r.id === id);
+      if (!isEventReportAuthor(existing, actor) && !canReviewEventReports(actor, settings)) {
+        throw new ForbiddenError();
+      }
     }
 
     // A resubmission's replaced file arrives as a base64 data URL, same as
@@ -139,16 +168,24 @@ export async function PATCH(
 
     return NextResponse.json(mergedRecord || updated.find((r: any) => r.id === id));
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 500 });
   }
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const actor = await requireSession(request);
     const { id } = await params;
+    const settings = await getAccessLevelSettingsServer();
+    const existingReports = await readCollection<any>('eventReports');
+    const existing = existingReports.find((r: any) => r.id === id);
+    if (!isEventReportAuthor(existing, actor) && !canReviewEventReports(actor, settings) && actor.tier !== 1) {
+      throw new ForbiddenError();
+    }
     let found = false;
     await mutateCollection('eventReports', (current) => {
       const filtered = (current || []).filter((r: any) => r.id !== id);
@@ -159,6 +196,7 @@ export async function DELETE(
     await deleteStoredFilesForRecord('event-reports', id);
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 500 });
   }
 }

@@ -1,19 +1,32 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
+import { requireSession, requirePermission, sessionErrorStatus } from '@/lib/session';
+import { isSuperUser } from '@/lib/permissions-server';
 
-export async function GET() {
-  const items = await readCollection('accessLevelSettings');
-  return NextResponse.json(items);
+export async function GET(request: Request) {
+  try {
+    const actor = await requireSession(request);
+    requirePermission(isSuperUser(actor), 'Only a Super User can view Access Level Settings.');
+    const items = await readCollection('accessLevelSettings');
+    return NextResponse.json(items);
+  } catch (err: any) {
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 500 });
+  }
 }
 
 // Always exactly one record — POST replaces it wholesale rather than
 // appending, since there's nothing to key multiple records by.
 export async function POST(request: Request) {
   try {
+    const actor = await requireSession(request);
+    requirePermission(isSuperUser(actor), 'Only a Super User can update Access Level Settings.');
+
     const item = await request.json();
     const updated = await mutateCollection('accessLevelSettings', () => [{ ...item, id: 'default' }]);
     return NextResponse.json(updated[0], { status: 200 });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 400 });
   }
 }

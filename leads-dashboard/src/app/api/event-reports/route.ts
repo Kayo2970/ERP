@@ -2,18 +2,28 @@ import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { saveBase64File } from '@/lib/file-storage';
 import { fanOutAutoApproval } from '@/lib/approval-sync';
+import { requireSession, sessionErrorStatus } from '@/lib/session';
 
 export const maxDuration = 60; // 60s execution limit for large uploads (up to 25 MB)
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
 
-export async function GET() {
-  const items = await readCollection('eventReports');
-  return NextResponse.json(items);
+export async function GET(request: Request) {
+  try {
+    await requireSession(request);
+    const items = await readCollection('eventReports');
+    return NextResponse.json(items);
+  } catch (err: any) {
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 500 });
+  }
 }
 
 export async function POST(request: Request) {
   try {
+    // Submission-assignment logic lives client-side/elsewhere and isn't
+    // fully visible here — err permissive and only require being signed in.
+    await requireSession(request);
     const item = await request.json();
 
     if (!item.eventId || !item.fileName || !item.fileSize) {
@@ -58,6 +68,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(created, { status: 201 });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 400 });
   }
 }
