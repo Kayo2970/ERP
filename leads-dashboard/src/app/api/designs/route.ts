@@ -2,18 +2,27 @@ import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { saveBase64File } from '@/lib/file-storage';
 import { fanOutAutoApproval } from '@/lib/approval-sync';
+import { requireSession, sessionErrorStatus } from '@/lib/session';
 
 export const maxDuration = 60; // 60s execution limit for large uploads (up to 25 MB)
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
 
-export async function GET() {
-  const items = await readCollection('designs');
-  return NextResponse.json(items);
+export async function GET(request: Request) {
+  try {
+    await requireSession(request);
+    const items = await readCollection('designs');
+    return NextResponse.json(items);
+  } catch (err: any) {
+    const status = sessionErrorStatus(err);
+    if (status) return NextResponse.json({ error: err.message }, { status });
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {
   try {
+    await requireSession(request); // any signed-in member may submit a design
     const item = await request.json();
 
     if (!item.title || !item.fileName || !item.fileSize) {
@@ -150,6 +159,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(created, { status: 201 });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 500 });
   }
 }

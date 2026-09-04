@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server';
 import { createEncryptedBackup } from '@/lib/backup';
+import { requireSession, sessionErrorStatus } from '@/lib/session';
+import { canManageBackup } from '@/lib/permissions-server';
 
 export async function POST(request: Request) {
   try {
+    const actor = await requireSession(request);
+    if (!canManageBackup(actor)) {
+      return NextResponse.json({ error: 'You do not have permission to download backups.' }, { status: 403 });
+    }
     const { passphrase } = await request.json();
     if (!passphrase || typeof passphrase !== 'string' || passphrase.length < 8) {
       return NextResponse.json({ error: 'A passphrase of at least 8 characters is required.' }, { status: 400 });
@@ -20,6 +26,8 @@ export async function POST(request: Request) {
       },
     });
   } catch (err: any) {
+    const status = sessionErrorStatus(err);
+    if (status) return NextResponse.json({ error: err.message }, { status });
     return NextResponse.json({ error: err.message || 'Failed to create backup.' }, { status: 500 });
   }
 }

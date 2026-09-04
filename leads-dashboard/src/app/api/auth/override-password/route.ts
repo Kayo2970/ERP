@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { hashPassword } from '@/lib/password';
+import { createSession, invalidateAllSessionsForMember } from '@/lib/session';
 
 /**
  * Super User Admin Override: Consume admin override and set member's new password directly without OTP.
@@ -73,10 +74,13 @@ export async function POST(request: Request) {
     // Strip passwordHash before returning session user object
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { passwordHash, ...safeUser } = updatedUserRecord;
+    await invalidateAllSessionsForMember(updatedUserRecord.id);
+    const token = await createSession(updatedUserRecord.id);
 
     return NextResponse.json({
       success: true,
       user: safeUser,
+      token,
       message: 'New password set successfully! Signing you in...',
     });
   } catch (err: any) {

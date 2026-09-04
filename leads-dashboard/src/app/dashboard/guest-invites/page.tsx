@@ -20,7 +20,7 @@ import {
   CheckSquare,
   Square,
 } from 'lucide-react';
-import { logAuditEvent, getGuests, getMembers, Guest as DirectoryGuest, Member } from '@/lib/local-data';
+import { logAuditEvent, getGuests, getMembers, Guest as DirectoryGuest, Member, authHeaders } from '@/lib/local-data';
 import { canManageGuestInvites } from '@/lib/permissions';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -231,7 +231,7 @@ export default function GuestInvitesPage() {
       try {
         const res = await fetch('/api/email/send', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             scope: 'SINGLE',
             recipientEmail: guest.email,

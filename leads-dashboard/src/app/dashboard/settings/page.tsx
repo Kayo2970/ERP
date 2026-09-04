@@ -20,7 +20,7 @@ import {
   RotateCw,
   AlertCircle
 } from 'lucide-react';
-import { getAuditLogs, getMembers, saveMembers, updateMember, updateMemberAvatar, logAuditEvent, AuditLogItem, getEmailLogs, requestEmailChange, confirmEmailChange, confirmNewEmailChange } from '@/lib/local-data';
+import { getAuditLogs, getMembers, saveMembers, updateMember, updateMemberAvatar, logAuditEvent, AuditLogItem, getEmailLogs, requestEmailChange, confirmEmailChange, confirmNewEmailChange, authHeaders } from '@/lib/local-data';
 import { FileDropzone, useUploadTask, formatFileSize } from '@/components/ui/file-dropzone';
 import DOMPurify from 'isomorphic-dompurify';
 
@@ -298,7 +298,7 @@ export default function SettingsPage() {
 
       const res = await fetch('/api/auth/change-password', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ email: user.email, currentPassword, newPassword }),
       });
       const data = await res.json();
@@ -344,7 +344,7 @@ export default function SettingsPage() {
     try {
       const res = await fetch('/api/email', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           to: testTo.trim(),
           subject: testSubject.trim(),

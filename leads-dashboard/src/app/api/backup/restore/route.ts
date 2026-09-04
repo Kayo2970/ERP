@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server';
 import { restoreEncryptedBackup, InvalidPassphraseError } from '@/lib/backup';
+import { requireSession, sessionErrorStatus } from '@/lib/session';
+import { canManageBackup } from '@/lib/permissions-server';
 
 export async function POST(request: Request) {
   try {
+    const actor = await requireSession(request);
+    if (!canManageBackup(actor)) {
+      return NextResponse.json({ error: 'You do not have permission to restore backups.' }, { status: 403 });
+    }
     const formData = await request.formData();
     const passphrase = formData.get('passphrase');
     const file = formData.get('file');
@@ -18,6 +24,8 @@ export async function POST(request: Request) {
     const summary = await restoreEncryptedBackup(buffer, passphrase);
     return NextResponse.json(summary);
   } catch (err: any) {
+    const status = sessionErrorStatus(err);
+    if (status) return NextResponse.json({ error: err.message }, { status });
     if (err instanceof InvalidPassphraseError) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }

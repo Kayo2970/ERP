@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection } from '@/lib/server-db';
 import { fanOutAutoApproval, cascadeCloseAutoApprovals } from '@/lib/approval-sync';
+import { requireSession, requirePermission, sessionErrorStatus } from '@/lib/session';
+import { canDeleteEvent, getAccessLevelSettingsServer } from '@/lib/permissions-server';
 
 const PENDING_APPROVAL_MESSAGE: Record<string, string> = {
   pending_create: 'This event was created and needs sign-off from the Centre Head, Advisor, or GG Campus Events Head before it goes live.',
@@ -14,6 +16,10 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Existing approval-routing logic (approvalStatus/approverType fan-out
+    // below) already handles the "not fully trusted, route to pending" case,
+    // so the gate here is just "must be a real signed-in member."
+    await requireSession(request);
     const { id } = await params;
     const updates = await request.json();
     // Upsert: if this id isn't in the server's collection yet (e.g. client-bundled
@@ -59,15 +65,19 @@ export async function PATCH(
 
     return NextResponse.json(result);
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 400 });
   }
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const actor = await requireSession(request);
+    const settings = await getAccessLevelSettingsServer();
+    requirePermission(canDeleteEvent(actor, settings), 'You do not have permission to delete events.');
     const { id } = await params;
     let found = false;
     await mutateCollection('events', (current) => {
@@ -78,6 +88,7 @@ export async function DELETE(
     if (!found) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 500 });
   }
 }

@@ -56,7 +56,8 @@ import {
   requestMemberPasswordReset,
   adminSetMemberPassword,
   Member,
-  MemberDivision
+  MemberDivision,
+  authHeaders
 } from '@/lib/local-data';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { StudentProfileModal } from '@/components/student-profile-modal';
@@ -319,7 +320,7 @@ export default function DirectoryPage() {
 
     if (!initialLink) {
       try {
-        const res = await fetch(`/api/members/${member.id}/resend-activation`, { method: 'POST' });
+        const res = await fetch(`/api/members/${member.id}/resend-activation`, { method: 'POST', headers: authHeaders() });
         const data = await res.json();
         if (data.activationLink) {
           setActivationModalData({ member, link: data.activationLink });
@@ -338,7 +339,7 @@ export default function DirectoryPage() {
     try {
       const res = await fetch(`/api/members/${activationModalData.member.id}/set-password`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ newPassword: adminPasswordInput.trim(), actorName: user?.name || 'Admin' }),
       });
       const data = await res.json();
@@ -357,7 +358,7 @@ export default function DirectoryPage() {
   const handleResendActivation = async (member: Member) => {
     setResendingMemberId(member.id);
     try {
-      const res = await fetch(`/api/members/${member.id}/resend-activation`, { method: 'POST' });
+      const res = await fetch(`/api/members/${member.id}/resend-activation`, { method: 'POST', headers: authHeaders() });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to resend the welcome email.');
       if (data.emailSent === false) {
@@ -785,7 +786,7 @@ export default function DirectoryPage() {
       try {
         await fetch('/api/email/send', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             scope: 'SINGLE',
             recipientEmail: target.email,

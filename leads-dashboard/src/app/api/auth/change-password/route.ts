@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection, readCollection } from '@/lib/server-db';
 import { hashPassword, verifyPassword } from '@/lib/password';
+import { requireSession, sessionErrorStatus, invalidateAllSessionsForMember, createSession } from '@/lib/session';
 
 /**
  * Self-service password change from Settings. Verifying currentPassword
@@ -10,6 +11,7 @@ import { hashPassword, verifyPassword } from '@/lib/password';
  */
 export async function POST(request: Request) {
   try {
+    const actor = await requireSession(request);
     const { email, currentPassword, newPassword } = await request.json();
     if (!email || !currentPassword || !newPassword) {
       return NextResponse.json({ error: 'Current password and new password are required.' }, { status: 400 });
@@ -19,6 +21,12 @@ export async function POST(request: Request) {
     }
 
     const trimmedEmail = email.trim().toLowerCase();
+    // Only ever act on the signed-in caller's own record — a request body
+    // naming a different email must never be able to change someone else's
+    // password, even if (implausibly) it also somehow knew their current one.
+    if (trimmedEmail !== (actor.email || '').toLowerCase()) {
+      return NextResponse.json({ error: 'You can only change your own password.' }, { status: 403 });
+    }
     const members = await readCollection<any>('members');
     const matchedUser = members.find(m => m.email.toLowerCase() === trimmedEmail);
 
@@ -37,8 +45,16 @@ export async function POST(request: Request) {
       )
     );
 
-    return NextResponse.json({ success: true });
+    // Rotate out every other live session for this account and issue this
+    // caller a fresh one, so a password change also kicks out anyone else
+    // who was using a stolen session token under the old password.
+    await invalidateAllSessionsForMember(matchedUser.id);
+    const token = await createSession(matchedUser.id);
+
+    return NextResponse.json({ success: true, token });
   } catch (err: any) {
+    const status = sessionErrorStatus(err);
+    if (status) return NextResponse.json({ error: err.message }, { status });
     console.error('[change-password-api] Error:', err);
     return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
   }

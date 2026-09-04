@@ -41,7 +41,7 @@ import {
   Sparkles,
   FileCheck2
 } from 'lucide-react';
-import { getAnnouncements, getTasks, getDesigns, getMembers, getBudgets, getReimbursements, getEvents, getApprovalRequests, logAuditEvent, Member, syncWithServer, getSystemSettings } from '@/lib/local-data';
+import { getAnnouncements, getTasks, getDesigns, getMembers, getBudgets, getReimbursements, getEvents, getApprovalRequests, logAuditEvent, Member, syncWithServer, getSystemSettings, signOutClient } from '@/lib/local-data';
 import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isFinanceHead, canAccessGuestDirectory, canVerifyBudgetCentreHead, canDecideBudget, canVerifyReimbursementCentreHead, canApproveAsSectorHead, canApproveAsFinanceHead, canSubmitEventReport, canReviewEventReports } from '@/lib/permissions';
 import { TermsModal } from '@/components/terms-modal';
 import { NotFoundScreen } from '@/components/not-found-screen';
@@ -441,7 +441,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       if (liveRecord) {
         if (liveRecord.status === 'Terminated') {
           logAuditEvent('SESSION_TERMINATED_LOGOUT', currentUser.name || 'User', 'Force-logged out — account was terminated while session was active', currentUser.email);
-          localStorage.removeItem('user');
+          signOutClient();
           localStorage.setItem('logoutReason', 'terminated');
           router.replace('/');
           return;
@@ -587,7 +587,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           console.error(e);
         }
       }
-      localStorage.removeItem('user');
+      signOutClient();
       localStorage.setItem('logoutReason', 'inactivity');
       router.replace('/');
     };
@@ -702,7 +702,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     .sort((a, b) => b.href.length - a.href.length)[0] || allSidebarItems[0];
 
   const handleLogout = () => {
-    localStorage.removeItem('user');
+    signOutClient();
     router.replace('/');
   };
 

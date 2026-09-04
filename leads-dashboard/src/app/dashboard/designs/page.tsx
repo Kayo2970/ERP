@@ -49,7 +49,8 @@ import {
   Member,
   EventItem,
   TaskItem,
-  OcrScanResult
+  OcrScanResult,
+  authHeaders
 } from '@/lib/local-data';
 import { canViewAllDesigns, isDesignHead, isCentreHead, hasCapability, canReviewDesignProofread } from '@/lib/permissions';
 
@@ -566,7 +567,7 @@ export default function DesignPortalPage() {
     try {
       const res = await fetch('/api/designs/ocr-scan', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ fileData: dataUrl, fileType }),
       });
 

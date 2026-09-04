@@ -1,14 +1,29 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { createActivationTokenAndSendEmail } from '@/lib/account-activation';
+import { requireSession, sessionErrorStatus } from '@/lib/session';
+import { getAccessLevelSettingsServer, canAddMember } from '@/lib/permissions-server';
 
-export async function GET() {
-  const members = await readCollection('members');
-  return NextResponse.json(members);
+export async function GET(request: Request) {
+  try {
+    await requireSession(request);
+  } catch (err: any) {
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 401 });
+  }
+  const members = await readCollection<any>('members');
+  // passwordHash must never leave the server — this endpoint returned it to
+  // any caller (and any caller at all, before the requireSession above).
+  return NextResponse.json(members.map(({ passwordHash, ...safe }: any) => safe));
 }
 
 export async function POST(request: Request) {
   try {
+    const actor = await requireSession(request);
+    const settings = await getAccessLevelSettingsServer();
+    if (!canAddMember(actor, settings)) {
+      return NextResponse.json({ error: "You don't have permission to add members." }, { status: 403 });
+    }
     const member = await request.json();
     const newMemberPayload = {
       ...member,
@@ -46,6 +61,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ...created, activationLink, activationEmailSent, activationEmailError }, { status: 201 });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 });
+    const status = sessionErrorStatus(err);
+    return NextResponse.json({ error: err.message }, { status: status || 400 });
   }
 }

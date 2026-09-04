@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { 
+import { authHeaders } from '@/lib/local-data';
+import {
   Mail, 
   Server, 
   Send, 
@@ -134,7 +135,7 @@ export default function EmailManagementPage() {
 
   const fetchSettings = async () => {
     try {
-      const res = await fetch('/api/email/settings', { cache: 'no-store' });
+      const res = await fetch('/api/email/settings', { cache: 'no-store', headers: authHeaders() });
       if (res.ok) {
         const data = await res.json();
         setSettings(data);
@@ -147,7 +148,7 @@ export default function EmailManagementPage() {
 
   const fetchLogs = async () => {
     try {
-      const res = await fetch('/api/email/logs');
+      const res = await fetch('/api/email/logs', { headers: authHeaders() });
       if (res.ok) {
         const data = await res.json();
         setOutboxLogs(data || []);
@@ -159,7 +160,7 @@ export default function EmailManagementPage() {
 
   const fetchQueues = async () => {
     try {
-      const res = await fetch('/api/email/queue');
+      const res = await fetch('/api/email/queue', { headers: authHeaders() });
       if (res.ok) {
         const data = await res.json();
         setPendingQueues(data.queues || []);
@@ -175,7 +176,7 @@ export default function EmailManagementPage() {
     setIsCancellingQueue(email || 'ALL');
     try {
       const url = email ? `/api/email/queue?email=${encodeURIComponent(email)}` : '/api/email/queue?all=true';
-      const res = await fetch(url, { method: 'DELETE' });
+      const res = await fetch(url, { method: 'DELETE', headers: authHeaders() });
       if (res.ok) {
         const data = await res.json();
         triggerToast('success', data.message || 'Queued email buffer cancelled.');
@@ -195,7 +196,7 @@ export default function EmailManagementPage() {
     try {
       const res = await fetch('/api/email/queue', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ email }),
       });
       if (res.ok) {
@@ -257,7 +258,7 @@ export default function EmailManagementPage() {
     try {
       const res = await fetch('/api/email/settings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ settings, actorName: user?.name || 'Super User' }),
       });
       if (res.ok) {
@@ -285,7 +286,7 @@ export default function EmailManagementPage() {
     try {
       const res = await fetch('/api/email/test', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         // Test whatever is currently in the form — including a provider
         // switch or credentials that haven't been saved yet — not whatever
         // was last saved. Otherwise switching providers here and testing
@@ -333,7 +334,7 @@ export default function EmailManagementPage() {
       };
       const res = await fetch('/api/email/send', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(payload),
       });
       const data = await res.json();

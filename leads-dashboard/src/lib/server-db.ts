@@ -74,6 +74,12 @@ export interface DbSchema {
   // PM2 restart near midnight (or two scheduler ticks landing on the same
   // day) can never double-send the same member's birthday email.
   birthdayEmailLog: any[];
+  // Server-side auth sessions — one row per issued login token (see
+  // src/lib/session.ts). Only the SHA-256 hash of the token is stored, never
+  // the token itself, so a leaked/backed-up sessions.json can't be replayed
+  // directly. This is what makes "sign out" and "revoke this device" real:
+  // deleting a row here invalidates that token immediately, server-side.
+  sessions: any[];
   lastUpdated?: string;
 }
 
@@ -103,6 +109,7 @@ const EMPTY_DB: DbSchema = {
   eventReports: [],
   approvalRequests: [],
   birthdayEmailLog: [],
+  sessions: [],
 };
 
 const SEED_DB: DbSchema = {
@@ -151,6 +158,7 @@ const SEED_DB: DbSchema = {
   eventReports: [],
   approvalRequests: [],
   birthdayEmailLog: [],
+  sessions: [],
 };
 
 const COLLECTION_KEYS = Object.keys(EMPTY_DB) as (keyof DbSchema)[];

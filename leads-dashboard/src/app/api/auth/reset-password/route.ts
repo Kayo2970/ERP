@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { hashPassword } from '@/lib/password';
+import { invalidateAllSessionsForMember } from '@/lib/session';
 
 export async function POST(request: Request) {
   try {
@@ -34,12 +35,14 @@ export async function POST(request: Request) {
     // Update user password in database
     let memberUpdated = false;
     let memberName = 'User';
+    let memberId = '';
 
     await mutateCollection('members', (current) => {
       return (current || []).map((m: any) => {
         if (m.email.toLowerCase() === trimmedEmail) {
           memberUpdated = true;
           memberName = m.name;
+          memberId = m.id;
           return {
             ...m,
             passwordHash: hashPassword(newPassword),
@@ -73,6 +76,9 @@ export async function POST(request: Request) {
       timestamp: new Date().toISOString(),
     };
     await mutateCollection('auditLogs', (current) => [auditLog, ...(current || [])]);
+
+    // A stolen/still-logged-in session shouldn't survive a password reset.
+    if (memberId) await invalidateAllSessionsForMember(memberId);
 
     return NextResponse.json({
       success: true,
