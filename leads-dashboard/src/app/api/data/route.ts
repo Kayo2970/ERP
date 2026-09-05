@@ -25,7 +25,9 @@ export async function GET(request: Request) {
     // client use for them either).
     db.members = (db.members || []).map((m: any) => {
       const { passwordHash, ...safe } = m;
-      return safe;
+      // Activation/reset badges on the client need to know whether a
+      // password is set without ever seeing the hash itself.
+      return { ...safe, hasPassword: !!passwordHash };
     });
     delete db.sessions;
 

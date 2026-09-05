@@ -1451,7 +1451,7 @@ export default function DirectoryPage() {
                                 Rejected
                               </span>
                             )}
-                            {member.status !== 'Terminated' && !member.passwordHash && member.approvalStatus !== 'pending_create' && member.approvalStatus !== 'rejected' && (
+                            {member.status !== 'Terminated' && !member.hasPassword && member.approvalStatus !== 'pending_create' && member.approvalStatus !== 'rejected' && (
                               <span
                                 className="inline-flex items-center text-[9px] font-semibold px-1.5 py-0.5 rounded-full border bg-warning/15 text-warning border-warning/30"
                                 title="This member hasn't set up their password yet — they were sent a welcome email with an activation link."
@@ -1572,7 +1572,7 @@ export default function DirectoryPage() {
                                 </button>
                               )}
 
-                              {member.status !== 'Terminated' && !member.passwordHash && (
+                              {member.status !== 'Terminated' && !member.hasPassword && (
                                 <button
                                   onClick={() => handleResendActivation(member)}
                                   disabled={resendingMemberId === member.id}

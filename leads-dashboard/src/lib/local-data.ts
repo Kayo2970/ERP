@@ -54,6 +54,7 @@ export interface Member {
   program?: string; // e.g. "B.Tech Computer Science Engineering", "MBA"
   batch?: string; // e.g. "Class of 2025" for Alumni
   passwordHash?: string; // scrypt hash ("salt:hash"), set via password.ts — never plaintext
+  hasPassword?: boolean; // client-side only: server derives this from passwordHash and strips the hash itself before sending member data to the browser
   bankName?: string;
   accountNumber?: string;
   ifscCode?: string;
