@@ -2,15 +2,16 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { CalendarRange, ExternalLink } from 'lucide-react';
+import { CalendarRange, ExternalLink, Maximize2, X } from 'lucide-react';
 import { EventItem, TaskItem, getEffectiveEventStatus, hasEventPlanningPhase } from '@/lib/local-data';
 
-type WindowKey = '14' | '30' | '90';
+type WindowKey = '14' | '30' | '90' | 'year';
 
 const WINDOW_OPTIONS: { key: WindowKey; label: string; before: number; after: number }[] = [
   { key: '14', label: '2 Weeks', before: 2, after: 14 },
   { key: '30', label: '30 Days', before: 5, after: 30 },
   { key: '90', label: '90 Days', before: 7, after: 90 },
+  { key: 'year', label: 'Full Year', before: 30, after: 335 },
 ];
 
 const DAY_MS = 86400000;
@@ -53,6 +54,17 @@ function countInWindow(opt: typeof WINDOW_OPTIONS[number], events: EventItem[], 
 
 export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProps) {
   const [windowKey, setWindowKey] = useState<WindowKey>('30');
+  // Expanding shows the same timeline full-screen with more rows and, by
+  // default, the Full Year window — collapsing back returns to whatever
+  // window was selected before.
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  useEffect(() => {
+    if (!isExpanded) return;
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsExpanded(false); };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isExpanded]);
   // Once the user picks a window explicitly, their choice sticks — auto-widen
   // only ever applies to the untouched default.
   const [userPickedWindow, setUserPickedWindow] = useState(false);
@@ -68,7 +80,7 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
         return;
       }
     }
-    setWindowKey('90');
+    setWindowKey('year');
   }, [events, tasks, userPickedWindow]);
 
   const windowOpt = WINDOW_OPTIONS.find(w => w.key === windowKey)!;
@@ -102,7 +114,7 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
     return { rangeStart: start, rangeEnd: end, totalDays: daysBetween(start, end) + 1 };
   }, [windowOpt, events]);
 
-  const dayWidth = totalDays <= 16 ? 40 : totalDays <= 35 ? 22 : 11;
+  const dayWidth = totalDays <= 16 ? 40 : totalDays <= 35 ? 22 : totalDays <= 120 ? 11 : 7;
   const timelineWidth = totalDays * dayWidth;
   const todayOffset = daysBetween(rangeStart, new Date(new Date().setHours(0, 0, 0, 0)));
 
@@ -111,12 +123,14 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
   const rangeStartStr = toDateStr(rangeStart);
   const rangeEndStr = toDateStr(rangeEnd);
 
+  const effectiveMaxRows = isExpanded ? 500 : maxRows;
+
   const eventRows = useMemo(() => {
     return events
       .filter(e => !e.datesTBD && e.startDate && e.endDate)
       .filter(e => e.endDate >= rangeStartStr && e.startDate <= rangeEndStr)
       .sort((a, b) => a.startDate.localeCompare(b.startDate))
-      .slice(0, maxRows)
+      .slice(0, effectiveMaxRows)
       .map(event => {
         const clampedStart = event.startDate < rangeStartStr ? rangeStartStr : event.startDate;
         const clampedEnd = event.endDate > rangeEndStr ? rangeEndStr : event.endDate;
@@ -137,14 +151,14 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
           .filter(t => t.eventId === event.id && t.dueDate >= rangeStartStr && t.dueDate <= rangeEndStr);
         return { event, left, width, planningLeft, planningWidth, tasks: eventTasks };
       });
-  }, [events, tasks, rangeStartStr, rangeEndStr, dayWidth, maxRows]);
+  }, [events, tasks, rangeStartStr, rangeEndStr, dayWidth, effectiveMaxRows]);
 
   const standaloneTasks = useMemo(() => {
     return tasks
       .filter(t => !t.eventId && t.dueDate >= rangeStartStr && t.dueDate <= rangeEndStr)
       .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
-      .slice(0, 12);
-  }, [tasks, rangeStartStr, rangeEndStr]);
+      .slice(0, isExpanded ? 200 : 12);
+  }, [tasks, rangeStartStr, rangeEndStr, isExpanded]);
 
   // Week/period tick labels along the header, spaced ~4-8 apart depending on zoom
   const tickEveryDays = totalDays <= 16 ? 1 : totalDays <= 35 ? 7 : 14;
@@ -156,8 +170,8 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
 
   const rowCount = eventRows.length + (standaloneTasks.length > 0 ? 1 : 0);
 
-  return (
-    <div className="glass-panel rounded-2xl p-6 flex flex-col space-y-4">
+  const content = (
+    <div className={isExpanded ? 'glass-panel rounded-2xl p-6 flex flex-col space-y-4 h-full min-h-0' : 'glass-panel rounded-2xl p-6 flex flex-col space-y-4'}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-base font-bold text-theme-text-primary flex items-center gap-2">
@@ -185,6 +199,17 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
               {opt.label}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => {
+              if (!isExpanded) { setWindowKey('year'); setUserPickedWindow(true); }
+              setIsExpanded(v => !v);
+            }}
+            title={isExpanded ? 'Collapse' : 'Expand — see the full year'}
+            className="p-1.5 rounded-lg bg-theme-border/30 text-theme-text-secondary hover:bg-theme-border/50 hover:text-theme-text-primary transition-all cursor-pointer"
+          >
+            {isExpanded ? <X className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+          </button>
         </div>
       </div>
 
@@ -194,7 +219,7 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
         </div>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-xl border border-theme-border/20">
+          <div className={isExpanded ? 'flex-1 min-h-0 overflow-auto rounded-xl border border-theme-border/20' : 'overflow-x-auto rounded-xl border border-theme-border/20'}>
             <div style={{ minWidth: timelineWidth + 176 }}>
               {/* Header: date scale */}
               <div className="flex sticky top-0 z-20">
@@ -315,10 +340,26 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
         </>
       )}
 
-      <div className="flex justify-end">
+      <div className="flex justify-end shrink-0">
         <Link href="/dashboard/events" className="text-xs font-semibold text-accent hover:underline flex items-center gap-1">
           Open Events Module <ExternalLink className="h-3 w-3" />
         </Link>
+      </div>
+    </div>
+  );
+
+  if (!isExpanded) return content;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-150"
+      onClick={() => setIsExpanded(false)}
+    >
+      <div
+        className="w-full max-w-7xl h-[88vh] animate-in zoom-in-95 duration-150"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {content}
       </div>
     </div>
   );
