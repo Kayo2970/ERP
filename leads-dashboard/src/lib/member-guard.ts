@@ -6,11 +6,11 @@
  * from the single-record ones.
  */
 
+const KAYOMARZ_EMAILS = new Set(['kayo2970@gmail.com', 'kayo2970@outlook.com']);
+
 export function isKayomarzIdentity(m: any): boolean {
   if (!m) return false;
-  const name = (m.name || '').toLowerCase();
-  const email = (m.email || '').toLowerCase();
-  return m.id === 'm1' || name.includes('kayomarz') || email === 'kayo2970@gmail.com' || email === 'kayo2970@outlook.com';
+  return m.id === 'm1' || (m.name || '').toLowerCase().includes('kayomarz') || KAYOMARZ_EMAILS.has((m.email || '').toLowerCase());
 }
 
 export function countActiveSuperUsersServer(members: any[]): number {

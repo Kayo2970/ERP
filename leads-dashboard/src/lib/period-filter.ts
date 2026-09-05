@@ -21,9 +21,8 @@ export function extractAvailableMonths(dates: string[]): string[] {
 
 /** Human label for a 'YYYY-MM' string, e.g. "August 2026". */
 export function monthLabel(month: string): string {
-  const [y, m] = month.split('-').map(Number);
-  if (!y || !m) return month;
-  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  if (!/^\d{4}-\d{2}$/.test(month)) return month;
+  return new Date(`${month}-01T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 }
 
 /** Short label for the current filter selection, for display / PDF metadata. */
