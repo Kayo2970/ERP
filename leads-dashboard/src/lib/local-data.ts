@@ -180,6 +180,15 @@ export interface EventItem {
   // display/sort/day-grid-match site must check this before trusting
   // startDate/endDate (see formatEventDateRange below).
   datesTBD?: boolean;
+  // Optional: when prep work (bookings, committee formation, design briefs,
+  // sponsor outreach...) actually starts, distinct from startDate/endDate
+  // (the event's live/on-ground dates). Lets an event be created and shared
+  // early — e.g. "planningStartDate: Feb 1" while the event itself runs in
+  // March — without pretending the event itself starts on the planning date.
+  // Absent/blank means no separate planning phase is tracked; every
+  // date-range/timeline display falls back to startDate in that case. Not
+  // meaningful (and not shown) when datesTBD is set.
+  planningStartDate?: string;
   status: 'planned' | 'active' | 'completed' | 'archived';
   location?: string;
   campus?: 'GG Campus' | 'RTC Campus' | 'Both Campuses';
@@ -2046,6 +2055,16 @@ export function formatEventDateRange(event: Pick<EventItem, 'startDate' | 'endDa
 export function getEventSortTime(event: Pick<EventItem, 'startDate' | 'datesTBD'>): number {
   if (event.datesTBD || !event.startDate) return Number.MAX_SAFE_INTEGER;
   return new Date(event.startDate).getTime();
+}
+
+/** True when the event has a real, earlier-than-startDate planning phase to display. */
+export function hasEventPlanningPhase(event: Pick<EventItem, 'startDate' | 'planningStartDate' | 'datesTBD'>): boolean {
+  return !event.datesTBD && !!event.planningStartDate && !!event.startDate && event.planningStartDate < event.startDate;
+}
+
+/** Short, human-readable note on when prep work begins, for list/card views. Empty string when there's no planning phase to show. */
+export function formatEventPlanningNote(event: Pick<EventItem, 'startDate' | 'planningStartDate' | 'datesTBD'>): string {
+  return hasEventPlanningPhase(event) ? `Prep work from ${event.planningStartDate}` : '';
 }
 
 /**

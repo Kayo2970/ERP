@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, ChevronRight, CalendarDays, PartyPopper } from 'lucide-react';
-import { getEvents, getEffectiveEventStatus, formatEventDateRange, getEventSortTime, EventItem } from '@/lib/local-data';
+import { getEvents, getEffectiveEventStatus, formatEventDateRange, hasEventPlanningPhase, getEventSortTime, EventItem } from '@/lib/local-data';
 import { canViewEvent, canApprovePendingEvent } from '@/lib/permissions';
 
 export default function CalendarPage() {
@@ -85,6 +85,14 @@ export default function CalendarPage() {
     return visibleEvents.filter(e => !e.datesTBD && checkStr >= e.startDate && checkStr <= e.endDate);
   };
 
+  // Days covered by an event's pre-event planning/prep phase (planningStartDate
+  // up to, but not including, its real startDate) — shown as a distinct amber
+  // marker from the event's own on-ground dates above.
+  const getDayPlanningEvents = (day: number) => {
+    const checkStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return visibleEvents.filter(e => hasEventPlanningPhase(e) && checkStr >= e.planningStartDate! && checkStr < e.startDate);
+  };
+
   const upcomingEvents = [...visibleEvents]
     .filter(e => !e.isHoliday)
     .filter(e => {
@@ -160,6 +168,8 @@ export default function CalendarPage() {
 
                 const dayEvents = getDayEvents(day);
                 const hasEvents = dayEvents.length > 0;
+                const dayPlanningEvents = getDayPlanningEvents(day);
+                const hasPlanning = dayPlanningEvents.length > 0;
                 const isSelected = selectedDay === day;
 
                 return (
@@ -171,12 +181,18 @@ export default function CalendarPage() {
                         ? 'bg-accent text-white shadow-md shadow-accent/25'
                         : hasEvents
                           ? 'bg-accent/15 border border-accent/30 text-accent hover:bg-accent/25'
-                          : 'hover:bg-theme-border/30 text-theme-text-primary'
+                          : hasPlanning
+                            ? 'bg-warning/10 border border-warning/25 text-warning hover:bg-warning/20'
+                            : 'hover:bg-theme-border/30 text-theme-text-primary'
                     }`}
+                    title={hasPlanning ? `${dayPlanningEvents.map(e => e.title).join(', ')} — prep/planning phase` : undefined}
                   >
                     <span>{day}</span>
                     {hasEvents && !isSelected && (
                       <span className="absolute bottom-1 h-1.5 w-1.5 bg-accent rounded-full animate-pulse"></span>
+                    )}
+                    {!hasEvents && hasPlanning && !isSelected && (
+                      <span className="absolute bottom-1 h-1.5 w-1.5 bg-warning rounded-full"></span>
                     )}
                   </button>
                 );
@@ -192,14 +208,29 @@ export default function CalendarPage() {
             {selectedDay ? (
               (() => {
                 const dayEvents = getDayEvents(selectedDay);
-                if (dayEvents.length === 0) {
+                const dayPlanningEvents = getDayPlanningEvents(selectedDay);
+                if (dayEvents.length === 0 && dayPlanningEvents.length === 0) {
                   return (
                     <div className="text-xs text-theme-text-secondary py-3 text-center bg-theme-border/10 border border-theme-border/20 rounded-xl">
                       No events scheduled for this date.
                     </div>
                   );
                 }
-                return dayEvents.map(ev => (
+                return [
+                  ...dayPlanningEvents.map(ev => (
+                    <Link
+                      key={`planning-${ev.id}`}
+                      href={`/dashboard/events/${ev.id}`}
+                      className="p-3 bg-warning/10 border border-warning/25 rounded-xl flex items-center justify-between gap-3 hover:bg-warning/20 transition-all block cursor-pointer"
+                    >
+                      <div>
+                        <h5 className="font-semibold text-theme-text-primary text-xs hover:text-accent transition-colors">{ev.title}</h5>
+                        <p className="text-[10px] text-theme-text-secondary mt-0.5">Prep/planning phase — event runs {formatEventDateRange(ev)}</p>
+                      </div>
+                      <span className="text-[10px] px-2.5 py-0.5 bg-warning/15 text-warning font-semibold rounded-md shrink-0">Planning</span>
+                    </Link>
+                  )),
+                  ...dayEvents.map(ev => (
                   ev.isHoliday ? (
                     <div
                       key={ev.id}
@@ -224,7 +255,8 @@ export default function CalendarPage() {
                       </span>
                     </Link>
                   )
-                ));
+                  )),
+                ];
               })()
             ) : (
               <div className="text-xs text-theme-text-secondary py-3 text-center bg-theme-border/10 border border-theme-border/20 rounded-xl">

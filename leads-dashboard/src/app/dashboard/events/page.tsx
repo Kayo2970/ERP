@@ -22,7 +22,7 @@ import {
   Sparkles,
   UserCheck
 } from 'lucide-react';
-import { getEvents, addEvent, updateEvent, deleteEvent, approveEvent, rejectEvent, submitEventEdit, submitEventDelete, getEffectiveEventStatus, formatEventDateRange, getEventSortTime, getEventSponsors, getEventSponsorTotal, getMembers, EventItem, EventSponsor, Member } from '@/lib/local-data';
+import { getEvents, addEvent, updateEvent, deleteEvent, approveEvent, rejectEvent, submitEventEdit, submitEventDelete, getEffectiveEventStatus, formatEventDateRange, formatEventPlanningNote, getEventSortTime, getEventSponsors, getEventSponsorTotal, getMembers, EventItem, EventSponsor, Member } from '@/lib/local-data';
 import { canCreateEvent, canEditEvent, canDeleteEvent, canManageEvents, canViewEvent, canApprovePendingEvent, getEventApprovalRequirement } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -51,6 +51,7 @@ export default function EventsPage() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [datesTBD, setDatesTBD] = useState(false);
+  const [planningStartDate, setPlanningStartDate] = useState('');
   const [location, setLocation] = useState('');
   const [campus, setCampus] = useState<'GG Campus' | 'RTC Campus' | 'Both Campuses'>('GG Campus');
   const [status, setStatus] = useState<EventItem['status']>('planned');
@@ -212,6 +213,7 @@ export default function EventsPage() {
     setStartDate('');
     setEndDate('');
     setDatesTBD(false);
+    setPlanningStartDate('');
     setLocation('');
     setCampus('GG Campus');
     setStatus('planned');
@@ -227,6 +229,7 @@ export default function EventsPage() {
     setStartDate(event.startDate);
     setEndDate(event.endDate);
     setDatesTBD(!!event.datesTBD);
+    setPlanningStartDate(event.planningStartDate || '');
     setLocation(event.location || '');
     setCampus(event.campus || 'GG Campus');
     setStatus(event.status);
@@ -260,6 +263,11 @@ export default function EventsPage() {
       return;
     }
 
+    if (!datesTBD && planningStartDate && new Date(planningStartDate) > new Date(startDate)) {
+      setFormError('Planning Start Date must be on or before the Event Start Date — it marks when prep work begins, ahead of the event itself.');
+      return;
+    }
+
     const cleanedSponsors = sponsors
       .filter((s) => s.name.trim())
       .map((s) => ({ ...s, name: s.name.trim(), amount: Number(s.amount) || undefined }));
@@ -271,6 +279,7 @@ export default function EventsPage() {
         startDate: datesTBD ? '' : startDate,
         endDate: datesTBD ? '' : endDate,
         datesTBD,
+        planningStartDate: datesTBD ? '' : planningStartDate,
         location: location.trim(),
         campus,
         status,
@@ -297,6 +306,7 @@ export default function EventsPage() {
         startDate: datesTBD ? '' : startDate,
         endDate: datesTBD ? '' : endDate,
         datesTBD,
+        planningStartDate: datesTBD ? '' : planningStartDate,
         location: location.trim(),
         campus,
         status,
@@ -620,6 +630,12 @@ export default function EventsPage() {
                       <Calendar className="h-3.5 w-3.5 text-accent" />
                       <span className={event.datesTBD ? 'text-warning font-semibold' : ''}>{formatEventDateRange(event)}</span>
                     </div>
+                    {formatEventPlanningNote(event) && (
+                      <div className="flex items-center gap-1.5 text-[11px]">
+                        <Clock className="h-3.5 w-3.5 text-accent/70" />
+                        <span className="text-accent/90 font-medium">{formatEventPlanningNote(event)}</span>
+                      </div>
+                    )}
                     {event.location && (
                       <div className="flex items-center gap-1.5 text-[11px]">
                         <MapPin className="h-3.5 w-3.5 text-warning" />
@@ -785,6 +801,20 @@ export default function EventsPage() {
                       onChange={(e) => setEndDate(e.target.value)}
                       className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                     />
+                  </div>
+
+                  <div className="space-y-1.5 col-span-2">
+                    <label className="block font-medium text-theme-text-secondary">Planning Start Date (optional)</label>
+                    <input
+                      type="date"
+                      value={planningStartDate}
+                      max={startDate || undefined}
+                      onChange={(e) => setPlanningStartDate(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                    />
+                    <p className="text-[11px] text-theme-text-secondary">
+                      When prep work (bookings, committees, design briefs...) actually starts — separate from the Event Start Date above. Leave blank if there's no separate lead-up phase.
+                    </p>
                   </div>
                 </div>
               )}

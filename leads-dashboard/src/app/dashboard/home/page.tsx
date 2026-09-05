@@ -25,6 +25,7 @@ import {
   getStudentLeaderboard,
   getEffectiveEventStatus,
   formatEventDateRange,
+  formatEventPlanningNote,
   getEventSortTime,
   TaskItem,
   EventItem,
@@ -490,6 +491,9 @@ export default function DashboardHome() {
                     </div>
                     <p className="text-[10px] text-theme-text-secondary line-clamp-2">{ev.description}</p>
                     <p className={`text-[10px] font-medium pt-1 ${ev.datesTBD ? 'text-warning' : 'text-theme-text-secondary'}`}>{formatEventDateRange(ev)}</p>
+                    {formatEventPlanningNote(ev) && (
+                      <p className="text-[10px] font-medium text-accent/90">{formatEventPlanningNote(ev)}</p>
+                    )}
                   </div>
                 ));
               })()

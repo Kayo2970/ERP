@@ -1,9 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { CalendarRange, ExternalLink } from 'lucide-react';
-import { EventItem, TaskItem, getEffectiveEventStatus } from '@/lib/local-data';
+import { EventItem, TaskItem, getEffectiveEventStatus, hasEventPlanningPhase } from '@/lib/local-data';
 
 type WindowKey = '14' | '30' | '90';
 
@@ -40,8 +40,37 @@ interface GanttTimelineProps {
  * date, plus a "Other Deliverables" row for tasks not tied to any event.
  * Both bars and markers deep-link back into the Events/Tasks modules.
  */
+/** How many events/tasks fall within a given window, without building full row data — used only to decide the auto-widen fallback below. */
+function countInWindow(opt: typeof WINDOW_OPTIONS[number], events: EventItem[], tasks: TaskItem[]): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const start = toDateStr(addDays(today, -opt.before));
+  const end = toDateStr(addDays(today, opt.after));
+  const eventCount = events.filter(e => !e.datesTBD && e.startDate && e.endDate && e.endDate >= start && e.startDate <= end).length;
+  const taskCount = tasks.filter(t => t.dueDate >= start && t.dueDate <= end).length;
+  return eventCount + taskCount;
+}
+
 export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProps) {
   const [windowKey, setWindowKey] = useState<WindowKey>('30');
+  // Once the user picks a window explicitly, their choice sticks — auto-widen
+  // only ever applies to the untouched default.
+  const [userPickedWindow, setUserPickedWindow] = useState(false);
+
+  // If the default (30-day) window — or, failing that, 2 weeks — turns up
+  // nothing, automatically widen to 90 days rather than showing an empty
+  // chart the user has to manually expand.
+  useEffect(() => {
+    if (userPickedWindow) return;
+    for (const opt of WINDOW_OPTIONS) {
+      if (countInWindow(opt, events, tasks) > 0) {
+        setWindowKey(opt.key);
+        return;
+      }
+    }
+    setWindowKey('90');
+  }, [events, tasks, userPickedWindow]);
+
   const windowOpt = WINDOW_OPTIONS.find(w => w.key === windowKey)!;
 
   const { rangeStart, rangeEnd, totalDays } = useMemo(() => {
@@ -72,9 +101,20 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
         const clampedEnd = event.endDate > rangeEndStr ? rangeEndStr : event.endDate;
         const left = xFor(clampedStart);
         const width = Math.max(dayWidth * 0.6, xFor(clampedEnd) - left + dayWidth);
+
+        // Pre-event planning/prep phase, drawn as a lighter, hatched lead-in
+        // segment ending where the event's own (solid) bar begins.
+        let planningLeft: number | null = null;
+        let planningWidth = 0;
+        if (hasEventPlanningPhase(event) && event.planningStartDate! <= rangeEndStr && event.startDate >= rangeStartStr) {
+          const clampedPlanStart = event.planningStartDate! < rangeStartStr ? rangeStartStr : event.planningStartDate!;
+          planningLeft = xFor(clampedPlanStart);
+          planningWidth = Math.max(dayWidth * 0.4, left - planningLeft);
+        }
+
         const eventTasks = tasks
           .filter(t => t.eventId === event.id && t.dueDate >= rangeStartStr && t.dueDate <= rangeEndStr);
-        return { event, left, width, tasks: eventTasks };
+        return { event, left, width, planningLeft, planningWidth, tasks: eventTasks };
       });
   }, [events, tasks, rangeStartStr, rangeEndStr, dayWidth, maxRows]);
 
@@ -104,6 +144,9 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
             Project Timeline
           </h3>
           <p className="text-xs text-theme-text-secondary">Events and their linked tasks, across the whole club — click any bar or marker to jump in</p>
+          {!userPickedWindow && windowKey !== '30' && (
+            <p className="text-[10px] text-warning font-medium pt-0.5">Auto-widened to {windowOpt.label.toLowerCase()} — nothing fell in the default window</p>
+          )}
         </div>
 
         <div className="flex items-center gap-1.5">
@@ -111,7 +154,7 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
             <button
               key={opt.key}
               type="button"
-              onClick={() => setWindowKey(opt.key)}
+              onClick={() => { setWindowKey(opt.key); setUserPickedWindow(true); }}
               className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-all cursor-pointer ${
                 windowKey === opt.key
                   ? 'bg-accent text-white'
@@ -159,7 +202,7 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
               </div>
 
               {/* Event rows */}
-              {eventRows.map(({ event, left, width, tasks: eventTasks }) => {
+              {eventRows.map(({ event, left, width, planningLeft, planningWidth, tasks: eventTasks }) => {
                 const effective = getEffectiveEventStatus(event, tasks);
                 return (
                   <div key={event.id} className="flex items-center h-11 border-b border-theme-border/10 group">
@@ -175,6 +218,14 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
                     <div className="relative" style={{ width: timelineWidth, height: '100%' }}>
                       {todayOffset >= 0 && todayOffset <= totalDays && (
                         <div className="absolute top-0 h-full border-l border-danger/30" style={{ left: todayOffset * dayWidth }} />
+                      )}
+                      {planningLeft !== null && (
+                        <Link
+                          href={`/dashboard/events/${event.id}`}
+                          className="absolute top-1/2 -translate-y-1/2 h-3 rounded-full bg-warning/40 border border-dashed border-warning/70 hover:bg-warning/55 transition-all"
+                          style={{ left: planningLeft, width: planningWidth }}
+                          title={`${event.title} · planning/prep phase from ${event.planningStartDate}`}
+                        />
                       )}
                       <Link
                         href={`/dashboard/events/${event.id}`}
@@ -236,6 +287,7 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
             <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-warning" /> Active</span>
             <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-success" /> Completed</span>
             <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-theme-text-secondary/50" /> Archived</span>
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-warning/40 border border-dashed border-warning/70" /> Planning/prep phase</span>
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rotate-45 bg-white border border-theme-text-secondary/40 inline-block" /> Task due</span>
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rotate-45 bg-success inline-block" /> Task completed</span>
           </div>
