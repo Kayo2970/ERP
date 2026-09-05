@@ -17,7 +17,6 @@ import fs from 'fs/promises';
 import fssync from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { ZipArchive } from 'archiver';
 import AdmZip from 'adm-zip';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -52,24 +51,14 @@ async function listFilesRecursive(dir: string, baseDir = dir): Promise<string[]>
 
 /** Build the zip (data/*.json + data/uploads/**) as an in-memory buffer. */
 async function buildZipBuffer(): Promise<Buffer> {
-  const archive = new ZipArchive({ zlib: { level: 9 } });
-  const chunks: Buffer[] = [];
-  const done = new Promise<Buffer>((resolve, reject) => {
-    archive.on('data', (chunk: Buffer) => chunks.push(chunk));
-    archive.on('error', reject);
-    archive.on('end', () => resolve(Buffer.concat(chunks)));
-  });
-
+  const zip = new AdmZip();
   const relFiles = await listFilesRecursive(DATA_DIR);
   for (const rel of relFiles) {
-    // Never bundle the retired legacy snapshot or a previous restore's
-    // safety-net copy into a new backup — only the live, current state.
     if (rel.includes('.migrated') || rel.startsWith('..')) continue;
-    archive.file(path.join(DATA_DIR, rel), { name: rel });
+    const targetDir = path.dirname(rel) === '.' ? '' : path.dirname(rel);
+    zip.addLocalFile(path.join(DATA_DIR, rel), targetDir, path.basename(rel));
   }
-
-  archive.finalize();
-  return done;
+  return zip.toBuffer();
 }
 
 export interface BackupSummary {
