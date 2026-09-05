@@ -30,10 +30,10 @@
     "semantic_hash": "e084f2f280f73897b3e4659b4facfbe2"
   },
   "leads-dashboard/package.json": {
-    "mtime": 1788566466.689495,
-    "seen": 1788566910.7683158,
-    "ast_hash": "7671d966af2410c3f3aea6b43e2ba492",
-    "semantic_hash": "7671d966af2410c3f3aea6b43e2ba492"
+    "mtime": 1788567242.8120706,
+    "seen": 1788567385.142729,
+    "ast_hash": "ec8495181bc357476f64a99fa6857654",
+    "semantic_hash": "ec8495181bc357476f64a99fa6857654"
   },
   "leads-dashboard/postcss.config.mjs": {
     "mtime": 1787862419.0104601,
@@ -900,10 +900,10 @@
     "semantic_hash": "026f4b1157b010d9b4cd7e035a65c095"
   },
   "leads-dashboard/src/lib/member-guard.ts": {
-    "mtime": 1788563109.8580728,
-    "seen": 1788565769.493612,
-    "ast_hash": "4124f59cf219e70342a5b86ee73b77cc",
-    "semantic_hash": "4124f59cf219e70342a5b86ee73b77cc"
+    "mtime": 1788567345.5646238,
+    "seen": 1788567385.146385,
+    "ast_hash": "1d5f8b54852d0566d955e29643d2b26e",
+    "semantic_hash": "1d5f8b54852d0566d955e29643d2b26e"
   },
   "leads-dashboard/src/lib/ocr-spellcheck.ts": {
     "mtime": 1787862419.0415823,
@@ -918,10 +918,10 @@
     "semantic_hash": "cc4c05ba3d5c74fd3cb668957acf7d93"
   },
   "leads-dashboard/src/lib/period-filter.ts": {
-    "mtime": 1787862419.0417454,
-    "seen": 1788565769.4936142,
-    "ast_hash": "595b8effcfad7f07e66c900cff6de438",
-    "semantic_hash": "595b8effcfad7f07e66c900cff6de438"
+    "mtime": 1788567353.2404914,
+    "seen": 1788567385.1464288,
+    "ast_hash": "99fd559fd9396fcf48721e89fb770705",
+    "semantic_hash": "99fd559fd9396fcf48721e89fb770705"
   },
   "leads-dashboard/src/lib/permissions-server.ts": {
     "mtime": 1788563109.858172,
