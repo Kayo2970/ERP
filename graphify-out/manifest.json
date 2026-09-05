@@ -30,10 +30,10 @@
     "semantic_hash": "e084f2f280f73897b3e4659b4facfbe2"
   },
   "leads-dashboard/package.json": {
-    "mtime": 1788567242.8120706,
-    "seen": 1788567385.142729,
-    "ast_hash": "ec8495181bc357476f64a99fa6857654",
-    "semantic_hash": "ec8495181bc357476f64a99fa6857654"
+    "mtime": 1788567595.2203555,
+    "seen": 1788567740.605351,
+    "ast_hash": "6ec5fd86059e617199664a476a9bdbd8",
+    "semantic_hash": "6ec5fd86059e617199664a476a9bdbd8"
   },
   "leads-dashboard/postcss.config.mjs": {
     "mtime": 1787862419.0104601,
@@ -822,10 +822,10 @@
     "semantic_hash": "b00be959c27e43c84222d32134b8f5e4"
   },
   "leads-dashboard/src/lib/backup.ts": {
-    "mtime": 1787862419.04043,
-    "seen": 1788565769.4936042,
-    "ast_hash": "3e993abf2712015ce3773ee0cbc4fc66",
-    "semantic_hash": "3e993abf2712015ce3773ee0cbc4fc66"
+    "mtime": 1788567585.2681308,
+    "seen": 1788567740.608602,
+    "ast_hash": "f4eaa95cc02bd4930da77afeea57b112",
+    "semantic_hash": "f4eaa95cc02bd4930da77afeea57b112"
   },
   "leads-dashboard/src/lib/birthday-scheduler.ts": {
     "mtime": 1787862419.040523,
@@ -1241,12 +1241,6 @@
     "ast_hash": "69ec65b3e5dc0a19f13af10cb235900d",
     "semantic_hash": "69ec65b3e5dc0a19f13af10cb235900d"
   },
-  "leads-dashboard/public/images/body-bg-dark.jpg": {
-    "mtime": 1787862419.013134,
-    "seen": 1788565769.4936478,
-    "ast_hash": "f34608dd213d81ba2c8998a501ae9f55",
-    "semantic_hash": "f34608dd213d81ba2c8998a501ae9f55"
-  },
   "leads-dashboard/public/images/body-bg-light.jpg": {
     "mtime": 1787862419.013605,
     "seen": 1788565769.493649,
@@ -1264,18 +1258,6 @@
     "seen": 1788565769.49365,
     "ast_hash": "04401055178b8dbfc4362b3eebb3ecf2",
     "semantic_hash": "04401055178b8dbfc4362b3eebb3ecf2"
-  },
-  "leads-dashboard/public/images/sung-jinwoo-dark.jpg": {
-    "mtime": 1787862419.0159163,
-    "seen": 1788565769.493651,
-    "ast_hash": "f34608dd213d81ba2c8998a501ae9f55",
-    "semantic_hash": "f34608dd213d81ba2c8998a501ae9f55"
-  },
-  "leads-dashboard/public/images/sung-jinwoo-mobile.jpg": {
-    "mtime": 1787862419.0164392,
-    "seen": 1788565769.493651,
-    "ast_hash": "2b9aaaa3bcd4ca4ef8d3c80ac0ccdf98",
-    "semantic_hash": "2b9aaaa3bcd4ca4ef8d3c80ac0ccdf98"
   },
   "leads-dashboard/public/next.svg": {
     "mtime": 1787862419.0165617,
