@@ -96,7 +96,7 @@ const navSections: NavSection[] = [
       { name: 'Members Directory', href: '/dashboard/directory', icon: FolderGit2 },
       { name: 'Guest Directory', href: '/dashboard/guest-directory', icon: Contact, guestDirectoryOnly: true },
       { name: 'Guest Invites', href: '/dashboard/guest-invites', icon: Send, centreHeadOnly: true },
-      { name: 'Group Policies', href: '/dashboard/policies', icon: ShieldCheck, superUserOnly: true },
+      { name: 'Group Policies', href: '/dashboard/policies', icon: ShieldCheck, centreHeadOnly: true },
       { name: 'Backup & Restore', href: '/dashboard/backup', icon: DatabaseBackup, superUserOnly: true },
       { name: 'Email Management', href: '/dashboard/email', icon: Mail, centreHeadOnly: true },
       { name: 'Settings', href: '/dashboard/settings', icon: Settings },

@@ -685,6 +685,13 @@ export interface DesignSubmissionItem {
   approvedInstagramCaption?: string;
   approvedLinkedinCaption?: string;
   captionStatus?: 'pending_submission' | 'pending_approval' | 'approved' | 'changes_requested';
+  // Whether the "Captions Approved" email (design asset + approved caption
+  // text) to the Centre Head / Advisor / GG Campus Head of Events actually
+  // went out — set by /api/designs/[id]'s PATCH handler the moment
+  // captionStatus first becomes 'approved'. Mirrors styleApprovalEmailSent/
+  // styleApprovalEmailError above.
+  captionApprovalEmailSent?: boolean;
+  captionApprovalEmailError?: string;
   captionReviewComments?: string;
   isSample?: boolean;
   // Optional automated OCR + spell-check pass run client-side at upload time

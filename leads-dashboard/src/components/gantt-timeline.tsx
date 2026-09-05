@@ -76,10 +76,31 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
   const { rangeStart, rangeEnd, totalDays } = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const start = addDays(today, -windowOpt.before);
+    let start = addDays(today, -windowOpt.before);
     const end = addDays(today, windowOpt.after);
+
+    // The default lookback is only a few days — nowhere near enough to
+    // actually place a planning-phase start date that's genuinely weeks
+    // out. Without this, every planning date earlier than that lookback
+    // clamped to the exact same left edge, so editing it to an even
+    // earlier date visibly did nothing — the chart looked like it wasn't
+    // reacting to the edit at all. Extend the window's left edge back to
+    // the earliest such date actually in play (capped so one very old
+    // date can't blow the whole chart out).
+    const endStr = toDateStr(end);
+    let earliestPlanning: string | null = null;
+    for (const e of events) {
+      if (!hasEventPlanningPhase(e) || !e.startDate || e.startDate > endStr) continue;
+      if (!earliestPlanning || e.planningStartDate! < earliestPlanning) earliestPlanning = e.planningStartDate!;
+    }
+    if (earliestPlanning && earliestPlanning < toDateStr(start)) {
+      const hardFloor = addDays(today, -180);
+      const candidate = parseDate(earliestPlanning);
+      start = candidate < hardFloor ? hardFloor : candidate;
+    }
+
     return { rangeStart: start, rangeEnd: end, totalDays: daysBetween(start, end) + 1 };
-  }, [windowOpt]);
+  }, [windowOpt, events]);
 
   const dayWidth = totalDays <= 16 ? 40 : totalDays <= 35 ? 22 : 11;
   const timelineWidth = totalDays * dayWidth;
@@ -106,7 +127,7 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
         // segment ending where the event's own (solid) bar begins.
         let planningLeft: number | null = null;
         let planningWidth = 0;
-        if (hasEventPlanningPhase(event) && event.planningStartDate! <= rangeEndStr && event.startDate >= rangeStartStr) {
+        if (hasEventPlanningPhase(event) && event.planningStartDate! <= rangeEndStr) {
           const clampedPlanStart = event.planningStartDate! < rangeStartStr ? rangeStartStr : event.planningStartDate!;
           planningLeft = xFor(clampedPlanStart);
           planningWidth = Math.max(dayWidth * 0.4, left - planningLeft);

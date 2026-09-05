@@ -262,7 +262,7 @@ export function resolveRatingReviewerRole(user: SessionUser, isDesignDeliverable
 /** Check if user is a Design Head (Head role + Design department/role). */
 export function isDesignHead(user: SessionUser): boolean {
   if (!user) return false;
-  if (user.tier <= 2) return true; // Super User and Centre Head have design review authority
+  if (isCentreHead(user)) return true; // Super User, Centre Head, and Advisor all have design review authority
   const role = ((user as any)?.role || '').toLowerCase();
   const dept = (user.department || resolveMember(user)?.department || '').toLowerCase();
   const isDesign = role.includes('design') || dept.includes('design');

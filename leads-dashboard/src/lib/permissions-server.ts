@@ -132,7 +132,7 @@ export function isEventsHeadGgCampus(user: ServerUser): boolean {
 
 export function isDesignHead(user: ServerUser, settings: AccessLevelSettings): boolean {
   if (!user) return false;
-  if (typeof user.tier === 'number' && user.tier <= 2) return true;
+  if (isCentreHead(user, settings)) return true; // Super User, Centre Head, and Advisor all have design review authority
   const role = (user.role || '').toLowerCase();
   const dept = (user.department || '').toLowerCase();
   const isDesign = role.includes('design') || dept.includes('design');

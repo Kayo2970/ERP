@@ -85,18 +85,13 @@ export default function CalendarPage() {
     return visibleEvents.filter(e => !e.datesTBD && checkStr >= e.startDate && checkStr <= e.endDate);
   };
 
-  // Days covered by an event's pre-event planning/prep phase (planningStartDate
-  // up to, but not including, its real startDate) — shown as a distinct amber
-  // marker from the event's own on-ground dates above. Only plottable once the
-  // event has a real startDate to bound the range against — an event whose own
-  // date is still "To Be Decided" can have a planning start date (see
-  // hasEventPlanningPhase) but no day grid to place it on, so it simply won't
-  // highlight here until a Start Date is set; it still shows correctly as a
-  // "Prep work from ..." note everywhere else (Events list, event detail page,
-  // dashboard Upcoming Events).
+  // Just the single day an event's planning/prep phase actually starts on —
+  // shown as one distinct amber marker, not a filled highlight across every
+  // day between planningStartDate and the event's own startDate. The event's
+  // real on-ground date(s) are marked separately by getDayEvents above.
   const getDayPlanningEvents = (day: number) => {
     const checkStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    return visibleEvents.filter(e => hasEventPlanningPhase(e) && !!e.startDate && checkStr >= e.planningStartDate! && checkStr < e.startDate);
+    return visibleEvents.filter(e => hasEventPlanningPhase(e) && checkStr === e.planningStartDate);
   };
 
   const upcomingEvents = [...visibleEvents]
