@@ -1115,41 +1115,11 @@
     "ast_hash": "17c96fd7c141ee42da91e886be5de4ef",
     "semantic_hash": "17c96fd7c141ee42da91e886be5de4ef"
   },
-  "REFERENCE DATA/13.jpg": {
-    "mtime": 1787862419.046097,
-    "seen": 1788565769.4936361,
-    "ast_hash": "1ce47dad30ebfc83d78432ae8d5510f9",
-    "semantic_hash": "1ce47dad30ebfc83d78432ae8d5510f9"
-  },
-  "REFERENCE DATA/14.jpg": {
-    "mtime": 1787862419.0470076,
-    "seen": 1788565769.4936361,
-    "ast_hash": "bc6c5f3db26e3b1d73e44dfb2c6ec24c",
-    "semantic_hash": "bc6c5f3db26e3b1d73e44dfb2c6ec24c"
-  },
-  "REFERENCE DATA/7.jpg": {
-    "mtime": 1787862419.0477972,
-    "seen": 1788565769.493637,
-    "ast_hash": "344db48945a15f4f23d503d2a8759fa9",
-    "semantic_hash": "344db48945a15f4f23d503d2a8759fa9"
-  },
-  "REFERENCE DATA/8.jpg": {
-    "mtime": 1787862419.0486999,
-    "seen": 1788565769.4936378,
-    "ast_hash": "72035af9325b4266349d3d52fc94572f",
-    "semantic_hash": "72035af9325b4266349d3d52fc94572f"
-  },
   "REFERENCE DATA/LEADS Short LOGO.png": {
     "mtime": 1787862419.0491693,
     "seen": 1788565769.4936378,
     "ast_hash": "350d537393b663422526ce33a6861fdd",
     "semantic_hash": "350d537393b663422526ce33a6861fdd"
-  },
-  "REFERENCE DATA/sung-jinwoo-dark-3840x2160-25924.jpg": {
-    "mtime": 1787862419.050469,
-    "seen": 1788565769.493639,
-    "ast_hash": "f34608dd213d81ba2c8998a501ae9f55",
-    "semantic_hash": "f34608dd213d81ba2c8998a501ae9f55"
   },
   "docs/database_er_diagram.png": {
     "mtime": 1787862418.9980805,
@@ -1241,12 +1211,6 @@
     "ast_hash": "69ec65b3e5dc0a19f13af10cb235900d",
     "semantic_hash": "69ec65b3e5dc0a19f13af10cb235900d"
   },
-  "leads-dashboard/public/images/body-bg-light.jpg": {
-    "mtime": 1787862419.013605,
-    "seen": 1788565769.493649,
-    "ast_hash": "8f10121154ce3689158646e8b61da53a",
-    "semantic_hash": "8f10121154ce3689158646e8b61da53a"
-  },
   "leads-dashboard/public/images/leads-short-logo.png": {
     "mtime": 1787862419.0145714,
     "seen": 1788565769.493649,
@@ -1264,36 +1228,6 @@
     "seen": 1788565769.4936519,
     "ast_hash": "8e061864f388b47f33a1c3780831193e",
     "semantic_hash": "8e061864f388b47f33a1c3780831193e"
-  },
-  "leads-dashboard/public/reference/13.jpg": {
-    "mtime": 1787862419.0185323,
-    "seen": 1788565769.4936519,
-    "ast_hash": "1ce47dad30ebfc83d78432ae8d5510f9",
-    "semantic_hash": "1ce47dad30ebfc83d78432ae8d5510f9"
-  },
-  "leads-dashboard/public/reference/14.jpg": {
-    "mtime": 1787862419.0207322,
-    "seen": 1788565769.493653,
-    "ast_hash": "bc6c5f3db26e3b1d73e44dfb2c6ec24c",
-    "semantic_hash": "bc6c5f3db26e3b1d73e44dfb2c6ec24c"
-  },
-  "leads-dashboard/public/reference/7.jpg": {
-    "mtime": 1787862419.0221388,
-    "seen": 1788565769.493653,
-    "ast_hash": "344db48945a15f4f23d503d2a8759fa9",
-    "semantic_hash": "344db48945a15f4f23d503d2a8759fa9"
-  },
-  "leads-dashboard/public/reference/8.jpg": {
-    "mtime": 1787862419.023157,
-    "seen": 1788565769.493654,
-    "ast_hash": "72035af9325b4266349d3d52fc94572f",
-    "semantic_hash": "72035af9325b4266349d3d52fc94572f"
-  },
-  "leads-dashboard/public/reference/9.jpg": {
-    "mtime": 1787862419.0242538,
-    "seen": 1788565769.493655,
-    "ast_hash": "5fd02577ba8322b16884ddf45f1ee334",
-    "semantic_hash": "5fd02577ba8322b16884ddf45f1ee334"
   },
   "leads-dashboard/public/window.svg": {
     "mtime": 1787862419.024537,
