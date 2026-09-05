@@ -39,6 +39,7 @@ import {
   approveEventCommittee,
   rejectEventCommittee,
   formatEventDateRange,
+  formatEventPlanningNote,
   getEventSponsors,
   getEventSponsorTotal,
   EventItem,
@@ -297,6 +298,12 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
             <Calendar className="h-4 w-4 text-accent" />
             <span className={event.datesTBD ? 'text-warning font-semibold' : ''}>{formatEventDateRange(event)}</span>
           </div>
+          {formatEventPlanningNote(event) && (
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-accent/70" />
+              <span className="text-accent/90 font-medium">{formatEventPlanningNote(event)}</span>
+            </div>
+          )}
           {event.location && (
             <div className="flex items-center gap-2">
               <MapPin className="h-4 w-4 text-warning" />

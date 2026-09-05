@@ -21,6 +21,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { getAuditLogs, getMembers, saveMembers, updateMember, updateMemberAvatar, logAuditEvent, AuditLogItem, getEmailLogs, requestEmailChange, confirmEmailChange, confirmNewEmailChange, authHeaders } from '@/lib/local-data';
+import { isCentreHead } from '@/lib/permissions';
 import { FileDropzone, useUploadTask, formatFileSize } from '@/components/ui/file-dropzone';
 import DOMPurify from 'isomorphic-dompurify';
 
@@ -367,7 +368,7 @@ export default function SettingsPage() {
     }
   };
 
-  const isSuperAdmin = user && (user.tier === 1 || user.tier === 2);
+  const isSuperAdmin = user && (user.tier === 1 || isCentreHead(user));
 
   const rolePrivileges = [
     { tier: 1, role: 'Super User', access: 'Full unconstrained system administration, user management, audit logs, and forms building.' },

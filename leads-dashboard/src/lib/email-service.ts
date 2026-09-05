@@ -942,6 +942,54 @@ export function generateEventReportApprovedEmailTemplate(eventTitle: string, sub
 }
 
 /**
+ * Template Generator: Design Captions Approved (sent with the design asset
+ * re-attached and the approved Instagram/LinkedIn caption text inline, once
+ * the caption reviewer marks captionStatus 'approved' — see
+ * reviewDesignCaptions in local-data.ts).
+ */
+export function generateCaptionsApprovedEmailTemplate(
+  designTitle: string,
+  designerName: string,
+  instagramCaption?: string,
+  linkedinCaption?: string
+): { subject: string; bodyText: string; bodyHtml: string } {
+  const subject = `Captions Approved: ${designTitle}`;
+  const captionBlockText = [
+    instagramCaption ? `Instagram caption:\n${instagramCaption}` : '',
+    linkedinCaption ? `LinkedIn caption:\n${linkedinCaption}` : '',
+  ].filter(Boolean).join('\n\n');
+  const bodyText = `Hello,\n\n` +
+    `The captions for design "${designTitle}", submitted by ${designerName}, have been approved and the design is now ready to post.\n\n` +
+    `${captionBlockText}\n\n` +
+    `The final asset is attached to this email.\n\n` +
+    `Regards,\nLEADS Next Gen Centre, MSRUAS`;
+
+  const captionBlockHtml = (label: string, text?: string) => text ? `
+      <div style="background: #f8fafc; border-left: 3px solid #38bdf8; padding: 10px 14px; border-radius: 4px; margin: 10px 0;">
+        <p style="margin: 0 0 4px; color: #0f172a; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;">${label}</p>
+        <p style="margin: 0; color: #334155; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${text}</p>
+      </div>
+    ` : '';
+
+  const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
+    headerTitle: `Captions Approved`,
+    headerSubtitle: designTitle,
+    badgeText: `Ready to Post`,
+    badgeColor: `#15803d`,
+    bodyContentHtml: `
+      <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello,</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">The captions for design <strong>${designTitle}</strong>, submitted by <strong>${designerName}</strong>, have been approved and the design is now ready to post.</p>
+      ${captionBlockHtml('Instagram Caption', instagramCaption)}
+      ${captionBlockHtml('LinkedIn Caption', linkedinCaption)}
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">The final asset is attached to this email.</p>
+    `
+  });
+
+  return { subject, bodyText, bodyHtml };
+}
+
+/**
  * Template Generator: Design Style Approved (sent with the design asset
  * attached once the Design Head marks it Style Approved).
  */

@@ -180,6 +180,15 @@ export interface EventItem {
   // display/sort/day-grid-match site must check this before trusting
   // startDate/endDate (see formatEventDateRange below).
   datesTBD?: boolean;
+  // Optional: when prep work (bookings, committee formation, design briefs,
+  // sponsor outreach...) actually starts, distinct from startDate/endDate
+  // (the event's live/on-ground dates). Lets an event be created and shared
+  // early — e.g. "planningStartDate: Feb 1" while the event itself runs in
+  // March — without pretending the event itself starts on the planning date.
+  // Absent/blank means no separate planning phase is tracked; every
+  // date-range/timeline display falls back to startDate in that case. Not
+  // meaningful (and not shown) when datesTBD is set.
+  planningStartDate?: string;
   status: 'planned' | 'active' | 'completed' | 'archived';
   location?: string;
   campus?: 'GG Campus' | 'RTC Campus' | 'Both Campuses';
@@ -676,6 +685,13 @@ export interface DesignSubmissionItem {
   approvedInstagramCaption?: string;
   approvedLinkedinCaption?: string;
   captionStatus?: 'pending_submission' | 'pending_approval' | 'approved' | 'changes_requested';
+  // Whether the "Captions Approved" email (design asset + approved caption
+  // text) to the Centre Head / Advisor / GG Campus Head of Events actually
+  // went out — set by /api/designs/[id]'s PATCH handler the moment
+  // captionStatus first becomes 'approved'. Mirrors styleApprovalEmailSent/
+  // styleApprovalEmailError above.
+  captionApprovalEmailSent?: boolean;
+  captionApprovalEmailError?: string;
   captionReviewComments?: string;
   isSample?: boolean;
   // Optional automated OCR + spell-check pass run client-side at upload time
@@ -2046,6 +2062,26 @@ export function formatEventDateRange(event: Pick<EventItem, 'startDate' | 'endDa
 export function getEventSortTime(event: Pick<EventItem, 'startDate' | 'datesTBD'>): number {
   if (event.datesTBD || !event.startDate) return Number.MAX_SAFE_INTEGER;
   return new Date(event.startDate).getTime();
+}
+
+/**
+ * True when the event has a planning/prep start date worth displaying.
+ * Planning is intentionally independent of the event's own date(s) — prep
+ * work can (and often does) start before the event's actual date is even
+ * locked in, so this stays true whenever planningStartDate is set and either
+ * the event date is still "To Be Decided" or there's no startDate yet at
+ * all. Once a real startDate exists, the planning date only counts as a
+ * genuine lead-up phase if it actually falls before it.
+ */
+export function hasEventPlanningPhase(event: Pick<EventItem, 'startDate' | 'planningStartDate' | 'datesTBD'>): boolean {
+  if (!event.planningStartDate) return false;
+  if (event.datesTBD || !event.startDate) return true;
+  return event.planningStartDate < event.startDate;
+}
+
+/** Short, human-readable note on when prep work begins, for list/card views. Empty string when there's no planning phase to show. */
+export function formatEventPlanningNote(event: Pick<EventItem, 'startDate' | 'planningStartDate' | 'datesTBD'>): string {
+  return hasEventPlanningPhase(event) ? `Prep work from ${event.planningStartDate}` : '';
 }
 
 /**

@@ -47,6 +47,7 @@ export async function PATCH(
     let justStyleRejected = false;
     let justProofreadApproved = false;
     let justProofreadRejected = false;
+    let justCaptionApproved = false;
     let mergedRecord: any = null;
 
     // Upsert: if this id isn't in the server's collection yet (e.g. client-bundled
@@ -65,6 +66,7 @@ export async function PATCH(
       const previousReviewStatus = next[idx].review?.status;
       const wasProofreadApproved = previousReviewStatus === 'Proofread Approved';
       const wasProofreadRejected = previousReviewStatus === 'Changes Requested';
+      const wasCaptionApproved = next[idx].captionStatus === 'approved';
       const merged = { ...next[idx], ...body };
       if (!wasStyleApproved && merged.styleStatus === 'Style Approved') {
         justStyleApproved = true;
@@ -77,6 +79,9 @@ export async function PATCH(
       }
       if (!wasProofreadRejected && merged.review?.status === 'Changes Requested') {
         justProofreadRejected = true;
+      }
+      if (!wasCaptionApproved && merged.captionStatus === 'approved') {
+        justCaptionApproved = true;
       }
       next[idx] = merged;
       mergedRecord = merged;
@@ -157,6 +162,60 @@ export async function PATCH(
           d.id === id ? { ...d, styleApprovalEmailSent: false, styleApprovalEmailError: message } : d
         ));
         mergedRecord = { ...mergedRecord, styleApprovalEmailSent: false, styleApprovalEmailError: message };
+      }
+    }
+
+    // Once captions are approved — by the Centre Head, Advisor, or GG Campus
+    // Head of Events (see reviewDesignCaptions in local-data.ts) — email the
+    // design asset plus the approved caption text to all three, same
+    // recipient resolution as the style-approval email above.
+    if (justCaptionApproved) {
+      try {
+        const [members, { dispatchEmail, generateCaptionsApprovedEmailTemplate, findApprovalRecipients }] = await Promise.all([
+          readCollection('members'),
+          import('@/lib/email-service'),
+        ]);
+        const recipients = findApprovalRecipients(members as any[]);
+        const to = [recipients.centreHead?.email, recipients.advisor?.email, recipients.eventsHeadGg?.email].filter(Boolean) as string[];
+
+        if (to.length > 0) {
+          const template = generateCaptionsApprovedEmailTemplate(
+            mergedRecord.title || 'Design',
+            mergedRecord.designerName || 'Designer',
+            mergedRecord.approvedInstagramCaption,
+            mergedRecord.approvedLinkedinCaption
+          );
+          const attachments = mergedRecord.storageKey
+            ? [{ filename: mergedRecord.fileName || 'design-asset', content: await readStoredFile(mergedRecord.storageKey) }]
+            : undefined;
+
+          const log = await dispatchEmail({
+            to: to.join(','),
+            subject: template.subject,
+            bodyText: template.bodyText,
+            bodyHtml: template.bodyHtml,
+            category: 'DESIGN_APPROVAL',
+            attachments,
+          });
+
+          await mutateCollection('designs', (current) => (current || []).map((d: any) =>
+            d.id === id ? { ...d, captionApprovalEmailSent: log.status === 'SENT', captionApprovalEmailError: log.errorMessage } : d
+          ));
+          mergedRecord = { ...mergedRecord, captionApprovalEmailSent: log.status === 'SENT', captionApprovalEmailError: log.errorMessage };
+        } else {
+          const noRecipientsMsg = 'No Centre Head, Advisor, or GG Campus Head of Events found in the Directory to send the approved captions to.';
+          await mutateCollection('designs', (current) => (current || []).map((d: any) =>
+            d.id === id ? { ...d, captionApprovalEmailSent: false, captionApprovalEmailError: noRecipientsMsg } : d
+          ));
+          mergedRecord = { ...mergedRecord, captionApprovalEmailSent: false, captionApprovalEmailError: noRecipientsMsg };
+        }
+      } catch (emailErr: any) {
+        console.error('[designs-api] Caption-approval email dispatch failed:', emailErr);
+        const message = emailErr?.message || 'Failed to send the approved captions email.';
+        await mutateCollection('designs', (current) => (current || []).map((d: any) =>
+          d.id === id ? { ...d, captionApprovalEmailSent: false, captionApprovalEmailError: message } : d
+        ));
+        mergedRecord = { ...mergedRecord, captionApprovalEmailSent: false, captionApprovalEmailError: message };
       }
     }
 

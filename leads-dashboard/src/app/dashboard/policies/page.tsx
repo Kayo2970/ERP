@@ -36,7 +36,7 @@ import {
   AccessLevelSettings,
   ModuleAccessKey,
 } from '@/lib/local-data';
-import { CAPABILITY_CATALOG, MODULE_CATALOG } from '@/lib/permissions';
+import { CAPABILITY_CATALOG, MODULE_CATALOG, isCentreHead } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -198,6 +198,10 @@ export default function GroupPoliciesPage() {
   };
 
   const isSuperUser = user?.tier === 1;
+  // Centre Head — which already folds in the Advisor role, see isCentreHead's
+  // doc comment — gets the same full access to Group Policy management as
+  // the Super User, not just a read-only view.
+  const canAccessPolicies = isSuperUser || isCentreHead(user);
 
   const resetForm = () => {
     setName('');
@@ -431,13 +435,13 @@ export default function GroupPoliciesPage() {
     );
   }
 
-  if (!isSuperUser) {
+  if (!canAccessPolicies) {
     return (
       <div className="p-6 md:p-8">
         <EmptyState
           icon={ShieldAlert}
-          title="Super User Access Required"
-          description="Group Policy Management controls who can access what across the entire dashboard. Only the Super User account can view or change these settings."
+          title="Access Required"
+          description="Group Policy Management controls who can access what across the entire dashboard. Only the Super User, Centre Head, and Advisor can view or change these settings."
         />
       </div>
     );

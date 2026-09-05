@@ -10,16 +10,19 @@ An enterprise-grade, institutional management and operations platform designed f
 
 #### 1. Dashboard Home (`/dashboard/home`)
 - **Executive Overview**: Centralized operations desk featuring friendly user greetings, official designation and committee breakdowns, active task counters, upcoming event schedules, and recent announcements.
+- **Cross-Module Project Timeline (Gantt)**: One bar per event spanning its start/end dates (colored by planned/active/completed/archived status), with diamond markers for that event's tasks plotted at their due date, plus an "Other Deliverables" row for tasks not tied to any event. Bars and markers deep-link straight into the Events and Tasks modules. A 2-Weeks / 30-Days / 90-Days window toggle keeps it legible, with a "Today" line and a frozen label column — and it auto-widens to 90 days on its own the moment the default window comes up empty, rather than showing a blank chart. Events with a separate **Planning Start Date** (see Events Desk below) render a lighter, dashed lead-in segment ahead of the event's own solid bar.
 - **Quick Action Hub**: Direct shortcuts for event creation, task assignment, design uploads, and announcement broadcasting.
 - **Personal Deliverables**: Tailored dashboard widget highlighting deliverables assigned specifically to the logged-in user.
 
 #### 2. Calendar Module (`/dashboard/calendar`)
 - **Inter-Campus Operational Timeline**: Interactive calendar displaying event schedules, sub-committee milestones, and university deadlines.
+- **Planning-Phase Markers**: Days that fall inside an event's pre-event planning window (its Planning Start Date up to its actual Start Date) are marked with a distinct amber indicator, separate from the event's own on-ground date highlight — so prep work in the lead-up to an event is visible on the calendar even before the event itself begins.
 - **Campus Filtering**: Filter view by **GG Campus**, **RTC Campus**, or **All Campuses**.
 - **Event Highlights**: Clickable event cards showing start/end dates, venue details, committee leads, and status badges.
 
 #### 3. Events Desk (`/dashboard/events`)
 - **Lifecycle Management**: End-to-end event workflow: *Draft* → *Pending Approval* → *Published* → *Completed*.
+- **Planning Start Date vs. Event Date**: Every event can optionally carry a separate **Planning Start Date** — when prep work (bookings, committee formation, design briefs, sponsor outreach) actually begins — distinct from its real Start/End Date on the ground. An event can be created and shared early (e.g. planning starting in February) while its actual on-campus dates sit later (e.g. March), without misrepresenting when the event itself runs. Shown as a "Prep work from ..." note on event cards, the event detail page, and the dashboard's Upcoming Events list, and as a distinct lead-in segment on the dashboard Gantt timeline and a separate marker on the Calendar.
 - **Status Filter Tabs**: Filter the events grid by *All Events*, *Ongoing*, *Completed*, or *Archived* — computed from each event's actual end date, not just its stored status, so a past-dated event reads as completed even if nobody manually flipped it.
 - **Sub-Committee Formation**: Create specialized committees (Logistics, Technical, Media, Operations) and assign member rosters.
 - **Bulk Roster Import**: Download a CSV template and bulk-upload events, same pattern as the Member Directory and Guest Directory importers.
@@ -29,13 +32,16 @@ An enterprise-grade, institutional management and operations platform designed f
 
 #### 4. Tasks Desk (`/dashboard/tasks`)
 - **Task Delegation**: Assign tasks to individual members or entire sub-committees with priority tagging (*Urgent*, *High*, *Normal*, *Low*).
+- **Searchable Student & Event Filters**: The Student and Event filter dropdowns are type-to-search comboboxes rather than plain scroll-to-find `<select>` lists — matches the "Select Assignee" search pattern already used when creating a task.
 - **Status Tracking**: Visual progress pipeline: *To Do* → *In Progress* → *Under Review* → *Completed*.
 - **Auto-Generated Design Tasks**: A finalized Design Portal submission (style-approved, and proofread-approved if proofreading was requested) automatically creates or completes a task here — linked to its event when tagged to one, or standalone otherwise — so it flows straight into the rating queue with no manual re-entry.
 - **Extension Requests**: Assignees can submit task deadline extension requests, which Faculty Advisors or the Centre Head can approve or reject.
 - **Executive Task Allotment & Universal Visibility**: Executive Council leadership (President & Vice President) hold complete platform-wide task visibility access to monitor all assigned tasks, while new executive task assignments route through Event Head approval.
+- **Live Gantt Sync**: A task's due date drives its marker position on the dashboard's Project Timeline — assign, reschedule, or complete a task and the Gantt chart reflects it on the next data sync, no separate step required.
 
 #### 5. Ratings & Student Performance (`/dashboard/ratings`)
 - **Rubric Evaluation**: 5-point performance scoring system for student deliverables and leadership contributions.
+- **Searchable Student & Event Filters**: Same type-to-search combobox as the Tasks Desk, applied to the Task Evaluation Queue's Student and Event filters.
 - **Time Period Filter**: Filter the evaluation history by a specific month or a custom date range — no fixed quarters.
 - **Scoped Visibility**:
   - *Super User / Centre Head*: Universal visibility across all members and campuses.
@@ -77,7 +83,8 @@ An enterprise-grade, institutional management and operations platform designed f
 #### 9. Public Forms Builder (`/dashboard/forms` & `/forms/[slug]`)
 - **Interactive Form Builder**: Custom form creation engine for student signups, feedback collection, and event registrations.
 - **QR Code Preview & Download**: Instant QR Code preview generated for every public form (`/forms/[slug]`), with a single-click download of a high-resolution PNG poster card (featuring official branding header, event title, scannable QR code, and URL string) for physical printing and distribution, plus direct browser printing.
-- **Reusable Field Templates**: Save a form's field schema as a template, then start any future form from one instead of rebuilding it from scratch.
+- **Reusable Field Templates & "Start from Template"**: Save any form's field schema as a reusable template, then start a future form from it via the **Start from Template** picker instead of rebuilding it field-by-field. Server-side, the built-in templates (below) are guaranteed present and kept in sync with their code-defined field list on every boot — even on a database that predates the template shipping — so the picker never silently comes up empty.
+- **Feedback Form Template & Word Export**: A built-in template matching the Centre's official `Feedback_Events.docx` field-for-field — Name/Type of Event, Date/Duration, Participant details, the 9-parameter 1–5 rating grid, Learning Outcomes, four open-ended questions, and the Outcome & Impact section. Every submission to a form built from this template can be downloaded as a filled copy of the real Word document (same header, layout, and branding as the official form), with every answer placed exactly where it would be hand-written — ticked scale boxes, checked event types, filled blanks — plus a footer disclaimer noting the response was completed and verified through the LEADS Operational Portal, so no physical copy needs to be filled or signed.
 - **Event Linking**: Tag a form to a specific event — shown as a badge in the builder and on the public form page itself.
 - **Field Customization**: Text inputs, textareas, dropdowns, checkboxes, and file upload fields.
 - **Public Form Slugs**: Custom public landing pages rendered at `/forms/[slug]`.
