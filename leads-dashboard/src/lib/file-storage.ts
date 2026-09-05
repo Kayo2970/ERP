@@ -74,17 +74,37 @@ export async function saveBase64File(
   const storageKey = `${category}/${recordId}/${index}__${safeName}`;
   const target = path.join(UPLOADS_DIR, category, recordId, `${index}__${safeName}`);
 
+  // Guard against path traversal in category or recordId — path.join normalises
+  // '..' sequences, so we must verify the resolved path stays inside UPLOADS_DIR
+  // and within the expected category subdirectory before writing anything.
+  const resolvedTarget = path.resolve(target);
+  const expectedPrefix = path.join(UPLOADS_DIR, category) + path.sep;
+  if (!resolvedTarget.startsWith(expectedPrefix)) {
+    throw new Error('Invalid file path: category or record ID contains path traversal sequences.');
+  }
+
   await fs.mkdir(path.dirname(target), { recursive: true });
   await fs.writeFile(target, buffer);
 
   return { storageKey, url: `/api/files/${storageKey}`, size: buffer.length };
 }
 
-/** Resolve a storageKey to an absolute path, refusing anything that escapes UPLOADS_DIR. */
+/** Resolve a storageKey to an absolute path, refusing anything that escapes UPLOADS_DIR
+ *  or traverses into a different category than the one stated in the key's first segment. */
 function resolveStoragePath(storageKey: string): string {
   const resolved = path.resolve(UPLOADS_DIR, storageKey);
   if (resolved !== UPLOADS_DIR && !resolved.startsWith(UPLOADS_DIR + path.sep)) {
     throw new Error('Invalid storage key.');
+  }
+  // Prevent cross-category traversal: e.g. "members/../guests/x/file" resolves
+  // within UPLOADS_DIR but ends up in a different category.  Verify the resolved
+  // path is actually inside the category named by the first segment of the key.
+  const firstSegment = storageKey.split('/')[0];
+  if (firstSegment) {
+    const expectedPrefix = path.join(UPLOADS_DIR, firstSegment) + path.sep;
+    if (!resolved.startsWith(expectedPrefix)) {
+      throw new Error('Invalid storage key.');
+    }
   }
   return resolved;
 }
