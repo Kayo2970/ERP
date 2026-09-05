@@ -1,16 +1,16 @@
-# Graph Report - ERP  (2026-09-06)
+# Graph Report - ERP  (2026-09-05)
 
 ## Corpus Check
-- 221 files · ~466,195 words
+- 221 files · ~461,813 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1857 nodes · 5220 edges · 237 communities (90 shown, 147 thin omitted)
-- Extraction: 98% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 67 edges (avg confidence: 0.82)
+- 1853 nodes · 5171 edges · 239 communities (90 shown, 149 thin omitted)
+- Extraction: 98% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 66 edges (avg confidence: 0.82)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `2252f4d7`
+- Built from commit: `8a7fb643`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -97,6 +97,7 @@
 - [[_COMMUNITY_@napi-rscanvas|@napi-rs/canvas]]
 - [[_COMMUNITY_nspell|nspell]]
 - [[_COMMUNITY_ogl|ogl]]
+- [[_COMMUNITY_react|react]]
 - [[_COMMUNITY_tesseract.js|tesseract.js]]
 - [[_COMMUNITY_@typesqrcode|@types/qrcode]]
 - [[_COMMUNITY_zod|zod]]
@@ -143,6 +144,7 @@
 - [[_COMMUNITY_SKILL|SKILL.md]]
 - [[_COMMUNITY_canViewTask() Visibility Logic|canViewTask() Visibility Logic]]
 - [[_COMMUNITY_not-found.tsx|not-found.tsx]]
+- [[_COMMUNITY_isSectorHead|isSectorHead]]
 - [[_COMMUNITY_AGENTS|AGENTS.md]]
 - [[_COMMUNITY_ponytail|ponytail.md]]
 - [[_COMMUNITY_getCommittees() Fallback List Doesn't Reflect Per-Event Model|getCommittees() Fallback List Doesn't Reflect Per-Event Model]]
@@ -254,10 +256,10 @@
 2. `requireSession()` - 151 edges
 3. `mutateCollection()` - 128 edges
 4. `logAuditEvent()` - 102 edges
-5. `getAccessLevelSettingsServer()` - 88 edges
-6. `readCollection()` - 87 edges
-7. `isCentreHead()` - 58 edges
-8. `getMembers()` - 56 edges
+5. `readCollection()` - 87 edges
+6. `getAccessLevelSettingsServer()` - 86 edges
+7. `getMembers()` - 56 edges
+8. `isCentreHead()` - 52 edges
 9. `getEvents()` - 51 edges
 10. `serverPatch()` - 44 edges
 
@@ -276,23 +278,23 @@
 ## Import Cycles
 - None detected.
 
-## Communities (237 total, 147 thin omitted)
+## Communities (239 total, 149 thin omitted)
 
 ### Community 0 - "local-data.ts"
 Cohesion: 0.06
-Nodes (65): BudgetPage(), CATEGORY_OPTIONS, CHART_COLORS, CURRENT_FY, CURRENT_FY_START, FINANCIAL_YEARS, MONTH_NAMES, addBudget() (+57 more)
+Nodes (61): BudgetPage(), CATEGORY_OPTIONS, CHART_COLORS, CURRENT_FY, CURRENT_FY_START, FINANCIAL_YEARS, MONTH_NAMES, addBudget() (+53 more)
 
 ### Community 1 - "rate-limit.ts"
-Cohesion: 0.11
-Nodes (33): hashPassword(), ActivateAccountSchema, GET(), POST(), ChangePasswordSchema, POST(), ConfirmEmailChangeSchema, POST() (+25 more)
+Cohesion: 0.10
+Nodes (35): hashPassword(), ChangePasswordSchema, POST(), ConfirmEmailChangeSchema, POST(), ConfirmNewEmailSchema, POST(), LoginSchema (+27 more)
 
 ### Community 2 - "apiError"
-Cohesion: 0.12
-Nodes (42): GET(), POST(), DELETE(), PATCH(), GET(), POST(), GET(), POST() (+34 more)
+Cohesion: 0.11
+Nodes (40): GET(), POST(), DELETE(), PATCH(), GET(), POST(), DELETE(), PATCH() (+32 more)
 
 ### Community 3 - "getMembers"
-Cohesion: 0.15
-Nodes (40): DirectoryPage(), applyMailMerge(), Guest, GuestInvitesPage(), SettingsPage(), formatFileSize(), useUploadTask(), addMember() (+32 more)
+Cohesion: 0.17
+Nodes (37): DirectoryPage(), SettingsPage(), useUploadTask(), addMember(), adminSetMemberPassword(), approveMemberCreate(), AuditLogItem, authHeaders() (+29 more)
 
 ### Community 4 - "CLAUDE.md (Root Architecture Guide)"
 Cohesion: 0.14
@@ -300,59 +302,59 @@ Nodes (21): announcements Collection, auditLogs Collection, events Collection, f
 
 ### Community 5 - "permissions-server.ts"
 Cohesion: 0.11
-Nodes (35): POST(), PATCH(), GET(), POST(), AccessLevelSettings, anyKeywordMatches(), canAccessGuestDirectory(), canApproveAsFinanceHead() (+27 more)
+Nodes (35): PATCH(), GET(), POST(), AccessLevelSettings, anyKeywordMatches(), canApproveAsFinanceHead(), canApproveAsSectorHead(), canApprovePendingEvent() (+27 more)
 
 ### Community 6 - "logAuditEvent"
-Cohesion: 0.13
-Nodes (42): CalendarPage(), EventDetailPage(), EventsPage(), EventStatusFilter, DashboardHome(), GanttTimelineProps, StudentProfileModal(), StudentProfileModalProps (+34 more)
+Cohesion: 0.15
+Nodes (39): CalendarPage(), EventDetailPage(), EventsPage(), EventStatusFilter, DashboardHome(), StudentProfileModal(), StudentProfileModalProps, addEvent() (+31 more)
 
 ### Community 7 - "requireSession"
-Cohesion: 0.22
-Nodes (20): canAddMember(), canBuildForms(), canCreateAnnouncement(), canDecideTaskExtension(), canEditDirectory(), canEditMemberRecordRow(), canEditRating(), canManageEmailSettings() (+12 more)
+Cohesion: 0.14
+Nodes (27): GET(), POST(), GET(), POST(), GET(), POST(), POST(), ApprovalRecipients (+19 more)
 
 ### Community 8 - "tasks/page.tsx"
-Cohesion: 0.15
-Nodes (38): DesignPortalPage(), FestivalsPage(), TasksPage(), DelegateTaskModal(), DelegateTaskModalProps, RequestApprovalModal(), RequestApprovalModalProps, addDesign() (+30 more)
+Cohesion: 0.17
+Nodes (30): DesignPortalPage(), FestivalsPage(), RequestApprovalModal(), addDesign(), addTask(), approveTask(), completeDesignPosting(), deleteDesign() (+22 more)
 
 ### Community 9 - "ratings/page.tsx"
-Cohesion: 0.14
-Nodes (24): jspdf, ReportsPage(), PeriodFilter(), PeriodFilterProps, RatingItem, extractAvailableMonths(), isWithinPeriod(), monthLabel() (+16 more)
+Cohesion: 0.10
+Nodes (37): jspdf, isDesignTask(), RatingsPage(), ReportsPage(), PeriodFilter(), PeriodFilterProps, SearchableSelect(), SearchableSelectOption (+29 more)
 
 ### Community 10 - "forms/page.tsx"
-Cohesion: 0.18
-Nodes (14): DELETE(), PATCH(), GET(), POST(), DELETE(), PATCH(), PENDING_APPROVAL_MESSAGE, PENDING_STATES (+6 more)
+Cohesion: 0.16
+Nodes (29): buildCategoryChartData(), buildFieldCounts(), buildScaleChartData(), buildSubmissionsByDay(), CHART_COLORS, CHARTABLE_TYPES, chartCountDomainMax(), computeAverage() (+21 more)
 
 ### Community 11 - "readCollectionFile"
 Cohesion: 0.20
 Nodes (21): decryptData(), deriveKey(), encryptData(), EncryptedPayload, FIXED_SALT, getMasterKey(), isEncryptedPayload(), collectionPath() (+13 more)
 
 ### Community 12 - "file-storage.ts"
-Cohesion: 0.12
-Nodes (30): DELETE(), PATCH(), POST(), DELETE(), isEventReportAuthor(), PATCH(), GET(), DELETE() (+22 more)
+Cohesion: 0.14
+Nodes (27): DELETE(), PATCH(), DELETE(), isEventReportAuthor(), PATCH(), GET(), DELETE(), PATCH() (+19 more)
 
 ### Community 13 - "getAccessLevelSettingsServer"
-Cohesion: 0.12
-Nodes (33): GET(), DELETE(), GET(), POST(), GET(), POST(), GET(), POST() (+25 more)
+Cohesion: 0.13
+Nodes (22): POST(), POST(), POST(), DELETE(), GET(), POST(), DELETE(), PATCH() (+14 more)
 
 ### Community 14 - "app/page.tsx"
-Cohesion: 0.06
-Nodes (58): qrcode, buildCategoryChartData(), buildFieldCounts(), buildScaleChartData(), buildSubmissionsByDay(), CHART_COLORS, CHARTABLE_TYPES, chartCountDomainMax() (+50 more)
+Cohesion: 0.10
+Nodes (24): INSPIRATIONAL_QUOTES, LoginPage(), QuoteItem, IosInstallPrompt(), isIos(), isStandalone(), LoadingScreen(), LoadingScreenProps (+16 more)
 
 ### Community 15 - "setup-superuser.js"
-Cohesion: 0.10
-Nodes (24): Direct Send SMTP Setup, DKIM/SPF/DMARC DNS Configuration, Full DNS Rebuild & Mail Verification, PM2/Nginx/Certbot Bootstrap, VPS Setup Bootstrap Procedure, log(), vps-setup.sh script, ask() (+16 more)
+Cohesion: 0.07
+Nodes (31): Direct Send SMTP Setup, DKIM/SPF/DMARC DNS Configuration, Full DNS Rebuild & Mail Verification, PM2/Nginx/Certbot Bootstrap, VPS Setup Bootstrap Procedure, log(), vps-setup.sh script, ask() (+23 more)
 
 ### Community 16 - "permissions.ts"
-Cohesion: 0.24
-Nodes (17): canCreateEvent(), canCreateTask(), canDeleteEvent(), canDeleteTask(), canEditEvent(), canEditTask(), canManageEvents(), canManageTasks() (+9 more)
+Cohesion: 0.23
+Nodes (22): TasksPage(), canViewTask(), uploadTaskAttachments(), canCreateAnnouncement(), canCreateEvent(), canCreateTask(), canDecideTaskExtension(), canDelegateAutoTask() (+14 more)
 
 ### Community 17 - "dashboard-shell.tsx"
-Cohesion: 0.12
-Nodes (21): allSidebarItems, DashboardShell(), loadSeenActionIds(), NavSection, navSections, saveSeenActionIds(), SidebarItem, NotFoundScreen() (+13 more)
+Cohesion: 0.13
+Nodes (27): ReimbursementsPage(), allSidebarItems, DashboardShell(), loadSeenActionIds(), NavSection, navSections, saveSeenActionIds(), SidebarItem (+19 more)
 
 ### Community 18 - "mutateCollection"
-Cohesion: 0.08
-Nodes (38): GET(), POST(), POST(), GET(), POST(), GET(), PENDING_APPROVAL_MESSAGE, POST() (+30 more)
+Cohesion: 0.10
+Nodes (40): DELETE(), PATCH(), GET(), POST(), GET(), POST(), ActivateAccountSchema, GET() (+32 more)
 
 ### Community 19 - "visiting-card-ocr.ts"
 Cohesion: 0.15
@@ -371,16 +373,16 @@ Cohesion: 0.16
 Nodes (26): AI-Powered OCR Scan & Data Extraction, Answer Ingestion & Data Capture, Asset Intake & Validation (section), Auto-Complete Linked Tasks & Requirements, Combined Gates Pass Decision, Data Processing & Document Generation (section), Design Asset Upload, DOCX Document Generated & Stored (+18 more)
 
 ### Community 23 - "budget/page.tsx"
-Cohesion: 0.14
-Nodes (14): Write Mutex Permanently Breaks After First Error, GET(), COLLECTION_KEYS, DATA_DIR, DbSchema, EMPTY_DB, LEGACY_DB_PATH, META_PATH (+6 more)
+Cohesion: 0.11
+Nodes (20): GET(), POST(), GET(), MemberCreateSchema, POST(), ActivationToken, createActivationTokenAndSendEmail(), getAppBaseUrl() (+12 more)
 
 ### Community 24 - "reimbursements/page.tsx"
-Cohesion: 0.17
-Nodes (21): BackupRestorePage(), ReimbursementsPage(), createProgressTracker(), FileDropzone(), FileDropzoneProps, FilePreviewRow(), FilePreviewRowProps, formatEta() (+13 more)
+Cohesion: 0.23
+Nodes (14): BackupRestorePage(), createProgressTracker(), FileDropzone(), FileDropzoneProps, FilePreviewRow(), FilePreviewRowProps, formatEta(), formatFileSize() (+6 more)
 
 ### Community 25 - "policies/page.tsx"
-Cohesion: 0.15
-Nodes (22): ALL_DIVISIONS, ALL_TIERS, EVERYONE_ELSE_RULE, GroupPoliciesPage(), memberMatchesCriteria(), ModuleAccessGrant, ModuleAccessMap, slugifyTag() (+14 more)
+Cohesion: 0.11
+Nodes (25): ALL_DIVISIONS, ALL_TIERS, EVERYONE_ELSE_RULE, GroupPoliciesPage(), memberMatchesCriteria(), ModuleAccessGrant, ModuleAccessMap, slugifyTag() (+17 more)
 
 ### Community 26 - "Member"
 Cohesion: 0.16
@@ -392,15 +394,15 @@ Nodes (12): devDependencies, eslint, eslint-config-next, tailwindcss, @tailwindc
 
 ### Community 28 - "members/[id]/route.ts"
 Cohesion: 0.28
-Nodes (16): DELETE(), PATCH(), POST(), DELETE(), PATCH(), POST(), POST(), countActiveSuperUsersServer() (+8 more)
+Nodes (17): DELETE(), PATCH(), POST(), DELETE(), PATCH(), POST(), countActiveSuperUsersServer(), isKayomarzIdentity() (+9 more)
 
 ### Community 29 - "email-service.ts"
 Cohesion: 0.06
 Nodes (33): 10. Analytics & Reports (`/dashboard/reports`), 11. Announcements Engine (`/dashboard/announcements`), 12. Member Directory & Roster (`/dashboard/directory`), 13. Guest Directory (`/dashboard/guest-directory`), 14. Guest Invites Dispatcher (`/dashboard/guest-invites`), 15. Dynamic Group Policies (`/dashboard/policies`), 16. Backup & Restore (`/dashboard/backup`), 17. Email Management & Client (`/dashboard/email`) (+25 more)
 
 ### Community 30 - "hasCapability"
-Cohesion: 0.18
-Nodes (21): GroupPolicy, ApprovalRequirement, canApprovePendingEvent(), canApprovePendingForm(), canApprovePendingTask(), canDelegateAutoTask(), canEditGuestRecord(), canViewGuestRecord() (+13 more)
+Cohesion: 0.12
+Nodes (46): getGroupPolicies(), canAddMember(), canApproveAnnouncement(), canApprovePendingForm(), canApprovePendingTask(), canBuildForms(), canDeleteForms(), canEditDirectory() (+38 more)
 
 ### Community 31 - "dependencies"
 Cohesion: 0.10
@@ -411,8 +413,8 @@ Cohesion: 0.67
 Nodes (3): Cross-Device Polling Never Actually Updates Open Screen, Login & Session (localStorage-based), 7-Second Poll Sync Mechanism
 
 ### Community 33 - "isCentreHead"
-Cohesion: 0.36
-Nodes (13): EventReportsPage(), addEventReport(), approveEventReport(), deleteEventReport(), EventReportItem, getEventReports(), rejectEventReport(), resubmitEventReport() (+5 more)
+Cohesion: 0.23
+Nodes (19): EventReportsPage(), addEventReport(), approveEventReport(), deleteEventReport(), EventReportItem, getEventReports(), isTaskAssignee(), rejectEventReport() (+11 more)
 
 ### Community 35 - "sync-status.ts"
 Cohesion: 0.26
@@ -423,12 +425,12 @@ Cohesion: 0.26
 Nodes (11): adm-zip, BackupSummary, buildZipBuffer(), createEncryptedBackup(), DATA_DIR, decryptBackup(), deriveKey(), InvalidPassphraseError (+3 more)
 
 ### Community 37 - "announcements/page.tsx"
-Cohesion: 0.22
-Nodes (20): AnnouncementsPage(), ApprovalsPage(), entityIcon(), entityLink(), statusBadge(), Tab, addAnnouncement(), approveAnnouncement() (+12 more)
+Cohesion: 0.20
+Nodes (17): AnnouncementsPage(), EmailManagementPage(), PendingQueueItem, ConfirmModal(), ConfirmModalProps, EmptyState(), EmailLog, EmailSettings (+9 more)
 
 ### Community 38 - "approvals/page.tsx"
-Cohesion: 0.26
-Nodes (16): canApproveAnnouncement(), canChangeTaskStatus(), canDeleteForms(), canEvaluateEventStudent(), canRespondToHolidayApproval(), canReviewDesignProofread(), canViewEvent(), canViewTaskDelegationTrail() (+8 more)
+Cohesion: 0.27
+Nodes (12): ApprovalsPage(), entityIcon(), entityLink(), statusBadge(), Tab, RequestApprovalModalProps, ApprovalRequest, decideApprovalRequest() (+4 more)
 
 ### Community 39 - "LEADS Dashboard Full Codebase Bug Audit"
 Cohesion: 0.67
@@ -443,12 +445,12 @@ Cohesion: 0.11
 Nodes (18): 1. What This Portal Does, 2. The Problem It Solves, 3. Who Uses It, 4.1 Event Management, 4.2 Task Management, 4.3 Rating & Evaluation, 4.4 Announcements & Email Alerts, 4.5 Reimbursement Portal (+10 more)
 
 ### Community 42 - "chip.tsx"
-Cohesion: 0.15
-Nodes (12): PromotionData, PromotionModal(), PromotionModalProps, Button(), Chip(), ChipColor, ChipProps, ChipSize (+4 more)
+Cohesion: 0.25
+Nodes (7): ChipColor, ChipProps, ChipSize, ChipVariant, COLOR_VARIANTS, DOT_COLORS, SIZES
 
 ### Community 43 - "birthday-scheduler.ts"
-Cohesion: 0.06
-Nodes (54): register(), BirthdayEmailLogEntry, monthDay(), msUntilNextMidnight(), runBirthdayCheck(), startBirthdayScheduler(), todayDateString(), deliverToHost() (+46 more)
+Cohesion: 0.13
+Nodes (24): register(), BirthdayEmailLogEntry, monthDay(), msUntilNextMidnight(), runBirthdayCheck(), startBirthdayScheduler(), todayDateString(), generateBirthdayEmailTemplate() (+16 more)
 
 ### Community 44 - "LEADS ERP Interactive Prototype"
 Cohesion: 0.15
@@ -511,16 +513,16 @@ Cohesion: 0.29
 Nodes (5): COLOR_TRACKS, ProgressColor, ProgressProps, ProgressSize, SIZES
 
 ### Community 60 - "Member"
-Cohesion: 0.83
-Nodes (3): DIVISION_SCOPES, getAnnouncementScopeMatch(), resolveAnnouncementRecipients()
+Cohesion: 0.26
+Nodes (10): DelegateTaskModal(), DelegateTaskModalProps, GanttTimelineProps, DIVISION_SCOPES, getAnnouncementScopeMatch(), resolveAnnouncementRecipients(), delegateAutoTask(), EventItem (+2 more)
 
 ### Community 61 - "approval-sync.ts"
 Cohesion: 0.14
 Nodes (14): 2. Solutions, Announcements, Cross-cutting, Dashboard Home, Directory, Events, Login, Public form page (+6 more)
 
 ### Community 62 - "matchingModulePolicies"
-Cohesion: 0.30
-Nodes (13): isDesignTask(), RatingsPage(), SearchableSelect(), SearchableSelectOption, SearchableSelectProps, addRating(), deleteRating(), getRatings() (+5 more)
+Cohesion: 0.13
+Nodes (21): DELETE(), GET(), AUTO_RECREATED_WORKFLOWS, DELETE(), PATCH(), PENDING_APPROVAL_MESSAGE, PENDING_STATES, GET() (+13 more)
 
 ### Community 64 - "decrypt-backup.js"
 Cohesion: 0.40
@@ -535,16 +537,16 @@ Cohesion: 0.83
 Nodes (3): create_manual(), set_cell_background(), set_cell_margins()
 
 ### Community 69 - "adm-zip"
-Cohesion: 0.16
-Nodes (20): EmailManagementPage(), PendingQueueItem, emptyForm, GuestDirectoryPage(), ConfirmModal(), ConfirmModalProps, EmptyState(), useDropTarget() (+12 more)
+Cohesion: 0.22
+Nodes (17): emptyForm, GuestDirectoryPage(), applyMailMerge(), Guest, GuestInvitesPage(), useDropTarget(), downloadCsv(), parseCsvLine() (+9 more)
 
 ### Community 72 - "dictionary-en"
 Cohesion: 0.17
 Nodes (11): 1. Purpose, 2.1 By Event, 2.2 By Committee, 2.3 By Individual, 2. Report Types, 3. Chart Requirements, 4. Export, 5. Access to Reports (+3 more)
 
 ### Community 73 - "html2canvas"
-Cohesion: 0.29
-Nodes (10): OcrScanIssue, OcrScanPageImage, cleanWord(), getSpellCheckerUK(), getSpellCheckerUS(), getWorker(), INDIAN_ENGLISH_WHITELIST, OCR_CACHE_DIR (+2 more)
+Cohesion: 0.26
+Nodes (11): OcrScanIssue, OcrScanPageImage, OcrScanResult, cleanWord(), getSpellCheckerUK(), getSpellCheckerUS(), getWorker(), INDIAN_ENGLISH_WHITELIST (+3 more)
 
 ### Community 74 - "jspdf"
 Cohesion: 0.18
@@ -563,20 +565,24 @@ Cohesion: 0.20
 Nodes (10): 1. Stop tracking the runtime database file in git, 2. Fix the load race: server data must win over sample/seed data, 3. Stop sending the whole database on every save — split into per-collection, per-record API routes, 4. Add live sync between open sessions, 5. Keep the existing audit log, Acceptance check before calling this done, Bugs to fix, in order, Context (current state) (+2 more)
 
 ### Community 81 - "nspell"
-Cohesion: 0.40
-Nodes (6): anyKeywordMatches(), canViewReimbursement(), escapeRegex(), hasModuleViewAllGrant(), isSectorHead(), keywordMatches()
+Cohesion: 0.36
+Nodes (8): qrcode, canvasToBlob(), drawCenterLogo(), FormQrModal(), FormQrModalProps, getFormTypeLabel(), isIOSDevice(), FormTemplateItem
 
 ### Community 82 - "ogl"
 Cohesion: 0.22
 Nodes (8): Boundaries, Intensity, Output, Persistence, Ponytail, Rules, The ladder, When NOT to be lazy
+
+### Community 83 - "react"
+Cohesion: 0.22
+Nodes (8): OnboardingTourProps, OnboardingTourUser, TourStep, PromotionData, PromotionModal(), PromotionModalProps, Button(), Chip()
 
 ### Community 84 - "tesseract.js"
 Cohesion: 0.25
 Nodes (7): Configure Default Mode, Deactivate, Levels, More, Ponytail Help, Skills, Update
 
 ### Community 85 - "@types/qrcode"
-Cohesion: 0.38
-Nodes (9): addDays(), countInWindow(), daysBetween(), GanttTimeline(), parseDate(), STATUS_COLORS, toDateStr(), WINDOW_OPTIONS (+1 more)
+Cohesion: 0.36
+Nodes (8): addDays(), daysBetween(), GanttTimeline(), parseDate(), STATUS_COLORS, toDateStr(), WINDOW_OPTIONS, WindowKey
 
 ### Community 86 - "zod"
 Cohesion: 0.33
@@ -618,10 +624,6 @@ Nodes (3): Boundaries, Output, Scan
 Cohesion: 0.50
 Nodes (4): Committee-Assigned Tasks Invisible to Everyone, canViewTask() Visibility Logic, Ratings Module (Actual Flow), Tasks Module (Actual Flow)
 
-### Community 129 - "not-found.tsx"
-Cohesion: 0.20
-Nodes (11): POST(), POST(), POST(), canManageBackup(), extractToken(), getSession(), getSessionMember(), hashToken() (+3 more)
-
 ## Ambiguous Edges - Review These
 - `Budget & Funds` → `Ratings & Performance`  [AMBIGUOUS]
   leads-dashboard/docs/module_data_flow_diagram.png · relation: shares_data_with
@@ -653,7 +655,7 @@ Nodes (11): POST(), POST(), POST(), canManageBackup(), extractToken(), getSessio
 ## Knowledge Gaps
 - **637 isolated node(s):** `deploy.sh script`, `eslintConfig`, `nextConfig`, `name`, `version` (+632 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **147 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **149 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
