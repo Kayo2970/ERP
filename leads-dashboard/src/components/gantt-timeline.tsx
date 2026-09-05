@@ -161,12 +161,15 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
   }, [tasks, rangeStartStr, rangeEndStr, isExpanded]);
 
   // Week/period tick labels along the header, spaced ~4-8 apart depending on zoom
-  const tickEveryDays = totalDays <= 16 ? 1 : totalDays <= 35 ? 7 : 14;
-  const ticks: { offset: number; label: string }[] = [];
-  for (let i = 0; i <= totalDays; i += tickEveryDays) {
-    const d = addDays(rangeStart, i);
-    ticks.push({ offset: i * dayWidth, label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) });
-  }
+  const ticks = useMemo(() => {
+    const tickEveryDays = totalDays <= 16 ? 1 : totalDays <= 35 ? 7 : 14;
+    const result: { offset: number; label: string }[] = [];
+    for (let i = 0; i <= totalDays; i += tickEveryDays) {
+      const d = addDays(rangeStart, i);
+      result.push({ offset: i * dayWidth, label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) });
+    }
+    return result;
+  }, [totalDays, dayWidth, rangeStart]);
 
   const rowCount = eventRows.length + (standaloneTasks.length > 0 ? 1 : 0);
 
