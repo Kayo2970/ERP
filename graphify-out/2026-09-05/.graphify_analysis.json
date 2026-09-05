@@ -2163,8 +2163,41 @@
       "why": "inferred connection - not explicitly stated in source; connects across different repos/directories; bridges separate communities; semantically similar concepts with no structural link"
     }
   ],
-  "tokens": {
-    "input": 0,
-    "output": 0
-  }
+  "questions": [
+    {
+      "type": "ambiguous_edge",
+      "question": "What is the exact relationship between `GroupPolicy` and `Submission`?",
+      "why": "Edge tagged AMBIGUOUS (relation: references) - confidence is low."
+    },
+    {
+      "type": "ambiguous_edge",
+      "question": "What is the exact relationship between `Guest` and `Member`?",
+      "why": "Edge tagged AMBIGUOUS (relation: references) - confidence is low."
+    },
+    {
+      "type": "ambiguous_edge",
+      "question": "What is the exact relationship between `Rating (upper, form-linked)` and `Rating (lower, member/event score)`?",
+      "why": "Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low."
+    },
+    {
+      "type": "ambiguous_edge",
+      "question": "What is the exact relationship between `Rating (lower, member/event score)` and `Task`?",
+      "why": "Edge tagged AMBIGUOUS (relation: references) - confidence is low."
+    },
+    {
+      "type": "ambiguous_edge",
+      "question": "What is the exact relationship between `Budget & Funds` and `Ratings & Performance`?",
+      "why": "Edge tagged AMBIGUOUS (relation: shares_data_with) - confidence is low."
+    },
+    {
+      "type": "ambiguous_edge",
+      "question": "What is the exact relationship between `Announcement table` and `GroupPolicy table`?",
+      "why": "Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low."
+    },
+    {
+      "type": "ambiguous_edge",
+      "question": "What is the exact relationship between `Announcement table` and `Rating table (event-linked)`?",
+      "why": "Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low."
+    }
+  ]
 }
