@@ -261,6 +261,7 @@ export type ServerTask = {
   approvalStatus?: string;
   approverType?: string;
   approverMemberId?: string;
+  submittedByEmail?: string;
 } | null | undefined;
 
 export type ServerEvent = {
@@ -268,6 +269,7 @@ export type ServerEvent = {
   approvalStatus?: string;
   approverType?: string;
   approverMemberId?: string;
+  submittedByEmail?: string;
 } | null | undefined;
 
 export type ServerRating = {
@@ -372,11 +374,18 @@ export async function canChangeTaskStatus(task: ServerTask, user: ServerUser, se
  */
 export function canApprovePendingEvent(event: ServerEvent, user: ServerUser, settings: AccessLevelSettings): boolean {
   if (!user || !event) return false;
-  if (user.tier === 1) return true;
+  if (user.tier === 1) return true; // Super User always overrides.
   if (event.approvalStatus !== 'pending_create' && event.approvalStatus !== 'pending_edit' && event.approvalStatus !== 'pending_delete') return false;
+  // Never let whoever submitted the change approve their own submission,
+  // even if their role would otherwise resolve as the approver.
+  if (event.submittedByEmail && user.email && String(event.submittedByEmail).toLowerCase() === user.email.toLowerCase()) return false;
   if (event.approverType === 'SPECIFIC_MEMBER') return user.id === event.approverMemberId;
   if (event.approverType === 'POLICY_TAG') return false;
-  return isSectorHead(user, settings);
+  // CENTER_HEAD (default): matches canApprovePendingTask below — was
+  // isSectorHead() before, which both missed Advisor (not in the
+  // configurable sectorHeadKeywords list) and over-included any role merely
+  // containing the word "head".
+  return isCentreHead(user, settings) || isEventsHeadGgCampus(user);
 }
 
 /**
@@ -387,8 +396,14 @@ export function canApprovePendingEvent(event: ServerEvent, user: ServerUser, set
  */
 export function canApprovePendingTask(task: ServerTask, user: ServerUser, settings: AccessLevelSettings): boolean {
   if (!user || !task) return false;
-  if (user.tier === 1) return true;
+  if (user.tier === 1) return true; // Super User always overrides.
   if (task.approvalStatus !== 'pending_create' && task.approvalStatus !== 'pending_edit') return false;
+  // Never let whoever submitted the change approve their own submission —
+  // this is what let a Centre Head/GG Campus Events Head who delegated an
+  // auto-generated task (see delegateAutoTask) turn around and approve their
+  // own delegation, since the generic CENTER_HEAD resolution below would
+  // otherwise match them too.
+  if (task.submittedByEmail && user.email && String(task.submittedByEmail).toLowerCase() === user.email.toLowerCase()) return false;
   if (task.approverType === 'SPECIFIC_MEMBER') return user.id === task.approverMemberId;
   if (task.approverType === 'POLICY_TAG') return false;
   return isCentreHead(user, settings) || isEventsHeadGgCampus(user);

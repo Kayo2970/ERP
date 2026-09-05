@@ -3,8 +3,8 @@ import { mutateCollection, readCollection } from '@/lib/server-db';
 import { enqueueTaskEmailNotification } from '@/lib/task-email-queue';
 import { deleteStoredFilesForRecord } from '@/lib/file-storage';
 import { fanOutAutoApproval, cascadeCloseAutoApprovals } from '@/lib/approval-sync';
-import { requireSession, requirePermission } from '@/lib/session';
-import { canDeleteTask, getAccessLevelSettingsServer } from '@/lib/permissions-server';
+import { requireSession, requirePermission, ForbiddenError } from '@/lib/session';
+import { canDeleteTask, canApprovePendingTask, getAccessLevelSettingsServer } from '@/lib/permissions-server';
 import { apiError } from '@/lib/api-error';
 
 const PENDING_APPROVAL_MESSAGE: Record<string, string> = {
@@ -20,8 +20,13 @@ export async function PATCH(
   try {
     // Existing approval-routing logic (approvalStatus/approverType fan-out
     // below) already handles the "not fully trusted, route to pending" case,
-    // so the gate here is just "must be a real signed-in member."
-    await requireSession(request);
+    // so the gate here is just "must be a real signed-in member" — EXCEPT
+    // for the specific transition that actually decides a pending item
+    // (pending_* -> approved/rejected), which requires the real resolved
+    // approver (see canApprovePendingTask below) and never just any
+    // signed-in member.
+    const actor = await requireSession(request);
+    const settings = await getAccessLevelSettingsServer();
     const { id } = await params;
     const updates = await request.json();
     // Upsert: if this id isn't in the server's collection yet (e.g. client-bundled
@@ -32,6 +37,14 @@ export async function PATCH(
       const idx = current.findIndex((item: any) => item.id === id);
       if (idx === -1) return [...current, { id, ...updates }];
       previous = current[idx];
+
+      const isDecideTransition =
+        PENDING_STATES.has(previous.approvalStatus) &&
+        (updates.approvalStatus === 'approved' || updates.approvalStatus === 'rejected');
+      if (isDecideTransition && !canApprovePendingTask(previous, actor, settings)) {
+        throw new ForbiddenError('You are not authorized to decide this task — it needs sign-off from the Centre Head, Advisor, or GG Campus Events Head.');
+      }
+
       const next = [...current];
       next[idx] = { ...next[idx], ...updates };
       return next;

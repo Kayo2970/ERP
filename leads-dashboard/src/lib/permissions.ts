@@ -794,8 +794,13 @@ export function getEventApprovalRequirement(user: SessionUser, action: 'CREATE' 
 /** Whether `user` is the resolved approver for a specific pending event (create, edit, or delete). */
 export function canApprovePendingEvent(event: EventItem, user: SessionUser): boolean {
   if (!user) return false;
-  if (user.tier === 1) return true;
+  if (user.tier === 1) return true; // Super User always overrides — sees and can decide everything.
   if (event.approvalStatus !== 'pending_create' && event.approvalStatus !== 'pending_edit' && event.approvalStatus !== 'pending_delete') return false;
+
+  // Never let whoever submitted the change be the one who signs off on it —
+  // even a Centre Head/GG Campus Events Head submitting their own edit still
+  // needs a genuinely different approver (one of the others, or Super User).
+  if (event.submittedByEmail && user.email && event.submittedByEmail.toLowerCase() === user.email.toLowerCase()) return false;
 
   const member = resolveMember(user);
   if (!member) return false;
@@ -805,7 +810,12 @@ export function canApprovePendingEvent(event: EventItem, user: SessionUser): boo
     const tagPolicy = getGroupPolicies().find(p => p.id === event.approverPolicyTagId);
     return !!tagPolicy && memberMatchesPolicy(member, tagPolicy);
   }
-  return isSectorHead(user); // CENTER_HEAD (default)
+  // CENTER_HEAD (default): Centre Head (which already folds in Advisor — see
+  // isCentreHead's doc comment) or the GG Campus Events Head. Was isSectorHead()
+  // before, which both missed Advisor (not in the configurable sectorHeadKeywords
+  // list) and over-included any role merely containing the word "head" — this
+  // matches canApprovePendingTask's equivalent branch instead.
+  return isCentreHead(user) || isEventsHeadGgCampus(user);
 }
 
 /**
@@ -846,8 +856,15 @@ export function getTaskApprovalRequirement(user: SessionUser, action: 'CREATE' |
 /** Whether `user` is the resolved approver for a specific pending task (create or edit). */
 export function canApprovePendingTask(task: TaskItem, user: SessionUser): boolean {
   if (!user) return false;
-  if (user.tier === 1) return true;
+  if (user.tier === 1) return true; // Super User always overrides — sees and can decide everything.
   if (task.approvalStatus !== 'pending_create' && task.approvalStatus !== 'pending_edit') return false;
+
+  // Never let whoever submitted the change be the one who signs off on it.
+  // This is what was letting a Centre Head/GG Campus Events Head who
+  // delegated an auto-generated task (see delegateAutoTask) turn around and
+  // approve their own delegation — the generic CENTER_HEAD resolution below
+  // would otherwise match them too, since they genuinely hold that role.
+  if (task.submittedByEmail && user.email && task.submittedByEmail.toLowerCase() === user.email.toLowerCase()) return false;
 
   const member = resolveMember(user);
   if (!member) return false;
