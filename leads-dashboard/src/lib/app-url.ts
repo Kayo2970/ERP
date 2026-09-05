@@ -11,7 +11,7 @@ export function getAppBaseUrl(req?: Request | NextRequest | null, customOrigin?:
   }
 
   // 2. Check process environment variables if set
-  const envUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || process.env.VERCEL_URL;
+  const envUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL;
   if (envUrl && !envUrl.includes('localhost')) {
     const formatted = envUrl.startsWith('http') ? envUrl : `https://${envUrl}`;
     return formatted.replace(/\/+$/, '');
