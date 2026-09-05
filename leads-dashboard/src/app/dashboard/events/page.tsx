@@ -279,7 +279,7 @@ export default function EventsPage() {
         startDate: datesTBD ? '' : startDate,
         endDate: datesTBD ? '' : endDate,
         datesTBD,
-        planningStartDate: datesTBD ? '' : planningStartDate,
+        planningStartDate,
         location: location.trim(),
         campus,
         status,
@@ -306,7 +306,7 @@ export default function EventsPage() {
         startDate: datesTBD ? '' : startDate,
         endDate: datesTBD ? '' : endDate,
         datesTBD,
-        planningStartDate: datesTBD ? '' : planningStartDate,
+        planningStartDate,
         location: location.trim(),
         campus,
         status,
@@ -802,22 +802,22 @@ export default function EventsPage() {
                       className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                     />
                   </div>
-
-                  <div className="space-y-1.5 col-span-2">
-                    <label className="block font-medium text-theme-text-secondary">Planning Start Date (optional)</label>
-                    <input
-                      type="date"
-                      value={planningStartDate}
-                      max={startDate || undefined}
-                      onChange={(e) => setPlanningStartDate(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                    />
-                    <p className="text-[11px] text-theme-text-secondary">
-                      When prep work (bookings, committees, design briefs...) actually starts — separate from the Event Start Date above. Leave blank if there's no separate lead-up phase.
-                    </p>
-                  </div>
                 </div>
               )}
+
+              <div className="space-y-1.5">
+                <label className="block font-medium text-theme-text-secondary">Planning Start Date (optional)</label>
+                <input
+                  type="date"
+                  value={planningStartDate}
+                  max={!datesTBD && startDate ? startDate : undefined}
+                  onChange={(e) => setPlanningStartDate(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                />
+                <p className="text-[11px] text-theme-text-secondary">
+                  When prep work (bookings, committees, design briefs...) actually starts. Independent of the Event Date(s) above — set this even while the event's own dates are still To Be Decided, so planning can begin before the event date is locked in.
+                </p>
+              </div>
 
               <div className="space-y-1.5">
                 <label className="block font-medium text-theme-text-secondary">Event Status</label>

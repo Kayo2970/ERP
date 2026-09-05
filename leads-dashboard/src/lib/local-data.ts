@@ -2057,9 +2057,19 @@ export function getEventSortTime(event: Pick<EventItem, 'startDate' | 'datesTBD'
   return new Date(event.startDate).getTime();
 }
 
-/** True when the event has a real, earlier-than-startDate planning phase to display. */
+/**
+ * True when the event has a planning/prep start date worth displaying.
+ * Planning is intentionally independent of the event's own date(s) — prep
+ * work can (and often does) start before the event's actual date is even
+ * locked in, so this stays true whenever planningStartDate is set and either
+ * the event date is still "To Be Decided" or there's no startDate yet at
+ * all. Once a real startDate exists, the planning date only counts as a
+ * genuine lead-up phase if it actually falls before it.
+ */
 export function hasEventPlanningPhase(event: Pick<EventItem, 'startDate' | 'planningStartDate' | 'datesTBD'>): boolean {
-  return !event.datesTBD && !!event.planningStartDate && !!event.startDate && event.planningStartDate < event.startDate;
+  if (!event.planningStartDate) return false;
+  if (event.datesTBD || !event.startDate) return true;
+  return event.planningStartDate < event.startDate;
 }
 
 /** Short, human-readable note on when prep work begins, for list/card views. Empty string when there's no planning phase to show. */
