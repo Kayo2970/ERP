@@ -33,6 +33,7 @@ import {
 import { canViewTaskExtended, canViewEvent, canApprovePendingEvent } from '@/lib/permissions';
 import { getRatingColor } from '@/lib/design-tokens';
 import { StudentProfileModal } from '@/components/student-profile-modal';
+import { GanttTimeline } from '@/components/gantt-timeline';
 
 export default function DashboardHome() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
@@ -250,6 +251,9 @@ export default function DashboardHome() {
         </div>
 
       </div>
+
+      {/* Cross-Module Project Timeline (Gantt) */}
+      <GanttTimeline events={visibleEvents} tasks={displayedTasks} />
 
       {/* Grid: Calendar & Leaderboard Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

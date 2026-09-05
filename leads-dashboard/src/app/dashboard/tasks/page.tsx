@@ -64,6 +64,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { RequestApprovalModal } from '@/components/request-approval-modal';
 import { DelegateTaskModal } from '@/components/delegate-task-modal';
 import { FileDropzone, FilePreviewRow } from '@/components/ui/file-dropzone';
+import { SearchableSelect } from '@/components/searchable-select';
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
@@ -827,30 +828,28 @@ export default function TasksPage() {
         <div className="glass-panel rounded-2xl p-4 flex flex-wrap items-end gap-3 text-xs">
           <div className="space-y-1">
             <label className="block font-medium text-theme-text-secondary">Student</label>
-            <select
+            <SearchableSelect
               value={filterStudentId}
-              onChange={(e) => setFilterStudentId(e.target.value)}
-              className="px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent min-w-[10rem]"
-            >
-              <option value="ALL">All Students</option>
-              {members.slice().sort((a, b) => a.name.localeCompare(b.name)).map(m => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
+              onChange={setFilterStudentId}
+              allLabel="All Students"
+              allValue="ALL"
+              placeholder="Search students..."
+              className="min-w-[12rem]"
+              options={members.slice().sort((a, b) => a.name.localeCompare(b.name)).map(m => ({ value: m.id, label: m.name }))}
+            />
           </div>
 
           <div className="space-y-1">
             <label className="block font-medium text-theme-text-secondary">Event</label>
-            <select
+            <SearchableSelect
               value={filterEventKey}
-              onChange={(e) => setFilterEventKey(e.target.value)}
-              className="px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent min-w-[10rem]"
-            >
-              <option value="ALL">All Events</option>
-              {eventGroupOptions.map(g => (
-                <option key={g.key} value={g.key}>{g.label}</option>
-              ))}
-            </select>
+              onChange={setFilterEventKey}
+              allLabel="All Events"
+              allValue="ALL"
+              placeholder="Search events..."
+              className="min-w-[12rem]"
+              options={eventGroupOptions.map(g => ({ value: g.key, label: g.label }))}
+            />
           </div>
 
           <div className="space-y-1">

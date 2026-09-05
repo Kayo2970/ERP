@@ -33,6 +33,7 @@ import { getRatingColor } from '@/lib/design-tokens';
 import { canViewRating, canEvaluateEventStudent, canEditRating, resolveRatingReviewerRole } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { PeriodFilter } from '@/components/period-filter';
+import { SearchableSelect } from '@/components/searchable-select';
 import { PeriodFilterValue, extractAvailableMonths, isWithinPeriod } from '@/lib/period-filter';
 
 // Falls back to the title-string convention for tasks created before
@@ -392,26 +393,24 @@ export default function RatingsPage() {
           {/* Student / event filters + sort — mirrors the Tasks page filter bar */}
           <div className="space-y-1.5">
             <div className="grid grid-cols-2 gap-1.5">
-              <select
+              <SearchableSelect
                 value={queueStudentFilter}
-                onChange={(e) => setQueueStudentFilter(e.target.value)}
-                className="w-full px-2 py-1.5 bg-theme-background/40 border border-theme-border/40 rounded-lg text-[11px] text-theme-text-primary focus:outline-none focus:border-accent"
-              >
-                <option value="ALL">All Students</option>
-                {queueStudentOptions.map(name => (
-                  <option key={name} value={name}>{name}</option>
-                ))}
-              </select>
-              <select
+                onChange={setQueueStudentFilter}
+                allLabel="All Students"
+                allValue="ALL"
+                placeholder="Search students..."
+                compact
+                options={queueStudentOptions.map(name => ({ value: name, label: name }))}
+              />
+              <SearchableSelect
                 value={queueEventFilter}
-                onChange={(e) => setQueueEventFilter(e.target.value)}
-                className="w-full px-2 py-1.5 bg-theme-background/40 border border-theme-border/40 rounded-lg text-[11px] text-theme-text-primary focus:outline-none focus:border-accent"
-              >
-                <option value="ALL">All Events</option>
-                {queueEventOptions.map(name => (
-                  <option key={name} value={name}>{name}</option>
-                ))}
-              </select>
+                onChange={setQueueEventFilter}
+                allLabel="All Events"
+                allValue="ALL"
+                placeholder="Search events..."
+                compact
+                options={queueEventOptions.map(name => ({ value: name, label: name }))}
+              />
             </div>
             <div className="flex items-center gap-1.5">
               <div className="flex-1 flex items-center gap-1.5 px-2 py-1.5 bg-theme-background/40 border border-theme-border/40 rounded-lg">

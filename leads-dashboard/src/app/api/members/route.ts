@@ -18,7 +18,9 @@ export async function GET(request: Request) {
     const members = await readCollection<any>('members');
     // passwordHash must never leave the server — this endpoint returned it to
     // any caller (and any caller at all, before the requireSession above).
-    return NextResponse.json(members.map(({ passwordHash, ...safe }: any) => safe));
+    // Activation/reset badges on the client need to know whether a password
+    // is set without ever seeing the hash itself.
+    return NextResponse.json(members.map(({ passwordHash, ...safe }: any) => ({ ...safe, hasPassword: !!passwordHash })));
   } catch (err: any) {
     return apiError(err, 'members-api-get');
   }
