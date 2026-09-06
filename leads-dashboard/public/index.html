@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LEADS ERP — Cloudflare Deployment</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: #090D16;
+      color: #F1F5F9;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      overflow-x: hidden;
+    }
+    .bg-glow {
+      position: absolute;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(29, 100, 178, 0.25) 0%, rgba(15, 23, 42, 0) 70%);
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .card {
+      position: relative;
+      z-index: 1;
+      max-width: 540px;
+      width: 100%;
+      background: rgba(15, 23, 42, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(16px);
+      border-radius: 20px;
+      padding: 40px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      text-align: center;
+    }
+    .logo-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 64px;
+      height: 64px;
+      background: linear-gradient(135deg, #1D64B2 0%, #0F386B 100%);
+      border-radius: 16px;
+      margin-bottom: 24px;
+      box-shadow: 0 10px 25px -5px rgba(29, 100, 178, 0.4);
+    }
+    .logo-badge img {
+      width: 36px;
+      height: 36px;
+      object-fit: contain;
+    }
+    h1 {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+      color: #FFFFFF;
+    }
+    p {
+      font-size: 15px;
+      color: #94A3B8;
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      background: rgba(22, 163, 74, 0.12);
+      border: 1px solid rgba(22, 163, 74, 0.3);
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #4ADE80;
+      margin-bottom: 32px;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      background: #22C55E;
+      border-radius: 50%;
+      box-shadow: 0 0 8px #22C55E;
+    }
+    .info-box {
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 12px;
+      padding: 18px;
+      text-align: left;
+      font-size: 13px;
+      color: #CBD5E1;
+      margin-bottom: 24px;
+    }
+    .info-box code {
+      font-family: 'JetBrains Mono', monospace;
+      color: #38BDF8;
+      background: rgba(56, 189, 248, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .footer-note {
+      font-size: 12px;
+      color: #64748B;
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-glow"></div>
+  <div class="card">
+    <div class="logo-badge">
+      <img src="/images/leads-short-logo.png" alt="LEADS Logo" onerror="this.src='/icon.png'" />
+    </div>
+    <h1>LEADS ERP Portal</h1>
+    <div class="status-badge">
+      <span class="status-dot"></span>
+      Cloudflare Workers Active
+    </div>
+    <p>
+      The static asset host for <strong>LEADS Operational Portal</strong> is live on Cloudflare Workers.
+    </p>
+
+    <div class="info-box">
+      <strong>System Architecture Note:</strong><br/>
+      LEADS ERP requires Node.js filesystem persistence for flat-file JSON database collections (`data/*.json`) and encrypted uploads. Full application hosting runs via Next.js server on VPS deployment.
+    </div>
+
+    <div class="footer-note">
+      Deployed via Wrangler • Cloudflare Workers Assets
+    </div>
+  </div>
+</body>
+</html>
