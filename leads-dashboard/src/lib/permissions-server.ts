@@ -451,13 +451,88 @@ export function canViewAllDesigns(user: ServerUser, settings: AccessLevelSetting
   return isBaseLeadership(user, settings) || isDesignHead(user, settings);
 }
 
+type ServerGroupPolicy = {
+  enabled?: boolean;
+  expiresAt?: string;
+  targetMemberIds?: string[];
+  targetDivisions?: string[];
+  targetTiers?: number[];
+  targetDesignationKeyword?: string;
+  capabilities?: string[];
+  moduleAccess?: Record<string, { edit?: 'ALL' | 'OWN' | 'NONE'; view?: 'ALL' | 'OWN' }>;
+};
+
+function isGroupPolicyActive(policy: ServerGroupPolicy): boolean {
+  if (policy.enabled === false) return false;
+  if (policy.expiresAt && policy.expiresAt <= new Date().toISOString()) return false;
+  return true;
+}
+
+function memberMatchesGroupPolicy(member: any, policy: ServerGroupPolicy): boolean {
+  if (policy.targetMemberIds?.includes(member.id)) return true;
+  if (policy.targetDivisions?.length && policy.targetDivisions.includes(member.division)) return true;
+  if (policy.targetTiers?.length && policy.targetTiers.includes(member.tier)) return true;
+  if (policy.targetDesignationKeyword?.trim()) {
+    const kw = policy.targetDesignationKeyword.trim().toLowerCase();
+    if ((member.role || '').toLowerCase().includes(kw)) return true;
+  }
+  return false;
+}
+
+async function resolveActingMember(user: ServerUser): Promise<any | undefined> {
+  if (!user) return undefined;
+  const members = await readCollection<any>('members');
+  return (
+    (user.id && members.find((m) => m.id === user.id)) ||
+    (user.email && members.find((m) => (m.email || '').toLowerCase() === user.email!.toLowerCase()))
+  );
+}
+
 /**
- * Form builder access. Ported from permissions.ts's canBuildForms (built-in
- * clause only): tier 1 or 5, any Head role, or an Executive role.
+ * Server-side port of permissions.ts's resolveModuleEditOverride: an active
+ * Group Policy's moduleAccess.<moduleKey>.edit grant/restriction for this
+ * member, beyond their built-in tier/role. Super User always 'ALL'.
  */
-export function canBuildForms(user: ServerUser, settings: AccessLevelSettings): boolean {
+async function resolveModuleEditOverrideServer(user: ServerUser, moduleKey: string): Promise<'ALL' | 'OWN' | 'NONE' | undefined> {
+  if (user?.tier === 1) return 'ALL';
+  const member = await resolveActingMember(user);
+  if (!member) return undefined;
+  const policies = await readCollection<ServerGroupPolicy>('groupPolicies');
+  const edits = policies
+    .filter((p) => isGroupPolicyActive(p) && memberMatchesGroupPolicy(member, p) && !!p.moduleAccess?.[moduleKey])
+    .map((p) => p.moduleAccess?.[moduleKey]?.edit)
+    .filter((e): e is 'ALL' | 'OWN' | 'NONE' => !!e);
+  if (edits.length === 0) return undefined;
+  if (edits.includes('ALL')) return 'ALL';
+  if (edits.includes('OWN')) return 'OWN';
+  return 'NONE';
+}
+
+/** Server-side port of permissions.ts's hasCapability. Super User (tier 1) always holds every capability. */
+async function hasCapabilityServer(user: ServerUser, capability: string): Promise<boolean> {
+  if (!user) return false;
+  if (user.tier === 1) return true;
+  const member = await resolveActingMember(user);
+  if (!member) return false;
+  const policies = await readCollection<ServerGroupPolicy>('groupPolicies');
+  return policies.some((p) => isGroupPolicyActive(p) && p.capabilities?.includes(capability) && memberMatchesGroupPolicy(member, p));
+}
+
+/**
+ * Form builder access. Ported from permissions.ts's canBuildForms, now
+ * including the Group Policy BUILD_FORMS capability and moduleAccess.FORMS
+ * edit override paths (previously omitted here, which caused a member whose
+ * forms access came only from a Group Policy grant to pass the client's
+ * canBuildForms check but get a 403 from the API — e.g. their "Save as
+ * Template" POST would silently fail and the template would never persist).
+ */
+export async function canBuildForms(user: ServerUser, settings: AccessLevelSettings): Promise<boolean> {
   if (isAlumniRole(user)) return false;
-  return (!!user && (user.tier === 1 || user.tier === 5)) || isHeadRole(user, settings) || isExecutiveRole(user);
+  const override = await resolveModuleEditOverrideServer(user, 'FORMS');
+  if (override === 'NONE') return false;
+  if (override === 'ALL') return true;
+  if ((!!user && (user.tier === 1 || user.tier === 5)) || isHeadRole(user, settings) || isExecutiveRole(user)) return true;
+  return hasCapabilityServer(user, 'BUILD_FORMS');
 }
 
 /**

@@ -11,7 +11,7 @@ export async function DELETE(
   try {
     const actor = await requireSession(request);
     const settings = await getAccessLevelSettingsServer();
-    if (!canBuildForms(actor, settings)) throw new ForbiddenError();
+    if (!(await canBuildForms(actor, settings))) throw new ForbiddenError();
     const { id } = await params;
     let found = false;
     await mutateCollection('formTemplates', (current) => {

@@ -52,6 +52,7 @@ import {
   getSubmissions,
   isSlugUnique,
   getFormTemplates,
+  saveFormTemplates,
   addFormTemplate,
   deleteFormTemplate,
   getEvents,
@@ -289,7 +290,7 @@ export default function FormsBuilderPage() {
   const handleSaveTemplate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!templateNameDraft.trim()) return;
-    addFormTemplate({
+    const { template: newTemplate, serverSaved } = addFormTemplate({
       name: templateNameDraft.trim(),
       fields,
       createdBy: user?.name || 'User'
@@ -298,6 +299,16 @@ export default function FormsBuilderPage() {
     setTemplateNameDraft('');
     setIsSaveTemplateOpen(false);
     triggerNotification('Field schema saved as a reusable template.');
+    serverSaved.catch(() => {
+      // The server rejected the save (e.g. a permission check failed) — the
+      // optimistic localStorage write would otherwise get silently wiped by
+      // the next server poll, so roll it back now and tell the user instead
+      // of letting the template quietly disappear later.
+      const rolledBack = getFormTemplates().filter(t => t.id !== newTemplate.id);
+      saveFormTemplates(rolledBack);
+      setTemplates(rolledBack);
+      setFormError(`Failed to save "${newTemplate.name}" as a template on the server — it was not persisted. Please try again or contact an admin if this keeps happening.`);
+    });
   };
 
   const handleDeleteTemplate = (templateId: string) => {
