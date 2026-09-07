@@ -4066,7 +4066,17 @@ export function saveFormTemplates(templates: FormTemplateItem[]): void {
   markLocalWrite('leads_form_templates');
 }
 
-export function addFormTemplate(template: Omit<FormTemplateItem, 'id' | 'createdAt'>): FormTemplateItem {
+/**
+ * Optimistically writes the new template into localStorage and returns it
+ * immediately, but also kicks off the server POST and returns that promise
+ * separately — a failed POST (e.g. a 403 from a client/server permission
+ * mismatch) used to be swallowed silently here, leaving the template stuck
+ * in this browser's localStorage only, until the next server poll overwrote
+ * it with the server's copy (which never had it) and it vanished everywhere.
+ * Callers that want to know whether the save actually persisted should await
+ * `serverSaved` and roll back / warn on rejection.
+ */
+export function addFormTemplate(template: Omit<FormTemplateItem, 'id' | 'createdAt'>): { template: FormTemplateItem; serverSaved: Promise<any> } {
   const current = getFormTemplates();
   const newTemplate: FormTemplateItem = {
     ...template,
@@ -4075,9 +4085,9 @@ export function addFormTemplate(template: Omit<FormTemplateItem, 'id' | 'created
   };
   current.unshift(newTemplate);
   saveFormTemplates(current);
-  serverPost('/api/form-templates', newTemplate);
+  const serverSaved = serverPost('/api/form-templates', newTemplate);
   logAuditEvent('FORM_TEMPLATE_CREATED', template.createdBy, `Saved form template "${template.name}"`);
-  return newTemplate;
+  return { template: newTemplate, serverSaved };
 }
 
 export function deleteFormTemplate(id: string, actorName: string): boolean {

@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   try {
     const actor = await requireSession(request);
     const settings = await getAccessLevelSettingsServer();
-    if (!canBuildForms(actor, settings)) throw new ForbiddenError();
+    if (!(await canBuildForms(actor, settings))) throw new ForbiddenError();
     const item = await request.json();
     const updated = await mutateCollection('forms', (current) => {
       if (item.slug && current.some((f: any) => f.slug?.toLowerCase() === item.slug?.toLowerCase())) {
