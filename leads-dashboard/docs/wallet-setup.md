@@ -59,7 +59,7 @@ WALLETWALLET_API_KEY=ww_live_...
 - `src/app/api/card/[slug]/apple-pass/route.ts` and `.../google-pass/route.ts`
   serve the cached pass straight off disk — a real WalletWallet API call
   only happens on a genuine cache miss (first publish, or an edit that
-  changed name/phone/email/bio/LinkedIn/designation).
+  changed name/phone/email/LinkedIn/designation).
 
 ### Passes are generated at save time, not on first tap
 
@@ -70,6 +70,17 @@ trigger anyone's). By the time a visitor actually opens the card and taps
 "Add to Apple Wallet," the `.pkpass` is already sitting cached on disk —
 the apple-pass/google-pass routes just replay that file back, so scanning
 the QR code or tapping the buttons never itself burns an API call.
+
+### Designation
+
+The card's designation mirrors the member's `role` field from the Members
+Directory by default — a Super User (Tier 1) can instead type a free-text
+override in the Visiting Card page's Designation field
+(`Member.cardDesignationOverride`), enforced server-side in
+`members/[id]/route.ts` (stripped from anyone else's request) via
+`effectiveCardDesignation()` in `src/lib/member-guard.ts`, which every
+designation-reading spot (the public card API, the .vcf export, and the
+wallet pass) goes through.
 
 ### Per-member rate limit
 
@@ -134,7 +145,7 @@ logo image URLs need the manual update above.
 ### Third-party data flow — know this before turning it on
 
 Every time a pass is generated, the member's name, phone, email,
-designation, and bio are sent to WalletWallet's servers to build the pass.
+designation, and LinkedIn are sent to WalletWallet's servers to build the pass.
 This is a deliberate trade-off (no certificates, way less setup) — if that
 data flow is a concern, the alternative is running your own signing
 pipeline with real Apple/Google Developer credentials instead. Ask before

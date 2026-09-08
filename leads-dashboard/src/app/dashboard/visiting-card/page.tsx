@@ -14,7 +14,7 @@ export default function VisitingCardPage() {
 
   const [cardEnabled, setCardEnabled] = useState(false);
   const [cardSlug, setCardSlug] = useState('');
-  const [cardBio, setCardBio] = useState('');
+  const [cardDesignationOverride, setCardDesignationOverride] = useState('');
   const [cardPhone, setCardPhone] = useState('');
   const [cardLinkedin, setCardLinkedin] = useState('');
   const [cardPhotoUrl, setCardPhotoUrl] = useState('');
@@ -65,7 +65,7 @@ export default function VisitingCardPage() {
       const me = allMembers.find(m => m.id === u.id || m.email.toLowerCase() === u.email.toLowerCase());
       setCardEnabled(Boolean(me?.cardEnabled));
       setCardSlug(me?.cardSlug || '');
-      setCardBio(me?.cardBio || '');
+      setCardDesignationOverride(me?.cardDesignationOverride || '');
       setCardPhone(me?.cardPhone || '');
       setCardLinkedin(me?.cardSocials?.linkedin || '');
       setCardPhotoUrl(me?.cardPhotoUrl || '');
@@ -135,11 +135,13 @@ export default function VisitingCardPage() {
     try {
       const changes = {
         cardEnabled,
-        cardBio: cardBio.trim(),
         cardPhone: cardPhone.trim(),
         cardSocials: {
           linkedin: cardLinkedin.trim(),
         },
+        // Only a Super User can set this — the server strips it from anyone
+        // else's request anyway, but there's no reason to send it otherwise.
+        ...(isWalletAdmin ? { cardDesignationOverride: cardDesignationOverride.trim() } : {}),
       };
       const updated = await updateMemberCard(user.id, changes, user.name);
       if (!updated) {
@@ -291,13 +293,28 @@ export default function VisitingCardPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="block font-medium text-theme-text-secondary">Designation</label>
-                <input
-                  type="text"
-                  disabled
-                  value={user?.role || ''}
-                  className="w-full px-4 py-2.5 bg-theme-background/10 border border-theme-border/30 rounded-xl text-theme-text-secondary cursor-not-allowed opacity-70"
-                />
-                <p className="text-[10px] text-theme-text-secondary/70">Matches your role as set in the Members Directory — not editable here.</p>
+                {isWalletAdmin ? (
+                  <>
+                    <input
+                      type="text"
+                      value={cardDesignationOverride}
+                      onChange={(e) => setCardDesignationOverride(e.target.value)}
+                      placeholder={user?.role || 'e.g. Head of Design'}
+                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                    />
+                    <p className="text-[10px] text-theme-text-secondary/70">Super User override — leave blank to fall back to your Directory role ({user?.role || '—'}).</p>
+                  </>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      disabled
+                      value={user?.role || ''}
+                      className="w-full px-4 py-2.5 bg-theme-background/10 border border-theme-border/30 rounded-xl text-theme-text-secondary cursor-not-allowed opacity-70"
+                    />
+                    <p className="text-[10px] text-theme-text-secondary/70">Matches your role as set in the Members Directory — not editable here.</p>
+                  </>
+                )}
               </div>
               <div className="space-y-1.5">
                 <label className="block font-medium text-theme-text-secondary">Phone</label>
@@ -309,18 +326,6 @@ export default function VisitingCardPage() {
                   className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                 />
               </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="block font-medium text-theme-text-secondary">About / What you're studying or doing</label>
-              <textarea
-                value={cardBio}
-                onChange={(e) => setCardBio(e.target.value)}
-                rows={3}
-                maxLength={600}
-                placeholder="e.g. MBA student specializing in Marketing, passionate about community building and events."
-                className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent resize-none"
-              />
             </div>
 
             <div className="space-y-1.5">
@@ -375,8 +380,7 @@ export default function VisitingCardPage() {
           <VisitingCardView
             card={{
               name: user?.name || '',
-              designation: user?.role || '',
-              bio: cardBio,
+              designation: (isWalletAdmin && cardDesignationOverride.trim()) ? cardDesignationOverride.trim() : (user?.role || ''),
               phone: cardPhone,
               email: user?.email,
               photoUrl: cardPhotoPreviewUrl || cardPhotoUrl || user?.avatarUrl,

@@ -59,7 +59,10 @@ export const MemberWriteSchema = z.object({
   avatarUrl: z.string().trim().max(2000).optional(),
   mustSetupPassword: z.boolean().optional(),
   cardEnabled: z.boolean().optional(),
-  cardBio: z.string().trim().max(600).optional(),
+  // Super-User-only free-text designation override — enforced server-side
+  // in members/[id]/route.ts, not here (this schema doesn't know who the
+  // actor is).
+  cardDesignationOverride: z.string().trim().max(200).optional(),
   cardPhone: z.string().trim().max(32).optional(),
   cardSocials: z.object({
     linkedin: z.union([z.literal(''), z.string().trim().max(300).url()]).optional(),

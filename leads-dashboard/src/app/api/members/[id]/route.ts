@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { mutateCollection } from '@/lib/server-db';
 import { deleteStoredFile, saveBase64File } from '@/lib/file-storage';
 import { requireSession } from '@/lib/session';
-import { getAccessLevelSettingsServer, canEditDirectory, canTerminateMember } from '@/lib/permissions-server';
+import { getAccessLevelSettingsServer, canEditDirectory, canTerminateMember, isSuperUser } from '@/lib/permissions-server';
 import { invalidateAllSessionsForMember } from '@/lib/session';
 import { isKayomarzIdentity, countActiveSuperUsersServer, PRIVILEGED_FIELDS } from '@/lib/member-guard';
 import { parseJsonBody, MemberWriteSchema } from '@/lib/validation';
@@ -40,6 +40,12 @@ export async function PATCH(
     delete updates.cardPassAppleStorageKey;
     delete updates.cardPassGoogleSaveUrl;
     delete updates.cardPassGenerations; // rate-limit bookkeeping — never client-writable
+    // The card's designation free-text override is Super-User-only — anyone
+    // else's card keeps mirroring their Directory role regardless of what
+    // they send here.
+    if ('cardDesignationOverride' in updates && !isSuperUser(actor)) {
+      delete updates.cardDesignationOverride;
+    }
 
     const isSelf = actor.id === id;
     const settings = await getAccessLevelSettingsServer();

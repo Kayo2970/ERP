@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { isWalletWalletConfigured } from '@/lib/wallet/walletwallet-config';
+import { effectiveCardDesignation } from '@/lib/member-guard';
 
 // Public, no-auth endpoint — same pattern as /api/forms/[slug]: anyone with
 // the link can view a published card. Only ever returns the safe public
@@ -33,8 +34,7 @@ export async function GET(
   return NextResponse.json({
     slug: member.cardSlug,
     name: member.name,
-    designation: member.role || '',
-    bio: member.cardBio || '',
+    designation: effectiveCardDesignation(member),
     phone: member.cardPhone || '',
     email: member.email,
     socials: member.cardSocials || {},

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { readCollection } from '@/lib/server-db';
+import { effectiveCardDesignation } from '@/lib/member-guard';
 
 // Escapes a value for use inside a VCARD 3.0 text field (RFC 6350 §3.4):
 // backslash, comma, semicolon and newline must be backslash-escaped.
@@ -35,8 +36,9 @@ export async function GET(
     `FN:${escapeVCardText(member.name || '')}`,
     'ORG:LEADS Next Gen Centre',
   ];
-  if (member.role) {
-    lines.push(`TITLE:${escapeVCardText(member.role)}`);
+  const designation = effectiveCardDesignation(member);
+  if (designation) {
+    lines.push(`TITLE:${escapeVCardText(designation)}`);
   }
   if (member.cardPhone) {
     lines.push(`TEL;TYPE=CELL:${escapeVCardText(member.cardPhone)}`);
@@ -45,7 +47,6 @@ export async function GET(
     lines.push(`EMAIL:${escapeVCardText(member.email)}`);
   }
   if (socials.linkedin) lines.push(`URL;TYPE=LinkedIn:${escapeVCardText(socials.linkedin)}`);
-  if (member.cardBio) lines.push(`NOTE:${escapeVCardText(member.cardBio)}`);
   lines.push('END:VCARD');
 
   const body = lines.join('\r\n') + '\r\n';

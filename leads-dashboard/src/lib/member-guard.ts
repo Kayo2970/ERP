@@ -24,3 +24,17 @@ export function countActiveSuperUsersServer(members: any[]): number {
 // passwordHash is never settable through the members routes at all
 // (dedicated set-password/activation/reset routes own that).
 export const PRIVILEGED_FIELDS = ['tier', 'role', 'status', 'division', 'department', 'approvalStatus', 'mustSetupPassword'];
+
+/**
+ * The Digital Visiting Card's designation: normally mirrors `role` (the
+ * Directory-set designation), except a Super User (tier 1) may type a
+ * free-text override — enforced server-side in members/[id]/route.ts, so
+ * this can trust `cardDesignationOverride` being present at all means it
+ * was legitimately set.
+ */
+export function effectiveCardDesignation(member: any): string {
+  if (member?.tier === 1 && member?.cardDesignationOverride) {
+    return member.cardDesignationOverride;
+  }
+  return member?.role || '';
+}

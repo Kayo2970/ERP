@@ -28,7 +28,6 @@ export interface WalletCardMember {
   designation?: string;
   phone?: string;
   email?: string;
-  bio?: string;
   linkedin?: string;
 }
 
@@ -49,7 +48,7 @@ export interface WalletWalletPass {
  * the primary field's LABEL is the member's designation and its VALUE is
  * their name (so the name renders large, with the designation as the small
  * caption above it), phone/email up front as secondary fields, and the back
- * carries the org's own contact details plus the member's bio/LinkedIn.
+ * carries the org's own contact details plus the member's LinkedIn.
  *
  * logoURL/iconURL/wideLogoURL/thumbnailURL are WalletWallet Pro-plan-only
  * fields — harmless to send on a free-tier key, just ignored.
@@ -69,7 +68,6 @@ export async function createWalletPass(apiKey: string, member: WalletCardMember,
     { label: 'Office Mobile Number', value: ORG_PHONE },
     { label: 'Address', value: ORG_ADDRESS },
   ] as { label: string; value: string; changeMessage?: string }[];
-  if (member.bio) backFields.push({ label: 'About', value: member.bio });
   if (member.linkedin) backFields.push({ label: 'LinkedIn', value: member.linkedin });
   backFields.push({ label: 'Full Card', value: cardUrl });
   // Placeholder field WalletWallet uses to push a notification to already-

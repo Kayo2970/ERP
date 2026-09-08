@@ -6,7 +6,6 @@ import { Link2, Phone, Mail, Download, Wallet } from 'lucide-react';
 export interface VisitingCardData {
   name: string;
   designation?: string;
-  bio?: string;
   phone?: string;
   email?: string;
   photoUrl?: string;
@@ -94,10 +93,6 @@ export function VisitingCardView({
             <p className="text-sm font-medium text-accent mt-0.5">{card.designation}</p>
           )}
         </div>
-
-        {card.bio && (
-          <p className="mt-4 text-sm text-theme-text-secondary leading-relaxed">{card.bio}</p>
-        )}
 
         {(card.phone || card.email) && (
           <div className="mt-4 flex flex-col items-center gap-1.5 text-xs text-theme-text-secondary">

@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { mutateCollection } from '@/lib/server-db';
 import { saveBase64File, deleteStoredFile } from '@/lib/file-storage';
+import { effectiveCardDesignation } from '@/lib/member-guard';
 import { createWalletPass } from './walletwallet-client';
 
 const RATE_LIMIT_WINDOW_MS = 15 * 24 * 60 * 60 * 1000; // 15 days
@@ -31,10 +32,9 @@ export class WalletPassRateLimitError extends Error {
 function contentHashFor(member: any, cardUrl: string): string {
   const payload = JSON.stringify({
     name: member.name,
-    designation: member.role || '',
+    designation: effectiveCardDesignation(member),
     phone: member.cardPhone || '',
     email: member.email || '',
-    bio: member.cardBio || '',
     linkedin: member.cardSocials?.linkedin || '',
     cardUrl,
   });
@@ -82,10 +82,9 @@ export async function getOrCreateWalletPass(apiKey: string, member: any, cardUrl
     apiKey,
     {
       name: member.name,
-      designation: member.role,
+      designation: effectiveCardDesignation(member),
       phone: member.cardPhone,
       email: member.email,
-      bio: member.cardBio,
       linkedin: member.cardSocials?.linkedin,
     },
     cardUrl

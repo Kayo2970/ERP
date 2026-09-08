@@ -108,10 +108,12 @@ export interface Member {
   // photo of someone else's physical card, unrelated feature).
   cardEnabled?: boolean; // public page 404s until true
   cardSlug?: string;     // stable URL segment, generated once server-side, immutable
-  // Designation is deliberately NOT a separate editable card field — it
-  // always mirrors `role` (the Directory-set designation) so the card can
-  // never show something different from what's on record in the ERP.
-  cardBio?: string; // "what they're studying/doing" — free text
+  // Designation normally mirrors `role` (the Directory-set designation) so
+  // the card can't show something out of sync with the ERP. The one
+  // exception: a Super User (tier 1) may type a free-text override here —
+  // gated server-side in members/[id]/route.ts, same treatment as
+  // Kayomarz's custom-role override in the Directory.
+  cardDesignationOverride?: string;
   cardPhone?: string;
   cardSocials?: {
     linkedin?: string;
@@ -1655,7 +1657,7 @@ export async function updateMemberAvatar(id: string, avatarData: string, avatarF
  */
 export async function updateMemberCard(
   id: string,
-  changes: Partial<Pick<Member, 'cardEnabled' | 'cardBio' | 'cardPhone' | 'cardSocials'>>,
+  changes: Partial<Pick<Member, 'cardEnabled' | 'cardDesignationOverride' | 'cardPhone' | 'cardSocials'>>,
   actorName: string
 ): Promise<Member | null> {
   const serverResult = await serverPatch('/api/members', id, changes);
