@@ -24,6 +24,7 @@ function contentHashFor(member: any, cardUrl: string): string {
     phone: member.cardPhone || '',
     email: member.email || '',
     bio: member.cardBio || '',
+    linkedin: member.cardSocials?.linkedin || '',
     cardUrl,
   });
   return crypto.createHash('sha256').update(payload).digest('hex');
@@ -49,6 +50,7 @@ export async function getOrCreateWalletPass(apiKey: string, member: any, cardUrl
       phone: member.cardPhone,
       email: member.email,
       bio: member.cardBio,
+      linkedin: member.cardSocials?.linkedin,
     },
     cardUrl
   );

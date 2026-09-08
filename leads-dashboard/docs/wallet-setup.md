@@ -33,9 +33,23 @@ WALLETWALLET_API_KEY=ww_live_...
 ### How it works
 
 - `src/lib/wallet/walletwallet-client.ts` — calls WalletWallet's
-  `POST /api/passes` (branded with the ERP's dark theme via
-  `colorPreset: 'dark'`), which returns a `.pkpass` file and a Google Wallet
-  save link in one response.
+  `POST /api/passes`, which returns a `.pkpass` file and a Google Wallet
+  save link in one response. The exact field layout (colors, org contact
+  details on the back, name as the big value with designation as the label
+  above it) matches the design finalized in the WalletWallet dashboard's
+  pass builder — see the constants (`ORG_NAME`, `ORG_EMAIL`, `ORG_PHONE`,
+  `ORG_ADDRESS`, `COLOR_PRESET`, `CUSTOM_COLOR`) at the top of that file to
+  tweak it. **Double-check `ORG_EMAIL` (`LEADS.NGC.@MSRUAS.AC.IN` — note the
+  stray dot before `@`) and `ORG_PHONE` (`+91 804536666` — only 9 digits) is
+  correct before relying on them; both were carried over verbatim from the
+  original pass design.**
+- `logoURL`/`iconURL`/`wideLogoURL`/`thumbnailURL` point at
+  `/images/leads-short-logo.png` (already hosted by the app) rather than a
+  separately uploaded wide-banner/thumbnail asset — swap in real files
+  under `public/images/` and update the URLs in `walletwallet-client.ts` if
+  a distinct wide-format or thumbnail asset is wanted. These four fields
+  are WalletWallet Pro-plan-only; harmless to send on a free-tier key, they
+  just get ignored.
 - `src/lib/wallet/card-wallet-pass.ts` — caches the issued pass on the
   member's own record (a content hash of their card fields) so repeat
   visits don't re-create an identical pass and burn API quota; a pass is
