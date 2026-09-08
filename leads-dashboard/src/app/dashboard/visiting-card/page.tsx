@@ -6,6 +6,7 @@ import { getMembers, saveMembers, updateMemberCard, updateMemberCardPhoto, authH
 import { FileDropzone, useUploadTask } from '@/components/ui/file-dropzone';
 import { VisitingCardView } from '@/components/visiting-card-view';
 import { CardQrModal } from '@/components/card-qr-modal';
+import { Linkedin } from '@/components/ui/linkedin-icon';
 
 const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
 
@@ -329,7 +330,10 @@ export default function VisitingCardPage() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="block font-medium text-theme-text-secondary">LinkedIn</label>
+              <label className="flex items-center gap-1.5 font-medium text-theme-text-secondary">
+                <Linkedin className="h-4 w-4 text-accent" />
+                LinkedIn
+              </label>
               <input type="url" value={cardLinkedin} onChange={(e) => setCardLinkedin(e.target.value)} placeholder="https://linkedin.com/in/..." className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent" />
             </div>
 

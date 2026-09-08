@@ -27,6 +27,7 @@ import {
   CheckCircle2,
   Scan,
 } from 'lucide-react';
+import { Linkedin } from '@/components/ui/linkedin-icon';
 import { getGuests, addGuest, updateGuest, deleteGuest, Guest, authHeaders } from '@/lib/local-data';
 import { canAccessGuestDirectory, canEditGuestRecord, canRemoveGuestContact, isRestrictedGuestEditor, canViewGuestRecord } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
@@ -738,7 +739,7 @@ export default function GuestDirectoryPage() {
                 )}
                 {guest.linkedin && (
                   <div className="flex items-center gap-1.5">
-                    <Link2 className="h-3 w-3 shrink-0" />
+                    <Linkedin className="h-3 w-3 shrink-0" />
                     <a
                       href={/^https?:\/\//i.test(guest.linkedin) ? guest.linkedin : `https://${guest.linkedin}`}
                       target="_blank"

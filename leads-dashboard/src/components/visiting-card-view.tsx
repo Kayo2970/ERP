@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Link2, Phone, Mail, Download, Wallet, AlertCircle } from 'lucide-react';
+import { Phone, Mail, Download, Wallet, AlertCircle } from 'lucide-react';
+import { Linkedin } from '@/components/ui/linkedin-icon';
 
 export interface VisitingCardData {
   name: string;
@@ -158,7 +159,7 @@ export function VisitingCardView({
           <div className="mt-4 flex items-center justify-center gap-3">
             {socials.linkedin && (
               <a href={socials.linkedin} target="_blank" rel="noopener noreferrer" title="LinkedIn" className="h-9 w-9 flex items-center justify-center rounded-xl bg-accent/15 border border-accent/30 text-accent hover:bg-accent/25 transition-colors">
-                <Link2 className="h-4 w-4" />
+                <Linkedin className="h-4 w-4" />
               </a>
             )}
           </div>
