@@ -57,6 +57,19 @@ export const MemberWriteSchema = z.object({
   avatarFileName: z.string().trim().max(300).optional(),
   avatarUrl: z.string().trim().max(2000).optional(),
   mustSetupPassword: z.boolean().optional(),
+  cardEnabled: z.boolean().optional(),
+  cardDesignation: z.string().trim().max(200).optional(),
+  cardBio: z.string().trim().max(600).optional(),
+  cardPhone: z.string().trim().max(32).optional(),
+  cardSocials: z.object({
+    linkedin: z.union([z.literal(''), z.string().trim().max(300).url()]).optional(),
+    instagram: z.union([z.literal(''), z.string().trim().max(300).url()]).optional(),
+    twitter: z.union([z.literal(''), z.string().trim().max(300).url()]).optional(),
+    website: z.union([z.literal(''), z.string().trim().max(300).url()]).optional(),
+  }).optional(),
+  cardPhotoData: z.string().max(3_000_000).optional(), // base64 data URL — file-size cap enforced separately server-side
+  cardPhotoFileName: z.string().trim().max(300).optional(),
+  cardPhotoUrl: z.string().trim().max(2000).optional(),
 }).passthrough();
 
 /** Parse `request`'s JSON body against `schema`, throwing ValidationError (caught by api-error.ts) on any mismatch. */

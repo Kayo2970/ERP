@@ -80,6 +80,12 @@ export interface DbSchema {
   // directly. This is what makes "sign out" and "revoke this device" real:
   // deleting a row here invalidates that token immediately, server-side.
   sessions: any[];
+  // Single-row collection (one document, id 'default') holding Apple/Google
+  // Wallet issuer credentials for the Digital Visiting Card feature — see
+  // src/lib/wallet/*-config.ts. Stored here (encrypted at rest, same as
+  // emailSettings' SMTP password) rather than only in env vars so a Super
+  // User can paste them in from Settings without a redeploy.
+  walletSettings: any[];
   lastUpdated?: string;
 }
 
@@ -110,6 +116,7 @@ const EMPTY_DB: DbSchema = {
   approvalRequests: [],
   birthdayEmailLog: [],
   sessions: [],
+  walletSettings: [],
 };
 
 const SEED_DB: DbSchema = {
@@ -159,6 +166,7 @@ const SEED_DB: DbSchema = {
   approvalRequests: [],
   birthdayEmailLog: [],
   sessions: [],
+  walletSettings: [],
 };
 
 const COLLECTION_KEYS = Object.keys(EMPTY_DB) as (keyof DbSchema)[];

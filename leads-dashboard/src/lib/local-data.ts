@@ -98,6 +98,25 @@ export interface Member {
   decidedBy?: string;
   decidedAt?: string;
   rejectionReason?: string;
+  // Digital Visiting Card (self-service, public share page at /card/[slug]).
+  // Prefixed `card*` to avoid colliding with Guest.visitingCard* (a scanned
+  // photo of someone else's physical card, unrelated feature).
+  cardEnabled?: boolean; // public page 404s until true
+  cardSlug?: string;     // stable URL segment, generated once server-side, immutable
+  cardDesignation?: string;
+  cardBio?: string; // "what they're studying/doing" — free text
+  cardPhone?: string;
+  cardSocials?: {
+    linkedin?: string;
+    instagram?: string;
+    twitter?: string;
+    website?: string;
+  };
+  cardPhotoData?: string;       // transient: base64 data URL sent on upload
+  cardPhotoFileName?: string;   // transient: original filename, paired with cardPhotoData
+  cardPhotoUrl?: string;        // servable path under /api/files
+  cardPhotoStorageKey?: string;
+  cardViews?: number;
 }
 
 // A person encountered outside the org (event guest, sponsor contact, vendor,
@@ -1607,6 +1626,41 @@ export async function updateMemberAvatar(id: string, avatarData: string, avatarF
     throw new Error('The photo failed to upload to the server. Please check your connection and try again.');
   }
   return { avatarUrl: serverResult.avatarUrl, avatarStorageKey: serverResult.avatarStorageKey };
+}
+
+/**
+ * Digital Visiting Card: update text/toggle fields (no photo). Awaits the
+ * server response (unlike the fire-and-forget updateMember) because the
+ * server is what mints `cardSlug` on first publish — the caller needs that
+ * slug back immediately to show the public link/QR without waiting on the
+ * next poll cycle.
+ */
+export async function updateMemberCard(
+  id: string,
+  changes: Partial<Pick<Member, 'cardEnabled' | 'cardDesignation' | 'cardBio' | 'cardPhone' | 'cardSocials'>>,
+  actorName: string
+): Promise<Member | null> {
+  const serverResult = await serverPatch('/api/members', id, changes);
+  if (!serverResult) return null;
+
+  const members = getMembers();
+  const idx = members.findIndex(m => m.id === id);
+  if (idx !== -1) {
+    members[idx] = { ...members[idx], ...serverResult };
+    saveMembers(members);
+  }
+
+  logAuditEvent('MEMBER_UPDATED', actorName, `Updated digital visiting card details for ${serverResult.name}`);
+  return serverResult;
+}
+
+/** Digital Visiting Card: dedicated photo-upload path, mirrors updateMemberAvatar. */
+export async function updateMemberCardPhoto(id: string, cardPhotoData: string, cardPhotoFileName: string, onProgress?: UploadProgressCallback): Promise<{ cardPhotoUrl: string; cardPhotoStorageKey?: string }> {
+  const serverResult = await serverPatch('/api/members', id, { cardPhotoData, cardPhotoFileName }, onProgress);
+  if (!serverResult || !serverResult.cardPhotoUrl) {
+    throw new Error('The photo failed to upload to the server. Please check your connection and try again.');
+  }
+  return { cardPhotoUrl: serverResult.cardPhotoUrl, cardPhotoStorageKey: serverResult.cardPhotoStorageKey };
 }
 
 /**
