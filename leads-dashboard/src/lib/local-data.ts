@@ -938,11 +938,27 @@ export const FEEDBACK_FORM_TEMPLATE_ID = 'tmpl_feedback_form';
 // Feedback_Events.docx — keep them in sync if either side changes.
 export const initialFormTemplates: FormTemplateItem[] = [
   {
+    id: 'tmpl_event_registration',
+    name: 'Event Registration Template',
+    description: 'Standard participant registration form with contact details, department, and year of study.',
+    createdBy: 'System',
+    createdAt: '2026-01-01',
+    fields: [
+      { id: 'f_full_name', label: 'Full Name', type: 'text', required: true },
+      { id: 'f_email', label: 'University / Professional Email', type: 'email', required: true },
+      { id: 'f_phone', label: 'Contact Phone / WhatsApp', type: 'text', required: true },
+      { id: 'f_dept', label: 'Department / Faculty', type: 'text', required: true },
+      { id: 'f_year', label: 'Year / Semester of Study', type: 'select', options: ['1st Year', '2nd Year', '3rd Year', '4th Year', 'Post-Graduate', 'Faculty / Staff', 'External Guest'], required: true },
+      { id: 'f_reg_no', label: 'Student / Employee ID No.', type: 'text', required: false },
+      { id: 'f_expectations', label: 'Expectations or Questions for this Event', type: 'textarea', required: false },
+    ],
+  },
+  {
     id: FEEDBACK_FORM_TEMPLATE_ID,
     name: 'Feedback Form Template',
     description: 'The standard LEADS event feedback form — matches the official Feedback_Events.docx exactly, including the option to download each response as a filled copy of that Word document.',
     createdBy: 'System',
-    createdAt: new Date().toISOString().split('T')[0],
+    createdAt: '2026-01-01',
     fields: [
       { id: 'f_event_name', label: 'Name of Event', type: 'text', required: true },
       // The original Word form gives this question its own tick-box per
@@ -978,6 +994,38 @@ export const initialFormTemplates: FormTemplateItem[] = [
       { id: 'f_enhance_knowledge', label: 'Did the event enhance your knowledge/skills?', type: 'select', options: ['Yes', 'No'], required: true },
       { id: 'f_apply_learning', label: 'Will you apply the learning in future?', type: 'select', options: ['Yes', 'No'], required: true },
       { id: 'f_overall_rating', label: 'Overall Rating (Out of 5)', type: 'scale', required: true },
+    ],
+  },
+  {
+    id: 'tmpl_hackathon_workshop',
+    name: 'Hackathon & Technical Workshop Registration',
+    description: 'Registration form for hackathons, project challenges, and tech workshops.',
+    createdBy: 'System',
+    createdAt: '2026-01-01',
+    fields: [
+      { id: 'f_lead_name', label: 'Participant / Lead Name', type: 'text', required: true },
+      { id: 'f_lead_email', label: 'Email Address', type: 'email', required: true },
+      { id: 'f_phone_num', label: 'WhatsApp / Phone Number', type: 'text', required: true },
+      { id: 'f_participation_type', label: 'Participation Type', type: 'select', options: ['Individual / Solo', 'Team Leader', 'Team Member'], required: true },
+      { id: 'f_team_name', label: 'Team Name (if participating in team)', type: 'text', required: false },
+      { id: 'f_tech_stack', label: 'Technical Domain / Track of Interest', type: 'multiselect', options: ['AI & Machine Learning', 'Web & Mobile Development', 'Cloud & DevOps', 'Cybersecurity', 'UI/UX Design', 'IoT & Robotics'], required: true },
+      { id: 'f_portfolio_url', label: 'GitHub / Portfolio / LinkedIn Profile URL', type: 'text', required: false },
+      { id: 'f_experience_summary', label: 'Brief Summary of Past Projects or Skills', type: 'textarea', required: false },
+    ],
+  },
+  {
+    id: 'tmpl_quick_survey',
+    name: 'Quick Event Survey',
+    description: 'Concise 6-question survey to capture attendee satisfaction and feedback.',
+    createdBy: 'System',
+    createdAt: '2026-01-01',
+    fields: [
+      { id: 'f_survey_name', label: 'Your Name (optional)', type: 'text', required: false },
+      { id: 'f_survey_email', label: 'Your Email (optional)', type: 'email', required: false },
+      { id: 'f_session_rating', label: 'Overall Rating of this Event', type: 'scale', required: true },
+      { id: 'f_content_relevance', label: 'Relevance and Value of Content', type: 'scale', required: true },
+      { id: 'f_best_part', label: 'What did you find most useful or inspiring?', type: 'textarea', required: false },
+      { id: 'f_suggested_improvements', label: 'Suggestions or Topics for Future Sessions', type: 'textarea', required: false },
     ],
   },
 ];
@@ -4122,16 +4170,22 @@ export function isSlugUnique(slug: string, excludeFormId?: string): boolean {
 // -------------------------------------------------------------
 
 export function getFormTemplates(): FormTemplateItem[] {
-  if (typeof window === 'undefined') return initialFormTemplates;
-  const saved = localStorage.getItem('leads_form_templates');
-  if (saved) {
-    try {
-      return JSON.parse(saved);
-    } catch (e) {
-      console.error(e);
+  let list: FormTemplateItem[] = [...initialFormTemplates];
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('leads_form_templates');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const custom = parsed.filter((p: any) => !initialFormTemplates.some(it => it.id === p.id));
+          list = [...initialFormTemplates, ...custom];
+        }
+      } catch (e) {
+        console.error(e);
+      }
     }
   }
-  return initialFormTemplates;
+  return list;
 }
 
 export function saveFormTemplates(templates: FormTemplateItem[]): void {
