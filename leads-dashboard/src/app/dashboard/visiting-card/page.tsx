@@ -388,6 +388,7 @@ export default function VisitingCardPage() {
             }}
             slug={cardSlug || 'preview'}
             showActions={Boolean(cardSlug)}
+            previewMode
             appleWalletAvailable={walletAvailability.appleWalletAvailable}
             googleWalletAvailable={walletAvailability.googleWalletAvailable}
           />

@@ -67,6 +67,19 @@ interface CachedWalletPass {
   googleSaveUrl: string;
 }
 
+/**
+ * Cache-only lookup — never calls WalletWallet's API, never touches the
+ * rate limit, just returns whatever is already sitting on this VPS's disk
+ * (or null if nothing's been generated for this member yet). Used by the
+ * Visiting Card page's own Live Preview so a member clicking around their
+ * own draft can never itself burn an API call or count against their
+ * quota — only a real Save/Publish (via getOrCreateWalletPass) does that.
+ */
+export function getCachedWalletPass(member: any): CachedWalletPass | null {
+  if (!member.cardPassAppleUrl || !member.cardPassGoogleSaveUrl) return null;
+  return { appleUrl: member.cardPassAppleUrl, googleSaveUrl: member.cardPassGoogleSaveUrl };
+}
+
 export async function getOrCreateWalletPass(apiKey: string, member: any, cardUrl: string): Promise<CachedWalletPass> {
   const hash = contentHashFor(member, cardUrl);
 

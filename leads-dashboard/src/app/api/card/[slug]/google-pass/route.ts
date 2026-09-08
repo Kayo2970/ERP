@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { readCollection } from '@/lib/server-db';
 import { getWalletWalletApiKey } from '@/lib/wallet/walletwallet-config';
-import { getOrCreateWalletPass, WalletPassRateLimitError } from '@/lib/wallet/card-wallet-pass';
+import { getOrCreateWalletPass, getCachedWalletPass, WalletPassRateLimitError } from '@/lib/wallet/card-wallet-pass';
 import { getAppBaseUrl } from '@/lib/app-url';
 
 export async function GET(
@@ -19,6 +19,18 @@ export async function GET(
   const apiKey = await getWalletWalletApiKey();
   if (!apiKey) {
     return NextResponse.json({ error: 'Google Wallet is not configured on this server yet.' }, { status: 501 });
+  }
+
+  // The Visiting Card page's own Live Preview asks for this — reads
+  // whatever's already cached on disk and never calls WalletWallet's API
+  // itself. See docs/wallet-setup.md.
+  const cacheOnly = new URL(request.url).searchParams.get('cacheOnly') === '1';
+  if (cacheOnly) {
+    const cached = getCachedWalletPass(member);
+    if (!cached) {
+      return NextResponse.json({ error: 'Not generated yet — save & publish your card to generate it.' }, { status: 404 });
+    }
+    return NextResponse.json({ saveUrl: cached.googleSaveUrl });
   }
 
   const cardUrl = `${getAppBaseUrl(request)}/card/${slug}`;

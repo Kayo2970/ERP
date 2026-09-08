@@ -2,7 +2,11 @@
 
 The Digital Visiting Card feature (sidebar → Visiting Card) works
 end-to-end today: profile fields, the public `/card/[slug]` page, QR code,
-and "Save Contact" (.vcf) all work with zero extra setup.
+and "Save Contact" (.vcf) all work with zero extra setup. The .vcf embeds
+the member's own card photo (falling back to their profile photo) inline
+as base64 — see `PHOTO` handling in `src/app/api/card/[slug]/vcf/route.ts`
+— so the saved contact carries a photo without depending on this server
+staying reachable later.
 
 ## Apple Wallet & Google Wallet
 
@@ -70,6 +74,17 @@ trigger anyone's). By the time a visitor actually opens the card and taps
 "Add to Apple Wallet," the `.pkpass` is already sitting cached on disk —
 the apple-pass/google-pass routes just replay that file back, so scanning
 the QR code or tapping the buttons never itself burns an API call.
+
+The Visiting Card page's own **Live Preview** takes this a step further:
+its wallet buttons pass `?cacheOnly=1` (via `VisitingCardView`'s
+`previewMode` prop) to the apple-pass/google-pass routes, which in that
+mode read `getCachedWalletPass()` — whatever's already on this VPS's disk
+— and **never call WalletWallet's API at all**, even on a cache miss (it
+just shows "save & publish to generate it" instead). So clicking around
+your own draft preview can never itself burn an API call or count against
+the rate limit below; only a real Save/Publish does that. The actual
+published `/card/[slug]` page (not the preview) still generates on demand
+as a fallback if nothing's cached yet, subject to the same rate limit.
 
 ### Designation
 

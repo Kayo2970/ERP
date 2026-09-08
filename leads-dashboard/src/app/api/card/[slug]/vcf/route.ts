@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { readCollection } from '@/lib/server-db';
+import { readStoredFile, guessMimeType } from '@/lib/file-storage';
 import { effectiveCardDesignation } from '@/lib/member-guard';
 
 // Escapes a value for use inside a VCARD 3.0 text field (RFC 6350 §3.4):
@@ -10,6 +11,17 @@ function escapeVCardText(value: string): string {
     .replace(/,/g, '\\,')
     .replace(/;/g, '\\;')
     .replace(/\n/g, '\\n');
+}
+
+// RFC 2426 §5.8.1: a content line longer than 75 octets is folded by
+// inserting CRLF followed by a single leading space before continuing —
+// the base64 PHOTO line is easily thousands of characters, well past that.
+function foldVCardLine(line: string): string {
+  const chunks: string[] = [];
+  for (let i = 0; i < line.length; i += 75) {
+    chunks.push(line.slice(i, i + 75));
+  }
+  return chunks.join('\r\n ');
 }
 
 export async function GET(
@@ -47,6 +59,26 @@ export async function GET(
     lines.push(`EMAIL:${escapeVCardText(member.email)}`);
   }
   if (socials.linkedin) lines.push(`URL;TYPE=LinkedIn:${escapeVCardText(socials.linkedin)}`);
+
+  // The photo the member set on their own card (falling back to their
+  // profile photo if they never set a card-specific one) — embedded inline
+  // as base64 so the contact still has a photo even offline, rather than a
+  // URL reference that depends on this server staying reachable.
+  const photoStorageKey = member.cardPhotoStorageKey || member.avatarStorageKey;
+  const photoFileName = member.cardPhotoUrl || member.avatarUrl || '';
+  if (photoStorageKey) {
+    try {
+      const photoBuffer = await readStoredFile(photoStorageKey);
+      const mime = guessMimeType(photoFileName || photoStorageKey);
+      const type = (mime.split('/')[1] || 'jpeg').toUpperCase();
+      const base64Photo = photoBuffer.toString('base64');
+      lines.push(foldVCardLine(`PHOTO;ENCODING=b;TYPE=${type}:${base64Photo}`));
+    } catch {
+      // Missing/unreadable file on disk shouldn't break the whole vCard —
+      // just skip the photo.
+    }
+  }
+
   lines.push('END:VCARD');
 
   const body = lines.join('\r\n') + '\r\n';

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Link2, Phone, Mail, Download, Wallet } from 'lucide-react';
+import { Link2, Phone, Mail, Download, Wallet, AlertCircle } from 'lucide-react';
 
 export interface VisitingCardData {
   name: string;
@@ -21,6 +21,16 @@ interface VisitingCardViewProps {
   showActions?: boolean;
   appleWalletAvailable?: boolean;
   googleWalletAvailable?: boolean;
+  /**
+   * Set true only for the Visiting Card page's own Live Preview. In this
+   * mode the wallet buttons read `?cacheOnly=1` — whatever pass is already
+   * sitting cached on this VPS from the last Save/Publish — and never call
+   * WalletWallet's live API themselves, so clicking around your own draft
+   * can never burn an API call or eat into your rate limit. The real
+   * published card (previewMode false/unset) can still generate on demand
+   * as a fallback.
+   */
+  previewMode?: boolean;
   onShowQr?: () => void;
 }
 
@@ -42,24 +52,59 @@ export function VisitingCardView({
   showActions = true,
   appleWalletAvailable = false,
   googleWalletAvailable = false,
+  previewMode = false,
   onShowQr,
 }: VisitingCardViewProps) {
   const socials = card.socials || {};
   const hasSocials = Boolean(socials.linkedin);
   const anyWalletAvailable = appleWalletAvailable || googleWalletAvailable;
   const [isOpeningGoogleWallet, setIsOpeningGoogleWallet] = useState(false);
+  const [isOpeningAppleWallet, setIsOpeningAppleWallet] = useState(false);
+  const [walletError, setWalletError] = useState('');
+
+  const cacheOnlySuffix = previewMode ? '?cacheOnly=1' : '';
+
+  const handleAddToAppleWallet = async () => {
+    setWalletError('');
+    setIsOpeningAppleWallet(true);
+    try {
+      const res = await fetch(`/api/card/${slug}/apple-pass${cacheOnlySuffix}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setWalletError(data.error || 'Could not fetch the Apple Wallet pass.');
+        return;
+      }
+      // Deliberately NOT an <a download> — that forces a plain file save.
+      // Navigating to a blob: URL that keeps the response's
+      // application/vnd.apple.pkpass type is what lets Safari present its
+      // native "Add to Apple Wallet" sheet, same as navigating straight to
+      // the API route would.
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      window.location.href = blobUrl;
+    } catch {
+      setWalletError('Could not fetch the Apple Wallet pass.');
+    } finally {
+      setIsOpeningAppleWallet(false);
+    }
+  };
 
   // Unlike Apple's route (which streams the .pkpass file directly), Google's
   // endpoint returns { saveUrl } — the actual pay.google.com/gp/v/save/<jwt>
   // link — so this needs a fetch-then-navigate instead of a plain <a href>.
   const handleAddToGoogleWallet = async () => {
+    setWalletError('');
     setIsOpeningGoogleWallet(true);
     try {
-      const res = await fetch(`/api/card/${slug}/google-pass`);
+      const res = await fetch(`/api/card/${slug}/google-pass${cacheOnlySuffix}`);
       const data = await res.json();
       if (res.ok && data.saveUrl) {
         window.location.href = data.saveUrl;
+      } else if (!res.ok) {
+        setWalletError(data.error || 'Could not fetch the Google Wallet pass.');
       }
+    } catch {
+      setWalletError('Could not fetch the Google Wallet pass.');
     } finally {
       setIsOpeningGoogleWallet(false);
     }
@@ -130,18 +175,19 @@ export function VisitingCardView({
             </a>
 
             <div className="grid grid-cols-1 gap-2">
-              <a
-                href={appleWalletAvailable ? `/api/card/${slug}/apple-pass` : undefined}
-                aria-disabled={!appleWalletAvailable}
+              <button
+                type="button"
+                onClick={appleWalletAvailable ? handleAddToAppleWallet : undefined}
+                disabled={!appleWalletAvailable || isOpeningAppleWallet}
                 className={`flex items-center justify-center gap-2 w-full px-4 py-2.5 text-xs font-semibold rounded-xl transition-all border ${
                   appleWalletAvailable
-                    ? 'bg-black text-white border-black/50 hover:bg-neutral-800 cursor-pointer'
+                    ? 'bg-black text-white border-black/50 hover:bg-neutral-800 cursor-pointer disabled:opacity-70'
                     : 'bg-theme-border/15 text-theme-text-secondary border-theme-border/30 cursor-not-allowed opacity-60'
                 }`}
               >
                 <Wallet className="h-3.5 w-3.5" />
-                {appleWalletAvailable ? 'Add to Apple Wallet' : 'Apple Wallet — coming soon'}
-              </a>
+                {appleWalletAvailable ? (isOpeningAppleWallet ? 'Opening…' : 'Add to Apple Wallet') : 'Apple Wallet — coming soon'}
+              </button>
               <button
                 type="button"
                 onClick={googleWalletAvailable ? handleAddToGoogleWallet : undefined}
@@ -156,6 +202,13 @@ export function VisitingCardView({
                 {googleWalletAvailable ? (isOpeningGoogleWallet ? 'Opening…' : 'Add to Google Wallet') : 'Google Wallet — coming soon'}
               </button>
             </div>
+
+            {walletError && (
+              <p className="flex items-center justify-center gap-1.5 text-[10px] text-danger pt-1">
+                <AlertCircle className="h-3 w-3 shrink-0" />
+                {walletError}
+              </p>
+            )}
 
             {onShowQr && (
               <button
