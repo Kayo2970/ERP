@@ -27,6 +27,7 @@ import {
   formatEventDateRange,
   formatEventPlanningNote,
   getEventSortTime,
+  isTaskAssignee,
   TaskItem,
   EventItem,
   AnnouncementItem
@@ -140,8 +141,15 @@ export default function DashboardHome() {
   // Filter tasks based on shared permission helper
   const displayedTasks = tasks.filter(task => canViewTaskExtended(task, user));
 
-  // Count tasks awaiting acknowledgment
-  const pendingAckCount = displayedTasks.filter(t => t.status === 'Assigned').length;
+  // Count tasks awaiting THIS member's own acknowledgment — must check
+  // isTaskAssignee (am I literally the assignee?), not canViewTaskExtended
+  // (can I see this task at all?). The latter is deliberately broad —
+  // Executives and Department Heads can see every task in their scope so
+  // they show up correctly elsewhere on this page — which was inflating
+  // this "awaiting YOUR acknowledgment" banner with tasks assigned to
+  // other people entirely, showing every leadership/Executive viewer the
+  // same non-personal number regardless of what's actually theirs to act on.
+  const pendingAckCount = tasks.filter(t => t.status === 'Assigned' && isTaskAssignee(t, user)).length;
 
   const scorePercentage = Math.min(100, Math.max(0, (overallAvgScore / 5.0) * 100));
 
