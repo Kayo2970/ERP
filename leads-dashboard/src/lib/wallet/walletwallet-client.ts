@@ -1,5 +1,13 @@
 const API_BASE = 'https://api.walletwallet.dev';
 
+// Production domain the app is deployed at — hardcoded (rather than derived
+// from the request) so the wallet pass's logo URLs are stable and always
+// resolve, even if this code ever runs from a request with a different
+// Host header. If the domain ever changes, update this constant and see
+// "If the production domain ever changes" in docs/wallet-setup.md for the
+// rest of what needs updating (DNS, env vars, etc.).
+const SITE_ORIGIN = 'https://leadsnextgencentre.online';
+
 // Fixed org-wide details shown on the back of every pass — same for every
 // member, so they live here rather than on the Member record. Sourced
 // verbatim from the pass design finalized in the WalletWallet dashboard;
@@ -47,8 +55,10 @@ export interface WalletWalletPass {
  * fields — harmless to send on a free-tier key, just ignored.
  */
 export async function createWalletPass(apiKey: string, member: WalletCardMember, cardUrl: string): Promise<WalletWalletPass> {
-  const origin = new URL(cardUrl).origin;
-  const logoUrl = `${origin}/images/leads-short-logo.png`;
+  // TODO: swap in the real wide-banner/thumbnail art once those files are
+  // hosted under public/images/ — see "Logo assets" in docs/wallet-setup.md.
+  // All four currently point at the same square logo as a placeholder.
+  const logoUrl = `${SITE_ORIGIN}/images/leads-short-logo.png`;
 
   const secondaryFields = [] as { label: string; value: string }[];
   if (member.phone) secondaryFields.push({ label: 'Phone Number', value: member.phone });

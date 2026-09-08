@@ -143,6 +143,12 @@ An enterprise-grade, institutional management and operations platform designed f
 
 Settings is also reachable directly from the dashboard header: clicking the name/avatar in the top navbar opens a dropdown with **Settings** and **Sign Out**, alongside the sidebar's own links.
 
+#### 19. Digital Visiting Card (`/dashboard/visiting-card` & `/card/[slug]`)
+- **Public, No-Login Card Page**: Every member can publish a shareable business card at a dynamically generated `/card/[slug]` URL — designation, bio, phone, LinkedIn, and photo, styled in the ERP's own dark navy/accent theme.
+- **QR Code & Save Contact**: A scannable QR code and a standards-compliant `.vcf` download that iOS/Android import natively into Contacts.
+- **Apple & Google Wallet, Auto-Generated**: "Add to Apple Wallet" / "Add to Google Wallet" issue automatically per member via the [WalletWallet](https://walletwallet.dev) API — no Apple Developer certificate or Google Cloud service account needed. Gated behind a single API key, set from **Settings → Digital Visiting Card → Wallet Setup** (Super User only) or the `WALLETWALLET_API_KEY` env var; see [`docs/wallet-setup.md`](docs/wallet-setup.md) for full setup, the pass's logo assets, and — **if the production domain ever changes from `leadsnextgencentre.online`** — exactly what to update.
+- **Designation Stays in Sync**: The card always shows the member's role exactly as set in the Members Directory, not a separately editable field, so it can't drift out of sync.
+
 ---
 
 ## 🔐 Permission Hierarchy & Role-Based Access Control (RBAC)

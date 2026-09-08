@@ -43,13 +43,49 @@ WALLETWALLET_API_KEY=ww_live_...
   stray dot before `@`) and `ORG_PHONE` (`+91 804536666` — only 9 digits) is
   correct before relying on them; both were carried over verbatim from the
   original pass design.**
-- `logoURL`/`iconURL`/`wideLogoURL`/`thumbnailURL` point at
-  `/images/leads-short-logo.png` (already hosted by the app) rather than a
-  separately uploaded wide-banner/thumbnail asset — swap in real files
-  under `public/images/` and update the URLs in `walletwallet-client.ts` if
-  a distinct wide-format or thumbnail asset is wanted. These four fields
-  are WalletWallet Pro-plan-only; harmless to send on a free-tier key, they
-  just get ignored.
+- `logoURL`/`iconURL`/`wideLogoURL`/`thumbnailURL` are built from a
+  hardcoded `SITE_ORIGIN` constant (`https://leadsnextgencentre.online`) at
+  the top of `walletwallet-client.ts` + `/images/leads-short-logo.png` —
+  see **Logo assets** and **If the production domain ever changes** below.
+  These four fields are WalletWallet Pro-plan-only; harmless to send on a
+  free-tier key, they just get ignored.
+
+#### Logo assets
+
+All four logo fields currently point at the same square `leads-short-logo.png`
+as a placeholder — there's a proper wide-format banner (with the "Centre
+for Leadership Empowering..." tagline and MSRUAS byline) and a
+higher-resolution square mark that should replace it, but they need to be
+uploaded as actual files (not pasted inline) before they can be hosted
+safely. Once you have them:
+
+1. Save the wide banner to `public/images/leads-wide-logo.png` and the
+   square mark to `public/images/leads-logo-square.png` (or reuse
+   `leads-short-logo.png` if it's the same artwork).
+2. In `src/lib/wallet/walletwallet-client.ts`, point `wideLogoURL` at the
+   wide banner and `logoURL`/`iconURL`/`thumbnailURL` at the square mark.
+3. Run `npx tsc --noEmit` and `npm run build`, then commit and push to
+   `main` — the VPS picks it up on its next `git pull`.
+
+#### If the production domain ever changes
+
+`SITE_ORIGIN` in `walletwallet-client.ts` is a hardcoded constant rather
+than derived from the request, so the wallet pass's logo URLs are always
+stable. If the site's domain ever changes from
+`https://leadsnextgencentre.online`:
+
+1. Update `SITE_ORIGIN` in `src/lib/wallet/walletwallet-client.ts` to the
+   new domain.
+2. Point the new domain's DNS at the VPS and update whatever's issuing its
+   TLS certificate (the logo URLs must be reachable over HTTPS or
+   Apple/Google Wallet will reject the pass).
+3. If any other env vars reference the old domain (e.g. `NEXT_PUBLIC_APP_URL`/`APP_URL` — see `src/lib/app-url.ts`), update those too.
+4. `npx tsc --noEmit` && `npm run build`, commit, push to `main`, redeploy.
+
+Cards already published under the old domain keep working — `cardUrl` (the
+QR code target and vCard link) is built per-request from the actual
+incoming domain via `getAppBaseUrl()`, not from this constant, so only the
+logo image URLs need the manual update above.
 - `src/lib/wallet/card-wallet-pass.ts` — caches the issued pass on the
   member's own record (a content hash of their card fields) so repeat
   visits don't re-create an identical pass and burn API quota; a pass is
