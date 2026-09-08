@@ -1,6 +1,6 @@
 # Digital Visiting Card — Wallet Setup
 
-The Digital Visiting Card feature (Settings → Digital Visiting Card) works
+The Digital Visiting Card feature (sidebar → Visiting Card) works
 end-to-end today: profile fields, the public `/card/[slug]` page, QR code,
 and "Save Contact" (.vcf) all work with zero extra setup.
 
@@ -16,7 +16,7 @@ once.
 
 1. Sign up at https://walletwallet.dev and generate an API key
    (`ww_live_...`). The free tier covers 1,000 passes/month.
-2. In the ERP: **Settings → Digital Visiting Card → Wallet Setup** (visible
+2. In the ERP: **sidebar → Visiting Card → Wallet Setup** (visible
    to a Tier-1 Super User only), paste the key in, click **Save**.
 
 That's it — "Add to Apple Wallet" and "Add to Google Wallet" appear on

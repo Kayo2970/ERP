@@ -39,7 +39,8 @@ import {
   Compass,
   Trash2,
   Sparkles,
-  FileCheck2
+  FileCheck2,
+  IdCard
 } from 'lucide-react';
 import { getAnnouncements, getTasks, getDesigns, getMembers, getBudgets, getReimbursements, getEvents, getApprovalRequests, logAuditEvent, Member, syncWithServer, getSystemSettings, signOutClient } from '@/lib/local-data';
 import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isFinanceHead, canAccessGuestDirectory, canVerifyBudgetCentreHead, canDecideBudget, canVerifyReimbursementCentreHead, canApproveAsSectorHead, canApproveAsFinanceHead, canSubmitEventReport, canReviewEventReports } from '@/lib/permissions';
@@ -82,6 +83,7 @@ const navSections: NavSection[] = [
       { name: 'Approvals', href: '/dashboard/approvals', icon: FileCheck2 },
       { name: 'Ratings', href: '/dashboard/ratings', icon: Star },
       { name: 'Design Portal', href: '/dashboard/designs', icon: Palette },
+      { name: 'Visiting Card', href: '/dashboard/visiting-card', icon: IdCard },
       { name: 'Event Reports', href: '/dashboard/event-reports', icon: FileCheck2, eventReportsOnly: true },
     ],
   },

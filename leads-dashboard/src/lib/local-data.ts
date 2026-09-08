@@ -103,7 +103,9 @@ export interface Member {
   // photo of someone else's physical card, unrelated feature).
   cardEnabled?: boolean; // public page 404s until true
   cardSlug?: string;     // stable URL segment, generated once server-side, immutable
-  cardDesignation?: string;
+  // Designation is deliberately NOT a separate editable card field — it
+  // always mirrors `role` (the Directory-set designation) so the card can
+  // never show something different from what's on record in the ERP.
   cardBio?: string; // "what they're studying/doing" — free text
   cardPhone?: string;
   cardSocials?: {
@@ -1646,7 +1648,7 @@ export async function updateMemberAvatar(id: string, avatarData: string, avatarF
  */
 export async function updateMemberCard(
   id: string,
-  changes: Partial<Pick<Member, 'cardEnabled' | 'cardDesignation' | 'cardBio' | 'cardPhone' | 'cardSocials'>>,
+  changes: Partial<Pick<Member, 'cardEnabled' | 'cardBio' | 'cardPhone' | 'cardSocials'>>,
   actorName: string
 ): Promise<Member | null> {
   const serverResult = await serverPatch('/api/members', id, changes);

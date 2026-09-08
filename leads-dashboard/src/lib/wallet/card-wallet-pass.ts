@@ -20,7 +20,7 @@ import { createWalletPass } from './walletwallet-client';
 function contentHashFor(member: any, cardUrl: string): string {
   const payload = JSON.stringify({
     name: member.name,
-    designation: member.cardDesignation || member.role || '',
+    designation: member.role || '',
     phone: member.cardPhone || '',
     email: member.email || '',
     bio: member.cardBio || '',
@@ -45,7 +45,7 @@ export async function getOrCreateWalletPass(apiKey: string, member: any, cardUrl
     apiKey,
     {
       name: member.name,
-      designation: member.cardDesignation || member.role,
+      designation: member.role,
       phone: member.cardPhone,
       email: member.email,
       bio: member.cardBio,

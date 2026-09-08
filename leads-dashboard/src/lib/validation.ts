@@ -58,7 +58,6 @@ export const MemberWriteSchema = z.object({
   avatarUrl: z.string().trim().max(2000).optional(),
   mustSetupPassword: z.boolean().optional(),
   cardEnabled: z.boolean().optional(),
-  cardDesignation: z.string().trim().max(200).optional(),
   cardBio: z.string().trim().max(600).optional(),
   cardPhone: z.string().trim().max(32).optional(),
   cardSocials: z.object({

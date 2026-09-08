@@ -39,7 +39,7 @@ export async function GET(
   return NextResponse.json({
     slug: member.cardSlug,
     name: member.name,
-    designation: member.cardDesignation || member.role || '',
+    designation: member.role || '',
     bio: member.cardBio || '',
     phone: member.cardPhone || '',
     email: member.email,

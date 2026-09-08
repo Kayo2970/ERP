@@ -18,23 +18,17 @@ import {
   RefreshCw,
   FileText,
   RotateCw,
-  AlertCircle,
-  IdCard,
-  QrCode,
-  Copy,
-  ExternalLink
+  AlertCircle
 } from 'lucide-react';
-import { getAuditLogs, getMembers, saveMembers, updateMember, updateMemberAvatar, updateMemberCard, updateMemberCardPhoto, logAuditEvent, AuditLogItem, getEmailLogs, requestEmailChange, confirmEmailChange, confirmNewEmailChange, authHeaders } from '@/lib/local-data';
+import { getAuditLogs, getMembers, saveMembers, updateMember, updateMemberAvatar, logAuditEvent, AuditLogItem, getEmailLogs, requestEmailChange, confirmEmailChange, confirmNewEmailChange, authHeaders } from '@/lib/local-data';
 import { isCentreHead } from '@/lib/permissions';
 import { FileDropzone, useUploadTask, formatFileSize } from '@/components/ui/file-dropzone';
-import { VisitingCardView } from '@/components/visiting-card-view';
-import { CardQrModal } from '@/components/card-qr-modal';
 import DOMPurify from 'isomorphic-dompurify';
 
 const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<'account' | 'reimbursement' | 'roles' | 'audit' | 'emails' | 'card'>('account');
+  const [activeTab, setActiveTab] = useState<'account' | 'reimbursement' | 'roles' | 'audit' | 'emails'>('account');
   const [user, setUser] = useState<any>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
   const [emailLogs, setEmailLogs] = useState<any[]>([]);
@@ -75,30 +69,6 @@ export default function SettingsPage() {
   const [savedAccountNumber, setSavedAccountNumber] = useState('');
   const [savedIfscCode, setSavedIfscCode] = useState('');
 
-  // Digital Visiting Card
-  const [cardEnabled, setCardEnabled] = useState(false);
-  const [cardSlug, setCardSlug] = useState('');
-  const [cardDesignation, setCardDesignation] = useState('');
-  const [cardBio, setCardBio] = useState('');
-  const [cardPhone, setCardPhone] = useState('');
-  const [cardLinkedin, setCardLinkedin] = useState('');
-  const [cardInstagram, setCardInstagram] = useState('');
-  const [cardTwitter, setCardTwitter] = useState('');
-  const [cardWebsite, setCardWebsite] = useState('');
-  const [cardPhotoUrl, setCardPhotoUrl] = useState('');
-  const [cardPhotoFile, setCardPhotoFile] = useState<File | null>(null);
-  const [cardPhotoPreviewUrl, setCardPhotoPreviewUrl] = useState<string | null>(null);
-  const [cardPhotoSizeError, setCardPhotoSizeError] = useState('');
-  const [isCardQrOpen, setIsCardQrOpen] = useState(false);
-  const [isSavingCard, setIsSavingCard] = useState(false);
-
-  // Digital Visiting Card — Wallet setup (Super User only). Apple + Google
-  // passes are both issued through a single WalletWallet API key
-  // (https://walletwallet.dev) — see docs/wallet-setup.md.
-  const [walletStatus, setWalletStatus] = useState<any>(null);
-  const [walletWalletApiKey, setWalletWalletApiKey] = useState('');
-  const [isSavingWallet, setIsSavingWallet] = useState(false);
-
   // Notification state
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -120,17 +90,6 @@ export default function SettingsPage() {
         setSavedIfscCode(u.ifscCode || me?.ifscCode || '');
         setDateOfBirth(u.dateOfBirth || me?.dateOfBirth || '');
         setTestTo(u.email || '');
-
-        setCardEnabled(Boolean(me?.cardEnabled));
-        setCardSlug(me?.cardSlug || '');
-        setCardDesignation(me?.cardDesignation || '');
-        setCardBio(me?.cardBio || '');
-        setCardPhone(me?.cardPhone || '');
-        setCardLinkedin(me?.cardSocials?.linkedin || '');
-        setCardInstagram(me?.cardSocials?.instagram || '');
-        setCardTwitter(me?.cardSocials?.twitter || '');
-        setCardWebsite(me?.cardSocials?.website || '');
-        setCardPhotoUrl(me?.cardPhotoUrl || '');
       } catch (e) {
         console.error(e);
       }
@@ -317,111 +276,6 @@ export default function SettingsPage() {
     return () => URL.revokeObjectURL(url);
   }, [avatarFile]);
 
-  const cardPhotoUpload = useUploadTask(async (file, onProgress) => {
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => (typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Could not read that file.')));
-      reader.onerror = () => reject(new Error('Could not read that file.'));
-      reader.readAsDataURL(file);
-    });
-
-    const result = await updateMemberCardPhoto(user.id, dataUrl, file.name, onProgress);
-    const members = getMembers();
-    const idx = members.findIndex(m => m.id === user.id);
-    if (idx !== -1) {
-      members[idx] = { ...members[idx], cardPhotoUrl: result.cardPhotoUrl, cardPhotoStorageKey: result.cardPhotoStorageKey };
-      saveMembers(members);
-    }
-    setCardPhotoUrl(result.cardPhotoUrl);
-    triggerSuccess('Visiting card photo updated successfully.');
-  });
-
-  const handleCardPhotoFilesSelected = (files: File[]) => {
-    const file = files[0];
-    if (!file || !user) return;
-
-    if (file.size > MAX_AVATAR_SIZE_BYTES) {
-      setCardPhotoSizeError(`Image size (${(file.size / (1024 * 1024)).toFixed(2)} MB) exceeds the 2 MB maximum limit.`);
-      return;
-    }
-    setCardPhotoSizeError('');
-    setCardPhotoFile(file);
-    cardPhotoUpload.start(file);
-  };
-
-  useEffect(() => {
-    if (!cardPhotoFile) {
-      setCardPhotoPreviewUrl(null);
-      return;
-    }
-    const url = URL.createObjectURL(cardPhotoFile);
-    setCardPhotoPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [cardPhotoFile]);
-
-  const handleUpdateCard = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
-    setIsSavingCard(true);
-    try {
-      const changes = {
-        cardEnabled,
-        cardDesignation: cardDesignation.trim(),
-        cardBio: cardBio.trim(),
-        cardPhone: cardPhone.trim(),
-        cardSocials: {
-          linkedin: cardLinkedin.trim(),
-          instagram: cardInstagram.trim(),
-          twitter: cardTwitter.trim(),
-          website: cardWebsite.trim(),
-        },
-      };
-      const updated = await updateMemberCard(user.id, changes, user.name);
-      if (!updated) {
-        triggerError('Could not find your member record to update.');
-        return;
-      }
-      if (updated.cardSlug) setCardSlug(updated.cardSlug);
-      triggerSuccess(cardEnabled ? 'Digital visiting card published successfully.' : 'Digital visiting card settings saved.');
-    } catch (err: any) {
-      triggerError(err?.message || 'Failed to save visiting card settings.');
-    } finally {
-      setIsSavingCard(false);
-    }
-  };
-
-  const cardPublicUrl = cardSlug && typeof window !== 'undefined' ? `${window.location.origin}/card/${cardSlug}` : '';
-
-  const fetchWalletStatus = async () => {
-    const res = await fetch('/api/admin/wallet-settings', { headers: authHeaders() });
-    if (res.ok) setWalletStatus(await res.json());
-  };
-
-  const handleSaveWalletSettings = async () => {
-    if (!walletWalletApiKey.trim()) {
-      triggerError('Enter a WalletWallet API key first.');
-      return;
-    }
-    setIsSavingWallet(true);
-    try {
-      const res = await fetch('/api/admin/wallet-settings', {
-        method: 'PATCH',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ walletwallet: { apiKey: walletWalletApiKey.trim() } }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        triggerError(data.error || 'Failed to save wallet settings.');
-        return;
-      }
-      setWalletWalletApiKey('');
-      await fetchWalletStatus();
-      triggerSuccess('Wallet credentials saved.');
-    } finally {
-      setIsSavingWallet(false);
-    }
-  };
-
   const handleUpdateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!displayName.trim()) {
@@ -515,7 +369,6 @@ export default function SettingsPage() {
   };
 
   const isSuperAdmin = user && (user.tier === 1 || isCentreHead(user));
-  const isWalletAdmin = user && user.tier === 1;
 
   const rolePrivileges = [
     { tier: 1, role: 'Super User', access: 'Full unconstrained system administration, user management, audit logs, and forms building.' },
@@ -590,18 +443,6 @@ export default function SettingsPage() {
         >
           <ShieldCheck className="h-4 w-4" />
           Roles & Permissions Matrix
-        </button>
-
-        <button
-          onClick={() => { setActiveTab('card'); if (isWalletAdmin) fetchWalletStatus(); }}
-          className={`pb-3 flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === 'card'
-              ? 'text-accent border-b-2 border-accent'
-              : 'text-theme-text-secondary hover:text-theme-text-primary'
-          }`}
-        >
-          <IdCard className="h-4 w-4" />
-          Digital Visiting Card
         </button>
 
         <button
@@ -1019,234 +860,6 @@ export default function SettingsPage() {
               <p>Build version: v2026.8.19-email-sync</p>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Digital Visiting Card */}
-      {activeTab === 'card' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="glass-panel rounded-2xl p-6 lg:col-span-2 space-y-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-bold text-theme-text-primary">Digital Visiting Card</h3>
-                <p className="text-xs text-theme-text-secondary">Share a public, QR-scannable business card — anyone can save your contact instantly.</p>
-              </div>
-              <label className="flex items-center gap-2 cursor-pointer shrink-0">
-                <span className="text-[11px] font-semibold text-theme-text-secondary">{cardEnabled ? 'Published' : 'Unpublished'}</span>
-                <button
-                  type="button"
-                  onClick={() => setCardEnabled(v => !v)}
-                  className={`relative w-10 h-6 rounded-full transition-colors cursor-pointer ${cardEnabled ? 'bg-accent' : 'bg-theme-border/40'}`}
-                >
-                  <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${cardEnabled ? 'translate-x-4' : ''}`} />
-                </button>
-              </label>
-            </div>
-
-            <form onSubmit={handleUpdateCard} className="space-y-4 text-xs">
-              <div className="flex items-center gap-4 pb-2">
-                <div className="h-16 w-16 shrink-0 rounded-2xl bg-accent flex items-center justify-center shadow-md shadow-accent/20 overflow-hidden relative">
-                  {cardPhotoPreviewUrl ? (
-                    <img src={cardPhotoPreviewUrl} alt={user?.name} className="h-full w-full object-cover" />
-                  ) : cardPhotoUrl ? (
-                    <img src={cardPhotoUrl} alt={user?.name} className="h-full w-full object-cover" />
-                  ) : (
-                    <span className="text-white font-bold text-base">
-                      {(user?.name || '').split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
-                    </span>
-                  )}
-                  {cardPhotoUpload.status === 'uploading' && (
-                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-[10px] font-bold">
-                      {cardPhotoUpload.progress}%
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-1.5 flex-1 max-w-sm">
-                  <FileDropzone
-                    onFilesSelected={handleCardPhotoFilesSelected}
-                    accept="image/*"
-                    disabled={cardPhotoUpload.status === 'uploading'}
-                    label="Upload Card Photo"
-                    hint="JPG, PNG, or GIF. Max size 2 MB. Falls back to your profile photo if unset."
-                    compact
-                  />
-                  {cardPhotoSizeError && <p className="text-[11px] text-danger">{cardPhotoSizeError}</p>}
-                  {cardPhotoUpload.status === 'error' && (
-                    <div className="flex items-center justify-between gap-2 text-[11px] text-danger">
-                      <span className="flex items-center gap-1"><AlertCircle className="h-3 w-3 shrink-0" />{cardPhotoUpload.error}</span>
-                      <button
-                        type="button"
-                        onClick={cardPhotoUpload.retry}
-                        className="flex items-center gap-1 font-semibold text-accent hover:underline cursor-pointer shrink-0"
-                      >
-                        <RotateCw className="h-3 w-3" />
-                        Retry
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Designation</label>
-                  <input
-                    type="text"
-                    value={cardDesignation}
-                    onChange={(e) => setCardDesignation(e.target.value)}
-                    placeholder="e.g. Events Head, LEADS Next Gen Centre"
-                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Phone</label>
-                  <input
-                    type="tel"
-                    value={cardPhone}
-                    onChange={(e) => setCardPhone(e.target.value)}
-                    placeholder="+91 XXXXX XXXXX"
-                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block font-medium text-theme-text-secondary">About / What you're studying or doing</label>
-                <textarea
-                  value={cardBio}
-                  onChange={(e) => setCardBio(e.target.value)}
-                  rows={3}
-                  maxLength={600}
-                  placeholder="e.g. MBA student specializing in Marketing, passionate about community building and events."
-                  className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent resize-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">LinkedIn</label>
-                  <input type="url" value={cardLinkedin} onChange={(e) => setCardLinkedin(e.target.value)} placeholder="https://linkedin.com/in/..." className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent" />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Instagram</label>
-                  <input type="url" value={cardInstagram} onChange={(e) => setCardInstagram(e.target.value)} placeholder="https://instagram.com/..." className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent" />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Twitter / X</label>
-                  <input type="url" value={cardTwitter} onChange={(e) => setCardTwitter(e.target.value)} placeholder="https://x.com/..." className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent" />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Website</label>
-                  <input type="url" value={cardWebsite} onChange={(e) => setCardWebsite(e.target.value)} placeholder="https://..." className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent" />
-                </div>
-              </div>
-
-              {cardPublicUrl && (
-                <div className="flex items-center gap-2 p-3 bg-theme-background/30 border border-theme-border/30 rounded-xl">
-                  <span className="flex-1 text-[11px] font-mono text-accent truncate">{cardPublicUrl}</span>
-                  <button
-                    type="button"
-                    onClick={() => navigator.clipboard.writeText(cardPublicUrl)}
-                    className="p-1.5 rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
-                    title="Copy link"
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsCardQrOpen(true)}
-                    className="p-1.5 rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
-                    title="Show QR"
-                  >
-                    <QrCode className="h-3.5 w-3.5" />
-                  </button>
-                  <a
-                    href={cardPublicUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-1.5 rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all"
-                    title="Open card"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </a>
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={isSavingCard}
-                className="flex items-center gap-2 px-5 py-2.5 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/20 cursor-pointer disabled:opacity-50"
-              >
-                <Save className="h-4 w-4" />
-                {isSavingCard ? 'Saving…' : cardEnabled ? 'Save & Publish' : 'Save'}
-              </button>
-            </form>
-          </div>
-
-          <div className="flex flex-col items-center gap-3">
-            <p className="text-[11px] font-semibold text-theme-text-secondary uppercase tracking-wider self-start">Live Preview</p>
-            <VisitingCardView
-              card={{
-                name: user?.name || '',
-                designation: cardDesignation,
-                bio: cardBio,
-                phone: cardPhone,
-                email: user?.email,
-                photoUrl: cardPhotoPreviewUrl || cardPhotoUrl || user?.avatarUrl,
-                socials: { linkedin: cardLinkedin, instagram: cardInstagram, twitter: cardTwitter, website: cardWebsite },
-              }}
-              slug={cardSlug || 'preview'}
-              showActions={Boolean(cardSlug)}
-            />
-          </div>
-
-          <CardQrModal
-            isOpen={isCardQrOpen}
-            onClose={() => setIsCardQrOpen(false)}
-            url={cardPublicUrl}
-            title="Your Visiting Card QR"
-            subtitle={user?.name}
-          />
-
-          {isWalletAdmin && (
-            <div className="glass-panel rounded-2xl p-6 lg:col-span-3 space-y-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-base font-bold text-theme-text-primary">Wallet Setup (Super User)</h3>
-                  <p className="text-xs text-theme-text-secondary">
-                    Apple &amp; Google Wallet passes are both issued through{' '}
-                    <a href="https://walletwallet.dev" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
-                      WalletWallet
-                    </a>{' '}
-                    — no Apple/Google developer certificates needed. Sign up, grab an API key, paste it below.
-                    See <code className="text-accent">docs/wallet-setup.md</code> for details.
-                  </p>
-                </div>
-                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${walletStatus?.walletWalletConfigured ? 'bg-success/15 text-success' : 'bg-theme-border/30 text-theme-text-secondary'}`}>
-                  {walletStatus?.walletWalletConfigured ? 'Configured' : 'Not configured'}
-                </span>
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-2.5 text-xs max-w-lg">
-                <input
-                  type="password"
-                  value={walletWalletApiKey}
-                  onChange={(e) => setWalletWalletApiKey(e.target.value)}
-                  placeholder="ww_live_..."
-                  className="flex-1 px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                />
-                <button
-                  type="button"
-                  onClick={handleSaveWalletSettings}
-                  disabled={isSavingWallet}
-                  className="flex items-center justify-center gap-2 px-5 py-2.5 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/20 cursor-pointer disabled:opacity-50 shrink-0"
-                >
-                  <Save className="h-4 w-4" />
-                  {isSavingWallet ? 'Saving…' : 'Save'}
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       )}
 

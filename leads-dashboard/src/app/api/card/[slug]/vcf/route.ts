@@ -35,8 +35,8 @@ export async function GET(
     `FN:${escapeVCardText(member.name || '')}`,
     'ORG:LEADS Next Gen Centre',
   ];
-  if (member.cardDesignation || member.role) {
-    lines.push(`TITLE:${escapeVCardText(member.cardDesignation || member.role)}`);
+  if (member.role) {
+    lines.push(`TITLE:${escapeVCardText(member.role)}`);
   }
   if (member.cardPhone) {
     lines.push(`TEL;TYPE=CELL:${escapeVCardText(member.cardPhone)}`);
