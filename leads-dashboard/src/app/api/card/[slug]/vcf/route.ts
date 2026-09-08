@@ -45,9 +45,6 @@ export async function GET(
     lines.push(`EMAIL:${escapeVCardText(member.email)}`);
   }
   if (socials.linkedin) lines.push(`URL;TYPE=LinkedIn:${escapeVCardText(socials.linkedin)}`);
-  if (socials.instagram) lines.push(`URL;TYPE=Instagram:${escapeVCardText(socials.instagram)}`);
-  if (socials.twitter) lines.push(`URL;TYPE=Twitter:${escapeVCardText(socials.twitter)}`);
-  if (socials.website) lines.push(`URL;TYPE=Website:${escapeVCardText(socials.website)}`);
   if (member.cardBio) lines.push(`NOTE:${escapeVCardText(member.cardBio)}`);
   lines.push('END:VCARD');
 

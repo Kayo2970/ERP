@@ -3,7 +3,7 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ShieldAlert, CheckCircle2, Lock, Eye, EyeOff, LogIn, Sparkles, Cake } from 'lucide-react';
+import { ShieldAlert, CheckCircle2, Lock, Eye, EyeOff, LogIn, Sparkles, Cake, Phone } from 'lucide-react';
 
 function ActivateAccountForm() {
   const searchParams = useSearchParams();
@@ -18,6 +18,7 @@ function ActivateAccountForm() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [dateOfBirth, setDateOfBirth] = useState('');
+  const [phone, setPhone] = useState('');
   const [submitError, setSubmitError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -57,13 +58,17 @@ function ActivateAccountForm() {
       setSubmitError('Passwords do not match.');
       return;
     }
+    if (phone.trim().length < 7) {
+      setSubmitError('Enter a valid mobile number.');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
       const res = await fetch('/api/auth/activate-account', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, newPassword, dateOfBirth: dateOfBirth || undefined }),
+        body: JSON.stringify({ token, newPassword, dateOfBirth: dateOfBirth || undefined, phone: phone.trim() }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to activate your account.');
@@ -181,6 +186,24 @@ function ActivateAccountForm() {
                   className="w-full pl-10 pr-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary placeholder-theme-text-secondary focus:outline-none focus:border-accent text-xs transition-all"
                 />
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block font-semibold text-theme-text-secondary uppercase tracking-wider">
+                Mobile Number
+              </label>
+              <div className="relative">
+                <Phone className="absolute left-3.5 top-3 h-4 w-4 text-theme-text-secondary" />
+                <input
+                  type="tel"
+                  required
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+91 XXXXX XXXXX"
+                  className="w-full pl-10 pr-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary placeholder-theme-text-secondary focus:outline-none focus:border-accent text-xs transition-all"
+                />
+              </div>
+              <p className="text-[11px] text-theme-text-secondary/70">Stored in the Members Directory so the Centre can reach you.</p>
             </div>
 
             <div className="space-y-1.5">

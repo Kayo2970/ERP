@@ -262,6 +262,7 @@ export default function DirectoryPage() {
   const [editCustomRole, setEditCustomRole] = useState('');
   const [editProgram, setEditProgram] = useState('');
   const [editBatch, setEditBatch] = useState('');
+  const [editPhone, setEditPhone] = useState('');
   const [editTierOverride, setEditTierOverride] = useState<number>(4);
 
   useEffect(() => {
@@ -487,6 +488,7 @@ export default function DirectoryPage() {
     setEditCustomRole(isKayomarzPavri(member) ? (member.role || '') : '');
     setEditProgram(member.program || '');
     setEditBatch(member.batch || '');
+    setEditPhone(member.phone || '');
     setEditTierOverride(member.tier || 4);
 
     const r = member.role || '';
@@ -574,6 +576,7 @@ export default function DirectoryPage() {
       department: derived.department,
       program: editProgram.trim() || undefined,
       batch: editDivision === 'Alumni' ? editBatch.trim() : undefined,
+      phone: editPhone.trim() || undefined,
       // A restricted (non-admin) editor spends their one-time edit the moment
       // they save — a full admin can keep editing the same record anytime.
       ...(isRestrictedDirectoryEditor(user) ? { selfEditUsedAt: new Date().toISOString() } : {}),
@@ -2114,6 +2117,17 @@ export default function DirectoryPage() {
                     value={editProgram}
                     onChange={(e) => setEditProgram(e.target.value)}
                     placeholder="e.g. B.Tech Computer Science Engineering, MBA"
+                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block font-medium text-theme-text-secondary">Mobile Number</label>
+                  <input
+                    type="tel"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    placeholder="+91 XXXXX XXXXX"
                     className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   />
                 </div>

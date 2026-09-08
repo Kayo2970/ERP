@@ -51,6 +51,7 @@ export const MemberWriteSchema = z.object({
   bankName: z.string().trim().max(200).optional(),
   accountNumber: z.string().trim().max(64).optional(),
   ifscCode: z.string().trim().max(32).optional(),
+  phone: z.string().trim().max(32).optional(),
   dateOfBirth: z.union([z.literal(''), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]).optional(),
   status: z.enum(['Active', 'Terminated']).optional(),
   avatarData: z.string().max(3_000_000).optional(), // base64 data URL — file-size cap enforced separately server-side
@@ -62,9 +63,6 @@ export const MemberWriteSchema = z.object({
   cardPhone: z.string().trim().max(32).optional(),
   cardSocials: z.object({
     linkedin: z.union([z.literal(''), z.string().trim().max(300).url()]).optional(),
-    instagram: z.union([z.literal(''), z.string().trim().max(300).url()]).optional(),
-    twitter: z.union([z.literal(''), z.string().trim().max(300).url()]).optional(),
-    website: z.union([z.literal(''), z.string().trim().max(300).url()]).optional(),
   }).optional(),
   cardPhotoData: z.string().max(3_000_000).optional(), // base64 data URL — file-size cap enforced separately server-side
   cardPhotoFileName: z.string().trim().max(300).optional(),

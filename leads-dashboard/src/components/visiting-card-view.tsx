@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Link2, Camera, AtSign, Globe, Phone, Mail, Download, Wallet } from 'lucide-react';
+import { Link2, Phone, Mail, Download, Wallet } from 'lucide-react';
 
 export interface VisitingCardData {
   name: string;
@@ -12,9 +12,6 @@ export interface VisitingCardData {
   photoUrl?: string;
   socials?: {
     linkedin?: string;
-    instagram?: string;
-    twitter?: string;
-    website?: string;
   };
 }
 
@@ -51,7 +48,7 @@ export function VisitingCardView({
   onShowQr,
 }: VisitingCardViewProps) {
   const socials = card.socials || {};
-  const hasSocials = socials.linkedin || socials.instagram || socials.twitter || socials.website;
+  const hasSocials = Boolean(socials.linkedin);
   const anyWalletAvailable = appleWalletAvailable || googleWalletAvailable || samsungWalletAvailable;
   const [isOpeningGoogleWallet, setIsOpeningGoogleWallet] = useState(false);
 
@@ -124,21 +121,6 @@ export function VisitingCardView({
             {socials.linkedin && (
               <a href={socials.linkedin} target="_blank" rel="noopener noreferrer" title="LinkedIn" className="h-9 w-9 flex items-center justify-center rounded-xl bg-accent/15 border border-accent/30 text-accent hover:bg-accent/25 transition-colors">
                 <Link2 className="h-4 w-4" />
-              </a>
-            )}
-            {socials.instagram && (
-              <a href={socials.instagram} target="_blank" rel="noopener noreferrer" title="Instagram" className="h-9 w-9 flex items-center justify-center rounded-xl bg-accent/15 border border-accent/30 text-accent hover:bg-accent/25 transition-colors">
-                <Camera className="h-4 w-4" />
-              </a>
-            )}
-            {socials.twitter && (
-              <a href={socials.twitter} target="_blank" rel="noopener noreferrer" title="Twitter / X" className="h-9 w-9 flex items-center justify-center rounded-xl bg-accent/15 border border-accent/30 text-accent hover:bg-accent/25 transition-colors">
-                <AtSign className="h-4 w-4" />
-              </a>
-            )}
-            {socials.website && (
-              <a href={socials.website} target="_blank" rel="noopener noreferrer" className="h-9 w-9 flex items-center justify-center rounded-xl bg-accent/15 border border-accent/30 text-accent hover:bg-accent/25 transition-colors">
-                <Globe className="h-4 w-4" />
               </a>
             )}
           </div>

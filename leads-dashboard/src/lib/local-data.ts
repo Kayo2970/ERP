@@ -58,6 +58,11 @@ export interface Member {
   bankName?: string;
   accountNumber?: string;
   ifscCode?: string;
+  // Collected once at account activation (or added later from Directory /
+  // Settings) — the member's own contact number, stored in the Directory.
+  // Separate from cardPhone, which is what shows on the public visiting
+  // card and can be edited independently of this.
+  phone?: string;
   // "YYYY-MM-DD". Collected once at account activation (or added later from
   // Settings) — used only to match month+day for the daily birthday email
   // (see src/lib/birthday-scheduler.ts). Optional: older members activated
@@ -110,9 +115,6 @@ export interface Member {
   cardPhone?: string;
   cardSocials?: {
     linkedin?: string;
-    instagram?: string;
-    twitter?: string;
-    website?: string;
   };
   cardPhotoData?: string;       // transient: base64 data URL sent on upload
   cardPhotoFileName?: string;   // transient: original filename, paired with cardPhotoData

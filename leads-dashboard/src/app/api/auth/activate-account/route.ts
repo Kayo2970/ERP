@@ -9,6 +9,7 @@ const ActivateAccountSchema = z.object({
   token: z.string().trim().min(1).max(256),
   newPassword: z.string().min(4).max(256),
   dateOfBirth: z.union([z.literal(''), z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date of birth is not in a valid format.')]).optional(),
+  phone: z.string().trim().min(7, 'Enter a valid mobile number.').max(32),
 }).strict();
 
 /** Validates an activation token and returns who it belongs to, without consuming it — lets the /activate page greet the member by name before they submit a password. */
@@ -43,7 +44,7 @@ export async function GET(request: Request) {
 /** Consumes an activation token — sets the member's first real password and deletes the token. */
 export async function POST(request: Request) {
   try {
-    const { token, newPassword, dateOfBirth } = await parseJsonBody(request, ActivateAccountSchema);
+    const { token, newPassword, dateOfBirth, phone } = await parseJsonBody(request, ActivateAccountSchema);
 
     const activations = await readCollection('accountActivations');
     const matched = activations.find((a: any) => a.token === token);
@@ -73,6 +74,7 @@ export async function POST(request: Request) {
             // second time on their very next sign-in.
             mustSetupPassword: false,
             ...(dateOfBirth ? { dateOfBirth } : {}),
+            phone,
           };
         }
         return m;

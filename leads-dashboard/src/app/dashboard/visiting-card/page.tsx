@@ -17,9 +17,6 @@ export default function VisitingCardPage() {
   const [cardBio, setCardBio] = useState('');
   const [cardPhone, setCardPhone] = useState('');
   const [cardLinkedin, setCardLinkedin] = useState('');
-  const [cardInstagram, setCardInstagram] = useState('');
-  const [cardTwitter, setCardTwitter] = useState('');
-  const [cardWebsite, setCardWebsite] = useState('');
   const [cardPhotoUrl, setCardPhotoUrl] = useState('');
   const [cardPhotoFile, setCardPhotoFile] = useState<File | null>(null);
   const [cardPhotoPreviewUrl, setCardPhotoPreviewUrl] = useState<string | null>(null);
@@ -63,9 +60,6 @@ export default function VisitingCardPage() {
       setCardBio(me?.cardBio || '');
       setCardPhone(me?.cardPhone || '');
       setCardLinkedin(me?.cardSocials?.linkedin || '');
-      setCardInstagram(me?.cardSocials?.instagram || '');
-      setCardTwitter(me?.cardSocials?.twitter || '');
-      setCardWebsite(me?.cardSocials?.website || '');
       setCardPhotoUrl(me?.cardPhotoUrl || '');
       if (u.tier === 1) fetchWalletStatus();
     } catch (e) {
@@ -131,9 +125,6 @@ export default function VisitingCardPage() {
         cardPhone: cardPhone.trim(),
         cardSocials: {
           linkedin: cardLinkedin.trim(),
-          instagram: cardInstagram.trim(),
-          twitter: cardTwitter.trim(),
-          website: cardWebsite.trim(),
         },
       };
       const updated = await updateMemberCard(user.id, changes, user.name);
@@ -293,23 +284,9 @@ export default function VisitingCardPage() {
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="block font-medium text-theme-text-secondary">LinkedIn</label>
-                <input type="url" value={cardLinkedin} onChange={(e) => setCardLinkedin(e.target.value)} placeholder="https://linkedin.com/in/..." className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent" />
-              </div>
-              <div className="space-y-1.5">
-                <label className="block font-medium text-theme-text-secondary">Instagram</label>
-                <input type="url" value={cardInstagram} onChange={(e) => setCardInstagram(e.target.value)} placeholder="https://instagram.com/..." className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent" />
-              </div>
-              <div className="space-y-1.5">
-                <label className="block font-medium text-theme-text-secondary">Twitter / X</label>
-                <input type="url" value={cardTwitter} onChange={(e) => setCardTwitter(e.target.value)} placeholder="https://x.com/..." className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent" />
-              </div>
-              <div className="space-y-1.5">
-                <label className="block font-medium text-theme-text-secondary">Website</label>
-                <input type="url" value={cardWebsite} onChange={(e) => setCardWebsite(e.target.value)} placeholder="https://..." className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent" />
-              </div>
+            <div className="space-y-1.5">
+              <label className="block font-medium text-theme-text-secondary">LinkedIn</label>
+              <input type="url" value={cardLinkedin} onChange={(e) => setCardLinkedin(e.target.value)} placeholder="https://linkedin.com/in/..." className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent" />
             </div>
 
             {cardPublicUrl && (
@@ -364,7 +341,7 @@ export default function VisitingCardPage() {
               phone: cardPhone,
               email: user?.email,
               photoUrl: cardPhotoPreviewUrl || cardPhotoUrl || user?.avatarUrl,
-              socials: { linkedin: cardLinkedin, instagram: cardInstagram, twitter: cardTwitter, website: cardWebsite },
+              socials: { linkedin: cardLinkedin },
             }}
             slug={cardSlug || 'preview'}
             showActions={Boolean(cardSlug)}
