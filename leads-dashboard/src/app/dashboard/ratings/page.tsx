@@ -35,6 +35,39 @@ import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { PeriodFilter } from '@/components/period-filter';
 import { SearchableSelect } from '@/components/searchable-select';
 import { PeriodFilterValue, extractAvailableMonths, isWithinPeriod } from '@/lib/period-filter';
+import {
+  RATING_CRITERIA,
+  RatingCriteriaSet,
+  criteriaSetForTaskCategory,
+  averageScore,
+  projectLegacyRatingFields,
+} from '@/lib/rating-criteria';
+import { groupScoredReportsBySubmitter } from '@/lib/report-scoring';
+import { getEventReports } from '@/lib/local-data';
+
+const CRITERIA_SET_LABEL: Record<RatingCriteriaSet, string> = {
+  general: 'General Task',
+  design: 'Design Task',
+  reportWriting: 'Report Writing Task',
+};
+
+function defaultScoresFor(set: RatingCriteriaSet): Record<string, number> {
+  const scores: Record<string, number> = {};
+  RATING_CRITERIA[set].forEach(c => { scores[c.key] = 5; });
+  return scores;
+}
+
+// Legacy ratings (pre-criteriaSet) only ever have the 4 fixed fields — editing
+// one re-scores it against the General rubric, seeded from its old scores.
+function legacyRatingAsGeneralScores(rating: RatingItem): Record<string, number> {
+  return {
+    accuracy: rating.quality,
+    timeliness: rating.timeliness,
+    collaboration: rating.collaboration,
+    reliability: rating.initiative,
+    communication: rating.overallScore,
+  };
+}
 
 // Falls back to the title-string convention for tasks created before
 // isDesignDeliverable existed, so already-created Design Portal tasks don't
@@ -48,6 +81,7 @@ export default function RatingsPage() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [user, setUser] = useState<any>(null);
+  const [eventReports, setEventReports] = useState<ReturnType<typeof getEventReports>>([]);
 
   // Search & Filter state
   const [taskSearchQuery, setTaskSearchQuery] = useState('');
@@ -67,11 +101,10 @@ export default function RatingsPage() {
   // Selected Task for Evaluation
   const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
 
-  // Form Scores
-  const [quality, setQuality] = useState(5);
-  const [timeliness, setTimeliness] = useState(5);
-  const [initiative, setInitiative] = useState(5);
-  const [collaboration, setCollaboration] = useState(5);
+  // Form Scores — which 5-criterion rubric is active, and the scores entered
+  // against it (keyed by RATING_CRITERIA[activeCriteriaSet]'s criterion keys).
+  const [activeCriteriaSet, setActiveCriteriaSet] = useState<RatingCriteriaSet>('general');
+  const [scores, setScores] = useState<Record<string, number>>(defaultScoresFor('general'));
   const [notes, setNotes] = useState('');
 
   // Notification Alerts
@@ -84,6 +117,7 @@ export default function RatingsPage() {
       setMembers(getMembers());
       setTasks(getTasks());
       setEvents(getEvents());
+      setEventReports(getEventReports());
     };
     refreshData();
 
@@ -128,12 +162,11 @@ export default function RatingsPage() {
       return;
     }
 
+    const criteriaSet = criteriaSetForTaskCategory(task.taskCategory);
     setEditingRating(null);
     setSelectedTask(task);
-    setQuality(5);
-    setTimeliness(5);
-    setInitiative(5);
-    setCollaboration(5);
+    setActiveCriteriaSet(criteriaSet);
+    setScores(defaultScoresFor(criteriaSet));
     setNotes('');
     setFormError('');
     setIsModalOpen(true);
@@ -143,10 +176,9 @@ export default function RatingsPage() {
     setEditingRating(rating);
     const matchedTask = tasks.find(t => t.id === rating.taskId) || null;
     setSelectedTask(matchedTask);
-    setQuality(rating.quality);
-    setTimeliness(rating.timeliness);
-    setInitiative(rating.initiative);
-    setCollaboration(rating.collaboration);
+    const criteriaSet = rating.criteriaSet ?? criteriaSetForTaskCategory(matchedTask?.taskCategory);
+    setActiveCriteriaSet(criteriaSet);
+    setScores(rating.scores ?? (rating.criteriaSet ? defaultScoresFor(criteriaSet) : legacyRatingAsGeneralScores(rating)));
     setNotes(rating.notes || '');
     setFormError('');
     setIsModalOpen(true);
@@ -172,14 +204,14 @@ export default function RatingsPage() {
       }
     }
 
-    const overall = parseFloat(((quality + timeliness + initiative + collaboration) / 4).toFixed(1));
+    const overall = averageScore(scores);
+    const legacy = projectLegacyRatingFields(activeCriteriaSet, scores);
 
     if (editingRating) {
       updateRating(editingRating.id, {
-        quality,
-        timeliness,
-        initiative,
-        collaboration,
+        criteriaSet: activeCriteriaSet,
+        scores,
+        ...legacy,
         overallScore: overall,
         notes,
       }, user?.name || 'User');
@@ -202,10 +234,9 @@ export default function RatingsPage() {
 
       if (ownExisting) {
         updateRating(ownExisting.id, {
-          quality,
-          timeliness,
-          initiative,
-          collaboration,
+          criteriaSet: activeCriteriaSet,
+          scores,
+          ...legacy,
           overallScore: overall,
           notes,
         }, user.name);
@@ -219,10 +250,9 @@ export default function RatingsPage() {
           targetName: selectedTask.assignee,
           raterName: user.name,
           reviewerRole: reviewerRole ?? undefined,
-          quality,
-          timeliness,
-          initiative,
-          collaboration,
+          criteriaSet: activeCriteriaSet,
+          scores,
+          ...legacy,
           overallScore: overall,
           notes,
         });
@@ -349,6 +379,10 @@ export default function RatingsPage() {
 
   const availableRatingMonths = extractAvailableMonths(ratings.map(r => r.createdAt));
 
+  // Report Writing Final Score leaderboard — decay-weighted average of each
+  // submitter's scored event reports (see report-scoring.ts).
+  const reportScoreLeaderboard = groupScoredReportsBySubmitter(eventReports);
+
   return (
     <div className="p-6 md:p-8 space-y-6">
       
@@ -363,8 +397,48 @@ export default function RatingsPage() {
       {/* Header section */}
       <div>
         <h1 className="text-xl font-bold text-theme-text-primary">Task-Based Performance Ratings</h1>
-        <p className="text-xs text-theme-text-secondary">Evaluate student members directly on task execution: Quality, Timeliness, Initiative, and Collaboration</p>
+        <p className="text-xs text-theme-text-secondary">Evaluate student members against the General, Design, or Report Writing rubric — whichever matches the task</p>
       </div>
+
+      {/* Report Writing Final Score leaderboard */}
+      {reportScoreLeaderboard.length > 0 && (
+        <div className="bg-theme-card border border-theme-card-border rounded-2xl p-5">
+          <h2 className="text-sm font-bold text-theme-text-primary mb-1">Report Writing — Final Score</h2>
+          <p className="text-[11px] text-theme-text-secondary mb-3">
+            Decay-weighted average of each submitter&apos;s scored event reports — older reports and submitters with more reports since count for less.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-xs text-left">
+              <thead>
+                <tr className="text-theme-text-secondary border-b border-theme-border/40">
+                  <th className="pb-2 font-semibold">Submitter</th>
+                  <th className="pb-2 font-semibold">Reports Scored</th>
+                  <th className="pb-2 font-semibold">Last Report</th>
+                  <th className="pb-2 font-semibold">Final Score</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-theme-border/20">
+                {reportScoreLeaderboard.map(row => {
+                  const colorTokens = getRatingColor(row.finalScore);
+                  return (
+                    <tr key={row.submittedBy}>
+                      <td className="py-2.5 pr-2 font-bold text-theme-text-primary whitespace-nowrap">{row.submittedBy}</td>
+                      <td className="py-2.5 pr-2 text-theme-text-secondary">{row.reportCount}</td>
+                      <td className="py-2.5 pr-2 text-theme-text-secondary whitespace-nowrap">{row.lastSubmittedAt}</td>
+                      <td className="py-2.5 pr-2">
+                        <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-lg border ${colorTokens.bg} ${colorTokens.text} ${colorTokens.border}`}>
+                          <Star className="h-3 w-3 fill-current" />
+                          {row.finalScore.toFixed(2)}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Grid: Task Evaluation Queue & Evaluation History */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -651,7 +725,20 @@ export default function RatingsPage() {
                           )}
                         </td>
                         <td className="py-3.5 pr-2 text-theme-text-secondary whitespace-nowrap">
-                          <span className="font-semibold text-theme-text-primary">{rating.quality}</span> &middot; <span className="font-semibold text-theme-text-primary">{rating.timeliness}</span> &middot; <span className="font-semibold text-theme-text-primary">{rating.initiative}</span> &middot; <span className="font-semibold text-theme-text-primary">{rating.collaboration}</span>
+                          {rating.criteriaSet && rating.scores ? (
+                            <span title={CRITERIA_SET_LABEL[rating.criteriaSet]}>
+                              {RATING_CRITERIA[rating.criteriaSet].map((c, i) => (
+                                <React.Fragment key={c.key}>
+                                  {i > 0 && ' · '}
+                                  <span className="font-semibold text-theme-text-primary" title={c.label}>{(rating.scores as Record<string, number>)[c.key]}</span>
+                                </React.Fragment>
+                              ))}
+                            </span>
+                          ) : (
+                            <>
+                              <span className="font-semibold text-theme-text-primary">{rating.quality}</span> &middot; <span className="font-semibold text-theme-text-primary">{rating.timeliness}</span> &middot; <span className="font-semibold text-theme-text-primary">{rating.initiative}</span> &middot; <span className="font-semibold text-theme-text-primary">{rating.collaboration}</span>
+                            </>
+                          )}
                         </td>
                         <td className="py-3.5 pr-2 whitespace-nowrap">
                           <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-lg border ${colorTokens.bg} ${colorTokens.text} ${colorTokens.border}`}>
@@ -750,62 +837,27 @@ export default function RatingsPage() {
             </div>
 
             <form onSubmit={handleEvaluateSubmit} className="space-y-4 text-xs">
-              
+
+              <div className="text-[10px] font-bold uppercase tracking-wide text-accent">
+                {CRITERIA_SET_LABEL[activeCriteriaSet]} Rubric
+              </div>
+
               {/* Score Sliders */}
               <div className="space-y-3">
-                
-                {/* Quality */}
-                <div className="space-y-1">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="font-semibold text-theme-text-primary">1. Quality of Deliverable</span>
-                    <span className="font-bold text-accent">{quality.toFixed(1)} / 5</span>
+                {RATING_CRITERIA[activeCriteriaSet].map((criterion, idx) => (
+                  <div className="space-y-1" key={criterion.key} title={criterion.description}>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-semibold text-theme-text-primary">{idx + 1}. {criterion.label}</span>
+                      <span className="font-bold text-accent">{(scores[criterion.key] ?? 5).toFixed(1)} / 5</span>
+                    </div>
+                    <input
+                      type="range" min="1" max="5" step="0.5"
+                      value={scores[criterion.key] ?? 5}
+                      onChange={(e) => setScores(s => ({ ...s, [criterion.key]: parseFloat(e.target.value) }))}
+                      className="w-full accent-accent h-1.5 bg-theme-border/40 rounded-lg appearance-none cursor-pointer"
+                    />
                   </div>
-                  <input
-                    type="range" min="1" max="5" step="0.5"
-                    value={quality} onChange={(e) => setQuality(parseFloat(e.target.value))}
-                    className="w-full accent-accent h-1.5 bg-theme-border/40 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-
-                {/* Timeliness */}
-                <div className="space-y-1">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="font-semibold text-theme-text-primary">2. Timeliness & Deadline Adherence</span>
-                    <span className="font-bold text-accent">{timeliness.toFixed(1)} / 5</span>
-                  </div>
-                  <input
-                    type="range" min="1" max="5" step="0.5"
-                    value={timeliness} onChange={(e) => setTimeliness(parseFloat(e.target.value))}
-                    className="w-full accent-accent h-1.5 bg-theme-border/40 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-
-                {/* Initiative */}
-                <div className="space-y-1">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="font-semibold text-theme-text-primary">3. Proactive Initiative & Problem Solving</span>
-                    <span className="font-bold text-accent">{initiative.toFixed(1)} / 5</span>
-                  </div>
-                  <input
-                    type="range" min="1" max="5" step="0.5"
-                    value={initiative} onChange={(e) => setInitiative(parseFloat(e.target.value))}
-                    className="w-full accent-accent h-1.5 bg-theme-border/40 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-
-                {/* Collaboration */}
-                <div className="space-y-1">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="font-semibold text-theme-text-primary">4. Team Collaboration & Communication</span>
-                    <span className="font-bold text-accent">{collaboration.toFixed(1)} / 5</span>
-                  </div>
-                  <input
-                    type="range" min="1" max="5" step="0.5"
-                    value={collaboration} onChange={(e) => setCollaboration(parseFloat(e.target.value))}
-                    className="w-full accent-accent h-1.5 bg-theme-border/40 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-
+                ))}
               </div>
 
               {/* Remarks Notes */}
@@ -825,7 +877,7 @@ export default function RatingsPage() {
                 <span className="font-semibold text-theme-text-secondary">Calculated Performance Rating:</span>
                 <span className="text-sm font-black text-warning flex items-center gap-1">
                   <Star className="h-4 w-4 fill-warning stroke-warning" />
-                  {((quality + timeliness + initiative + collaboration) / 4).toFixed(1)} / 5.0
+                  {averageScore(scores).toFixed(1)} / 5.0
                 </span>
               </div>
 
