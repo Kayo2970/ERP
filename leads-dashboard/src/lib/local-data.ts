@@ -1,4 +1,5 @@
 import { trackSync } from './sync-status';
+import { averageScore } from './rating-criteria';
 
 // -------------------------------------------------------------
 // Session token — attached to every authenticated API call so the server
@@ -291,6 +292,10 @@ export interface TaskItem {
   decidedAt?: string;
   ratingScore?: number;
   ratedAt?: string;
+  // Set once by task-deadline-scheduler.ts after it emails the assignee(s) a
+  // reminder the day before dueDate — the idempotency guard that stops the
+  // same task from being reminded on every subsequent daily check.
+  deadlineReminderSentAt?: string;
   // Set by syncDesignTask() when this task was auto-created/completed from a
   // Style-Approved Design Portal submission — lets the Ratings page grant
   // Design Heads evaluation rights on it (see permissions.ts) without
@@ -349,7 +354,7 @@ export interface TaskItem {
   // flagged as needing a real creative brief up front, rather than a title
   // alone — see briefDescription/attachments below. Purely a UI/creation-time
   // affordance: it doesn't change any approval or visibility rule.
-  taskCategory?: 'general' | 'design';
+  taskCategory?: 'general' | 'design' | 'reportWriting';
   // Free-text brief of what the requester wants from the deliverable — only
   // collected/shown when taskCategory === 'design', but stored generically
   // in case a future task type wants the same field.
@@ -410,6 +415,14 @@ export interface EventReportItem {
   // means the report IS approved but nobody was actually emailed yet.
   emailSent?: boolean;
   emailError?: string;
+  // Report Writing rubric scores (see rating-criteria.ts's RATING_CRITERIA.
+  // reportWriting), entered by whichever of the Centre Head / GG Campus Head
+  // of Events reviews the report — same trust level as approving it. Feeds
+  // the decay-weighted Final Score on the Ratings page (report-scoring.ts).
+  reportScores?: Record<string, number>;
+  reportScore?: number;
+  scoredBy?: string;
+  scoredAt?: string;
 }
 
 /**
@@ -473,6 +486,19 @@ export interface RatingItem {
   // this field existed — treated as neither slot, so old ratings keep
   // displaying exactly as before rather than retroactively joining an average.
   reviewerRole?: 'CENTRE_HEAD' | 'GG_HEAD' | 'DESIGN_HEAD';
+  // Which 5-criterion rubric this rating was scored against (see
+  // rating-criteria.ts) — General/Design/Report Writing. Undefined on
+  // ratings created before this field existed.
+  criteriaSet?: 'general' | 'design' | 'reportWriting';
+  // The actual per-criterion scores (keyed by RATING_CRITERIA[criteriaSet]'s
+  // `key`s), populated for every rating submitted after this field existed.
+  scores?: Record<string, number>;
+  // Legacy fixed 4-criteria fields. Still populated (as a best-effort
+  // projection of `scores`, see projectLegacyRatingFields) on every new
+  // rating so existing analytics/exports built around exactly these 4
+  // fields (report-generator.ts, reports/page.tsx, student-profile-modal.tsx)
+  // keep working unchanged; on ratings created before criteriaSet existed,
+  // these are the only scores that ever existed.
   quality: number;
   timeliness: number;
   initiative: number;
@@ -2532,6 +2558,32 @@ export async function approveEventReport(id: string, as: 'centre_head' | 'gg_eve
   return current[idx] || null;
 }
 
+/** Score a report against the Report Writing rubric (Clarity, Analysis,
+ *  Structure, Comprehensiveness, Accuracy — see rating-criteria.ts). Either
+ *  reviewer (Centre Head or GG Campus Head of Events) can enter or edit the
+ *  score, same trust level as approving the report. Feeds the decay-weighted
+ *  Final Score leaderboard on the Ratings page (report-scoring.ts). */
+export async function scoreEventReport(id: string, reportScores: Record<string, number>, actorName: string): Promise<EventReportItem | null> {
+  const patch = {
+    reportScores,
+    reportScore: averageScore(reportScores),
+    scoredBy: actorName,
+    scoredAt: new Date().toISOString(),
+  };
+
+  const serverResult = await serverPatch('/api/event-reports', id, patch);
+  if (!serverResult) return null;
+
+  const current = getEventReports();
+  const idx = current.findIndex(r => r.id === id);
+  if (idx !== -1) {
+    current[idx] = { ...current[idx], ...serverResult };
+    saveEventReports(current);
+  }
+  logAuditEvent('EVENT_REPORT_SCORED', actorName, `Scored event report "${serverResult.eventTitle || ''}" ${patch.reportScore}/5.0 on the Report Writing rubric`);
+  return current[idx] || null;
+}
+
 export async function rejectEventReport(id: string, actorName: string, reason?: string): Promise<EventReportItem | null> {
   const serverResult = await serverPatch('/api/event-reports', id, {
     status: 'rejected',
@@ -3204,6 +3256,8 @@ function propagateCommitteeRating(task: TaskItem, parentRating: RatingItem): voi
     if (existingIdx !== -1) {
       ratings[existingIdx] = {
         ...ratings[existingIdx],
+        criteriaSet: parentRating.criteriaSet,
+        scores: parentRating.scores,
         quality: parentRating.quality,
         timeliness: parentRating.timeliness,
         initiative: parentRating.initiative,
@@ -3227,6 +3281,8 @@ function propagateCommitteeRating(task: TaskItem, parentRating: RatingItem): voi
       targetName: memberObj.name,
       raterName: parentRating.raterName,
       reviewerRole: parentRating.reviewerRole,
+      criteriaSet: parentRating.criteriaSet,
+      scores: parentRating.scores,
       quality: parentRating.quality,
       timeliness: parentRating.timeliness,
       initiative: parentRating.initiative,
@@ -3269,6 +3325,8 @@ function propagateGroupRating(task: TaskItem, parentRating: RatingItem): void {
     if (existingIdx !== -1) {
       ratings[existingIdx] = {
         ...ratings[existingIdx],
+        criteriaSet: parentRating.criteriaSet,
+        scores: parentRating.scores,
         quality: parentRating.quality,
         timeliness: parentRating.timeliness,
         initiative: parentRating.initiative,
@@ -3292,6 +3350,8 @@ function propagateGroupRating(task: TaskItem, parentRating: RatingItem): void {
       targetName: memberObj.name,
       raterName: parentRating.raterName,
       reviewerRole: parentRating.reviewerRole,
+      criteriaSet: parentRating.criteriaSet,
+      scores: parentRating.scores,
       quality: parentRating.quality,
       timeliness: parentRating.timeliness,
       initiative: parentRating.initiative,

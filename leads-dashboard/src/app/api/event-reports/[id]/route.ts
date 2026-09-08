@@ -35,6 +35,8 @@ export async function PATCH(
     const settings = await getAccessLevelSettingsServer();
     const isApprovalAction = Object.prototype.hasOwnProperty.call(body, 'centreHeadApproved')
       || Object.prototype.hasOwnProperty.call(body, 'eventsHeadGgApproved')
+      || Object.prototype.hasOwnProperty.call(body, 'reportScores')
+      || Object.prototype.hasOwnProperty.call(body, 'reportScore')
       || body.status === 'approved'
       || body.status === 'rejected';
     if (isApprovalAction) {

@@ -120,7 +120,7 @@ export default function TasksPage() {
   // Design-brief task type — lets the requester (typically Faculty) attach
   // reference files and write out exactly what they want from the deliverable,
   // instead of a title alone.
-  const [taskCategory, setTaskCategory] = useState<'general' | 'design'>('general');
+  const [taskCategory, setTaskCategory] = useState<'general' | 'design' | 'reportWriting'>('general');
   const [briefDescription, setBriefDescription] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [existingAttachments, setExistingAttachments] = useState<ReceiptFile[]>([]);
@@ -1441,6 +1441,16 @@ export default function TasksPage() {
                     />
                     <Palette className="h-3.5 w-3.5 text-accent" />
                     Design Task
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer font-medium text-theme-text-primary">
+                    <input
+                      type="radio"
+                      name="taskCategory"
+                      checked={taskCategory === 'reportWriting'}
+                      onChange={() => setTaskCategory('reportWriting')}
+                      className="accent-accent"
+                    />
+                    Report Writing Task
                   </label>
                 </div>
               </div>

@@ -21,6 +21,7 @@ import {
   resubmitEventReport,
   approveEventReport,
   rejectEventReport,
+  scoreEventReport,
   deleteEventReport,
   isApprovedEvent,
   getTasks,
@@ -30,6 +31,7 @@ import {
   TaskItem,
 } from '@/lib/local-data';
 import { canSubmitEventReport, canReviewEventReports, canViewEventReports, isCentreHead, isEventsHeadGgCampus } from '@/lib/permissions';
+import { RATING_CRITERIA } from '@/lib/rating-criteria';
 import { FileDropzone, FilePreviewRow, createProgressTracker } from '@/components/ui/file-dropzone';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -56,6 +58,10 @@ export default function EventReportsPage() {
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectionReasonInput, setRejectionReasonInput] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const [scoringId, setScoringId] = useState<string | null>(null);
+  const [scoringValues, setScoringValues] = useState<Record<string, number>>({});
+  const [isScoring, setIsScoring] = useState(false);
 
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -225,6 +231,29 @@ export default function EventReportsPage() {
       : 'Approved your side.');
   };
 
+  const openScoring = (report: EventReportItem) => {
+    setScoringId(report.id);
+    const initial: Record<string, number> = {};
+    RATING_CRITERIA.reportWriting.forEach(c => { initial[c.key] = report.reportScores?.[c.key] ?? 5; });
+    setScoringValues(initial);
+  };
+
+  const handleSubmitScore = async () => {
+    if (!scoringId) return;
+    setIsScoring(true);
+    try {
+      const result = await scoreEventReport(scoringId, scoringValues, user?.name || 'Reviewer');
+      if (!result) { triggerError('Failed to save the report score.'); return; }
+      setReports(getEventReports());
+      setScoringId(null);
+      triggerSuccess(`Scored ${result.reportScore?.toFixed(1)}/5.0 on the Report Writing rubric.`);
+    } catch (err: any) {
+      triggerError(err.message || 'Failed to save the report score.');
+    } finally {
+      setIsScoring(false);
+    }
+  };
+
   const handleConfirmReject = async () => {
     if (!rejectingId) return;
     const result = await rejectEventReport(rejectingId, user?.name || 'Reviewer', rejectionReasonInput || undefined);
@@ -368,11 +397,21 @@ export default function EventReportsPage() {
                     {statusBadge(report)}
                   </div>
                   {approvalChecklist(report)}
+                  {report.reportScore != null && (
+                    <p className="text-[10px] font-semibold text-theme-text-secondary">
+                      Report Writing score: <span className="text-theme-text-primary">{report.reportScore.toFixed(1)}/5.0</span> (by {report.scoredBy})
+                    </p>
+                  )}
                   <div className="flex items-center gap-2 pt-1">
                     {report.fileUrl && (
                       <a href={report.fileUrl} target="_blank" rel="noopener noreferrer" className="p-1.5 text-accent hover:bg-accent/10 rounded-lg transition-all" title="Download report">
                         <Download className="h-3.5 w-3.5" />
                       </a>
+                    )}
+                    {(viewerIsCentreHead || viewerIsGgEventsHead) && (
+                      <button onClick={() => openScoring(report)} className="px-3 py-1.5 bg-accent/15 hover:bg-accent/25 text-accent border border-accent/30 text-[11px] font-bold rounded-lg transition-all cursor-pointer">
+                        {report.reportScore != null ? 'Edit Score' : 'Score Report'}
+                      </button>
                     )}
                     {viewerIsCentreHead && !report.centreHeadApproved && (
                       <button onClick={() => handleApprove(report, 'centre_head')} className="flex-1 py-1.5 bg-success/15 hover:bg-success/25 text-success border border-success/30 text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5">
@@ -388,6 +427,37 @@ export default function EventReportsPage() {
                       <X className="h-3 w-3" /> Reject
                     </button>
                   </div>
+
+                  {scoringId === report.id && (
+                    <div className="space-y-2.5 p-3 bg-accent/5 border border-accent/20 rounded-xl">
+                      {RATING_CRITERIA.reportWriting.map(criterion => (
+                        <div className="space-y-1" key={criterion.key} title={criterion.description}>
+                          <div className="flex justify-between items-center text-[11px]">
+                            <span className="font-semibold text-theme-text-primary">{criterion.label}</span>
+                            <span className="font-bold text-accent">{(scoringValues[criterion.key] ?? 5).toFixed(1)} / 5</span>
+                          </div>
+                          <input
+                            type="range" min="1" max="5" step="0.5"
+                            value={scoringValues[criterion.key] ?? 5}
+                            onChange={(e) => setScoringValues(v => ({ ...v, [criterion.key]: parseFloat(e.target.value) }))}
+                            className="w-full accent-accent h-1.5 bg-theme-border/40 rounded-lg appearance-none cursor-pointer"
+                          />
+                        </div>
+                      ))}
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          onClick={handleSubmitScore}
+                          disabled={isScoring}
+                          className="flex-1 py-1.5 bg-accent hover:bg-primary-light text-white text-[11px] font-bold rounded-lg transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          {isScoring ? 'Saving...' : 'Save Score'}
+                        </button>
+                        <button onClick={() => setScoringId(null)} className="px-3 py-1.5 bg-theme-border/20 hover:bg-theme-border/30 text-theme-text-secondary text-[11px] font-bold rounded-lg transition-all cursor-pointer">
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

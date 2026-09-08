@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, ChevronRight, CalendarDays, PartyPopper } from 'lucide-react';
-import { getEvents, getEffectiveEventStatus, formatEventDateRange, hasEventPlanningPhase, getEventSortTime, EventItem } from '@/lib/local-data';
+import { ChevronLeft, ChevronRight, CalendarDays, PartyPopper, ClipboardCheck } from 'lucide-react';
+import { getEvents, getTasks, getEffectiveEventStatus, formatEventDateRange, hasEventPlanningPhase, getEventSortTime, EventItem, TaskItem } from '@/lib/local-data';
 import { canViewEvent, canApprovePendingEvent } from '@/lib/permissions';
 
 export default function CalendarPage() {
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [user, setUser] = useState<any>(null);
   const [calendarDate, setCalendarDate] = useState(new Date(2026, 7, 1)); // Default August 2026
   const [selectedDay, setSelectedDay] = useState<number | null>(10); // Default to 10th
@@ -15,6 +16,7 @@ export default function CalendarPage() {
   useEffect(() => {
     const refreshData = () => {
       setEvents(getEvents());
+      setTasks(getTasks());
     };
     refreshData();
 
@@ -94,6 +96,13 @@ export default function CalendarPage() {
     return visibleEvents.filter(e => hasEventPlanningPhase(e) && checkStr === e.planningStartDate);
   };
 
+  // Task deadlines shown alongside events on the same grid — a task's
+  // dueDate places it on the calendar the same way an event's startDate does.
+  const getDayTasks = (day: number) => {
+    const checkStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return tasks.filter(t => t.status !== 'Completed' && t.dueDate === checkStr);
+  };
+
   const upcomingEvents = [...visibleEvents]
     .filter(e => !e.isHoliday)
     .filter(e => {
@@ -104,6 +113,10 @@ export default function CalendarPage() {
     .slice(0, 6);
 
   const todayStr = new Date().toISOString().slice(0, 10);
+  const upcomingTaskDeadlines = [...tasks]
+    .filter(t => t.status !== 'Completed' && t.dueDate >= todayStr)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+    .slice(0, 6);
   const upcomingHolidays = [...visibleEvents]
     .filter(e => e.isHoliday && e.startDate >= todayStr)
     .sort((a, b) => a.startDate.localeCompare(b.startDate))
@@ -171,6 +184,8 @@ export default function CalendarPage() {
                 const hasEvents = dayEvents.length > 0;
                 const dayPlanningEvents = getDayPlanningEvents(day);
                 const hasPlanning = dayPlanningEvents.length > 0;
+                const dayTasks = getDayTasks(day);
+                const hasTasks = dayTasks.length > 0;
                 const isSelected = selectedDay === day;
 
                 return (
@@ -184,9 +199,17 @@ export default function CalendarPage() {
                           ? 'bg-accent/15 border border-accent/30 text-accent hover:bg-accent/25'
                           : hasPlanning
                             ? 'bg-warning/10 border border-warning/25 text-warning hover:bg-warning/20'
-                            : 'hover:bg-theme-border/30 text-theme-text-primary'
+                            : hasTasks
+                              ? 'bg-danger/10 border border-danger/25 text-danger hover:bg-danger/20'
+                              : 'hover:bg-theme-border/30 text-theme-text-primary'
                     }`}
-                    title={hasPlanning ? `${dayPlanningEvents.map(e => e.title).join(', ')} — prep/planning phase` : undefined}
+                    title={
+                      hasTasks
+                        ? `${dayTasks.map(t => t.title).join(', ')} — task deadline`
+                        : hasPlanning
+                          ? `${dayPlanningEvents.map(e => e.title).join(', ')} — prep/planning phase`
+                          : undefined
+                    }
                   >
                     <span>{day}</span>
                     {hasEvents && !isSelected && (
@@ -194,6 +217,9 @@ export default function CalendarPage() {
                     )}
                     {!hasEvents && hasPlanning && !isSelected && (
                       <span className="absolute bottom-1 h-1.5 w-1.5 bg-warning rounded-full"></span>
+                    )}
+                    {hasTasks && !isSelected && (
+                      <span className="absolute top-1 right-1 h-1.5 w-1.5 bg-danger rounded-full"></span>
                     )}
                   </button>
                 );
@@ -210,7 +236,8 @@ export default function CalendarPage() {
               (() => {
                 const dayEvents = getDayEvents(selectedDay);
                 const dayPlanningEvents = getDayPlanningEvents(selectedDay);
-                if (dayEvents.length === 0 && dayPlanningEvents.length === 0) {
+                const dayTasks = getDayTasks(selectedDay);
+                if (dayEvents.length === 0 && dayPlanningEvents.length === 0 && dayTasks.length === 0) {
                   return (
                     <div className="text-xs text-theme-text-secondary py-3 text-center bg-theme-border/10 border border-theme-border/20 rounded-xl">
                       No events scheduled for this date.
@@ -218,6 +245,22 @@ export default function CalendarPage() {
                   );
                 }
                 return [
+                  ...dayTasks.map(t => (
+                    <Link
+                      key={`task-${t.id}`}
+                      href="/dashboard/tasks"
+                      className="p-3 bg-danger/10 border border-danger/25 rounded-xl flex items-center justify-between gap-3 hover:bg-danger/20 transition-all block cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2">
+                        <ClipboardCheck className="h-3.5 w-3.5 text-danger shrink-0" />
+                        <div>
+                          <h5 className="font-semibold text-theme-text-primary text-xs hover:text-accent transition-colors">{t.title}</h5>
+                          <p className="text-[10px] text-theme-text-secondary mt-0.5">{t.assignee}{t.event ? ` · ${t.event}` : ''}</p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] px-2.5 py-0.5 bg-danger/15 text-danger font-semibold rounded-md shrink-0">Deadline</span>
+                    </Link>
+                  )),
                   ...dayPlanningEvents.map(ev => (
                     <Link
                       key={`planning-${ev.id}`}
@@ -284,6 +327,32 @@ export default function CalendarPage() {
                 >
                   <h5 className="font-semibold text-theme-text-primary text-xs hover:text-accent transition-colors">{ev.title}</h5>
                   <p className={`text-[10px] ${ev.datesTBD ? 'text-warning font-semibold' : 'text-theme-text-secondary'}`}>{formatEventDateRange(ev)}</p>
+                </Link>
+              ))
+            )}
+          </div>
+
+          <h3 className="text-base font-bold text-theme-text-primary flex items-center gap-1.5 pt-2 border-t border-theme-border/20">
+            <ClipboardCheck className="h-4 w-4 text-danger" />
+            Upcoming Task Deadlines
+          </h3>
+          <div className="space-y-2 text-xs">
+            {upcomingTaskDeadlines.length === 0 ? (
+              <div className="text-xs text-theme-text-secondary py-3 text-center bg-theme-border/10 border border-theme-border/20 rounded-xl">
+                No upcoming task deadlines.
+              </div>
+            ) : (
+              upcomingTaskDeadlines.map(t => (
+                <Link
+                  key={t.id}
+                  href="/dashboard/tasks"
+                  className="p-3 bg-danger/10 border border-danger/25 rounded-xl flex items-center justify-between gap-2 hover:bg-danger/20 transition-all block cursor-pointer"
+                >
+                  <div>
+                    <h5 className="font-semibold text-theme-text-primary text-xs hover:text-accent transition-colors">{t.title}</h5>
+                    <p className="text-[10px] text-theme-text-secondary mt-0.5">{t.assignee}</p>
+                  </div>
+                  <span className="text-[10px] text-danger font-semibold shrink-0">{t.dueDate}</span>
                 </Link>
               ))
             )}
