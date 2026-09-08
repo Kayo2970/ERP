@@ -31,6 +31,15 @@ export default function VisitingCardPage() {
   const [walletWalletApiKey, setWalletWalletApiKey] = useState('');
   const [isSavingWallet, setIsSavingWallet] = useState(false);
 
+  // Whether Apple/Google Wallet buttons are actually live right now — every
+  // member can see this (unlike walletStatus above, which needs Super User),
+  // so the Live Preview shows real buttons instead of always "coming soon".
+  const [walletAvailability, setWalletAvailability] = useState({
+    appleWalletAvailable: false,
+    googleWalletAvailable: false,
+    samsungWalletAvailable: false,
+  });
+
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -65,11 +74,17 @@ export default function VisitingCardPage() {
     } catch (e) {
       console.error(e);
     }
+    fetchWalletAvailability();
   }, []);
 
   const fetchWalletStatus = async () => {
     const res = await fetch('/api/admin/wallet-settings', { headers: authHeaders() });
     if (res.ok) setWalletStatus(await res.json());
+  };
+
+  const fetchWalletAvailability = async () => {
+    const res = await fetch('/api/wallet-availability', { headers: authHeaders() });
+    if (res.ok) setWalletAvailability(await res.json());
   };
 
   const cardPhotoUpload = useUploadTask(async (file, onProgress) => {
@@ -159,7 +174,7 @@ export default function VisitingCardPage() {
         return;
       }
       setWalletWalletApiKey('');
-      await fetchWalletStatus();
+      await Promise.all([fetchWalletStatus(), fetchWalletAvailability()]);
       triggerSuccess('Wallet credentials saved.');
     } finally {
       setIsSavingWallet(false);
@@ -345,6 +360,9 @@ export default function VisitingCardPage() {
             }}
             slug={cardSlug || 'preview'}
             showActions={Boolean(cardSlug)}
+            appleWalletAvailable={walletAvailability.appleWalletAvailable}
+            googleWalletAvailable={walletAvailability.googleWalletAvailable}
+            samsungWalletAvailable={walletAvailability.samsungWalletAvailable}
           />
         </div>
 
