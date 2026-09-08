@@ -29,6 +29,16 @@ export async function PATCH(
     const updates: any = await parseJsonBody(request, MemberWriteSchema);
 
     delete updates.passwordHash; // never settable through this route
+    // Server-managed wallet-pass cache (see card-wallet-pass.ts) — never
+    // settable through this route either. MemberWriteSchema is a passthrough
+    // schema (see validation.ts), so without this a client could otherwise
+    // point cardPassAppleUrl at an arbitrary storage key and have the
+    // apple-pass route serve that file back as their .pkpass download.
+    delete updates.cardPassSerial;
+    delete updates.cardPassContentHash;
+    delete updates.cardPassAppleUrl;
+    delete updates.cardPassAppleStorageKey;
+    delete updates.cardPassGoogleSaveUrl;
 
     const isSelf = actor.id === id;
     const settings = await getAccessLevelSettingsServer();

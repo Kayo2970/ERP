@@ -117,6 +117,15 @@ export interface Member {
   cardPhotoUrl?: string;        // servable path under /api/files
   cardPhotoStorageKey?: string;
   cardViews?: number;
+  // Cached WalletWallet pass (see src/lib/wallet/card-wallet-pass.ts) — set
+  // server-side only, never through the members PATCH route/schema.
+  // Regenerated automatically when cardPassContentHash no longer matches
+  // the member's current card fields.
+  cardPassSerial?: string;
+  cardPassContentHash?: string;
+  cardPassAppleUrl?: string;
+  cardPassAppleStorageKey?: string;
+  cardPassGoogleSaveUrl?: string;
 }
 
 // A person encountered outside the org (event guest, sponsor contact, vendor,

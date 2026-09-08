@@ -92,18 +92,11 @@ export default function SettingsPage() {
   const [isCardQrOpen, setIsCardQrOpen] = useState(false);
   const [isSavingCard, setIsSavingCard] = useState(false);
 
-  // Digital Visiting Card — Wallet setup (Super User only)
+  // Digital Visiting Card — Wallet setup (Super User only). Apple + Google
+  // passes are both issued through a single WalletWallet API key
+  // (https://walletwallet.dev) — see docs/wallet-setup.md.
   const [walletStatus, setWalletStatus] = useState<any>(null);
-  const [appleP12Base64, setAppleP12Base64] = useState('');
-  const [appleP12FileName, setAppleP12FileName] = useState('');
-  const [appleP12Password, setAppleP12Password] = useState('');
-  const [appleWwdrBase64, setAppleWwdrBase64] = useState('');
-  const [appleWwdrFileName, setAppleWwdrFileName] = useState('');
-  const [appleTeamId, setAppleTeamId] = useState('');
-  const [applePassTypeId, setApplePassTypeId] = useState('');
-  const [googleSaJsonBase64, setGoogleSaJsonBase64] = useState('');
-  const [googleSaFileName, setGoogleSaFileName] = useState('');
-  const [googleIssuerId, setGoogleIssuerId] = useState('');
+  const [walletWalletApiKey, setWalletWalletApiKey] = useState('');
   const [isSavingWallet, setIsSavingWallet] = useState(false);
 
   // Notification state
@@ -399,69 +392,29 @@ export default function SettingsPage() {
 
   const cardPublicUrl = cardSlug && typeof window !== 'undefined' ? `${window.location.origin}/card/${cardSlug}` : '';
 
-  const readFileAsBase64 = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result !== 'string') { reject(new Error('Could not read that file.')); return; }
-        // Strip the "data:<mime>;base64," prefix — only the raw base64 payload is stored.
-        resolve(reader.result.split(',').pop() || '');
-      };
-      reader.onerror = () => reject(new Error('Could not read that file.'));
-      reader.readAsDataURL(file);
-    });
-
   const fetchWalletStatus = async () => {
     const res = await fetch('/api/admin/wallet-settings', { headers: authHeaders() });
     if (res.ok) setWalletStatus(await res.json());
   };
 
   const handleSaveWalletSettings = async () => {
+    if (!walletWalletApiKey.trim()) {
+      triggerError('Enter a WalletWallet API key first.');
+      return;
+    }
     setIsSavingWallet(true);
     try {
-      const body: any = {};
-      if (appleP12Base64 || appleWwdrBase64 || appleTeamId || applePassTypeId) {
-        body.apple = {
-          ...(appleP12Base64 ? { p12Base64: appleP12Base64 } : {}),
-          ...(appleP12Password ? { p12Password: appleP12Password } : {}),
-          ...(appleWwdrBase64 ? { wwdrPemBase64: appleWwdrBase64 } : {}),
-          ...(appleTeamId ? { teamIdentifier: appleTeamId.trim() } : {}),
-          ...(applePassTypeId ? { passTypeIdentifier: applePassTypeId.trim() } : {}),
-        };
-      }
-      if (googleSaJsonBase64 || googleIssuerId) {
-        let serviceAccountEmail = '';
-        let privateKey = '';
-        if (googleSaJsonBase64) {
-          try {
-            const sa = JSON.parse(atob(googleSaJsonBase64));
-            serviceAccountEmail = sa.client_email || '';
-            privateKey = sa.private_key || '';
-          } catch {
-            triggerError('That does not look like a valid Google service account JSON key file.');
-            return;
-          }
-        }
-        body.google = {
-          ...(googleIssuerId ? { issuerId: googleIssuerId.trim() } : {}),
-          ...(serviceAccountEmail ? { serviceAccountEmail } : {}),
-          ...(privateKey ? { privateKey } : {}),
-        };
-      }
-
       const res = await fetch('/api/admin/wallet-settings', {
         method: 'PATCH',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify(body),
+        body: JSON.stringify({ walletwallet: { apiKey: walletWalletApiKey.trim() } }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         triggerError(data.error || 'Failed to save wallet settings.');
         return;
       }
-      setAppleP12Base64(''); setAppleP12FileName(''); setAppleP12Password('');
-      setAppleWwdrBase64(''); setAppleWwdrFileName('');
-      setGoogleSaJsonBase64(''); setGoogleSaFileName('');
+      setWalletWalletApiKey('');
       await fetchWalletStatus();
       triggerSuccess('Wallet credentials saved.');
     } finally {
@@ -1257,121 +1210,41 @@ export default function SettingsPage() {
 
           {isWalletAdmin && (
             <div className="glass-panel rounded-2xl p-6 lg:col-span-3 space-y-5">
-              <div>
-                <h3 className="text-base font-bold text-theme-text-primary">Wallet Setup (Super User)</h3>
-                <p className="text-xs text-theme-text-secondary">
-                  Apple &amp; Google Wallet buttons stay hidden on every card until real credentials are added here.
-                  See <code className="text-accent">docs/wallet-setup.md</code> for exactly what to obtain from Apple / Google first.
-                </p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-theme-text-primary">Wallet Setup (Super User)</h3>
+                  <p className="text-xs text-theme-text-secondary">
+                    Apple &amp; Google Wallet passes are both issued through{' '}
+                    <a href="https://walletwallet.dev" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+                      WalletWallet
+                    </a>{' '}
+                    — no Apple/Google developer certificates needed. Sign up, grab an API key, paste it below.
+                    See <code className="text-accent">docs/wallet-setup.md</code> for details.
+                  </p>
+                </div>
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${walletStatus?.walletWalletConfigured ? 'bg-success/15 text-success' : 'bg-theme-border/30 text-theme-text-secondary'}`}>
+                  {walletStatus?.walletWalletConfigured ? 'Configured' : 'Not configured'}
+                </span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
-                {/* Apple Wallet */}
-                <div className="space-y-3 p-4 bg-theme-background/30 border border-theme-border/30 rounded-xl">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-bold text-theme-text-primary">Apple Wallet</h4>
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${walletStatus?.appleConfigured ? 'bg-success/15 text-success' : 'bg-theme-border/30 text-theme-text-secondary'}`}>
-                      {walletStatus?.appleConfigured ? 'Configured' : 'Not configured'}
-                    </span>
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="block font-medium text-theme-text-secondary">Pass Type ID Certificate (.p12)</label>
-                    <input
-                      type="file"
-                      accept=".p12"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        setAppleP12FileName(file.name);
-                        setAppleP12Base64(await readFileAsBase64(file));
-                      }}
-                      className="w-full text-[11px] text-theme-text-secondary file:mr-2 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-accent/15 file:text-accent file:cursor-pointer cursor-pointer"
-                    />
-                    {appleP12FileName && <p className="text-[10px] text-theme-text-secondary">{appleP12FileName}</p>}
-                  </div>
-                  <input
-                    type="password"
-                    value={appleP12Password}
-                    onChange={(e) => setAppleP12Password(e.target.value)}
-                    placeholder=".p12 password"
-                    className="w-full px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent"
-                  />
-                  <div className="space-y-1.5">
-                    <label className="block font-medium text-theme-text-secondary">Apple WWDR Certificate (.pem/.cer)</label>
-                    <input
-                      type="file"
-                      accept=".pem,.cer"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        setAppleWwdrFileName(file.name);
-                        setAppleWwdrBase64(await readFileAsBase64(file));
-                      }}
-                      className="w-full text-[11px] text-theme-text-secondary file:mr-2 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-accent/15 file:text-accent file:cursor-pointer cursor-pointer"
-                    />
-                    {appleWwdrFileName && <p className="text-[10px] text-theme-text-secondary">{appleWwdrFileName}</p>}
-                  </div>
-                  <input
-                    type="text"
-                    value={appleTeamId}
-                    onChange={(e) => setAppleTeamId(e.target.value)}
-                    placeholder={walletStatus?.appleTeamIdentifier || 'Team ID'}
-                    className="w-full px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent"
-                  />
-                  <input
-                    type="text"
-                    value={applePassTypeId}
-                    onChange={(e) => setApplePassTypeId(e.target.value)}
-                    placeholder={walletStatus?.applePassTypeIdentifier || 'Pass Type Identifier (pass.xxx)'}
-                    className="w-full px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent"
-                  />
-                </div>
-
-                {/* Google Wallet */}
-                <div className="space-y-3 p-4 bg-theme-background/30 border border-theme-border/30 rounded-xl">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-bold text-theme-text-primary">Google Wallet</h4>
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${walletStatus?.googleConfigured ? 'bg-success/15 text-success' : 'bg-theme-border/30 text-theme-text-secondary'}`}>
-                      {walletStatus?.googleConfigured ? 'Configured' : 'Not configured'}
-                    </span>
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="block font-medium text-theme-text-secondary">Service Account JSON key</label>
-                    <input
-                      type="file"
-                      accept=".json"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        setGoogleSaFileName(file.name);
-                        setGoogleSaJsonBase64(await readFileAsBase64(file));
-                      }}
-                      className="w-full text-[11px] text-theme-text-secondary file:mr-2 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-accent/15 file:text-accent file:cursor-pointer cursor-pointer"
-                    />
-                    {googleSaFileName && <p className="text-[10px] text-theme-text-secondary">{googleSaFileName}</p>}
-                    {walletStatus?.googleServiceAccountEmail && (
-                      <p className="text-[10px] text-theme-text-secondary">Current: {walletStatus.googleServiceAccountEmail}</p>
-                    )}
-                  </div>
-                  <input
-                    type="text"
-                    value={googleIssuerId}
-                    onChange={(e) => setGoogleIssuerId(e.target.value)}
-                    placeholder={walletStatus?.googleIssuerId || 'Issuer ID'}
-                    className="w-full px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent"
-                  />
-                </div>
+              <div className="flex flex-col sm:flex-row gap-2.5 text-xs max-w-lg">
+                <input
+                  type="password"
+                  value={walletWalletApiKey}
+                  onChange={(e) => setWalletWalletApiKey(e.target.value)}
+                  placeholder="ww_live_..."
+                  className="flex-1 px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveWalletSettings}
+                  disabled={isSavingWallet}
+                  className="flex items-center justify-center gap-2 px-5 py-2.5 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/20 cursor-pointer disabled:opacity-50 shrink-0"
+                >
+                  <Save className="h-4 w-4" />
+                  {isSavingWallet ? 'Saving…' : 'Save'}
+                </button>
               </div>
-
-              <button
-                type="button"
-                onClick={handleSaveWalletSettings}
-                disabled={isSavingWallet}
-                className="flex items-center gap-2 px-5 py-2.5 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/20 cursor-pointer disabled:opacity-50"
-              >
-                <Save className="h-4 w-4" />
-                {isSavingWallet ? 'Saving…' : 'Save Wallet Credentials'}
-              </button>
             </div>
           )}
         </div>

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
-import { isAppleWalletConfigured } from '@/lib/wallet/apple-config';
-import { isGoogleWalletConfigured } from '@/lib/wallet/google-config';
+import { isWalletWalletConfigured } from '@/lib/wallet/walletwallet-config';
 import { isSamsungWalletConfigured } from '@/lib/wallet/samsung-config';
 
 // Public, no-auth endpoint — same pattern as /api/forms/[slug]: anyone with
@@ -28,11 +27,14 @@ export async function GET(
     return next;
   }).catch(() => {});
 
-  const [appleWalletAvailable, googleWalletAvailable, samsungWalletAvailable] = await Promise.all([
-    isAppleWalletConfigured(),
-    isGoogleWalletConfigured(),
+  // One WalletWallet API key issues both Apple and Google passes together
+  // (see src/lib/wallet/walletwallet-client.ts), so a single check gates both.
+  const [walletWalletAvailable, samsungWalletAvailable] = await Promise.all([
+    isWalletWalletConfigured(),
     isSamsungWalletConfigured(),
   ]);
+  const appleWalletAvailable = walletWalletAvailable;
+  const googleWalletAvailable = walletWalletAvailable;
 
   return NextResponse.json({
     slug: member.cardSlug,

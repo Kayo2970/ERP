@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { readCollection } from '@/lib/server-db';
-import { getGoogleWalletCredentials } from '@/lib/wallet/google-config';
-import { buildGoogleWalletSaveUrl } from '@/lib/wallet/google-pass';
+import { getWalletWalletApiKey } from '@/lib/wallet/walletwallet-config';
+import { getOrCreateWalletPass } from '@/lib/wallet/card-wallet-pass';
 import { getAppBaseUrl } from '@/lib/app-url';
 
 export async function GET(
@@ -16,25 +16,13 @@ export async function GET(
     return NextResponse.json({ error: 'Card not found' }, { status: 404 });
   }
 
-  const creds = await getGoogleWalletCredentials();
-  if (!creds) {
+  const apiKey = await getWalletWalletApiKey();
+  if (!apiKey) {
     return NextResponse.json({ error: 'Google Wallet is not configured on this server yet.' }, { status: 501 });
   }
 
   const cardUrl = `${getAppBaseUrl(request)}/card/${slug}`;
-  const saveUrl = buildGoogleWalletSaveUrl(
-    creds,
-    {
-      cardSlug: member.cardSlug,
-      name: member.name,
-      designation: member.cardDesignation || member.role,
-      phone: member.cardPhone,
-      email: member.email,
-      bio: member.cardBio,
-      socials: member.cardSocials,
-    },
-    cardUrl
-  );
+  const { googleSaveUrl } = await getOrCreateWalletPass(apiKey, member, cardUrl);
 
-  return NextResponse.json({ saveUrl });
+  return NextResponse.json({ saveUrl: googleSaveUrl });
 }
