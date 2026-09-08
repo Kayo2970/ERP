@@ -22,7 +22,6 @@ interface VisitingCardViewProps {
   showActions?: boolean;
   appleWalletAvailable?: boolean;
   googleWalletAvailable?: boolean;
-  samsungWalletAvailable?: boolean;
   onShowQr?: () => void;
 }
 
@@ -44,12 +43,11 @@ export function VisitingCardView({
   showActions = true,
   appleWalletAvailable = false,
   googleWalletAvailable = false,
-  samsungWalletAvailable = false,
   onShowQr,
 }: VisitingCardViewProps) {
   const socials = card.socials || {};
   const hasSocials = Boolean(socials.linkedin);
-  const anyWalletAvailable = appleWalletAvailable || googleWalletAvailable || samsungWalletAvailable;
+  const anyWalletAvailable = appleWalletAvailable || googleWalletAvailable;
   const [isOpeningGoogleWallet, setIsOpeningGoogleWallet] = useState(false);
 
   // Unlike Apple's route (which streams the .pkpass file directly), Google's
@@ -162,18 +160,6 @@ export function VisitingCardView({
                 <Wallet className="h-3.5 w-3.5" />
                 {googleWalletAvailable ? (isOpeningGoogleWallet ? 'Opening…' : 'Add to Google Wallet') : 'Google Wallet — coming soon'}
               </button>
-              <a
-                href={samsungWalletAvailable ? `/api/card/${slug}/samsung-pass` : undefined}
-                aria-disabled={!samsungWalletAvailable}
-                className={`flex items-center justify-center gap-2 w-full px-4 py-2.5 text-xs font-semibold rounded-xl transition-all border ${
-                  samsungWalletAvailable
-                    ? 'bg-[#1428A0] text-white border-[#1428A0]/60 hover:bg-[#0f1e80] cursor-pointer'
-                    : 'bg-theme-border/15 text-theme-text-secondary border-theme-border/30 cursor-not-allowed opacity-60'
-                }`}
-              >
-                <Wallet className="h-3.5 w-3.5" />
-                {samsungWalletAvailable ? 'Add to Samsung Wallet' : 'Samsung Wallet — coming soon'}
-              </a>
             </div>
 
             {onShowQr && (

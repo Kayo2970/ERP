@@ -9,7 +9,6 @@ interface PublicCardResponse extends VisitingCardData {
   slug: string;
   appleWalletAvailable: boolean;
   googleWalletAvailable: boolean;
-  samsungWalletAvailable: boolean;
 }
 
 export default function PublicVisitingCardPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -85,7 +84,6 @@ export default function PublicVisitingCardPage({ params }: { params: Promise<{ s
         slug={card.slug}
         appleWalletAvailable={card.appleWalletAvailable}
         googleWalletAvailable={card.googleWalletAvailable}
-        samsungWalletAvailable={card.samsungWalletAvailable}
         onShowQr={() => setIsQrOpen(true)}
       />
 

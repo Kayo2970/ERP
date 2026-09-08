@@ -130,6 +130,11 @@ export interface Member {
   cardPassAppleUrl?: string;
   cardPassAppleStorageKey?: string;
   cardPassGoogleSaveUrl?: string;
+  // ISO timestamps of each real WalletWallet API call spent regenerating
+  // this member's pass — powers the 2-per-15-days rate limit (Super Users
+  // exempt) in src/lib/wallet/card-wallet-pass.ts. Pruned to the current
+  // 15-day window on each write.
+  cardPassGenerations?: string[];
 }
 
 // A person encountered outside the org (event guest, sponsor contact, vendor,

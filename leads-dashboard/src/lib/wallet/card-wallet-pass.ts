@@ -3,6 +3,17 @@ import { mutateCollection } from '@/lib/server-db';
 import { saveBase64File, deleteStoredFile } from '@/lib/file-storage';
 import { createWalletPass } from './walletwallet-client';
 
+const RATE_LIMIT_WINDOW_MS = 15 * 24 * 60 * 60 * 1000; // 15 days
+const RATE_LIMIT_MAX_GENERATIONS = 2;
+
+export class WalletPassRateLimitError extends Error {
+  retryAt: string;
+  constructor(retryAt: string) {
+    super(`Wallet pass generation limit reached (${RATE_LIMIT_MAX_GENERATIONS} per 15 days). Try again after ${retryAt}.`);
+    this.retryAt = retryAt;
+  }
+}
+
 /**
  * Caches the WalletWallet-issued pass on the member record so a repeat visit
  * to the card page doesn't burn API quota re-creating an identical pass —
@@ -30,6 +41,27 @@ function contentHashFor(member: any, cardUrl: string): string {
   return crypto.createHash('sha256').update(payload).digest('hex');
 }
 
+/** Generation timestamps within the current rate-limit window (oldest first). */
+function recentGenerations(member: any): string[] {
+  const cutoff = Date.now() - RATE_LIMIT_WINDOW_MS;
+  return ((member.cardPassGenerations as string[]) || []).filter((iso) => new Date(iso).getTime() > cutoff);
+}
+
+/**
+ * Every non-Super-User member is limited to RATE_LIMIT_MAX_GENERATIONS
+ * actual WalletWallet API calls per rolling 15-day window — a cache hit
+ * (unchanged card content) never counts against this, only a real
+ * regeneration does. Super Users (tier 1) are exempt.
+ */
+export function checkWalletPassRateLimit(member: any): void {
+  if (member.tier === 1) return;
+  const recent = recentGenerations(member);
+  if (recent.length < RATE_LIMIT_MAX_GENERATIONS) return;
+  const oldest = new Date(recent[0]).getTime();
+  const retryAt = new Date(oldest + RATE_LIMIT_WINDOW_MS).toISOString();
+  throw new WalletPassRateLimitError(retryAt);
+}
+
 interface CachedWalletPass {
   appleUrl: string;
   googleSaveUrl: string;
@@ -41,6 +73,10 @@ export async function getOrCreateWalletPass(apiKey: string, member: any, cardUrl
   if (member.cardPassContentHash === hash && member.cardPassAppleUrl && member.cardPassGoogleSaveUrl) {
     return { appleUrl: member.cardPassAppleUrl, googleSaveUrl: member.cardPassGoogleSaveUrl };
   }
+
+  // A real regeneration is about to happen — enforce the per-member quota
+  // before spending an API call.
+  checkWalletPassRateLimit(member);
 
   const pass = await createWalletPass(
     apiKey,
@@ -71,6 +107,7 @@ export async function getOrCreateWalletPass(apiKey: string, member: any, cardUrl
     if (next[idx].cardPassAppleStorageKey && next[idx].cardPassAppleStorageKey !== stored.storageKey) {
       previousStorageKey = next[idx].cardPassAppleStorageKey;
     }
+    const generations = [...recentGenerations(next[idx]), new Date().toISOString()];
     next[idx] = {
       ...next[idx],
       cardPassSerial: pass.serialNumber,
@@ -78,6 +115,7 @@ export async function getOrCreateWalletPass(apiKey: string, member: any, cardUrl
       cardPassAppleUrl: stored.url,
       cardPassAppleStorageKey: stored.storageKey,
       cardPassGoogleSaveUrl: pass.googleSaveUrl,
+      cardPassGenerations: generations,
     };
     return next;
   });

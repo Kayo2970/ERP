@@ -39,6 +39,7 @@ export async function PATCH(
     delete updates.cardPassAppleUrl;
     delete updates.cardPassAppleStorageKey;
     delete updates.cardPassGoogleSaveUrl;
+    delete updates.cardPassGenerations; // rate-limit bookkeeping — never client-writable
 
     const isSelf = actor.id === id;
     const settings = await getAccessLevelSettingsServer();

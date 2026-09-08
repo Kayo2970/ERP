@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireSession } from '@/lib/session';
 import { isWalletWalletConfigured } from '@/lib/wallet/walletwallet-config';
-import { isSamsungWalletConfigured } from '@/lib/wallet/samsung-config';
 import { apiError } from '@/lib/api-error';
 
 /**
@@ -15,15 +14,11 @@ export async function GET(request: Request) {
   try {
     await requireSession(request);
 
-    const [walletWalletAvailable, samsungWalletAvailable] = await Promise.all([
-      isWalletWalletConfigured(),
-      isSamsungWalletConfigured(),
-    ]);
+    const walletWalletAvailable = await isWalletWalletConfigured();
 
     return NextResponse.json({
       appleWalletAvailable: walletWalletAvailable,
       googleWalletAvailable: walletWalletAvailable,
-      samsungWalletAvailable,
     });
   } catch (err: any) {
     return apiError(err, 'wallet-availability-get');

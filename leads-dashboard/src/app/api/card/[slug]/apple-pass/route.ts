@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { readCollection } from '@/lib/server-db';
 import { readStoredFile } from '@/lib/file-storage';
 import { getWalletWalletApiKey } from '@/lib/wallet/walletwallet-config';
-import { getOrCreateWalletPass } from '@/lib/wallet/card-wallet-pass';
+import { getOrCreateWalletPass, WalletPassRateLimitError } from '@/lib/wallet/card-wallet-pass';
 import { getAppBaseUrl } from '@/lib/app-url';
 
 export async function GET(
@@ -25,13 +25,20 @@ export async function GET(
   }
 
   const cardUrl = `${getAppBaseUrl(request)}/card/${slug}`;
-  const { appleUrl } = await getOrCreateWalletPass(apiKey, member, cardUrl);
-  const pkpass = await readStoredFile(appleUrl.replace('/api/files/', ''));
+  try {
+    const { appleUrl } = await getOrCreateWalletPass(apiKey, member, cardUrl);
+    const pkpass = await readStoredFile(appleUrl.replace('/api/files/', ''));
 
-  return new NextResponse(new Uint8Array(pkpass), {
-    headers: {
-      'Content-Type': 'application/vnd.apple.pkpass',
-      'Content-Disposition': `attachment; filename="${slug}.pkpass"`,
-    },
-  });
+    return new NextResponse(new Uint8Array(pkpass), {
+      headers: {
+        'Content-Type': 'application/vnd.apple.pkpass',
+        'Content-Disposition': `attachment; filename="${slug}.pkpass"`,
+      },
+    });
+  } catch (err) {
+    if (err instanceof WalletPassRateLimitError) {
+      return NextResponse.json({ error: err.message, retryAt: err.retryAt }, { status: 429 });
+    }
+    throw err;
+  }
 }

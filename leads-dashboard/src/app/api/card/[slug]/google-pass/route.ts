@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { readCollection } from '@/lib/server-db';
 import { getWalletWalletApiKey } from '@/lib/wallet/walletwallet-config';
-import { getOrCreateWalletPass } from '@/lib/wallet/card-wallet-pass';
+import { getOrCreateWalletPass, WalletPassRateLimitError } from '@/lib/wallet/card-wallet-pass';
 import { getAppBaseUrl } from '@/lib/app-url';
 
 export async function GET(
@@ -22,7 +22,13 @@ export async function GET(
   }
 
   const cardUrl = `${getAppBaseUrl(request)}/card/${slug}`;
-  const { googleSaveUrl } = await getOrCreateWalletPass(apiKey, member, cardUrl);
-
-  return NextResponse.json({ saveUrl: googleSaveUrl });
+  try {
+    const { googleSaveUrl } = await getOrCreateWalletPass(apiKey, member, cardUrl);
+    return NextResponse.json({ saveUrl: googleSaveUrl });
+  } catch (err) {
+    if (err instanceof WalletPassRateLimitError) {
+      return NextResponse.json({ error: err.message, retryAt: err.retryAt }, { status: 429 });
+    }
+    throw err;
+  }
 }

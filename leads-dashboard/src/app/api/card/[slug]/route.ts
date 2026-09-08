@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { isWalletWalletConfigured } from '@/lib/wallet/walletwallet-config';
-import { isSamsungWalletConfigured } from '@/lib/wallet/samsung-config';
 
 // Public, no-auth endpoint — same pattern as /api/forms/[slug]: anyone with
 // the link can view a published card. Only ever returns the safe public
@@ -29,12 +28,7 @@ export async function GET(
 
   // One WalletWallet API key issues both Apple and Google passes together
   // (see src/lib/wallet/walletwallet-client.ts), so a single check gates both.
-  const [walletWalletAvailable, samsungWalletAvailable] = await Promise.all([
-    isWalletWalletConfigured(),
-    isSamsungWalletConfigured(),
-  ]);
-  const appleWalletAvailable = walletWalletAvailable;
-  const googleWalletAvailable = walletWalletAvailable;
+  const walletWalletAvailable = await isWalletWalletConfigured();
 
   return NextResponse.json({
     slug: member.cardSlug,
@@ -45,8 +39,7 @@ export async function GET(
     email: member.email,
     socials: member.cardSocials || {},
     photoUrl: member.cardPhotoUrl || member.avatarUrl || '',
-    appleWalletAvailable,
-    googleWalletAvailable,
-    samsungWalletAvailable,
+    appleWalletAvailable: walletWalletAvailable,
+    googleWalletAvailable: walletWalletAvailable,
   });
 }

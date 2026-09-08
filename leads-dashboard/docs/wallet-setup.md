@@ -10,7 +10,10 @@ Both are issued through **[WalletWallet](https://walletwallet.dev)** — a
 hosted API that signs passes with its own Apple/Google credentials, so this
 deployment never needs its own Apple Developer Program certificate or
 Google Cloud service account. One API key activates both platforms at
-once.
+once. (There is no Samsung Wallet integration — Samsung's card-issuance
+program is invite/business-verification-gated with no public self-serve
+API, and WalletWallet doesn't cover it either. Samsung/Android users get
+the QR code and Save Contact, both of which already work everywhere.)
 
 ### Setup
 
@@ -49,6 +52,47 @@ WALLETWALLET_API_KEY=ww_live_...
   see **Logo assets** and **If the production domain ever changes** below.
   These four fields are WalletWallet Pro-plan-only; harmless to send on a
   free-tier key, they just get ignored.
+- `src/lib/wallet/card-wallet-pass.ts` — caches the issued pass on the
+  member's own record (a content hash of their card fields) so repeat
+  visits don't re-create an identical pass and burn API quota; a pass is
+  only regenerated when the member actually edits their card.
+- `src/app/api/card/[slug]/apple-pass/route.ts` and `.../google-pass/route.ts`
+  serve the cached pass straight off disk — a real WalletWallet API call
+  only happens on a genuine cache miss (first publish, or an edit that
+  changed name/phone/email/bio/LinkedIn/designation).
+
+### Passes are generated at save time, not on first tap
+
+`src/app/api/card/[slug]/wallet-pass/route.ts` is called automatically by
+the Visiting Card page the moment a member saves/publishes their card
+(self-service — a member can only trigger their own, a Super User can
+trigger anyone's). By the time a visitor actually opens the card and taps
+"Add to Apple Wallet," the `.pkpass` is already sitting cached on disk —
+the apple-pass/google-pass routes just replay that file back, so scanning
+the QR code or tapping the buttons never itself burns an API call.
+
+### Per-member rate limit
+
+Each non-Super-User member is limited to **2 real WalletWallet API calls
+per rolling 15-day window** (a cache hit — unchanged card content — never
+counts against this, only an actual regeneration does). Super Users
+(Tier 1) are exempt. Enforced in `checkWalletPassRateLimit()` in
+`card-wallet-pass.ts`, backed by `Member.cardPassGenerations` (an array of
+ISO timestamps, pruned to the current window on every write — never
+client-writable, stripped server-side in `members/[id]/route.ts`).
+Hitting the limit returns **HTTP 429** with a `retryAt` timestamp; the
+Visiting Card page surfaces this as a message after Save rather than
+failing the save itself. To change the limit, edit
+`RATE_LIMIT_WINDOW_MS`/`RATE_LIMIT_MAX_GENERATIONS` at the top of
+`card-wallet-pass.ts`.
+
+Known limitation (see the `ponytail:` comment in `card-wallet-pass.ts`):
+editing a published card creates a brand-new pass rather than pushing a
+live update to phones that already saved the old one, since WalletWallet's
+update endpoint doesn't return fresh pass bytes. Anyone who re-adds the
+card gets the current version; already-installed passes just don't
+auto-refresh. Fine for how this feature is used today — worth revisiting
+if that becomes a real problem.
 
 #### Logo assets
 
@@ -86,20 +130,6 @@ Cards already published under the old domain keep working — `cardUrl` (the
 QR code target and vCard link) is built per-request from the actual
 incoming domain via `getAppBaseUrl()`, not from this constant, so only the
 logo image URLs need the manual update above.
-- `src/lib/wallet/card-wallet-pass.ts` — caches the issued pass on the
-  member's own record (a content hash of their card fields) so repeat
-  visits don't re-create an identical pass and burn API quota; a pass is
-  only regenerated when the member actually edits their card.
-- `src/app/api/card/[slug]/apple-pass/route.ts` and `.../google-pass/route.ts`
-  serve the cached (or freshly created) pass.
-
-Known limitation (see the `ponytail:` comment in `card-wallet-pass.ts`):
-editing a published card creates a brand-new pass rather than pushing a
-live update to phones that already saved the old one, since WalletWallet's
-update endpoint doesn't return fresh pass bytes. Anyone who re-adds the
-card gets the current version; already-installed passes just don't
-auto-refresh. Fine for how this feature is used today — worth revisiting
-if that becomes a real problem.
 
 ### Third-party data flow — know this before turning it on
 
@@ -111,22 +141,3 @@ pipeline with real Apple/Google Developer credentials instead. Ask before
 re-introducing that if it's ever needed; the self-hosted approach was
 removed in favor of WalletWallet to avoid the Apple Developer Program
 enrollment ($99/yr + account setup) and Google Cloud service account setup.
-
-## Samsung Wallet
-
-Samsung Wallet card issuance requires enrollment in Samsung's **Partner
-Portal**, which is invite/business-verification-gated — unlike Apple's
-$99/yr self-serve program or Google's open signup, there is no publicly
-documented self-serve path for an individual developer to issue arbitrary
-business cards today, and WalletWallet doesn't cover Samsung either.
-
-Until Samsung grants partner access, Samsung/Android users get the
-universal fallback everyone gets: **Save Contact** (.vcf — Android
-natively imports it into Contacts) and the **QR code**. This is a fully
-practical substitute in the meantime.
-
-Once partner access is granted: `src/lib/wallet/samsung-config.ts` and
-`src/app/api/card/[slug]/samsung-pass/route.ts` are stubbed as drop-in
-points — replace `isSamsungWalletConfigured()`'s `return false` with a
-real check, and implement the card-issuing logic once Samsung's actual API
-spec is available.

@@ -37,7 +37,6 @@ export default function VisitingCardPage() {
   const [walletAvailability, setWalletAvailability] = useState({
     appleWalletAvailable: false,
     googleWalletAvailable: false,
-    samsungWalletAvailable: false,
   });
 
   const [successMsg, setSuccessMsg] = useState('');
@@ -148,7 +147,32 @@ export default function VisitingCardPage() {
         return;
       }
       if (updated.cardSlug) setCardSlug(updated.cardSlug);
-      triggerSuccess(cardEnabled ? 'Digital visiting card published successfully.' : 'Digital visiting card settings saved.');
+
+      // Pre-generate the Apple/Google Wallet pass now, right after saving,
+      // instead of waiting for the first "Add to Wallet" tap — by the time
+      // anyone views the card, the pass is already cached on disk. A rate
+      // limit or misconfigured wallet here is never a reason to treat the
+      // card save itself as failed.
+      let statusMsg = cardEnabled ? 'Digital visiting card published successfully.' : 'Digital visiting card settings saved.';
+      if (updated.cardEnabled && updated.cardSlug) {
+        try {
+          const walletRes = await fetch(`/api/card/${updated.cardSlug}/wallet-pass`, {
+            method: 'POST',
+            headers: authHeaders(),
+          });
+          if (!walletRes.ok) {
+            const data = await walletRes.json().catch(() => ({}));
+            if (walletRes.status === 429) {
+              statusMsg += ` Wallet pass update limit reached — ${data.error || 'try again later'}.`;
+            } else if (walletRes.status !== 501) {
+              console.warn('[visiting-card] wallet pass generation failed:', data.error);
+            }
+          }
+        } catch (e) {
+          console.warn('[visiting-card] wallet pass generation request failed:', e);
+        }
+      }
+      triggerSuccess(statusMsg);
     } catch (err: any) {
       triggerError(err?.message || 'Failed to save visiting card settings.');
     } finally {
@@ -362,7 +386,6 @@ export default function VisitingCardPage() {
             showActions={Boolean(cardSlug)}
             appleWalletAvailable={walletAvailability.appleWalletAvailable}
             googleWalletAvailable={walletAvailability.googleWalletAvailable}
-            samsungWalletAvailable={walletAvailability.samsungWalletAvailable}
           />
         </div>
 
