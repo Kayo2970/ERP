@@ -10,6 +10,15 @@ import { apiError } from '@/lib/api-error';
 
 const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
 
+function slugifyName(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug || 'member';
+}
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -51,7 +60,23 @@ export async function PATCH(
     delete updates.avatarData;
     delete updates.avatarFileName;
 
+    // Same treatment for the digital visiting card's own photo — stored under
+    // a different index (1) in the member's upload folder so it never collides
+    // with the avatar (index 0) saved above.
+    if (typeof updates.cardPhotoData === 'string' && updates.cardPhotoData.startsWith('data:')) {
+      const approxSize = Math.ceil((updates.cardPhotoData.length * 3) / 4);
+      if (approxSize > MAX_AVATAR_SIZE_BYTES) {
+        return NextResponse.json({ error: 'Card photo exceeds the 2 MB maximum limit.' }, { status: 400 });
+      }
+      const stored = await saveBase64File('members', id, 1, updates.cardPhotoFileName || 'card-photo.jpg', updates.cardPhotoData);
+      updates.cardPhotoUrl = stored.url;
+      updates.cardPhotoStorageKey = stored.storageKey;
+    }
+    delete updates.cardPhotoData;
+    delete updates.cardPhotoFileName;
+
     let previousStorageKey: string | undefined;
+    let previousCardPhotoStorageKey: string | undefined;
     // Upsert: if this id isn't in the server's collection yet (e.g. client-bundled
     // sample/seed data never POSTed), create it instead of 404ing and silently
     // dropping the edit.
@@ -64,7 +89,23 @@ export async function PATCH(
       if (updates.avatarStorageKey && next[idx].avatarStorageKey && next[idx].avatarStorageKey !== updates.avatarStorageKey) {
         previousStorageKey = next[idx].avatarStorageKey;
       }
+      if (updates.cardPhotoStorageKey && next[idx].cardPhotoStorageKey && next[idx].cardPhotoStorageKey !== updates.cardPhotoStorageKey) {
+        previousCardPhotoStorageKey = next[idx].cardPhotoStorageKey;
+      }
       const merged = { ...next[idx], ...updates };
+
+      // First time the card is enabled, mint a stable public slug — done here
+      // (inside the mutator) so it can see the full collection and dedupe
+      // against every other member's slug before it's ever exposed publicly.
+      if (updates.cardEnabled === true && !merged.cardSlug) {
+        const base = slugifyName(merged.name || 'member');
+        const taken = new Set(next.filter((m: any) => m.id !== id).map((m: any) => m.cardSlug).filter(Boolean));
+        let slug = base;
+        while (taken.has(slug)) {
+          slug = `${base}-${Math.random().toString(36).slice(2, 6)}`;
+        }
+        merged.cardSlug = slug;
+      }
 
       // Invariant 1: Kayomarz Pavri ALWAYS remains a Super User (tier 1, Active)
       if (isKayomarzIdentity(next[idx]) || isKayomarzIdentity(merged)) {
@@ -86,6 +127,9 @@ export async function PATCH(
 
     if (previousStorageKey) {
       await deleteStoredFile(previousStorageKey);
+    }
+    if (previousCardPhotoStorageKey) {
+      await deleteStoredFile(previousCardPhotoStorageKey);
     }
 
     if (updates.status === 'Terminated') {
