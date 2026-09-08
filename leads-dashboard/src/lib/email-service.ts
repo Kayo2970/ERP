@@ -19,7 +19,7 @@ export interface EmailLog {
   subject: string;
   bodyText: string;
   bodyHtml: string;
-  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION' | 'BIRTHDAY' | 'EVENT_REPORT_APPROVAL' | 'DESIGN_APPROVAL' | 'APPROVAL_REQUEST';
+  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'TASK_DEADLINE_REMINDER' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION' | 'BIRTHDAY' | 'EVENT_REPORT_APPROVAL' | 'DESIGN_APPROVAL' | 'APPROVAL_REQUEST';
   status: 'SENT' | 'FAILED';
   sentAt: string;
   // Diagnostics for "shows SENT but never arrives" — a resolved sendMail()
@@ -38,7 +38,7 @@ export interface SendEmailPayload {
   bodyHtml?: string;
   badgeText?: string;
   badgeColor?: string;
-  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION' | 'BIRTHDAY' | 'EVENT_REPORT_APPROVAL' | 'DESIGN_APPROVAL' | 'APPROVAL_REQUEST';
+  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'TASK_DEADLINE_REMINDER' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION' | 'BIRTHDAY' | 'EVENT_REPORT_APPROVAL' | 'DESIGN_APPROVAL' | 'APPROVAL_REQUEST';
   // Files attached to the outgoing message, e.g. an approved event report
   // or design asset read straight off disk via file-storage.ts's
   // readStoredFile(). Not persisted on the EmailLog entry (only the fact
@@ -416,6 +416,7 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
   if (!badgeTextToUse) {
     if (payload.category === 'ANNOUNCEMENT') badgeTextToUse = 'Official Announcement';
     else if (payload.category === 'TASK_ASSIGNMENT') badgeTextToUse = 'Task Assignment';
+    else if (payload.category === 'TASK_DEADLINE_REMINDER') badgeTextToUse = 'Deadline Reminder';
     else if (payload.category === 'EVENT_ROSTER') badgeTextToUse = 'Event Roster';
     else if (payload.category === 'ACCOUNT_ACTIVATION') badgeTextToUse = 'Account Notice';
     else if (payload.category === 'BIRTHDAY') badgeTextToUse = 'Greetings';
@@ -797,6 +798,47 @@ export function generateTaskEmailTemplate(memberName: string, taskTitle: string,
 
       <div style="margin-top: 20px; text-align: center;">
         <a href="https://leadsnextgencentre.online/dashboard/tasks" style="background: #0284c7; color: #ffffff; padding: 10px 20px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 12px; display: inline-block;">Open Tasks Desk &rarr;</a>
+      </div>
+    `
+  });
+
+  return { subject, bodyText, bodyHtml };
+}
+
+/**
+ * Template Generator: Task Deadline Reminder (sent 1 day before dueDate)
+ */
+export function generateTaskDeadlineReminderEmailTemplate(memberName: string, taskTitle: string, eventName: string, dueDate: string): { subject: string; bodyText: string; bodyHtml: string } {
+  const subject = `Deadline Tomorrow: ${taskTitle}`;
+  const bodyText = `Hello ${memberName},\n\nThis is a reminder that the following task is due tomorrow.\n\n` +
+    `Task: ${taskTitle}\n` +
+    `Context: ${eventName || 'LEADS Operations'}\n` +
+    `Due Date: ${dueDate}\n\n` +
+    `Please log in to your dashboard to review and complete it in time.`;
+
+  const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
+    headerTitle: taskTitle,
+    headerSubtitle: `Due ${dueDate}`,
+    badgeText: `Deadline Reminder`,
+    badgeColor: `#d97706`,
+    bodyContentHtml: `
+      <p style="margin-top: 0; color: #334155;">Hello <strong>${memberName}</strong>,</p>
+      <p style="color: #334155; font-size: 14px;">This is a reminder that the following task is due <strong>tomorrow</strong>:</p>
+
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #334155; margin: 16px 0;">
+        <tr>
+          <td style="padding: 8px 0; color: #64748b; width: 120px;">Context:</td>
+          <td style="padding: 8px 0; font-weight: 600; color: #0f172a;">${eventName || 'LEADS Operations'}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: #64748b;">Due Date:</td>
+          <td style="padding: 8px 0; font-weight: 700; color: #d97706;">${dueDate}</td>
+        </tr>
+      </table>
+
+      <div style="margin-top: 20px; text-align: center;">
+        <a href="https://leadsnextgencentre.online/dashboard/tasks" style="background: #d97706; color: #ffffff; padding: 10px 20px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 12px; display: inline-block;">Open Tasks Desk &rarr;</a>
       </div>
     `
   });

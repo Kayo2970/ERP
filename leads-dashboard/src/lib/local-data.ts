@@ -292,6 +292,10 @@ export interface TaskItem {
   decidedAt?: string;
   ratingScore?: number;
   ratedAt?: string;
+  // Set once by task-deadline-scheduler.ts after it emails the assignee(s) a
+  // reminder the day before dueDate — the idempotency guard that stops the
+  // same task from being reminded on every subsequent daily check.
+  deadlineReminderSentAt?: string;
   // Set by syncDesignTask() when this task was auto-created/completed from a
   // Style-Approved Design Portal submission — lets the Ratings page grant
   // Design Heads evaluation rights on it (see permissions.ts) without
