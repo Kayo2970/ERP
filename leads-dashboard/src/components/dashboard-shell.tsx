@@ -42,7 +42,7 @@ import {
   FileCheck2,
   IdCard
 } from 'lucide-react';
-import { getAnnouncements, getTasks, getDesigns, getMembers, getBudgets, getReimbursements, getEvents, getApprovalRequests, logAuditEvent, Member, syncWithServer, getSystemSettings, signOutClient } from '@/lib/local-data';
+import { getAnnouncements, getTasks, getDesigns, getMembers, getBudgets, getReimbursements, getEvents, getApprovalRequests, logAuditEvent, Member, syncWithServer, getSystemSettings, signOutClient, getSessionToken, setSessionToken, authHeaders } from '@/lib/local-data';
 import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isFinanceHead, canAccessGuestDirectory, canVerifyBudgetCentreHead, canDecideBudget, canVerifyReimbursementCentreHead, canApproveAsSectorHead, canApproveAsFinanceHead, canSubmitEventReport, canReviewEventReports, canViewEventReports } from '@/lib/permissions';
 import { TermsModal } from '@/components/terms-modal';
 import { PrivacyPolicyModal } from '@/components/privacy-policy-modal';
@@ -332,8 +332,10 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     setIsSidebarCollapsed(localStorage.getItem('sidebarCollapsed') === 'true');
 
     const savedUser = localStorage.getItem('user');
-    if (!savedUser) {
-      // Route guard: Redirect to login if unauthenticated
+    const token = getSessionToken();
+    if (!savedUser || !token) {
+      // Route guard: Redirect to login if unauthenticated or missing session token
+      signOutClient();
       router.replace('/');
       return;
     }
@@ -617,8 +619,27 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   // even across a chain of switches (only ever stashes the ORIGINAL identity once).
   const canQuickSwitch = isImpersonating ? originalUser?.tier === 1 : user.tier === 1;
 
-  const handleQuickSwitch = (target: Member) => {
+  const handleQuickSwitch = async (target: Member) => {
     const realIdentity = isImpersonating ? originalUser : user;
+    const realToken = localStorage.getItem('impersonatorOriginalToken') || getSessionToken();
+    try {
+      const res = await fetch('/api/auth/impersonate', {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ targetMemberId: target.id }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.token) {
+          if (!isImpersonating && realToken) {
+            localStorage.setItem('impersonatorOriginalToken', realToken);
+          }
+          setSessionToken(data.token);
+        }
+      }
+    } catch (e) {
+      console.warn('Impersonate token request failed:', e);
+    }
     localStorage.setItem('impersonatorOriginalUser', JSON.stringify(realIdentity));
     localStorage.setItem('user', JSON.stringify(target));
     logAuditEvent(
@@ -634,6 +655,11 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
   const handleReturnToSelf = () => {
     if (!originalUser) return;
+    const origToken = localStorage.getItem('impersonatorOriginalToken');
+    if (origToken) {
+      setSessionToken(origToken);
+      localStorage.removeItem('impersonatorOriginalToken');
+    }
     localStorage.setItem('user', JSON.stringify(originalUser));
     localStorage.removeItem('impersonatorOriginalUser');
     logAuditEvent(

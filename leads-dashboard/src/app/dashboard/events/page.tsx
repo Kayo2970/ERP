@@ -20,14 +20,53 @@ import {
   Ban,
   Handshake,
   Sparkles,
-  UserCheck
+  UserCheck,
+  Ticket,
+  QrCode,
+  Search,
+  Printer,
+  ShieldCheck,
 } from 'lucide-react';
-import { getEvents, addEvent, updateEvent, deleteEvent, approveEvent, rejectEvent, submitEventEdit, submitEventDelete, getEffectiveEventStatus, formatEventDateRange, formatEventPlanningNote, getEventSortTime, getEventSponsors, getEventSponsorTotal, getMembers, EventItem, EventSponsor, Member } from '@/lib/local-data';
-import { canCreateEvent, canEditEvent, canDeleteEvent, canManageEvents, canViewEvent, canApprovePendingEvent, getEventApprovalRequirement } from '@/lib/permissions';
+import {
+  getEvents,
+  addEvent,
+  updateEvent,
+  deleteEvent,
+  approveEvent,
+  rejectEvent,
+  submitEventEdit,
+  submitEventDelete,
+  getEffectiveEventStatus,
+  formatEventDateRange,
+  formatEventPlanningNote,
+  getEventSortTime,
+  getEventSponsors,
+  getEventSponsorTotal,
+  getMembers,
+  EventItem,
+  EventSponsor,
+  Member,
+  EventPassItem,
+  getEventPasses,
+  updateEventPassStatus,
+} from '@/lib/local-data';
+import {
+  canCreateEvent,
+  canEditEvent,
+  canDeleteEvent,
+  canManageEvents,
+  canViewEvent,
+  canApprovePendingEvent,
+  getEventApprovalRequirement,
+  canManageEventPasses,
+  canScanEventPasses,
+} from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useDropTarget } from '@/components/ui/file-dropzone';
 import { RequestApprovalModal } from '@/components/request-approval-modal';
+import { EventPassStudio } from '@/components/event-pass-studio';
+import { EventPassScanner } from '@/components/event-pass-scanner';
 
 type EventStatusFilter = 'ALL' | 'ONGOING' | 'COMPLETED' | 'ARCHIVED';
 
@@ -35,6 +74,10 @@ export default function EventsPage() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [user, setUser] = useState<any>(null);
   const [statusFilter, setStatusFilter] = useState<EventStatusFilter>('ALL');
+  const [mainTab, setMainTab] = useState<'events' | 'passes' | 'scanner'>('events');
+  const [eventPasses, setEventPasses] = useState<EventPassItem[]>([]);
+  const [passFilterEventId, setPassFilterEventId] = useState('ALL');
+  const [passSearchQuery, setPassSearchQuery] = useState('');
 
   // Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -71,6 +114,7 @@ export default function EventsPage() {
     const refreshData = () => {
       setEvents(getEvents());
       setMembers(getMembers());
+      setEventPasses(getEventPasses());
     };
     refreshData();
 
@@ -412,6 +456,8 @@ export default function EventsPage() {
 
   const canManage = canManageEvents(user);
   const canCreate = canCreateEvent(user);
+  const canManagePasses = canManageEventPasses(user);
+  const canScanPasses = canScanEventPasses(user);
 
   const getStatusBadge = (eventStatus: EventItem['status']) => {
     switch (eventStatus) {
@@ -485,88 +531,141 @@ export default function EventsPage() {
         </div>
       )}
 
-      {/* Header section with Create Button */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Events & Milestone Operations</h1>
-          <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">Manage symposiums, create event-specific sub-committees, and assign student teams</p>
-        </div>
-        {canManage && (
-          <div className="flex flex-wrap items-center gap-2.5">
-            <button
-              onClick={handleDownloadTemplate}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/15 text-slate-800 dark:text-white text-xs font-bold rounded-xl transition-all cursor-pointer border border-slate-300 dark:border-white/15 shadow-sm"
-              title="Download CSV Template"
-            >
-              <Download className="h-4 w-4" />
-              Download Template
-            </button>
+      {/* Top View Switcher */}
+      <div className="flex items-center gap-2 border-b border-slate-200/90 dark:border-white/10 pb-4">
+        <button
+          type="button"
+          onClick={() => setMainTab('events')}
+          className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+            mainTab === 'events'
+              ? 'bg-accent text-white shadow-md shadow-accent/25'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5'
+          }`}
+        >
+          <Calendar className="h-4 w-4" />
+          Events Directory
+        </button>
 
-            <button
-              onClick={handleUploadClick}
-              {...csvDragHandlers}
-              className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer border shadow-sm ${
-                isCsvDragOver
-                  ? 'border-accent bg-accent/15 shadow-md shadow-accent/25 ring-2 ring-accent/30 text-accent'
-                  : 'border-slate-300 dark:border-white/15 bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/15 text-slate-800 dark:text-white'
-              }`}
-              title="Upload Filled CSV File — click or drag and drop"
-            >
-              <Upload className="h-4 w-4" />
-              {isCsvDragOver ? 'Drop CSV here' : 'Upload Events (CSV)'}
-            </button>
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileUpload}
-              accept=".csv"
-              className="hidden"
-            />
-
-            <Link
-              href="/dashboard/festivals"
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-accent/15 border border-accent/35 text-accent hover:bg-accent/25 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm"
-            >
-              <Sparkles className="h-4 w-4" />
-              Festivals & Observances
-            </Link>
-
-            {canCreate && (
-              <button
-                onClick={handleOpenCreate}
-                className="flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent/90 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-accent/25 cursor-pointer uppercase tracking-wider"
-              >
-                <Plus className="h-4 w-4" />
-                Create New Event
-              </button>
+        {canManagePasses && (
+          <button
+            type="button"
+            onClick={() => setMainTab('passes')}
+            className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+              mainTab === 'passes'
+                ? 'bg-accent text-white shadow-md shadow-accent/25'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5'
+            }`}
+          >
+            <Ticket className="h-4 w-4" />
+            Passes & Tickets Studio
+            {eventPasses.length > 0 && (
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-mono">
+                {eventPasses.length}
+              </span>
             )}
-          </div>
+          </button>
+        )}
+
+        {canScanPasses && (
+          <button
+            type="button"
+            onClick={() => setMainTab('scanner')}
+            className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+              mainTab === 'scanner'
+                ? 'bg-accent text-white shadow-md shadow-accent/25'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5'
+            }`}
+          >
+            <QrCode className="h-4 w-4" />
+            Turnstile QR Scanner
+          </button>
         )}
       </div>
 
-      {/* Status Filter Tabs */}
-      {visibleEvents.length > 0 && (
-        <div className="flex items-center gap-1.5 bg-slate-100/90 dark:bg-slate-900/80 rounded-2xl p-1.5 w-fit border border-slate-200/90 dark:border-white/15 shadow-sm">
-          {([
-            { key: 'ALL', label: 'All Events' },
-            { key: 'ONGOING', label: 'Ongoing' },
-            { key: 'COMPLETED', label: 'Completed' },
-            { key: 'ARCHIVED', label: 'Archived' },
-          ] as { key: EventStatusFilter; label: string }[]).map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setStatusFilter(tab.key)}
-              className={`px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                statusFilter === tab.key
-                  ? 'bg-accent text-white shadow-md shadow-accent/25 scale-105'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/80 dark:hover:bg-white/10'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      )}
+      {mainTab === 'events' && (
+        <div className="space-y-6">
+          {/* Header section with Create Button */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Events & Milestone Operations</h1>
+              <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">Manage symposiums, create event-specific sub-committees, and assign student teams</p>
+            </div>
+            {canManage && (
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  onClick={handleDownloadTemplate}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/15 text-slate-800 dark:text-white text-xs font-bold rounded-xl transition-all cursor-pointer border border-slate-300 dark:border-white/15 shadow-sm"
+                  title="Download CSV Template"
+                >
+                  <Download className="h-4 w-4" />
+                  Download Template
+                </button>
+
+                <button
+                  onClick={handleUploadClick}
+                  {...csvDragHandlers}
+                  className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer border shadow-sm ${
+                    isCsvDragOver
+                      ? 'border-accent bg-accent/15 shadow-md shadow-accent/25 ring-2 ring-accent/30 text-accent'
+                      : 'border-slate-300 dark:border-white/15 bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/15 text-slate-800 dark:text-white'
+                  }`}
+                  title="Upload Filled CSV File — click or drag and drop"
+                >
+                  <Upload className="h-4 w-4" />
+                  {isCsvDragOver ? 'Drop CSV here' : 'Upload Events (CSV)'}
+                </button>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileUpload}
+                  accept=".csv"
+                  className="hidden"
+                />
+
+                <Link
+                  href="/dashboard/festivals"
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-accent/15 border border-accent/35 text-accent hover:bg-accent/25 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Festivals & Observances
+                </Link>
+
+                {canCreate && (
+                  <button
+                    onClick={handleOpenCreate}
+                    className="flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent/90 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-accent/25 cursor-pointer uppercase tracking-wider"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Create New Event
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Status Filter Tabs */}
+          {visibleEvents.length > 0 && (
+            <div className="flex items-center gap-1.5 bg-slate-100/90 dark:bg-slate-900/80 rounded-2xl p-1.5 w-fit border border-slate-200/90 dark:border-white/15 shadow-sm">
+              {([
+                { key: 'ALL', label: 'All Events' },
+                { key: 'ONGOING', label: 'Ongoing' },
+                { key: 'COMPLETED', label: 'Completed' },
+                { key: 'ARCHIVED', label: 'Archived' },
+              ] as { key: EventStatusFilter; label: string }[]).map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => setStatusFilter(tab.key)}
+                  className={`px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                    statusFilter === tab.key
+                      ? 'bg-accent text-white shadow-md shadow-accent/25 scale-105'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/80 dark:hover:bg-white/10'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          )}
 
       {/* Grid of Events Cards */}
       {visibleEvents.length === 0 ? (
@@ -736,6 +835,177 @@ export default function EventsPage() {
               </div>
             );
           })}
+        </div>
+      )}
+        </div>
+      )}
+
+      {/* PASSES & TICKETS STUDIO VIEW */}
+      {mainTab === 'passes' && canManagePasses && (
+        <div className="space-y-8 animate-in fade-in duration-300">
+          <EventPassStudio
+            events={events}
+            currentUserId={user?.id}
+            currentUserName={user?.name || 'Authorized Staff'}
+            currentUserEmail={user?.email}
+            onPassIssued={(newPass) => {
+              setEventPasses(getEventPasses());
+            }}
+          />
+
+          {/* ISSUED PASSES LEDGER TABLE */}
+          <div className="glass-panel rounded-3xl p-6 md:p-8 space-y-5 border border-white/15 bg-theme-card/90 shadow-2xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
+              <div>
+                <h3 className="text-base font-bold text-theme-text-primary">Issued Event Passes & Turnstile Roster</h3>
+                <p className="text-xs text-theme-text-secondary">
+                  Real-time list of all on-the-spot and digital passes issued for events.
+                </p>
+              </div>
+
+              {/* Filters */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                <div className="relative">
+                  <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-theme-text-secondary" />
+                  <input
+                    type="text"
+                    value={passSearchQuery}
+                    onChange={(e) => setPassSearchQuery(e.target.value)}
+                    placeholder="Search attendee or serial..."
+                    className="pl-8 pr-3 py-1.5 bg-theme-background/50 border border-theme-card-border rounded-xl text-theme-text-primary text-xs focus:outline-none focus:border-accent"
+                  />
+                </div>
+
+                <select
+                  value={passFilterEventId}
+                  onChange={(e) => setPassFilterEventId(e.target.value)}
+                  className="px-3 py-1.5 bg-theme-background/50 border border-theme-card-border rounded-xl text-theme-text-primary text-xs focus:outline-none focus:border-accent"
+                >
+                  <option value="ALL" className="bg-slate-900 text-white">All Events</option>
+                  {events.map((evt) => (
+                    <option key={evt.id} value={evt.id} className="bg-slate-900 text-white">
+                      {evt.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Passes Table */}
+            {eventPasses.length === 0 ? (
+              <div className="py-12 text-center text-theme-text-secondary text-xs">
+                No event passes issued yet. Use the studio above to issue the first pass!
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-white/10 text-theme-text-secondary text-[11px] uppercase tracking-wider">
+                      <th className="py-3 px-4">Serial ID</th>
+                      <th className="py-3 px-4">Attendee</th>
+                      <th className="py-3 px-4">Event</th>
+                      <th className="py-3 px-4">Type</th>
+                      <th className="py-3 px-4">Issued By</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {eventPasses
+                      .filter((p) => {
+                        if (passFilterEventId !== 'ALL' && p.eventId !== passFilterEventId) return false;
+                        if (passSearchQuery.trim()) {
+                          const q = passSearchQuery.toLowerCase();
+                          return (
+                            p.attendeeName.toLowerCase().includes(q) ||
+                            p.serialNumber.toLowerCase().includes(q) ||
+                            (p.attendeeOrg && p.attendeeOrg.toLowerCase().includes(q)) ||
+                            p.passType.toLowerCase().includes(q)
+                          );
+                        }
+                        return true;
+                      })
+                      .map((pass) => (
+                        <tr key={pass.id} className="hover:bg-white/5 transition-colors">
+                          <td className="py-3 px-4 font-mono font-bold text-sky-400">
+                            {pass.serialNumber}
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-theme-text-primary">{pass.attendeeName}</div>
+                            {pass.attendeeOrg && (
+                              <div className="text-[10px] text-theme-text-secondary">{pass.attendeeOrg}</div>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-theme-text-secondary max-w-xs truncate">
+                            {pass.eventName}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent/15 text-accent border border-accent/30">
+                              {pass.passType}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-theme-text-secondary text-[11px]">
+                            {pass.issuedBy}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                                pass.status === 'Checked In'
+                                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                                  : pass.status === 'Cancelled'
+                                  ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                                  : 'bg-sky-500/15 text-sky-300 border border-sky-500/30'
+                              }`}
+                            >
+                              {pass.status}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            {pass.status !== 'Checked In' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  updateEventPassStatus(pass.id, 'Checked In', user?.name || 'Staff');
+                                  setEventPasses(getEventPasses());
+                                  triggerSuccess(`Checked in ${pass.attendeeName}!`);
+                                }}
+                                className="px-3 py-1 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-lg text-[10px] font-bold transition-all cursor-pointer mr-2"
+                              >
+                                Admit
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(pass.serialNumber);
+                                triggerSuccess(`Copied serial ${pass.serialNumber}`);
+                              }}
+                              className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                              title="Copy Serial ID"
+                            >
+                              Copy ID
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TURNSTILE SCANNER VIEW */}
+      {mainTab === 'scanner' && canScanPasses && (
+        <div className="animate-in fade-in duration-300">
+          <EventPassScanner
+            currentUserName={user?.name || 'Staff'}
+            onPassCheckedIn={(pass) => {
+              setEventPasses(getEventPasses());
+              triggerSuccess(`Checked in ${pass.attendeeName} for ${pass.eventName}!`);
+            }}
+          />
         </div>
       )}
 

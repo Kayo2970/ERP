@@ -267,6 +267,40 @@ export interface EventItem {
   rejectionReason?: string;
 }
 
+export type EventPassType =
+  | 'VIP Pass'
+  | 'Guest Pass'
+  | 'Executive Delegate'
+  | 'Student Delegate'
+  | 'Keynote Speaker'
+  | 'Press / Media'
+  | 'Organizer';
+
+export interface EventPassItem {
+  id: string;
+  serialNumber: string;
+  eventId: string;
+  eventName: string;
+  eventDate?: string;
+  eventVenue?: string;
+  attendeeName: string;
+  attendeeEmail?: string;
+  attendeePhone?: string;
+  attendeeOrg?: string;
+  passType: EventPassType;
+  accessTier?: string;
+  validityDate?: string;
+  seatOrZone?: string;
+  notes?: string;
+  issuedBy: string;
+  issuedByEmail?: string;
+  issuedAt: string;
+  status: 'Active' | 'Checked In' | 'Cancelled';
+  checkedInAt?: string;
+  checkedInBy?: string;
+  qrPayload: string;
+}
+
 export interface TaskItem {
   id: string;
   title: string;
@@ -2394,6 +2428,114 @@ export function getCommittees(eventId?: string): string[] {
     return ['Logistics & Venue Committee', 'Technical & AV Committee', 'Design & Media Committee'];
   }
   return Array.from(names);
+}
+
+// -------------------------------------------------------------
+// Event Passes & Tickets (On-the-spot manual issuance + QR check-in)
+// -------------------------------------------------------------
+const EVENT_PASSES_STORAGE_KEY = 'leads_event_passes';
+
+export function getEventPasses(eventId?: string): EventPassItem[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(EVENT_PASSES_STORAGE_KEY);
+    const passes: EventPassItem[] = raw ? JSON.parse(raw) : [];
+    if (eventId) {
+      return passes.filter((p) => p.eventId === eventId);
+    }
+    return passes;
+  } catch (e) {
+    console.error('Failed to load event passes:', e);
+    return [];
+  }
+}
+
+export function saveEventPasses(passes: EventPassItem[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(EVENT_PASSES_STORAGE_KEY, JSON.stringify(passes));
+  } catch (e) {
+    console.error('Failed to save event passes:', e);
+  }
+}
+
+export function addEventPass(
+  passData: Omit<EventPassItem, 'id' | 'serialNumber' | 'issuedAt' | 'status' | 'qrPayload'>
+): EventPassItem {
+  const passes = getEventPasses();
+  const id = `pass-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const serialNumber = `LEADS-EVT-2026-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+  const issuedAt = new Date().toISOString();
+  
+  // Cryptographic/verification token payload
+  const qrPayload = JSON.stringify({
+    passId: id,
+    serial: serialNumber,
+    eventId: passData.eventId,
+    attendee: passData.attendeeName,
+    type: passData.passType,
+    issuedAt,
+  });
+
+  const newPass: EventPassItem = {
+    ...passData,
+    id,
+    serialNumber,
+    issuedAt,
+    status: 'Active',
+    qrPayload,
+  };
+
+  passes.unshift(newPass);
+  saveEventPasses(passes);
+
+  // Sync with backend API
+  fetch(`/api/events/${passData.eventId}/passes`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(newPass),
+  }).catch((err) => console.warn('Failed to sync event pass creation with server:', err));
+
+  logAuditEvent(
+    'EVENT_PASS_ISSUED' as any,
+    passData.issuedBy,
+    `Issued on-the-spot ${passData.passType} "${serialNumber}" to ${passData.attendeeName} for event "${passData.eventName}"`
+  );
+
+  return newPass;
+}
+
+export function updateEventPassStatus(
+  passId: string,
+  status: 'Active' | 'Checked In' | 'Cancelled',
+  actorName: string
+): EventPassItem | null {
+  const passes = getEventPasses();
+  const idx = passes.findIndex((p) => p.id === passId || p.serialNumber === passId);
+  if (idx === -1) return null;
+
+  const now = new Date().toISOString();
+  passes[idx] = {
+    ...passes[idx],
+    status,
+    ...(status === 'Checked In' ? { checkedInAt: now, checkedInBy: actorName } : {}),
+  };
+
+  saveEventPasses(passes);
+
+  fetch(`/api/events/${passes[idx].eventId}/passes`, {
+    method: 'PATCH',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ passId: passes[idx].id, status, checkedInBy: actorName, checkedInAt: now }),
+  }).catch((err) => console.warn('Failed to sync pass status update with server:', err));
+
+  logAuditEvent(
+    'EVENT_PASS_STATUS_CHANGED' as any,
+    actorName,
+    `Marked pass "${passes[idx].serialNumber}" (${passes[idx].attendeeName}) as ${status}`
+  );
+
+  return passes[idx];
 }
 
 // -------------------------------------------------------------

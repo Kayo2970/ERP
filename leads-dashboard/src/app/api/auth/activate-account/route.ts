@@ -38,7 +38,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ valid: false, error: 'The account this link belongs to no longer exists.' }, { status: 404 });
   }
 
-  return NextResponse.json({ valid: true, name: member.name, email: member.email });
+  return NextResponse.json({
+    valid: true,
+    name: member.name,
+    email: member.email,
+    role: member.role,
+    division: member.division,
+    cardSlug: member.cardSlug,
+  });
 }
 
 /** Consumes an activation token — sets the member's first real password and deletes the token. */
@@ -57,25 +64,24 @@ export async function POST(request: Request) {
 
     let memberName = 'User';
     let memberFound = false;
+    let activatedMember: any = null;
     await mutateCollection('members', (current) =>
       (current || []).map((m: any) => {
         if (m.id === matched.memberId) {
           memberFound = true;
           memberName = m.name;
-          return {
+          const slug = m.cardSlug || m.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+          activatedMember = {
             ...m,
             passwordHash: hashPassword(newPassword),
-            // A new member is always created with mustSetupPassword: true
-            // (see /api/members POST) so login knows to route them here
-            // instead of straight to a password check. Leaving it true
-            // after they successfully set a password here was making
-            // login's mustSetupPassword check (checked before passwordHash)
-            // send them right back through "set up your password" a
-            // second time on their very next sign-in.
             mustSetupPassword: false,
             ...(dateOfBirth ? { dateOfBirth } : {}),
             phone,
+            cardPhone: m.cardPhone || phone,
+            cardSlug: slug,
+            cardEnabled: true,
           };
+          return activatedMember;
         }
         return m;
       })
@@ -98,7 +104,19 @@ export async function POST(request: Request) {
       ...(current || []),
     ]);
 
-    return NextResponse.json({ success: true, message: 'Account activated! You can now sign in with your new password.' });
+    return NextResponse.json({
+      success: true,
+      message: 'Account activated! You can now sign in with your new password.',
+      member: {
+        id: activatedMember?.id,
+        name: activatedMember?.name,
+        email: activatedMember?.email,
+        role: activatedMember?.role,
+        phone: activatedMember?.phone,
+        cardSlug: activatedMember?.cardSlug,
+        tier: activatedMember?.tier,
+      },
+    });
   } catch (err: any) {
     return apiError(err, 'activate-account-api');
   }

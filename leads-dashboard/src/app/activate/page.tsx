@@ -3,7 +3,8 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ShieldAlert, CheckCircle2, Lock, Eye, EyeOff, LogIn, Sparkles, Cake, Phone } from 'lucide-react';
+import { ShieldAlert, CheckCircle2, Lock, Eye, EyeOff, LogIn, Sparkles, Cake, Phone, ArrowRight } from 'lucide-react';
+import { InteractiveKeycardHolder } from '@/components/interactive-keycard-holder';
 
 function ActivateAccountForm() {
   const searchParams = useSearchParams();
@@ -13,6 +14,8 @@ function ActivateAccountForm() {
   const [validationError, setValidationError] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [role, setRole] = useState('');
+  const [cardSlug, setCardSlug] = useState('');
 
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -34,6 +37,8 @@ function ActivateAccountForm() {
         if (data.valid) {
           setName(data.name);
           setEmail(data.email);
+          setRole(data.role || 'Member');
+          setCardSlug(data.cardSlug || '');
           setStatus('ready');
         } else {
           setValidationError(data.error || 'This activation link is invalid.');
@@ -72,6 +77,10 @@ function ActivateAccountForm() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to activate your account.');
+      if (data.member) {
+        if (data.member.role) setRole(data.member.role);
+        if (data.member.cardSlug) setCardSlug(data.member.cardSlug);
+      }
       setStatus('done');
     } catch (err: any) {
       setSubmitError(err.message || 'Failed to activate your account.');
@@ -79,6 +88,62 @@ function ActivateAccountForm() {
       setIsSubmitting(false);
     }
   };
+
+  if (status === 'done') {
+    const dynamicQr = cardSlug ? `/api/card/${cardSlug}/qr` : '/card/leads-qr-code.png';
+    return (
+      <div className="min-h-screen bg-space-theme text-theme-text-primary flex flex-col items-center justify-center p-4 py-10 relative z-0 overflow-x-hidden">
+        {/* Top Celebration Header */}
+        <div className="w-full max-w-2xl text-center space-y-3 mb-4 animate-in fade-in slide-in-from-top-4 duration-500">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent/15 border border-accent/30 text-accent text-[11px] font-bold tracking-wider uppercase">
+            <Sparkles className="h-3.5 w-3.5" /> Official Induction & Credentials Issued
+          </div>
+          <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">
+            Welcome to the Centre, {name.split(' ')[0]}!
+          </h1>
+          <p className="text-xs md:text-sm text-theme-text-secondary max-w-md mx-auto">
+            These are your official executive credentials and digital access pass for the LEADS Next Gen Centre.
+          </p>
+        </div>
+
+        {/* 3D Leather Keycard Presentation */}
+        <div className="w-full max-w-md my-2 animate-in zoom-in-95 duration-500">
+          <InteractiveKeycardHolder
+            memberName={name}
+            memberRole={role || 'Executive Member'}
+            phone={phone}
+            email={email}
+            qrUrl={dynamicQr}
+            issuingAuthority="LEADS Next Gen Centre"
+            autoOpen={true}
+            showActions={false}
+          />
+        </div>
+
+        {/* Bottom Navigation Actions */}
+        <div className="w-full max-w-sm flex flex-col sm:flex-row items-center gap-3 mt-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <Link
+            href="/"
+            className="w-full py-3 bg-accent hover:bg-primary-light text-white font-bold rounded-xl transition-all shadow-lg shadow-accent/25 flex items-center justify-center gap-2 text-xs"
+          >
+            <LogIn className="h-4 w-4" />
+            Proceed to Sign In
+          </Link>
+          {cardSlug && (
+            <a
+              href={`/card/${cardSlug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl transition-all border border-white/15 flex items-center justify-center gap-2 text-xs"
+            >
+              <span>View Public Card</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </a>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-space-theme flex flex-col items-center justify-center p-4 md:p-8">
@@ -238,22 +303,6 @@ function ActivateAccountForm() {
               )}
             </button>
           </form>
-        )}
-
-        {status === 'done' && (
-          <div className="space-y-4">
-            <div className="flex gap-3 p-3.5 bg-emerald-500/15 border border-emerald-500/30 rounded-2xl text-emerald-400 text-xs leading-relaxed">
-              <CheckCircle2 className="h-4.5 w-4.5 shrink-0" />
-              <span>Your account is set up! You can now sign in with your new password.</span>
-            </div>
-            <Link
-              href="/"
-              className="w-full py-3 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 text-xs"
-            >
-              <LogIn className="h-3.5 w-3.5" />
-              Go to Sign In
-            </Link>
-          </div>
         )}
       </div>
     </div>

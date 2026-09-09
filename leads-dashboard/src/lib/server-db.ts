@@ -68,6 +68,7 @@ export interface DbSchema {
   budgets: any[];
   incomeSources: any[];
   eventReports: any[];
+  event_passes: any[];
   approvalRequests: any[];
   // One row per (memberId, date) a birthday email was actually sent for —
   // see src/lib/birthday-scheduler.ts. Purely an idempotency guard so a
@@ -113,6 +114,7 @@ const EMPTY_DB: DbSchema = {
   budgets: [],
   incomeSources: [],
   eventReports: [],
+  event_passes: [],
   approvalRequests: [],
   birthdayEmailLog: [],
   sessions: [],
@@ -163,6 +165,7 @@ const SEED_DB: DbSchema = {
   budgets: initialBudgets,
   incomeSources: initialIncomeSources,
   eventReports: [],
+  event_passes: [],
   approvalRequests: [],
   birthdayEmailLog: [],
   sessions: [],

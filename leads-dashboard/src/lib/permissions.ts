@@ -317,6 +317,8 @@ export const CAPABILITY_CATALOG: { key: string; label: string; description: stri
   { key: 'EVENTS_EDIT', label: 'Edit Events', description: "Edit any existing event's details.", module: 'Events' },
   { key: 'EVENTS_DELETE', label: 'Delete Events', description: 'Delete any event.', module: 'Events' },
   { key: 'EVENTS_VIEW_ALL', label: 'View All Events', description: 'See every event, not just ones created by or listing this person.', module: 'Events' },
+  { key: 'MANAGE_EVENT_PASSES', label: 'Manage Event Passes & Tickets', description: 'Issue, view, and manage on-the-spot event passes and tickets.', module: 'Events' },
+  { key: 'SCAN_EVENT_PASSES', label: 'Scan & Verify Event Passes', description: 'Scan QR codes on event passes at turnstiles/entrances to verify genuineness and check in guests.', module: 'Events' },
   { key: 'FESTIVALS_MANAGE', label: 'Manage Festivals', description: 'Create, edit, and organize festival schedules and events.', module: 'Festivals' },
   { key: 'TASKS_CREATE', label: 'Create Tasks', description: 'Assign new tasks to individuals or committees.', module: 'Tasks' },
   { key: 'TASKS_EDIT', label: 'Edit Tasks', description: 'Edit any existing task.', module: 'Tasks' },
@@ -776,6 +778,18 @@ export function canDeleteEvent(user: SessionUser): boolean {
  *  canManageTasksAndEvents() did, now backed by the finer create/edit/delete checks. */
 export function canManageEvents(user: SessionUser): boolean {
   return canCreateEvent(user) || canEditEvent(user) || canDeleteEvent(user);
+}
+
+/** Check if user is authorized to issue and manage on-the-spot event passes and tickets. */
+export function canManageEventPasses(user: SessionUser): boolean {
+  if (!user) return false;
+  return isBaseLeadership(user) || isHeadRole(user) || user.tier === 2.5 || hasCapability(user, 'MANAGE_EVENT_PASSES') || hasCapability(user, 'EVENTS_EDIT');
+}
+
+/** Check if user is authorized to scan QR passes at turnstiles/entrances to verify and check in attendees. */
+export function canScanEventPasses(user: SessionUser): boolean {
+  if (!user) return false;
+  return canManageEventPasses(user) || hasCapability(user, 'SCAN_EVENT_PASSES');
 }
 
 /**

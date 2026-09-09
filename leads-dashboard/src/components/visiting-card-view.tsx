@@ -112,7 +112,7 @@ export function VisitingCardView({
   };
 
   return (
-    <div className="glass-panel w-full max-w-md rounded-3xl overflow-hidden border border-white/20 dark:border-white/15 shadow-2xl backdrop-blur-2xl bg-theme-card/90">
+    <div className="glass-panel w-full max-w-md rounded-3xl overflow-hidden border border-white/20 dark:border-white/15 shadow-2xl backdrop-blur-2xl bg-theme-card/90 animate-in fade-in zoom-in-95 duration-300">
       {/* Header band */}
       <div
         className="relative px-6 pt-8 pb-14 text-center"
@@ -186,8 +186,12 @@ export function VisitingCardView({
                     : 'bg-theme-border/15 text-theme-text-secondary border-theme-border/30 cursor-not-allowed opacity-60'
                 }`}
               >
-                <Wallet className="h-3.5 w-3.5" />
-                {appleWalletAvailable ? (isOpeningAppleWallet ? 'Opening…' : 'Add to Apple Wallet') : 'Apple Wallet — coming soon'}
+                {isOpeningAppleWallet ? (
+                  <span className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Wallet className="h-3.5 w-3.5" />
+                )}
+                {appleWalletAvailable ? (isOpeningAppleWallet ? 'Generating Apple Pass…' : 'Add to Apple Wallet') : 'Apple Wallet — coming soon'}
               </button>
               <button
                 type="button"
@@ -199,8 +203,12 @@ export function VisitingCardView({
                     : 'bg-theme-border/15 text-theme-text-secondary border-theme-border/30 cursor-not-allowed opacity-60'
                 }`}
               >
-                <Wallet className="h-3.5 w-3.5" />
-                {googleWalletAvailable ? (isOpeningGoogleWallet ? 'Opening…' : 'Add to Google Wallet') : 'Google Wallet — coming soon'}
+                {isOpeningGoogleWallet ? (
+                  <span className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Wallet className="h-3.5 w-3.5" />
+                )}
+                {googleWalletAvailable ? (isOpeningGoogleWallet ? 'Generating Google Pass…' : 'Add to Google Wallet') : 'Google Wallet — coming soon'}
               </button>
             </div>
 

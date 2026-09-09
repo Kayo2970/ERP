@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ShieldAlert, LogIn, Mail, Lock, Eye, EyeOff, KeyRound, CheckCircle2, Clock, ArrowLeft, Send, Quote } from 'lucide-react';
-import { logAuditEvent, requestPasswordReset, submitPasswordReset, submitAdminOverridePasswordReset, setSessionToken } from '@/lib/local-data';
+import { logAuditEvent, requestPasswordReset, submitPasswordReset, submitAdminOverridePasswordReset, setSessionToken, getSessionToken } from '@/lib/local-data';
 import { TermsModal } from '@/components/terms-modal';
 import { PrivacyPolicyModal } from '@/components/privacy-policy-modal';
 import { IosInstallPrompt } from '@/components/ios-install-prompt';
@@ -220,10 +220,13 @@ export default function LoginPage() {
       localStorage.removeItem('logoutReason');
     }
 
-    // If already logged in, route to home
+    // If already logged in with an active session token, route to home
     const currentUser = localStorage.getItem('user');
-    if (currentUser) {
+    const token = getSessionToken();
+    if (currentUser && token) {
       router.push('/dashboard/home');
+    } else if (currentUser && !token) {
+      localStorage.removeItem('user');
     }
   }, [router]);
 
