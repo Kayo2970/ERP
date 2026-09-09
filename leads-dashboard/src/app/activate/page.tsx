@@ -113,6 +113,7 @@ function ActivateAccountForm() {
             memberRole={role || 'Executive Member'}
             phone={phone}
             email={email}
+            cardUrl={cardSlug && typeof window !== 'undefined' ? `${window.location.origin}/card/${cardSlug}` : undefined}
             qrUrl={dynamicQr}
             issuingAuthority="LEADS Next Gen Centre"
             autoOpen={true}

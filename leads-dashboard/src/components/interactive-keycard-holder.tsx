@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import QRCode from 'qrcode';
 import styles from './interactive-keycard.module.css';
 
 const CARD_EXTRACT_DURATION = 850;
@@ -18,6 +19,7 @@ export interface InteractiveKeycardProps {
   accessLevel?: string;
   validityPeriod?: string;
   issuingAuthority?: string;
+  cardUrl?: string;
   qrUrl?: string;
   onSaveContact?: () => void;
   onAddToAppleWallet?: () => void;
@@ -38,6 +40,7 @@ export function InteractiveKeycardHolder({
   accessLevel = 'Executive & Alumni Fellow (Tier 1)',
   validityPeriod,
   issuingAuthority = 'LEADS Next Gen Centre',
+  cardUrl,
   qrUrl = '/card/leads-qr-code.png',
   onSaveContact,
   onAddToAppleWallet,
@@ -50,6 +53,7 @@ export function InteractiveKeycardHolder({
   const [stageState, setStageState] = useState<'init' | 'entered' | 'opened' | 'extracting' | 'extracted' | 'tucking' | 'closing'>('init');
   const [activeTab, setActiveTab] = useState<'card' | 'creds'>('card');
   const [isFlipped, setIsFlipped] = useState(false);
+  const [dynamicQrUrl, setDynamicQrUrl] = useState<string>('');
   const cardRef = useRef<HTMLDivElement>(null);
   const dragInfo = useRef({ isDragging: false, startY: 0, currentDeltaY: 0, hasDragged: false });
   const holderDragInfo = useRef({ isDragging: false, startY: 0, hasDragged: false });
@@ -83,8 +87,78 @@ export function InteractiveKeycardHolder({
       .toUpperCase()
       .padStart(5, '0')
       .slice(0, 5);
-    return `LEADS-2026-${hash}`;
+    return `LEADS-DIR-${hash}`;
   }, [serialNumber, memberName, email]);
+
+  // Dynamically generate QR code with LEADS logo in center
+  useEffect(() => {
+    let isMounted = true;
+
+    const generateQr = async () => {
+      let targetUrl = cardUrl || qrUrl;
+      // If no valid URL string was provided or only default PNG path, compute public URL fallback
+      if (!targetUrl || targetUrl.endsWith('.png') || targetUrl.endsWith('.jpg')) {
+        if (cardUrl) {
+          targetUrl = cardUrl;
+        } else if (typeof window !== 'undefined') {
+          targetUrl = window.location.href;
+        } else {
+          targetUrl = 'https://leads-centre.org';
+        }
+      }
+
+      try {
+        const qrCanvas = document.createElement('canvas');
+        await QRCode.toCanvas(qrCanvas, targetUrl, {
+          width: 360,
+          margin: 2,
+          color: { dark: '#0B1B2E', light: '#ffffff' },
+          errorCorrectionLevel: 'H',
+        });
+
+        const ctx = qrCanvas.getContext('2d');
+        if (ctx) {
+          const logo = new Image();
+          logo.onload = () => {
+            if (!isMounted) return;
+            const size = qrCanvas.width;
+            const logoSize = Math.round(size * 0.22);
+            const pad = Math.round(logoSize * 0.16);
+            const boxSize = logoSize + pad * 2;
+            const boxX = (size - boxSize) / 2;
+            const boxY = (size - boxSize) / 2;
+            const radius = Math.round(boxSize * 0.15);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.moveTo(boxX + radius, boxY);
+            ctx.arcTo(boxX + boxSize, boxY, boxX + boxSize, boxY + boxSize, radius);
+            ctx.arcTo(boxX + boxSize, boxY + boxSize, boxX, boxY + boxSize, radius);
+            ctx.arcTo(boxX, boxY + boxSize, boxX, boxY, radius);
+            ctx.arcTo(boxX, boxY, boxX + boxSize, boxY, radius);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.drawImage(logo, (size - logoSize) / 2, (size - logoSize) / 2, logoSize, logoSize);
+            if (isMounted) {
+              setDynamicQrUrl(qrCanvas.toDataURL('image/png'));
+            }
+          };
+          logo.onerror = () => {
+            if (isMounted) setDynamicQrUrl(qrCanvas.toDataURL('image/png'));
+          };
+          logo.src = '/card/leads-logo-clean.png';
+        } else {
+          if (isMounted) setDynamicQrUrl(qrCanvas.toDataURL('image/png'));
+        }
+      } catch (err) {
+        console.warn('[InteractiveKeycard] QR generation warning:', err);
+      }
+    };
+
+    generateQr();
+    return () => { isMounted = false; };
+  }, [cardUrl, qrUrl]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -374,7 +448,7 @@ export function InteractiveKeycardHolder({
                     </div>
 
                     <div className={styles.passQrBox}>
-                      <img src={qrUrl} alt="QR Code" />
+                      <img src={dynamicQrUrl || qrUrl || '/card/leads-qr-code.png'} alt="Card QR Code" />
                     </div>
                   </div>
 

@@ -457,6 +457,7 @@ export default function VisitingCardPage() {
                 serialNumber={cardSlug ? `LEADS-DIR-${cardSlug.toUpperCase()}` : 'LEADS-DIR-2026-99'}
                 accessLevel="Executive & Alumni Fellow"
                 issuingAuthority="LEADS Next Gen Centre • RUAS"
+                cardUrl={cardPublicUrl}
                 qrUrl="/card/leads-qr-code.png"
                 showActions={true}
                 autoOpen={true}
@@ -509,6 +510,7 @@ export default function VisitingCardPage() {
                 serialNumber={cardSlug ? `LEADS-DIR-${cardSlug.toUpperCase()}` : 'LEADS-DIR-2026-99'}
                 accessLevel={user?.division === 'Faculty' ? 'Faculty & Academic Leadership' : user?.tier === 1 ? 'Executive Super User (Tier 1)' : 'Core Committee & Executive Fellow'}
                 issuingAuthority="LEADS Next Gen Centre • RUAS"
+                cardUrl={cardPublicUrl}
                 qrUrl="/card/leads-qr-code.png"
                 showActions={true}
                 autoOpen={true}
