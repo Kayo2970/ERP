@@ -114,6 +114,7 @@ export interface WalletEventPassData {
   roomOrVenue?: string;
   passType: string;
   validityDate?: string;
+  passColor?: string;
 }
 
 /**
@@ -167,8 +168,8 @@ export async function createEventWalletPass(
     body: JSON.stringify({
       organizationName: ORG_NAME,
       logoText: 'LEADS Next Gen Centre',
-      colorPreset: 'dark',
-      color: '#0b1526',
+      colorPreset: 'custom',
+      color: eventPass.passColor || '#0b1526',
       logoURL: logoUrl,
       iconURL: logoUrl,
       barcodeValue: passUrl,

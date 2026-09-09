@@ -26,6 +26,7 @@ import {
   Send,
   Smartphone,
   Eye,
+  Palette,
 } from 'lucide-react';
 import {
   EventItem,
@@ -47,6 +48,16 @@ interface EventPassStudioProps {
   currentUserEmail?: string;
   onPassIssued?: (pass: EventPassItem) => void;
 }
+
+export const PASS_COLOR_PRESETS = [
+  { name: 'Obsidian Black', hex: '#0b1526', ring: 'ring-slate-500' },
+  { name: 'Sapphire Navy', hex: '#0d2342', ring: 'ring-sky-500' },
+  { name: 'Emerald Forest', hex: '#063024', ring: 'ring-emerald-500' },
+  { name: 'Amethyst Purple', hex: '#2b124c', ring: 'ring-purple-500' },
+  { name: 'Burgundy Wine', hex: '#3e0f1e', ring: 'ring-rose-500' },
+  { name: 'Amber Bronze', hex: '#3a2408', ring: 'ring-amber-500' },
+  { name: 'Titanium Slate', hex: '#1e2530', ring: 'ring-slate-400' },
+];
 
 const PASS_TYPES: {
   type: EventPassType;
@@ -134,6 +145,7 @@ export function EventPassStudio({
   const [attendeeName, setAttendeeName] = useState('');
   const [guestCategory, setGuestCategory] = useState<EventGuestCategory>('VIP Dignitary');
   const [passType, setPassType] = useState<EventPassType>('VIP Pass');
+  const [passColor, setPassColor] = useState<string>('#0b1526');
   const [roomOrVenue, setRoomOrVenue] = useState('');
   const [attendeeEmail, setAttendeeEmail] = useState('');
   const [attendeePhone, setAttendeePhone] = useState('');
@@ -191,6 +203,7 @@ export function EventPassStudio({
         accessTier: passType === 'VIP Pass' ? 'All Access VIP' : 'General Admission',
         validityDate: displayValidity,
         seatOrZone: displayRoom,
+        passColor,
         notes: notes.trim() || undefined,
         issuedBy: currentUserName,
         issuedByEmail: currentUserEmail,
@@ -404,6 +417,61 @@ export function EventPassStudio({
               </div>
             </div>
 
+            {/* 4.5. Pass Color Customization (Live on Card & Apple Wallet) */}
+            <div className="space-y-2 p-3.5 rounded-2xl bg-slate-50/70 dark:bg-white/5 border border-slate-200 dark:border-white/10">
+              <div className="flex items-center justify-between">
+                <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                  <Palette className="h-3.5 w-3.5 text-accent" />
+                  <span>Pass Color Theme</span>
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <div
+                    className="w-4 h-4 rounded-full border border-white/30 shadow-inner"
+                    style={{ backgroundColor: passColor }}
+                  />
+                  <span className="font-mono text-[10px] text-slate-400 font-bold uppercase">
+                    {passColor}
+                  </span>
+                </div>
+              </div>
+
+              {/* Color Presets & Custom Native Picker */}
+              <div className="flex flex-wrap items-center gap-2">
+                {PASS_COLOR_PRESETS.map((cp) => {
+                  const isSelected = passColor.toLowerCase() === cp.hex.toLowerCase();
+                  return (
+                    <button
+                      type="button"
+                      key={cp.hex}
+                      onClick={() => setPassColor(cp.hex)}
+                      title={cp.name}
+                      className={`h-7 w-7 rounded-xl transition-all cursor-pointer relative flex items-center justify-center border ${
+                        isSelected
+                          ? 'scale-110 ring-2 ring-accent border-white shadow-md'
+                          : 'border-white/20 hover:scale-105 opacity-85 hover:opacity-100'
+                      }`}
+                      style={{ backgroundColor: cp.hex }}
+                    >
+                      {isSelected && <Sparkles className="h-3 w-3 text-white drop-shadow" />}
+                    </button>
+                  );
+                })}
+
+                {/* Custom Color Input */}
+                <div className="flex items-center gap-1.5 ml-auto">
+                  <label className="relative cursor-pointer flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 border border-slate-300 dark:border-white/15 text-[10px] font-bold text-slate-700 dark:text-slate-200 transition-all">
+                    <span>Custom</span>
+                    <input
+                      type="color"
+                      value={passColor}
+                      onChange={(e) => setPassColor(e.target.value)}
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+
             {/* 5. Room / Venue / Hall Allocation */}
             <div className="space-y-1.5">
               <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] flex items-center justify-between">
@@ -582,7 +650,12 @@ export function EventPassStudio({
                 onClick={() => setIsFlipped(!isFlipped)}
               >
                 {/* FRONT FACE */}
-                <div className={`${styles.passFace} ${styles.passFront}`}>
+                <div
+                  className={`${styles.passFace} ${styles.passFront}`}
+                  style={{
+                    backgroundImage: `linear-gradient(145deg, ${passColor}ee 0%, #060c18fa 100%), url('/card/dark-blue-leather.jpg')`,
+                  }}
+                >
                   {/* Lanyard Cut */}
                   <div className={styles.lanyardSlot} />
 
@@ -677,7 +750,12 @@ export function EventPassStudio({
                 </div>
 
                 {/* BACK FACE */}
-                <div className={`${styles.passFace} ${styles.passBack}`}>
+                <div
+                  className={`${styles.passFace} ${styles.passBack}`}
+                  style={{
+                    backgroundImage: `linear-gradient(155deg, ${passColor}f2 0%, #080e1afa 100%), url('/card/dark-blue-leather.jpg')`,
+                  }}
+                >
                   {/* Lanyard Cut */}
                   <div className={styles.lanyardSlot} />
 
@@ -751,6 +829,7 @@ export function EventPassStudio({
               serialNumber={issuedPass ? issuedPass.serialNumber : previewSerial}
               interactive={true}
               logoText={brandHeader}
+              passColor={passColor}
             />
           )}
 

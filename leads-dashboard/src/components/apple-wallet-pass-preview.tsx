@@ -18,6 +18,7 @@ export interface AppleWalletPassPreviewProps {
   interactive?: boolean;
   logoText?: string;
   logoUrl?: string;
+  passColor?: string;
 }
 
 export function AppleWalletPassPreview({
@@ -32,11 +33,24 @@ export function AppleWalletPassPreview({
   interactive = true,
   logoText = 'LEADS Next Gen Centre',
   logoUrl = '/card/leads-logo.png',
+  passColor = '#0f1a2e',
 }: AppleWalletPassPreviewProps) {
   const [isFlipped, setIsFlipped] = useState(false);
 
   const displayValidity = validityDate || eventDate;
   const displaySerial = serialNumber || `LEADS-EVT-2026-${(attendeeName || 'GUEST').slice(0, 3).toUpperCase()}-99`;
+
+  const frontStyle: React.CSSProperties = passColor
+    ? {
+        background: `linear-gradient(180deg, ${passColor} 0%, #060c18 100%)`,
+      }
+    : {};
+
+  const backStyle: React.CSSProperties = passColor
+    ? {
+        background: `linear-gradient(180deg, ${passColor} 0%, #060c18 100%)`,
+      }
+    : {};
 
   return (
     <div className={styles.walletContainer}>
@@ -45,7 +59,7 @@ export function AppleWalletPassPreview({
         onClick={interactive ? () => setIsFlipped(!isFlipped) : undefined}
       >
         {/* FRONT FACE (98% Pixel-Accurate Native iOS Wallet) */}
-        <div className={`${styles.passFace} ${styles.passFront}`}>
+        <div className={`${styles.passFace} ${styles.passFront}`} style={frontStyle}>
           {/* Header */}
           <div className={styles.headerRow}>
             <div className={styles.logoArea}>
@@ -114,7 +128,7 @@ export function AppleWalletPassPreview({
         </div>
 
         {/* BACK FACE (iOS Details Sheet) */}
-        <div className={`${styles.passFace} ${styles.passBack}`}>
+        <div className={`${styles.passFace} ${styles.passBack}`} style={backStyle}>
           <div className={styles.backHeader}>
             <span className={styles.backTitle}>Pass Details</span>
             <button
@@ -156,14 +170,7 @@ export function AppleWalletPassPreview({
                 Strictly non-transferable. Present at official event turnstiles.
               </span>
             </div>
-            <div className={styles.backItem}>
-              <span className={styles.backItemLabel}>Live Notifications</span>
-              <span className="text-[9.5px] text-emerald-400">
-                Automatic lock-screen updates enabled via APNs
-              </span>
-            </div>
           </div>
-
 
           <div className={styles.footerRow}>
             <span className="text-[8px] text-slate-500">

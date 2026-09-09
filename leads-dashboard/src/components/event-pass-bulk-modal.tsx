@@ -236,6 +236,7 @@ export function EventPassBulkModal({
           accessTier: row.passType === 'VIP Pass' ? 'All Access VIP' : 'General Admission',
           validityDate: row.validity || formattedDate,
           seatOrZone: row.roomOrVenue,
+          passColor: '#0b1526',
           notes: row.notes,
           issuedBy: currentUserName,
           issuedByEmail: currentUserEmail,

@@ -311,6 +311,7 @@ export interface EventPassItem {
   status: 'Active' | 'Checked In' | 'Cancelled';
   checkedInAt?: string;
   checkedInBy?: string;
+  passColor?: string;
   qrPayload: string;
 }
 

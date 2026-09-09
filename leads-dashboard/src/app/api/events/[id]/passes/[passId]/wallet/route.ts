@@ -42,6 +42,7 @@ export async function GET(
         roomOrVenue: pass.roomOrVenue,
         passType: pass.passType,
         validityDate: pass.validityDate,
+        passColor: pass.passColor,
       },
       passUrl
     );
