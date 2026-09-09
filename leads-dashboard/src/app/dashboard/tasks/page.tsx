@@ -825,7 +825,7 @@ export default function TasksPage() {
 
       {/* Filters & Sorting */}
       {displayedTasks.length > 0 && (
-        <div className="glass-panel rounded-2xl p-4 flex flex-wrap items-end gap-3 text-xs">
+        <div className="glass-panel rounded-2xl p-4 flex flex-wrap items-end gap-3 text-xs relative z-30">
           <div className="space-y-1">
             <label className="block font-medium text-theme-text-secondary">Student</label>
             <SearchableSelect
