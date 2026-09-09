@@ -29,6 +29,7 @@ export interface WalletCardMember {
   phone?: string;
   email?: string;
   linkedin?: string;
+  photoUrl?: string;
 }
 
 export interface WalletWalletPass {
@@ -50,14 +51,13 @@ export interface WalletWalletPass {
  * caption above it), phone/email up front as secondary fields, and the back
  * carries the org's own contact details plus the member's LinkedIn.
  *
- * logoURL/iconURL/wideLogoURL/thumbnailURL are WalletWallet Pro-plan-only
- * fields — harmless to send on a free-tier key, just ignored.
+ * Uses the member's VPS-hosted photo for the pass thumbnail & icon when available.
  */
 export async function createWalletPass(apiKey: string, member: WalletCardMember, cardUrl: string): Promise<WalletWalletPass> {
-  // TODO: swap in the real wide-banner/thumbnail art once those files are
-  // hosted under public/images/ — see "Logo assets" in docs/wallet-setup.md.
-  // All four currently point at the same square logo as a placeholder.
   const logoUrl = `${SITE_ORIGIN}/images/leads-short-logo.png`;
+  const memberPhoto = member.photoUrl
+    ? (member.photoUrl.startsWith('http') ? member.photoUrl : `${SITE_ORIGIN}${member.photoUrl}`)
+    : logoUrl;
 
   const secondaryFields = [] as { label: string; value: string }[];
   if (member.phone) secondaryFields.push({ label: 'Phone Number', value: member.phone });
@@ -85,9 +85,9 @@ export async function createWalletPass(apiKey: string, member: WalletCardMember,
       colorPreset: COLOR_PRESET,
       color: CUSTOM_COLOR,
       logoURL: logoUrl,
-      iconURL: logoUrl,
+      iconURL: memberPhoto,
       wideLogoURL: logoUrl,
-      thumbnailURL: logoUrl,
+      thumbnailURL: memberPhoto,
       barcodeValue: cardUrl,
       barcodeFormat: 'QR',
       primaryFields: [{ label: member.designation || ORG_NAME, value: member.name }],
