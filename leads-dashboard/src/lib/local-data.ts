@@ -2572,7 +2572,7 @@ export async function dispatchPassEmail(
   }
 
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://leadsnextgencentre.online';
-  const passUrl = `${origin}/dashboard/events?pass=${pass.serialNumber}`;
+  const passUrl = `${origin}/pass/${pass.serialNumber}`;
 
   const subject = `Your Official Pass for ${pass.eventName} — ${pass.passType}`;
   const bodyText = `Dear ${pass.attendeeName},\n\nWe are delighted to welcome you to ${pass.eventName}. Your official credential has been issued by the LEADS Next Gen Centre.\n\n• Pass Tier: ${pass.passType}\n• Guest Category: ${pass.guestCategory || 'Guest Attendee'}\n• Assigned Venue / Room: ${pass.roomOrVenue || pass.eventVenue || 'Main Auditorium'}\n• Event Date & Validity: ${pass.validityDate || pass.eventDate || '2026'}\n• Pass Serial ID: ${pass.serialNumber}\n\nYou can access your verified digital pass, save it to Apple Wallet / Google Wallet, or view check-in details via the link below:\n${passUrl}\n\nPlease present your digital pass or QR code at official event turnstiles upon arrival.\n\nWarm regards,\nLEADS Next Gen Centre • RUAS`;

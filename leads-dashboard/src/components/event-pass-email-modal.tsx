@@ -100,7 +100,7 @@ export function EventPassEmailModal({
   const renderMailMerge = (template: string, pass?: EventPassItem) => {
     if (!pass) return template;
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://leadsnextgencentre.online';
-    const passUrl = `${origin}/dashboard/events?pass=${pass.serialNumber}`;
+    const passUrl = `${origin}/pass/${pass.serialNumber}`;
 
     return template
       .replace(/@name|\{\{name\}\}/gi, pass.attendeeName)
