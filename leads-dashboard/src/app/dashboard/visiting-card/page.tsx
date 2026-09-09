@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Save, QrCode, Copy, ExternalLink, RotateCw, AlertCircle, Sparkles, Layers, Smartphone } from 'lucide-react';
+import { Save, QrCode, Copy, ExternalLink, RotateCw, AlertCircle, Sparkles, Layers, Smartphone, Maximize2, X, ShieldCheck } from 'lucide-react';
 import { getMembers, saveMembers, updateMemberCard, updateMemberCardPhoto, authHeaders } from '@/lib/local-data';
 import { FileDropzone, useUploadTask } from '@/components/ui/file-dropzone';
 import { VisitingCardView } from '@/components/visiting-card-view';
@@ -15,6 +15,7 @@ export default function VisitingCardPage() {
   const [user, setUser] = useState<any>(null);
 
   const [cardExperienceMode, setCardExperienceMode] = useState<'profile' | 'leather'>('profile');
+  const [isFullscreenLeatherOpen, setIsFullscreenLeatherOpen] = useState(false);
   const [cardEnabled, setCardEnabled] = useState(false);
   const [cardSlug, setCardSlug] = useState('');
   const [cardDesignationOverride, setCardDesignationOverride] = useState('');
@@ -383,33 +384,47 @@ export default function VisitingCardPage() {
         </div>
 
         <div className="flex flex-col items-center xl:items-center w-full xl:col-span-7 2xl:col-span-7 gap-4 min-w-0 overflow-visible">
-          <div className="flex items-center justify-between w-full max-w-xl px-1">
+          <div className="flex items-center justify-between w-full max-w-xl px-1 flex-wrap gap-2">
             <p className="text-[11px] font-semibold text-theme-text-secondary uppercase tracking-wider">Card Experience</p>
-            <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 text-xs shadow-inner">
+
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setCardExperienceMode('profile')}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                  cardExperienceMode === 'profile'
-                    ? 'bg-accent text-white shadow-sm'
-                    : 'text-theme-text-secondary hover:text-white'
-                }`}
+                onClick={() => setIsFullscreenLeatherOpen(true)}
+                className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 via-amber-700 to-amber-800 hover:from-amber-500 hover:to-amber-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-950/40 border border-amber-400/40 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                title="View Fullscreen 3D Leather Card Holder with Authenticated Credentials"
               >
-                <Smartphone className="h-3.5 w-3.5 inline mr-1.5" />
-                3D Gyro Card
+                <Maximize2 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Fullscreen 3D Holder</span>
+                <span className="sm:hidden">Fullscreen</span>
               </button>
-              <button
-                type="button"
-                onClick={() => setCardExperienceMode('leather')}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                  cardExperienceMode === 'leather'
-                    ? 'bg-accent text-white shadow-sm'
-                    : 'text-theme-text-secondary hover:text-white'
-                }`}
-              >
-                <Sparkles className="h-3.5 w-3.5 inline mr-1.5" />
-                Leather Holder
-              </button>
+
+              <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 text-xs shadow-inner">
+                <button
+                  type="button"
+                  onClick={() => setCardExperienceMode('profile')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                    cardExperienceMode === 'profile'
+                      ? 'bg-accent text-white shadow-sm'
+                      : 'text-theme-text-secondary hover:text-white'
+                  }`}
+                >
+                  <Smartphone className="h-3.5 w-3.5 inline mr-1.5" />
+                  3D Gyro Card
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCardExperienceMode('leather')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                    cardExperienceMode === 'leather'
+                      ? 'bg-accent text-white shadow-sm'
+                      : 'text-theme-text-secondary hover:text-white'
+                  }`}
+                >
+                  <Sparkles className="h-3.5 w-3.5 inline mr-1.5" />
+                  Leather Holder
+                </button>
+              </div>
             </div>
           </div>
 
@@ -449,6 +464,67 @@ export default function VisitingCardPage() {
             </div>
           )}
         </div>
+
+        {/* Fullscreen Authenticated 3D Leather Card Holder Experience */}
+        {isFullscreenLeatherOpen && (
+          <div className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-2xl flex flex-col justify-between p-4 sm:p-6 overflow-y-auto animate-in fade-in duration-300">
+            {/* Top Bar */}
+            <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4 shrink-0 max-w-5xl mx-auto w-full">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-sm sm:text-base font-black text-white flex items-center gap-2 flex-wrap">
+                    LEADS Executive 3D Keycard Vault
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                      <ShieldCheck className="h-3 w-3" /> Authenticated Member View
+                    </span>
+                  </h2>
+                  <p className="text-[11px] text-slate-400">
+                    Physical 3D luxury leather bookfold with complete live member credentials.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsFullscreenLeatherOpen(false)}
+                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/20 flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+              >
+                <X className="h-4 w-4" />
+                <span>Exit Fullscreen</span>
+                <span className="text-[10px] text-white/50 font-mono hidden sm:inline">(Esc)</span>
+              </button>
+            </div>
+
+            {/* Central 3D Stage */}
+            <div className="flex-1 flex flex-col items-center justify-center my-4 overflow-visible w-full max-w-4xl mx-auto">
+              <InteractiveKeycardHolder
+                memberName={user?.name || 'Executive Member'}
+                memberRole={(isWalletAdmin && cardDesignationOverride.trim()) ? cardDesignationOverride.trim() : (user?.role || 'LEADS Member')}
+                phone={cardPhone || user?.phone || '+91 9608768647'}
+                email={user?.email || 'member@leads-centre.org'}
+                photoUrl={cardPhotoPreviewUrl || cardPhotoUrl || user?.avatarUrl}
+                serialNumber={cardSlug ? `LEADS-DIR-${cardSlug.toUpperCase()}` : 'LEADS-DIR-2026-99'}
+                accessLevel={user?.division === 'Faculty' ? 'Faculty & Academic Leadership' : user?.tier === 1 ? 'Executive Super User (Tier 1)' : 'Core Committee & Executive Fellow'}
+                issuingAuthority="LEADS Next Gen Centre • RUAS"
+                qrUrl="/card/leads-qr-code.png"
+                showActions={true}
+                autoOpen={true}
+              />
+            </div>
+
+            {/* Bottom HUD Hint */}
+            <div className="border-t border-white/10 pt-3 text-center text-[11px] text-slate-400 shrink-0 max-w-2xl mx-auto w-full">
+              <p className="flex items-center justify-center gap-2 flex-wrap">
+                <span>💡 <strong>Interactivity:</strong> Tap leather flap to open/close</span>
+                <span>•</span>
+                <span>Tap card to pull out &amp; flip for 5-point verification details</span>
+              </p>
+            </div>
+          </div>
+        )}
 
         <CardQrModal
           isOpen={isCardQrOpen}
