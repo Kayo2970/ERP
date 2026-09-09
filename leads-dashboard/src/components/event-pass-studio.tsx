@@ -138,7 +138,8 @@ export function EventPassStudio({
   const [attendeeEmail, setAttendeeEmail] = useState('');
   const [attendeePhone, setAttendeePhone] = useState('');
   const [attendeeOrg, setAttendeeOrg] = useState('');
-  const [customValidity, setCustomValidity] = useState('');
+  const [brandHeader, setBrandHeader] = useState('LEADS Next Gen Centre');
+  const [validityDate, setValidityDate] = useState('');
   const [notes, setNotes] = useState('');
 
   // Modals & Preview mode
@@ -167,7 +168,7 @@ export function EventPassStudio({
 
   const previewSerial = `LEADS-EVT-2026-${(attendeeName || 'GUEST').slice(0, 3).toUpperCase()}-99`;
   const displayRoom = roomOrVenue.trim() || selectedEvent?.location || 'Main Auditorium';
-  const displayValidity = customValidity.trim() || formattedEventDate;
+  const displayValidity = validityDate.trim() || formattedEventDate;
 
   const handleIssuePass = (e: React.FormEvent) => {
     e.preventDefault();
@@ -213,7 +214,7 @@ export function EventPassStudio({
     setAttendeePhone('');
     setAttendeeOrg('');
     setRoomOrVenue('');
-    setCustomValidity('');
+    setValidityDate('');
     setNotes('');
     setIssuedPass(null);
     setIsFlipped(false);
@@ -313,6 +314,21 @@ export function EventPassStudio({
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* Pass Header Branding Customization */}
+            <div className="space-y-1.5">
+              <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] flex items-center justify-between">
+                <span>Pass Header Title / Organization</span>
+                <span className="text-[10px] text-accent font-semibold lowercase">(branding)</span>
+              </label>
+              <input
+                type="text"
+                value={brandHeader}
+                onChange={(e) => setBrandHeader(e.target.value)}
+                placeholder="LEADS Next Gen Centre"
+                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-300 dark:border-white/15 rounded-xl text-slate-900 dark:text-white font-semibold focus:outline-none focus:border-accent text-xs"
+              />
             </div>
 
             {/* 2. Guest / Attendee Name */}
@@ -421,7 +437,7 @@ export function EventPassStudio({
               </div>
             </div>
 
-            {/* 6. Contact Details: Org & Email */}
+            {/* 6. Contact Details: Org & Structured Date Selection */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px]">
@@ -440,16 +456,24 @@ export function EventPassStudio({
               </div>
 
               <div className="space-y-1.5">
-                <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px]">
-                  Date & Validity Slot
+                <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] flex items-center justify-between">
+                  <span>Pass Validity Date</span>
+                  {validityDate && (
+                    <button
+                      type="button"
+                      onClick={() => setValidityDate('')}
+                      className="text-[10px] text-sky-400 hover:underline"
+                    >
+                      Reset to Event
+                    </button>
+                  )}
                 </label>
                 <div className="relative">
-                  <Clock className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
+                  <Calendar className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
                   <input
-                    type="text"
-                    value={customValidity}
-                    onChange={(e) => setCustomValidity(e.target.value)}
-                    placeholder={formattedEventDate}
+                    type="date"
+                    value={validityDate}
+                    onChange={(e) => setValidityDate(e.target.value)}
                     className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-300 dark:border-white/15 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:border-accent text-xs"
                   />
                 </div>
@@ -571,7 +595,7 @@ export function EventPassStudio({
                         className={styles.leadsLogo}
                       />
                       <div className={styles.brandText}>
-                        <span className={styles.brandTitle}>LEADS Next Gen Centre</span>
+                        <span className={styles.brandTitle}>{brandHeader}</span>
                         <span className={styles.brandSubtitle}>RUAS Executive Credential</span>
                       </div>
                     </div>
@@ -644,7 +668,7 @@ export function EventPassStudio({
 
                   {/* Footer */}
                   <div className={styles.passFooter}>
-                    <span>LEADS Next Gen Centre • RUAS</span>
+                    <span>{brandHeader} • RUAS</span>
                     <div className={styles.flipHint}>
                       <RotateCw className="h-2.5 w-2.5" />
                       <span>Tap to flip</span>
@@ -688,13 +712,13 @@ export function EventPassStudio({
                       </div>
                       <div className={styles.ruleItem}>
                         <span className={styles.dot} />
-                        <span>For venue assistance or room queries, contact the LEADS Event Helpdesk.</span>
+                        <span>Real-time session and venue updates will be delivered via your digital pass.</span>
                       </div>
                     </div>
 
                     <div className="p-3 bg-white/5 border border-white/10 rounded-xl space-y-1 text-[9.5px]">
                       <div className="text-slate-400 font-bold uppercase text-[8px]">Issued Authority</div>
-                      <div className="text-white font-extrabold">LEADS Next Gen Centre</div>
+                      <div className="text-white font-extrabold">{brandHeader} • RUAS</div>
                       <div className="text-sky-300 font-mono text-[9px]">
                         Issued By: {currentUserName || 'Staff Reception'}
                       </div>
@@ -703,7 +727,7 @@ export function EventPassStudio({
 
                   {/* Back Footer */}
                   <div className={styles.passFooter}>
-                    <span>Emergency: +91 80 4536 6666</span>
+                    <span>Issuing Authority: {brandHeader} • RUAS</span>
                     <div className={styles.flipHint}>
                       <RotateCw className="h-2.5 w-2.5" />
                       <span>Back to front</span>
@@ -726,8 +750,10 @@ export function EventPassStudio({
               validityDate={displayValidity}
               serialNumber={issuedPass ? issuedPass.serialNumber : previewSerial}
               interactive={true}
+              logoText={brandHeader}
             />
           )}
+
 
           {/* POST-ISSUANCE ACTIONS BAR */}
           {issuedPass ? (

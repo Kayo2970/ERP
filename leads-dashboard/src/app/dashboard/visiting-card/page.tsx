@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Save, QrCode, Copy, ExternalLink, RotateCw, AlertCircle } from 'lucide-react';
+import { Save, QrCode, Copy, ExternalLink, RotateCw, AlertCircle, Sparkles, Layers, Smartphone } from 'lucide-react';
 import { getMembers, saveMembers, updateMemberCard, updateMemberCardPhoto, authHeaders } from '@/lib/local-data';
 import { FileDropzone, useUploadTask } from '@/components/ui/file-dropzone';
 import { VisitingCardView } from '@/components/visiting-card-view';
+import { InteractiveKeycardHolder } from '@/components/interactive-keycard-holder';
 import { CardQrModal } from '@/components/card-qr-modal';
 import { Linkedin } from '@/components/ui/linkedin-icon';
 
@@ -13,6 +14,7 @@ const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
 export default function VisitingCardPage() {
   const [user, setUser] = useState<any>(null);
 
+  const [cardExperienceMode, setCardExperienceMode] = useState<'profile' | 'leather'>('profile');
   const [cardEnabled, setCardEnabled] = useState(false);
   const [cardSlug, setCardSlug] = useState('');
   const [cardDesignationOverride, setCardDesignationOverride] = useState('');
@@ -23,6 +25,7 @@ export default function VisitingCardPage() {
   const [cardPhotoPreviewUrl, setCardPhotoPreviewUrl] = useState<string | null>(null);
   const [cardPhotoSizeError, setCardPhotoSizeError] = useState('');
   const [isCardQrOpen, setIsCardQrOpen] = useState(false);
+
   const [isSavingCard, setIsSavingCard] = useState(false);
 
   // Wallet Setup (Super User only). Apple + Google passes are both issued
@@ -379,24 +382,72 @@ export default function VisitingCardPage() {
           </form>
         </div>
 
-        <div className="flex flex-col items-center gap-3">
-          <p className="text-[11px] font-semibold text-theme-text-secondary uppercase tracking-wider self-start">Live Preview</p>
-          <VisitingCardView
-            card={{
-              name: user?.name || '',
-              designation: (isWalletAdmin && cardDesignationOverride.trim()) ? cardDesignationOverride.trim() : (user?.role || ''),
-              phone: cardPhone,
-              email: user?.email,
-              photoUrl: cardPhotoPreviewUrl || cardPhotoUrl || user?.avatarUrl,
-              socials: { linkedin: cardLinkedin },
-            }}
-            slug={cardSlug || 'preview'}
-            showActions={Boolean(cardSlug)}
-            previewMode
-            appleWalletAvailable={walletAvailability.appleWalletAvailable}
-            googleWalletAvailable={walletAvailability.googleWalletAvailable}
-          />
+        <div className="flex flex-col items-center gap-3 w-full max-w-md">
+          <div className="flex items-center justify-between w-full">
+            <p className="text-[11px] font-semibold text-theme-text-secondary uppercase tracking-wider">Card Experience</p>
+            <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 text-xs">
+              <button
+                type="button"
+                onClick={() => setCardExperienceMode('profile')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                  cardExperienceMode === 'profile'
+                    ? 'bg-accent text-white shadow-sm'
+                    : 'text-theme-text-secondary hover:text-white'
+                }`}
+              >
+                <Smartphone className="h-3 w-3 inline mr-1" />
+                3D Gyro Card
+              </button>
+              <button
+                type="button"
+                onClick={() => setCardExperienceMode('leather')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                  cardExperienceMode === 'leather'
+                    ? 'bg-accent text-white shadow-sm'
+                    : 'text-theme-text-secondary hover:text-white'
+                }`}
+              >
+                <Sparkles className="h-3 w-3 inline mr-1" />
+                Leather Holder
+              </button>
+            </div>
+          </div>
+
+          {cardExperienceMode === 'profile' ? (
+            <VisitingCardView
+              card={{
+                name: user?.name || '',
+                designation: (isWalletAdmin && cardDesignationOverride.trim()) ? cardDesignationOverride.trim() : (user?.role || ''),
+                phone: cardPhone,
+                email: user?.email,
+                photoUrl: cardPhotoPreviewUrl || cardPhotoUrl || user?.avatarUrl,
+                socials: { linkedin: cardLinkedin },
+              }}
+              slug={cardSlug || 'preview'}
+              showActions={Boolean(cardSlug)}
+              previewMode
+              appleWalletAvailable={walletAvailability.appleWalletAvailable}
+              googleWalletAvailable={walletAvailability.googleWalletAvailable}
+            />
+          ) : (
+            <div className="w-full">
+              <InteractiveKeycardHolder
+                memberName={user?.name || 'Executive Member'}
+                memberRole={(isWalletAdmin && cardDesignationOverride.trim()) ? cardDesignationOverride.trim() : (user?.role || 'LEADS Member')}
+                phone={cardPhone || user?.phone || '+91 9608768647'}
+                email={user?.email || 'member@leads-centre.org'}
+                photoUrl={cardPhotoPreviewUrl || cardPhotoUrl || user?.avatarUrl}
+                serialNumber={cardSlug ? `LEADS-DIR-${cardSlug.toUpperCase()}` : 'LEADS-DIR-2026-99'}
+                accessLevel="Executive & Alumni Fellow"
+                issuingAuthority="LEADS Next Gen Centre • RUAS"
+                qrUrl="/card/leads-qr-code.png"
+                showActions={true}
+                autoOpen={true}
+              />
+            </div>
+          )}
         </div>
+
 
         <CardQrModal
           isOpen={isCardQrOpen}

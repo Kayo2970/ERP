@@ -16,6 +16,8 @@ export interface AppleWalletPassPreviewProps {
   qrPayload?: string;
   issuedBy?: string;
   interactive?: boolean;
+  logoText?: string;
+  logoUrl?: string;
 }
 
 export function AppleWalletPassPreview({
@@ -28,6 +30,8 @@ export function AppleWalletPassPreview({
   validityDate,
   serialNumber,
   interactive = true,
+  logoText = 'LEADS Next Gen Centre',
+  logoUrl = '/card/leads-logo.png',
 }: AppleWalletPassPreviewProps) {
   const [isFlipped, setIsFlipped] = useState(false);
 
@@ -46,11 +50,11 @@ export function AppleWalletPassPreview({
           <div className={styles.headerRow}>
             <div className={styles.logoArea}>
               <img
-                src="/card/leads-logo.png"
-                alt="LEADS Logo"
+                src={logoUrl}
+                alt="Logo"
                 className={styles.passLogo}
               />
-              <span className={styles.logoText}>LEADS Next Gen Centre</span>
+              <span className={styles.logoText}>{logoText}</span>
             </div>
             <div className={styles.headerField}>
               <div className={styles.headerLabel}>Access</div>
@@ -147,16 +151,19 @@ export function AppleWalletPassPreview({
               </span>
             </div>
             <div className={styles.backItem}>
-              <span className={styles.backItemLabel}>Support & Helpline</span>
-              <span className={styles.backItemValue}>+91 80 4536 6666</span>
-            </div>
-            <div className={styles.backItem}>
               <span className={styles.backItemLabel}>Access Policy</span>
               <span className="text-[9.5px] text-slate-300">
                 Strictly non-transferable. Present at official event turnstiles.
               </span>
             </div>
+            <div className={styles.backItem}>
+              <span className={styles.backItemLabel}>Live Notifications</span>
+              <span className="text-[9.5px] text-emerald-400">
+                Automatic lock-screen updates enabled via APNs
+              </span>
+            </div>
           </div>
+
 
           <div className={styles.footerRow}>
             <span className="text-[8px] text-slate-500">

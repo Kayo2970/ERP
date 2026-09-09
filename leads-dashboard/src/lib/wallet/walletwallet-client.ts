@@ -153,7 +153,6 @@ export async function createEventWalletPass(
     { label: 'Event Name', value: eventPass.eventName },
     { label: 'Pass Serial ID', value: eventPass.serialNumber },
     { label: 'Issuing Authority', value: 'LEADS Next Gen Centre • RUAS' },
-    { label: 'Support Helpline', value: ORG_PHONE },
     { label: 'Access Policy', value: 'Strictly non-transferable. Present at event check-in turnstiles.' },
     { label: 'Digital Pass Link', value: passUrl },
     { label: 'Notifications', value: ' ', changeMessage: '%@' },
@@ -189,4 +188,45 @@ export async function createEventWalletPass(
 
   return res.json();
 }
+
+/**
+ * Pushes a live lock-screen update / notification to an issued Apple & Google Wallet pass
+ * via WalletWallet PUT /api/passes/:serialNumber.
+ */
+export async function updateEventPassPushNotification(
+  apiKey: string,
+  serialNumber: string,
+  message: string,
+  additionalFields?: { [key: string]: string }
+): Promise<{ success: boolean; detail?: any }> {
+  const updatePayload: any = {
+    backFields: [
+      { label: 'Notifications', value: message, changeMessage: '%@' },
+    ],
+  };
+
+  if (additionalFields?.roomOrVenue) {
+    updatePayload.secondaryFields = [
+      { label: 'ROOM / VENUE', value: additionalFields.roomOrVenue, changeMessage: '%@' },
+    ];
+  }
+
+  const res = await fetch(`${API_BASE}/api/passes/${encodeURIComponent(serialNumber)}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(updatePayload),
+  });
+
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+    throw new Error(`Push notification update failed: ${detail.error || res.statusText}`);
+  }
+
+  const data = await res.json().catch(() => ({}));
+  return { success: true, detail: data };
+}
+
 

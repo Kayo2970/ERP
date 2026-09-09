@@ -26,6 +26,8 @@ import {
   Search,
   Printer,
   ShieldCheck,
+  Bell,
+  FileSpreadsheet,
 } from 'lucide-react';
 import {
   getEvents,
@@ -67,6 +69,8 @@ import { useDropTarget } from '@/components/ui/file-dropzone';
 import { RequestApprovalModal } from '@/components/request-approval-modal';
 import { EventPassStudio } from '@/components/event-pass-studio';
 import { EventPassScanner } from '@/components/event-pass-scanner';
+import { EventPassPushModal } from '@/components/event-pass-push-modal';
+
 
 type EventStatusFilter = 'ALL' | 'ONGOING' | 'COMPLETED' | 'ARCHIVED';
 
@@ -79,7 +83,9 @@ export default function EventsPage() {
   const [passFilterEventId, setPassFilterEventId] = useState('ALL');
   const [passSearchQuery, setPassSearchQuery] = useState('');
 
-  // Modals
+  // Modals & Push Broadcast
+  const [isPushModalOpen, setIsPushModalOpen] = useState(false);
+  const [selectedPushPass, setSelectedPushPass] = useState<EventPassItem | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
   const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
@@ -87,6 +93,7 @@ export default function EventsPage() {
   const [rejectionReasonInput, setRejectionReasonInput] = useState('');
   const [members, setMembers] = useState<Member[]>([]);
   const [approvalRequestEvent, setApprovalRequestEvent] = useState<EventItem | null>(null);
+
 
   // Form State
   const [title, setTitle] = useState('');
@@ -162,6 +169,66 @@ export default function EventsPage() {
     link.click();
     document.body.removeChild(link);
   };
+
+  const handleExportAttendance = () => {
+    const filtered = eventPasses.filter((p) => {
+      if (passFilterEventId !== 'ALL' && p.eventId !== passFilterEventId) return false;
+      return true;
+    });
+
+    if (filtered.length === 0) {
+      triggerError('No pass records found to export.');
+      return;
+    }
+
+    const headers = [
+      'Serial ID',
+      'Attendee Name',
+      'Guest Category',
+      'Affiliation / Org',
+      'Email',
+      'Phone / WhatsApp',
+      'Event Name',
+      'Pass Type / Tier',
+      'Allocated Room / Venue',
+      'Attendance Status',
+      'Check-In Time',
+      'Checked In By',
+      'Issued By',
+      'Issued Date',
+    ];
+
+    const rows = filtered.map((p) => [
+      `"${p.serialNumber}"`,
+      `"${(p.attendeeName || '').replace(/"/g, '""')}"`,
+      `"${(p.guestCategory || '').replace(/"/g, '""')}"`,
+      `"${(p.attendeeOrg || '').replace(/"/g, '""')}"`,
+      `"${(p.attendeeEmail || '').replace(/"/g, '""')}"`,
+      `"${(p.attendeePhone || '').replace(/"/g, '""')}"`,
+      `"${(p.eventName || '').replace(/"/g, '""')}"`,
+      `"${(p.passType || '').replace(/"/g, '""')}"`,
+      `"${(p.roomOrVenue || p.eventVenue || '').replace(/"/g, '""')}"`,
+      `"${p.status === 'Checked In' ? 'Checked In' : 'Not Attended (Registered)'}"`,
+      `"${p.checkedInAt ? new Date(p.checkedInAt).toLocaleString() : 'N/A'}"`,
+      `"${(p.checkedInBy || 'N/A').replace(/"/g, '""')}"`,
+      `"${(p.issuedBy || '').replace(/"/g, '""')}"`,
+      `"${p.issuedAt ? new Date(p.issuedAt).toLocaleDateString() : new Date().toLocaleDateString()}"`,
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    const targetEventTitle = events.find((e) => e.id === passFilterEventId)?.title || 'All_Events';
+    const cleanTitle = targetEventTitle.replace(/[^a-zA-Z0-9_-]/g, '_');
+    link.setAttribute('download', `Attendance_Roster_${cleanTitle}_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    triggerSuccess(`Downloaded attendance roster for ${filtered.length} attendees!`);
+  };
+
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();
@@ -863,8 +930,31 @@ export default function EventsPage() {
                 </p>
               </div>
 
-              {/* Filters */}
+              {/* Filters & Actions */}
               <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleExportAttendance}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-600 dark:text-emerald-400 border border-emerald-500/35 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
+                  title="Export Attendance & Registration Roster to CSV for Audits"
+                >
+                  <FileSpreadsheet className="h-3.5 w-3.5" />
+                  Export Attendance (CSV)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedPushPass(null);
+                    setIsPushModalOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-accent/15 hover:bg-accent/25 text-accent border border-accent/35 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
+                  title="Broadcast lock-screen push notification to attendees"
+                >
+                  <Bell className="h-3.5 w-3.5 animate-pulse" />
+                  Broadcast Push
+                </button>
+
                 <div className="relative">
                   <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-theme-text-secondary" />
                   <input
@@ -979,30 +1069,43 @@ export default function EventsPage() {
                             </span>
                           </td>
                           <td className="py-3 px-4 text-right">
-                            {pass.status !== 'Checked In' && (
+                            <div className="flex items-center justify-end gap-1.5">
+                              {pass.status !== 'Checked In' && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    updateEventPassStatus(pass.id, 'Checked In', user?.name || 'Staff');
+                                    setEventPasses(getEventPasses());
+                                    triggerSuccess(`Checked in ${pass.attendeeName}!`);
+                                  }}
+                                  className="px-2.5 py-1 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                                >
+                                  Admit
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => {
-                                  updateEventPassStatus(pass.id, 'Checked In', user?.name || 'Staff');
-                                  setEventPasses(getEventPasses());
-                                  triggerSuccess(`Checked in ${pass.attendeeName}!`);
+                                  setSelectedPushPass(pass);
+                                  setIsPushModalOpen(true);
                                 }}
-                                className="px-3 py-1 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30 rounded-lg text-[10px] font-bold transition-all cursor-pointer mr-2"
+                                className="p-1.5 bg-accent/10 hover:bg-accent/20 text-accent border border-accent/25 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                                title="Send Lock-Screen Push Alert to this Attendee"
                               >
-                                Admit
+                                <Bell className="h-3 w-3" />
                               </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                navigator.clipboard.writeText(pass.serialNumber);
-                                triggerSuccess(`Copied serial ${pass.serialNumber}`);
-                              }}
-                              className="px-2.5 py-1 bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 text-slate-800 dark:text-white rounded-lg text-[10px] font-bold transition-all cursor-pointer"
-                              title="Copy Serial ID"
-                            >
-                              Copy ID
-                            </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(pass.serialNumber);
+                                  triggerSuccess(`Copied serial ${pass.serialNumber}`);
+                                }}
+                                className="px-2 py-1 bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 text-slate-800 dark:text-white rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                                title="Copy Serial ID"
+                              >
+                                Copy ID
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -1013,6 +1116,7 @@ export default function EventsPage() {
           </div>
         </div>
       )}
+
 
       {/* TURNSTILE SCANNER VIEW */}
       {mainTab === 'scanner' && canScanPasses && (
@@ -1298,6 +1402,31 @@ export default function EventsPage() {
         </div>
       )}
 
+      {/* Push Notification Broadcast Modal */}
+      {isPushModalOpen && (
+        <EventPassPushModal
+          isOpen={isPushModalOpen}
+          onClose={() => {
+            setIsPushModalOpen(false);
+            setSelectedPushPass(null);
+          }}
+          eventId={passFilterEventId !== 'ALL' ? passFilterEventId : events[0]?.id || ''}
+          eventName={
+            (passFilterEventId !== 'ALL'
+              ? events.find((e) => e.id === passFilterEventId)?.title
+              : events[0]?.title) || 'LEADS Official Event'
+          }
+          passes={
+            passFilterEventId !== 'ALL'
+              ? eventPasses.filter((p) => p.eventId === passFilterEventId)
+              : eventPasses
+          }
+          initialSelectedPass={selectedPushPass}
+          onBroadcastSuccess={() => triggerSuccess('Push notification alert sent to pass holders!')}
+        />
+      )}
+
     </div>
   );
 }
+
