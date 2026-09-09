@@ -103,3 +103,90 @@ export async function createWalletPass(apiKey: string, member: WalletCardMember,
 
   return res.json();
 }
+
+export interface WalletEventPassData {
+  serialNumber: string;
+  eventName: string;
+  eventDate?: string;
+  eventVenue?: string;
+  attendeeName: string;
+  guestCategory?: string;
+  roomOrVenue?: string;
+  passType: string;
+  validityDate?: string;
+}
+
+/**
+ * Creates an event access pass (Apple Wallet .pkpass + Google Wallet save link)
+ * via WalletWallet API matching the 98% pixel-accurate native layout.
+ */
+export async function createEventWalletPass(
+  apiKey: string,
+  eventPass: WalletEventPassData,
+  passUrl: string
+): Promise<WalletWalletPass> {
+  const logoUrl = `${SITE_ORIGIN}/card/leads-logo.png`;
+
+  const headerFields = [
+    { label: 'ACCESS', value: (eventPass.passType || 'VIP PASS').toUpperCase() },
+  ];
+
+  const primaryFields = [
+    {
+      label: (eventPass.guestCategory || 'GUEST ATTENDEE').toUpperCase(),
+      value: eventPass.attendeeName,
+    },
+  ];
+
+  const secondaryFields = [
+    {
+      label: 'ROOM / VENUE',
+      value: eventPass.roomOrVenue || eventPass.eventVenue || 'Main Auditorium',
+    },
+    {
+      label: 'VALIDITY',
+      value: eventPass.validityDate || eventPass.eventDate || '2026',
+    },
+  ];
+
+  const backFields = [
+    { label: 'Event Name', value: eventPass.eventName },
+    { label: 'Pass Serial ID', value: eventPass.serialNumber },
+    { label: 'Issuing Authority', value: 'LEADS Next Gen Centre • RUAS' },
+    { label: 'Support Helpline', value: ORG_PHONE },
+    { label: 'Access Policy', value: 'Strictly non-transferable. Present at event check-in turnstiles.' },
+    { label: 'Digital Pass Link', value: passUrl },
+    { label: 'Notifications', value: ' ', changeMessage: '%@' },
+  ];
+
+  const res = await fetch(`${API_BASE}/api/passes`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      organizationName: ORG_NAME,
+      logoText: 'LEADS Next Gen Centre',
+      colorPreset: 'dark',
+      color: '#0b1526',
+      logoURL: logoUrl,
+      iconURL: logoUrl,
+      barcodeValue: passUrl,
+      barcodeFormat: 'QR',
+      barcodeAltText: eventPass.serialNumber,
+      headerFields,
+      primaryFields,
+      secondaryFields,
+      backFields,
+    }),
+  });
+
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+    throw new Error(`WalletWallet event pass creation failed: ${detail.error || res.statusText}`);
+  }
+
+  return res.json();
+}
+

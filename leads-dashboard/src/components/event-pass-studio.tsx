@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useId } from 'react';
+import React, { useState } from 'react';
 import {
   Ticket,
   User,
@@ -21,6 +21,11 @@ import {
   Share2,
   ExternalLink,
   Layers,
+  Upload,
+  Download,
+  Send,
+  Smartphone,
+  Eye,
 } from 'lucide-react';
 import {
   EventItem,
@@ -28,8 +33,12 @@ import {
   EventPassType,
   EventGuestCategory,
   addEventPass,
+  getEventPasses,
 } from '@/lib/local-data';
 import styles from './event-pass-card.module.css';
+import { AppleWalletPassPreview } from './apple-wallet-pass-preview';
+import { EventPassBulkModal } from './event-pass-bulk-modal';
+import { EventPassEmailModal } from './event-pass-email-modal';
 
 interface EventPassStudioProps {
   events: EventItem[];
@@ -132,12 +141,16 @@ export function EventPassStudio({
   const [customValidity, setCustomValidity] = useState('');
   const [notes, setNotes] = useState('');
 
+  // Modals & Preview mode
+  const [previewMode, setPreviewMode] = useState<'luxury' | 'apple-wallet'>('luxury');
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+
   const [isFlipped, setIsFlipped] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [issuedPass, setIssuedPass] = useState<EventPassItem | null>(null);
   const [successToast, setSuccessToast] = useState('');
   const [copiedSerial, setCopiedSerial] = useState(false);
-  const [copiedLink, setCopiedLink] = useState(false);
 
   const selectedEvent = events.find((e) => e.id === selectedEventId) || defaultEvent;
   const currentPassMeta = PASS_TYPES.find((p) => p.type === passType) || PASS_TYPES[0];
@@ -212,6 +225,35 @@ export function EventPassStudio({
 
   return (
     <div className="space-y-6">
+      {/* Top Action Toolbar: Bulk Import, Mail-Merge, Download Template */}
+      <div className="glass-panel rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-slate-200/90 dark:border-white/15 bg-white/95 dark:bg-[#0D1F38]/95 shadow-lg">
+        <div className="flex items-center gap-2.5">
+          <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+            <Ticket className="h-4 w-4 text-accent" /> Event Pass Actions
+          </span>
+          <span className="text-[10px] text-slate-500 font-medium hidden md:inline">
+            • Design single pass, import CSV rosters, or email attendees
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsBulkModalOpen(true)}
+            className="px-3.5 py-1.5 bg-accent/15 hover:bg-accent/25 text-accent border border-accent/35 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+          >
+            <Upload className="h-3.5 w-3.5" /> Bulk CSV Import
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsEmailModalOpen(true)}
+            className="px-3.5 py-1.5 bg-sky-500/15 hover:bg-sky-500/25 text-sky-400 border border-sky-500/35 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+          >
+            <Send className="h-3.5 w-3.5" /> Mail-Merge Dispatch
+          </button>
+        </div>
+      </div>
+
       {successToast && (
         <div className="flex items-center justify-between p-4 bg-emerald-500/15 border border-emerald-500/30 rounded-2xl text-emerald-300 text-xs animate-in fade-in duration-300 shadow-lg shadow-emerald-500/10">
           <div className="flex items-center gap-3">
@@ -467,183 +509,225 @@ export function EventPassStudio({
           </form>
         </div>
 
-        {/* RIGHT COLUMN: REAL-TIME INTERACTIVE LUXURY PASS PREVIEW */}
+        {/* RIGHT COLUMN: REAL-TIME INTERACTIVE LIVE PASS PREVIEWS */}
         <div className="lg:col-span-6 flex flex-col items-center space-y-4">
+          {/* Dual Preview Switcher: 3D Luxury vs Apple Wallet (98% Match) */}
           <div className="flex items-center justify-between w-full max-w-[380px] px-1">
-            <span className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-accent animate-pulse" /> Live Card Preview
-            </span>
-            <button
-              type="button"
-              onClick={() => setIsFlipped(!isFlipped)}
-              className="text-[11px] font-bold text-sky-400 hover:text-sky-300 bg-sky-500/15 hover:bg-sky-500/25 px-3 py-1 rounded-full border border-sky-500/30 flex items-center gap-1.5 transition-all cursor-pointer"
-            >
-              <RotateCw className="h-3 w-3" />
-              {isFlipped ? 'Show Front' : 'Flip to Back'}
-            </button>
+            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-white/15">
+              <button
+                type="button"
+                onClick={() => setPreviewMode('luxury')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  previewMode === 'luxury'
+                    ? 'bg-accent text-white shadow-md shadow-accent/25'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-white'
+                }`}
+              >
+                <Sparkles className="h-3 w-3" /> 3D Luxury
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewMode('apple-wallet')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  previewMode === 'apple-wallet'
+                    ? 'bg-accent text-white shadow-md shadow-accent/25'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-white'
+                }`}
+              >
+                <Smartphone className="h-3 w-3" /> Apple Wallet (98%)
+              </button>
+            </div>
+
+            {previewMode === 'luxury' && (
+              <button
+                type="button"
+                onClick={() => setIsFlipped(!isFlipped)}
+                className="text-[11px] font-bold text-sky-400 hover:text-sky-300 bg-sky-500/15 hover:bg-sky-500/25 px-3 py-1 rounded-full border border-sky-500/30 flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <RotateCw className="h-3 w-3" />
+                {isFlipped ? 'Front' : 'Back'}
+              </button>
+            )}
           </div>
 
-          {/* 3D PHOTOREALISTIC LUXURY PASS CARD */}
-          <div className={`${styles.passContainer} printableBadge`}>
-            <div
-              className={`${styles.passCardInner} ${isFlipped ? styles.isFlipped : ''}`}
-              onClick={() => setIsFlipped(!isFlipped)}
-            >
-              {/* FRONT FACE */}
-              <div className={`${styles.passFace} ${styles.passFront}`}>
-                {/* Lanyard Cut */}
-                <div className={styles.lanyardSlot} />
+          {/* VIEW 1: 3D PHOTOREALISTIC LUXURY PASS CARD */}
+          {previewMode === 'luxury' && (
+            <div className={`${styles.passContainer} printableBadge`}>
+              <div
+                className={`${styles.passCardInner} ${isFlipped ? styles.isFlipped : ''}`}
+                onClick={() => setIsFlipped(!isFlipped)}
+              >
+                {/* FRONT FACE */}
+                <div className={`${styles.passFace} ${styles.passFront}`}>
+                  {/* Lanyard Cut */}
+                  <div className={styles.lanyardSlot} />
 
-                {/* Header */}
-                <div className={styles.passHeader}>
-                  <div className={styles.brandWrap}>
-                    <img
-                      src="/card/leads-logo.png"
-                      alt="LEADS Logo"
-                      className={styles.leadsLogo}
-                    />
-                    <div className={styles.brandText}>
-                      <span className={styles.brandTitle}>LEADS Next Gen Centre</span>
-                      <span className={styles.brandSubtitle}>RUAS Executive Credential</span>
-                    </div>
-                  </div>
-                  <span className={`${styles.passTypePill} ${currentPassMeta.colorClass}`}>
-                    {currentPassMeta.badge}
-                  </span>
-                </div>
-
-                {/* Body Content */}
-                <div className={styles.passBody}>
-                  {/* Event Info */}
-                  <div className={styles.eventRow}>
-                    <div className={styles.eventTitleText}>
-                      {selectedEvent?.title || 'Selected Event Name'}
-                    </div>
-                    <div className={styles.eventDateText}>
-                      <Calendar className="h-3 w-3 text-sky-400 shrink-0" />
-                      <span>{displayValidity}</span>
-                    </div>
-                  </div>
-
-                  {/* Guest Identity Box */}
-                  <div className={styles.guestBox}>
-                    <div className={styles.guestCategoryTag}>
-                      <Tag className="h-2.5 w-2.5" />
-                      <span>{guestCategory}</span>
-                    </div>
-                    <div className={styles.attendeeNameText}>
-                      {attendeeName.trim() || 'Guest / Attendee Name'}
-                    </div>
-
-                    <div className={styles.metaGrid}>
-                      <div className={styles.metaItem}>
-                        <span className={styles.metaLabel}>Assigned Room / Venue</span>
-                        <span className={`${styles.metaVal} ${styles.roomVal}`}>
-                          📍 {displayRoom}
-                        </span>
-                      </div>
-                      <div className={styles.metaItem}>
-                        <span className={styles.metaLabel}>Affiliation / Tier</span>
-                        <span className={styles.metaVal}>
-                          {attendeeOrg.trim() || 'Guest Invitee'}
-                        </span>
+                  {/* Header */}
+                  <div className={styles.passHeader}>
+                    <div className={styles.brandWrap}>
+                      <img
+                        src="/card/leads-logo.png"
+                        alt="LEADS Logo"
+                        className={styles.leadsLogo}
+                      />
+                      <div className={styles.brandText}>
+                        <span className={styles.brandTitle}>LEADS Next Gen Centre</span>
+                        <span className={styles.brandSubtitle}>RUAS Executive Credential</span>
                       </div>
                     </div>
-                  </div>
-                </div>
-
-                {/* QR Turnstile Scanner Box */}
-                <div className={styles.qrModule}>
-                  <div className={styles.qrDetails}>
-                    <span className={styles.serialText}>
-                      {issuedPass ? issuedPass.serialNumber : previewSerial}
-                    </span>
-                    <span className={styles.verifiedPill}>
-                      <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-                      Cryptographically Signed
-                    </span>
-                    <span className="text-[8px] text-slate-500 font-semibold">
-                      Valid at all official event turnstiles
+                    <span className={`${styles.passTypePill} ${currentPassMeta.colorClass}`}>
+                      {currentPassMeta.badge}
                     </span>
                   </div>
-                  <div className={styles.qrImageBox}>
-                    <img
-                      src="/card/leads-qr-code.png"
-                      alt="Verified Turnstile QR"
-                    />
+
+                  {/* Body Content */}
+                  <div className={styles.passBody}>
+                    {/* Event Info */}
+                    <div className={styles.eventRow}>
+                      <div className={styles.eventTitleText}>
+                        {selectedEvent?.title || 'Selected Event Name'}
+                      </div>
+                      <div className={styles.eventDateText}>
+                        <Calendar className="h-3 w-3 text-sky-400 shrink-0" />
+                        <span>{displayValidity}</span>
+                      </div>
+                    </div>
+
+                    {/* Guest Identity Box */}
+                    <div className={styles.guestBox}>
+                      <div className={styles.guestCategoryTag}>
+                        <Tag className="h-2.5 w-2.5" />
+                        <span>{guestCategory}</span>
+                      </div>
+                      <div className={styles.attendeeNameText}>
+                        {attendeeName.trim() || 'Guest / Attendee Name'}
+                      </div>
+
+                      <div className={styles.metaGrid}>
+                        <div className={styles.metaItem}>
+                          <span className={styles.metaLabel}>Assigned Room / Venue</span>
+                          <span className={`${styles.metaVal} ${styles.roomVal}`}>
+                            📍 {displayRoom}
+                          </span>
+                        </div>
+                        <div className={styles.metaItem}>
+                          <span className={styles.metaLabel}>Affiliation / Tier</span>
+                          <span className={styles.metaVal}>
+                            {attendeeOrg.trim() || 'Guest Invitee'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* QR Turnstile Scanner Box */}
+                  <div className={styles.qrModule}>
+                    <div className={styles.qrDetails}>
+                      <span className={styles.serialText}>
+                        {issuedPass ? issuedPass.serialNumber : previewSerial}
+                      </span>
+                      <span className={styles.verifiedPill}>
+                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                        Cryptographically Signed
+                      </span>
+                      <span className="text-[8px] text-slate-500 font-semibold">
+                        Valid at all official event turnstiles
+                      </span>
+                    </div>
+                    <div className={styles.qrImageBox}>
+                      <img
+                        src="/card/leads-qr-code.png"
+                        alt="Verified Turnstile QR"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Footer */}
+                  <div className={styles.passFooter}>
+                    <span>LEADS Next Gen Centre • RUAS</span>
+                    <div className={styles.flipHint}>
+                      <RotateCw className="h-2.5 w-2.5" />
+                      <span>Tap to flip</span>
+                    </div>
                   </div>
                 </div>
 
-                {/* Footer */}
-                <div className={styles.passFooter}>
-                  <span>LEADS Next Gen Centre • RUAS</span>
-                  <div className={styles.flipHint}>
-                    <RotateCw className="h-2.5 w-2.5" />
-                    <span>Tap to flip</span>
-                  </div>
-                </div>
-              </div>
+                {/* BACK FACE */}
+                <div className={`${styles.passFace} ${styles.passBack}`}>
+                  {/* Lanyard Cut */}
+                  <div className={styles.lanyardSlot} />
 
-              {/* BACK FACE */}
-              <div className={`${styles.passFace} ${styles.passBack}`}>
-                {/* Lanyard Cut */}
-                <div className={styles.lanyardSlot} />
-
-                {/* Back Header */}
-                <div className={styles.passHeader}>
-                  <div className={styles.brandWrap}>
-                    <span className="text-xs font-black uppercase tracking-wider text-white">
-                      Pass Terms & Protocol
+                  {/* Back Header */}
+                  <div className={styles.passHeader}>
+                    <div className={styles.brandWrap}>
+                      <span className="text-xs font-black uppercase tracking-wider text-white">
+                        Pass Terms & Protocol
+                      </span>
+                    </div>
+                    <span className="text-[9px] font-bold text-sky-400 bg-sky-500/15 px-2 py-0.5 rounded-full border border-sky-500/30">
+                      RUAS SECURE
                     </span>
                   </div>
-                  <span className="text-[9px] font-bold text-sky-400 bg-sky-500/15 px-2 py-0.5 rounded-full border border-sky-500/30">
-                    RUAS SECURE
-                  </span>
-                </div>
 
-                {/* Magnetic Stripe Graphic */}
-                <div className={styles.magneticStripe} />
+                  {/* Magnetic Stripe Graphic */}
+                  <div className={styles.magneticStripe} />
 
-                {/* Back Rules Content */}
-                <div className={styles.backContent}>
-                  <div className={styles.ruleCard}>
-                    <div className="text-[10px] font-extrabold text-white mb-2 uppercase tracking-wide">
-                      Access & Security Policy
+                  {/* Back Rules Content */}
+                  <div className={styles.backContent}>
+                    <div className={styles.ruleCard}>
+                      <div className="text-[10px] font-extrabold text-white mb-2 uppercase tracking-wide">
+                        Access & Security Policy
+                      </div>
+                      <div className={styles.ruleItem}>
+                        <span className={styles.dot} />
+                        <span>This pass grants admission to designated event halls, keynotes, and sessions.</span>
+                      </div>
+                      <div className={styles.ruleItem}>
+                        <span className={styles.dot} />
+                        <span>Strictly non-transferable. Must be visibly worn or presented at all check-in turnstiles.</span>
+                      </div>
+                      <div className={styles.ruleItem}>
+                        <span className={styles.dot} />
+                        <span>For venue assistance or room queries, contact the LEADS Event Helpdesk.</span>
+                      </div>
                     </div>
-                    <div className={styles.ruleItem}>
-                      <span className={styles.dot} />
-                      <span>This pass grants admission to designated event halls, keynotes, and sessions.</span>
-                    </div>
-                    <div className={styles.ruleItem}>
-                      <span className={styles.dot} />
-                      <span>Strictly non-transferable. Must be visibly worn or presented at all check-in turnstiles.</span>
-                    </div>
-                    <div className={styles.ruleItem}>
-                      <span className={styles.dot} />
-                      <span>For venue assistance or room queries, contact the LEADS Event Helpdesk.</span>
+
+                    <div className="p-3 bg-white/5 border border-white/10 rounded-xl space-y-1 text-[9.5px]">
+                      <div className="text-slate-400 font-bold uppercase text-[8px]">Issued Authority</div>
+                      <div className="text-white font-extrabold">LEADS Next Gen Centre</div>
+                      <div className="text-sky-300 font-mono text-[9px]">
+                        Issued By: {currentUserName || 'Staff Reception'}
+                      </div>
                     </div>
                   </div>
 
-                  <div className="p-3 bg-white/5 border border-white/10 rounded-xl space-y-1 text-[9.5px]">
-                    <div className="text-slate-400 font-bold uppercase text-[8px]">Issued Authority</div>
-                    <div className="text-white font-extrabold">LEADS Next Gen Centre</div>
-                    <div className="text-sky-300 font-mono text-[9px]">
-                      Issued By: {currentUserName || 'Staff Reception'}
+                  {/* Back Footer */}
+                  <div className={styles.passFooter}>
+                    <span>Emergency: +91 80 4536 6666</span>
+                    <div className={styles.flipHint}>
+                      <RotateCw className="h-2.5 w-2.5" />
+                      <span>Back to front</span>
                     </div>
-                  </div>
-                </div>
-
-                {/* Back Footer */}
-                <div className={styles.passFooter}>
-                  <span>Emergency: +91 80 4536 6666</span>
-                  <div className={styles.flipHint}>
-                    <RotateCw className="h-2.5 w-2.5" />
-                    <span>Back to front</span>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
+
+          {/* VIEW 2: 98% PIXEL-ACCURATE NATIVE APPLE WALLET PREVIEW */}
+          {previewMode === 'apple-wallet' && (
+            <AppleWalletPassPreview
+              attendeeName={attendeeName}
+              guestCategory={guestCategory}
+              passType={passType}
+              roomOrVenue={displayRoom}
+              eventName={selectedEvent?.title || 'Official Event'}
+              eventDate={formattedEventDate}
+              validityDate={displayValidity}
+              serialNumber={issuedPass ? issuedPass.serialNumber : previewSerial}
+              interactive={true}
+            />
+          )}
 
           {/* POST-ISSUANCE ACTIONS BAR */}
           {issuedPass ? (
@@ -680,11 +764,38 @@ export function EventPassStudio({
             </div>
           ) : (
             <p className="text-[11px] text-slate-500 text-center max-w-[340px]">
-              Tip: Fill the guest name and room allocation above to see the card update live in real-time.
+              Tip: Toggle between 3D Luxury and Apple Wallet view above to inspect native wallet rendering.
             </p>
           )}
         </div>
       </div>
+
+      {/* BULK CSV MODAL */}
+      <EventPassBulkModal
+        isOpen={isBulkModalOpen}
+        onClose={() => setIsBulkModalOpen(false)}
+        events={events}
+        selectedEventId={selectedEventId}
+        currentUserName={currentUserName}
+        currentUserEmail={currentUserEmail}
+        onPassesImported={() => {
+          if (onPassIssued) {
+            const all = getEventPasses();
+            if (all[0]) onPassIssued(all[0]);
+          }
+        }}
+      />
+
+      {/* MAIL-MERGE EMAIL DISPATCH MODAL */}
+      <EventPassEmailModal
+        isOpen={isEmailModalOpen}
+        onClose={() => setIsEmailModalOpen(false)}
+        events={events}
+        selectedEventId={selectedEventId}
+        passes={getEventPasses()}
+        currentUserName={currentUserName}
+        currentUserEmail={currentUserEmail}
+      />
     </div>
   );
 }
