@@ -216,7 +216,7 @@ export default function VisitingCardPage() {
   const cardPublicUrl = cardSlug && typeof window !== 'undefined' ? `${window.location.origin}/card/${cardSlug}` : '';
 
   return (
-    <div className="space-y-6">
+    <div className="p-4 sm:p-6 md:p-8 space-y-8 min-w-0">
       {successMsg && (
         <div className="flex items-center gap-3 p-4 bg-success/15 border border-success/20 rounded-2xl text-theme-text-primary text-xs animate-in fade-in duration-300">
           <span>{successMsg}</span>
@@ -234,8 +234,8 @@ export default function VisitingCardPage() {
         <p className="text-xs text-theme-text-secondary">Share a public, QR-scannable business card — anyone can save your contact instantly, and add it to Apple or Google Wallet.</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="glass-panel rounded-2xl p-6 lg:col-span-2 space-y-5">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+        <div className="glass-panel rounded-2xl p-6 xl:col-span-5 2xl:col-span-5 space-y-5">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-theme-text-primary">Card Details</h3>
             <label className="flex items-center gap-2 cursor-pointer shrink-0">
@@ -382,55 +382,57 @@ export default function VisitingCardPage() {
           </form>
         </div>
 
-        <div className="flex flex-col items-center gap-3 w-full max-w-md">
-          <div className="flex items-center justify-between w-full">
+        <div className="flex flex-col items-center xl:items-center w-full xl:col-span-7 2xl:col-span-7 gap-4 min-w-0 overflow-visible">
+          <div className="flex items-center justify-between w-full max-w-xl px-1">
             <p className="text-[11px] font-semibold text-theme-text-secondary uppercase tracking-wider">Card Experience</p>
-            <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 text-xs">
+            <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 text-xs shadow-inner">
               <button
                 type="button"
                 onClick={() => setCardExperienceMode('profile')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                   cardExperienceMode === 'profile'
                     ? 'bg-accent text-white shadow-sm'
                     : 'text-theme-text-secondary hover:text-white'
                 }`}
               >
-                <Smartphone className="h-3 w-3 inline mr-1" />
+                <Smartphone className="h-3.5 w-3.5 inline mr-1.5" />
                 3D Gyro Card
               </button>
               <button
                 type="button"
                 onClick={() => setCardExperienceMode('leather')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                   cardExperienceMode === 'leather'
                     ? 'bg-accent text-white shadow-sm'
                     : 'text-theme-text-secondary hover:text-white'
                 }`}
               >
-                <Sparkles className="h-3 w-3 inline mr-1" />
+                <Sparkles className="h-3.5 w-3.5 inline mr-1.5" />
                 Leather Holder
               </button>
             </div>
           </div>
 
           {cardExperienceMode === 'profile' ? (
-            <VisitingCardView
-              card={{
-                name: user?.name || '',
-                designation: (isWalletAdmin && cardDesignationOverride.trim()) ? cardDesignationOverride.trim() : (user?.role || ''),
-                phone: cardPhone,
-                email: user?.email,
-                photoUrl: cardPhotoPreviewUrl || cardPhotoUrl || user?.avatarUrl,
-                socials: { linkedin: cardLinkedin },
-              }}
-              slug={cardSlug || 'preview'}
-              showActions={Boolean(cardSlug)}
-              previewMode
-              appleWalletAvailable={walletAvailability.appleWalletAvailable}
-              googleWalletAvailable={walletAvailability.googleWalletAvailable}
-            />
+            <div className="w-full flex justify-center py-2">
+              <VisitingCardView
+                card={{
+                  name: user?.name || '',
+                  designation: (isWalletAdmin && cardDesignationOverride.trim()) ? cardDesignationOverride.trim() : (user?.role || ''),
+                  phone: cardPhone,
+                  email: user?.email,
+                  photoUrl: cardPhotoPreviewUrl || cardPhotoUrl || user?.avatarUrl,
+                  socials: { linkedin: cardLinkedin },
+                }}
+                slug={cardSlug || 'preview'}
+                showActions={Boolean(cardSlug)}
+                previewMode
+                appleWalletAvailable={walletAvailability.appleWalletAvailable}
+                googleWalletAvailable={walletAvailability.googleWalletAvailable}
+              />
+            </div>
           ) : (
-            <div className="w-full">
+            <div className="w-full max-w-2xl flex flex-col items-center justify-center overflow-visible py-2">
               <InteractiveKeycardHolder
                 memberName={user?.name || 'Executive Member'}
                 memberRole={(isWalletAdmin && cardDesignationOverride.trim()) ? cardDesignationOverride.trim() : (user?.role || 'LEADS Member')}
@@ -448,7 +450,6 @@ export default function VisitingCardPage() {
           )}
         </div>
 
-
         <CardQrModal
           isOpen={isCardQrOpen}
           onClose={() => setIsCardQrOpen(false)}
@@ -458,7 +459,7 @@ export default function VisitingCardPage() {
         />
 
         {isWalletAdmin && (
-          <div className="glass-panel rounded-2xl p-6 lg:col-span-3 space-y-5">
+          <div className="glass-panel rounded-2xl p-6 xl:col-span-12 space-y-5">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-base font-bold text-theme-text-primary">Wallet Setup (Super User)</h3>
