@@ -33,6 +33,7 @@ export function InteractiveKeycardHolder({
   memberRole = 'LEADS Member',
   phone = '+91 9608768647',
   email = 'member@leads-centre.org',
+  photoUrl,
   serialNumber,
   accessLevel = 'Executive & Alumni Fellow (Tier 1)',
   validityPeriod,
@@ -53,6 +54,13 @@ export function InteractiveKeycardHolder({
   const dragInfo = useRef({ isDragging: false, startY: 0, currentDeltaY: 0, hasDragged: false });
   const holderDragInfo = useRef({ isDragging: false, startY: 0, hasDragged: false });
 
+  const memberInitials = (memberName || '?')
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() || '')
+    .join('');
+
   // Compute 1-year dynamic validity if not passed
   const formattedValidity = React.useMemo(() => {
     if (validityPeriod) return validityPeriod;
@@ -63,6 +71,7 @@ export function InteractiveKeycardHolder({
       d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
     return `${formatDate(now)} – ${formatDate(nextYear)} (1 Year)`;
   }, [validityPeriod]);
+
 
   // Compute unique serial ID if not passed
   const formattedSerial = React.useMemo(() => {
@@ -328,16 +337,27 @@ export function InteractiveKeycardHolder({
               <div className={styles.passInner}>
                 {/* FRONT FACE */}
                 <div className={`${styles.passFace} ${styles.passFront}`}>
+                  {/* Luxury Holographic Foil Shimmer */}
+                  <div className={styles.holographicFoil} />
+
                   <div>
                     <div className={styles.passHeader}>
                       <img src="/card/leads-logo.png" alt="LEADS Logo" className={styles.passMiniLogo} />
-                      <span className={styles.passBadgePill}>ACTIVE PASS</span>
+                      <span className={styles.passBadgePill}>EXECUTIVE PASS</span>
                     </div>
 
-                    <div className={styles.passPrimary}>
-                      <div>
+                    {/* Member Photo & Executive Identity */}
+                    <div className={styles.passAvatarArea}>
+                      <div className={styles.passPhotoWrap}>
+                        {photoUrl ? (
+                          <img src={photoUrl} alt={memberName} className={styles.passPhotoImage} />
+                        ) : (
+                          <div className={styles.passPhotoInitials}>{memberInitials}</div>
+                        )}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
                         <div className={styles.passLabel}>{memberRole}</div>
-                        <div className={styles.passName}>{memberName}</div>
+                        <div className={styles.passName} style={{ fontSize: '15px' }}>{memberName}</div>
                       </div>
                       <img src="/card/leads-logo-clean.png" alt="LEADS RUAS" className={styles.passSideLogo} />
                     </div>
@@ -357,6 +377,7 @@ export function InteractiveKeycardHolder({
                       <img src={qrUrl} alt="QR Code" />
                     </div>
                   </div>
+
 
                   <div className={styles.passCardFooter}>
                     <div className={styles.flipAffordanceHint}>
