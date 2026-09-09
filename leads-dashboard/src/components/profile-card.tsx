@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import {
   Phone,
   Mail,
@@ -76,6 +76,8 @@ export function ProfileCard({
     opacity: 0,
   });
   const [gyroActive, setGyroActive] = useState(false);
+  const [needsIosPermission, setNeedsIosPermission] = useState(false);
+  const isTouchingRef = useRef(false);
 
   // Desktop Pointer / Mouse Tilt
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -87,8 +89,8 @@ export function ProfileCard({
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
 
-    const rotateX = ((y - centerY) / centerY) * -12;
-    const rotateY = ((x - centerX) / centerX) * 12;
+    const rotateX = ((y - centerY) / centerY) * -14;
+    const rotateY = ((x - centerX) / centerX) * 14;
 
     const glareX = `${(x / rect.width) * 100}%`;
     const glareY = `${(y / rect.height) * 100}%`;
@@ -103,43 +105,108 @@ export function ProfileCard({
     setGlareStyle((prev) => ({ ...prev, opacity: 0 }));
   };
 
-  // Mobile Gyroscope Device Orientation Tilt
+  // Mobile Touch Move Tilt (Finger Swipe / Drag Physics)
+  const handleTouchStart = () => {
+    isTouchingRef.current = true;
+    // On iOS Safari, user tap allows requesting device orientation permission
+    if (needsIosPermission) {
+      enableIosGyroscope();
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!enableTilt || !cardRef.current || e.touches.length === 0) return;
+    const touch = e.touches[0];
+    const rect = cardRef.current.getBoundingClientRect();
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
+
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+
+    const rotateX = ((y - centerY) / centerY) * -16;
+    const rotateY = ((x - centerX) / centerX) * 16;
+
+    const glareX = `${Math.max(0, Math.min(100, (x / rect.width) * 100))}%`;
+    const glareY = `${Math.max(0, Math.min(100, (y / rect.height) * 100))}%`;
+
+    setTransformStyle(`perspective(1000px) rotateX(${rotateX.toFixed(2)}deg) rotateY(${rotateY.toFixed(2)}deg) scale3d(1.03, 1.03, 1.03)`);
+    setGlareStyle({ x: glareX, y: glareY, opacity: 0.8 });
+  };
+
+  const handleTouchEnd = () => {
+    isTouchingRef.current = false;
+    setTimeout(() => {
+      if (!isTouchingRef.current && !gyroActive) {
+        setTransformStyle('perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)');
+        setGlareStyle((prev) => ({ ...prev, opacity: 0 }));
+      }
+    }, 400);
+  };
+
+  // Gyroscope orientation listener
+  const handleOrientation = useCallback((event: DeviceOrientationEvent) => {
+    if (isTouchingRef.current) return; // Touch drag takes precedence
+    const gamma = event.gamma; // Left to right [-90, 90]
+    const beta = event.beta; // Front to back [-180, 180]
+
+    if (gamma === null || beta === null) return;
+    setGyroActive(true);
+
+    // Clamp angles for comfortable hand-held tilting
+    const clampedGamma = Math.max(-35, Math.min(35, gamma));
+    const clampedBeta = Math.max(10, Math.min(80, beta)) - 45; // baseline holding angle at 45 deg
+
+    const rotateY = (clampedGamma / 35) * 18;
+    const rotateX = -(clampedBeta / 35) * 18;
+
+    const glareX = `${50 + (clampedGamma / 35) * 45}%`;
+    const glareY = `${50 + (clampedBeta / 35) * 45}%`;
+
+    setTransformStyle(
+      `perspective(1000px) rotateX(${rotateX.toFixed(2)}deg) rotateY(${rotateY.toFixed(2)}deg) scale3d(1.01, 1.01, 1.01)`
+    );
+    setGlareStyle({ x: glareX, y: glareY, opacity: 0.55 });
+  }, []);
+
+  // iOS Safari Permission Request
+  const enableIosGyroscope = async () => {
+    if (
+      typeof window !== 'undefined' &&
+      typeof (window as any).DeviceOrientationEvent !== 'undefined' &&
+      typeof (window as any).DeviceOrientationEvent.requestPermission === 'function'
+    ) {
+      try {
+        const state = await (window as any).DeviceOrientationEvent.requestPermission();
+        if (state === 'granted') {
+          setNeedsIosPermission(false);
+          setGyroActive(true);
+          window.addEventListener('deviceorientation', handleOrientation, true);
+        }
+      } catch (err) {
+        console.warn('Device orientation permission dismissed:', err);
+      }
+    }
+  };
+
   useEffect(() => {
-    if (!enableMobileTilt) return;
+    if (!enableMobileTilt || typeof window === 'undefined') return;
 
-    const handleOrientation = (event: DeviceOrientationEvent) => {
-      const gamma = event.gamma; // Left to right [-90, 90]
-      const beta = event.beta; // Front to back [-180, 180]
-
-      if (gamma === null || beta === null) return;
-      setGyroActive(true);
-
-      // Clamp angles
-      const clampedGamma = Math.max(-30, Math.min(30, gamma));
-      const clampedBeta = Math.max(10, Math.min(70, beta)) - 40; // centered at ~40 deg holding angle
-
-      const rotateY = (clampedGamma / 30) * 15;
-      const rotateX = -(clampedBeta / 30) * 15;
-
-      const glareX = `${50 + (clampedGamma / 30) * 40}%`;
-      const glareY = `${50 + (clampedBeta / 30) * 40}%`;
-
-      setTransformStyle(
-        `perspective(1000px) rotateX(${rotateX.toFixed(2)}deg) rotateY(${rotateY.toFixed(2)}deg)`
-      );
-      setGlareStyle({ x: glareX, y: glareY, opacity: 0.45 });
-    };
-
-    if (typeof window !== 'undefined' && 'DeviceOrientationEvent' in window) {
+    // Check if browser requires explicit permission (iOS 13+)
+    if (
+      typeof (window as any).DeviceOrientationEvent !== 'undefined' &&
+      typeof (window as any).DeviceOrientationEvent.requestPermission === 'function'
+    ) {
+      setNeedsIosPermission(true);
+    } else if ('DeviceOrientationEvent' in window) {
+      // Standard Android / non-iOS browser: auto-bind
       window.addEventListener('deviceorientation', handleOrientation, true);
     }
 
     return () => {
-      if (typeof window !== 'undefined' && 'DeviceOrientationEvent' in window) {
-        window.removeEventListener('deviceorientation', handleOrientation, true);
-      }
+      window.removeEventListener('deviceorientation', handleOrientation, true);
     };
-  }, [enableMobileTilt]);
+  }, [enableMobileTilt, handleOrientation]);
 
   const initials = (name || '?')
     .trim()
@@ -156,6 +223,10 @@ export function ProfileCard({
         ref={cardRef}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onClick={needsIosPermission ? enableIosGyroscope : undefined}
         className={styles.cardContainer}
         style={{
           transform: transformStyle || undefined,
@@ -315,11 +386,23 @@ export function ProfileCard({
             )}
           </div>
 
-          {/* Gyroscope active micro-badge */}
-          {gyroActive && (
+          {/* iOS Safari Gyroscope Permission Prompt or Active Status */}
+          {needsIosPermission && !gyroActive ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                enableIosGyroscope();
+              }}
+              className="mt-3 px-3 py-1.5 rounded-full bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/40 text-sky-300 text-[11px] font-bold flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
+            >
+              <Smartphone className="h-3.5 w-3.5 animate-bounce" />
+              Tap to Enable 3D Motion (iOS)
+            </button>
+          ) : (
             <div className={styles.gyroscopeHint}>
               <Smartphone className="h-3 w-3 text-sky-400 animate-pulse" />
-              <span>3D Gyroscope Active — Tilt Phone</span>
+              <span>{gyroActive ? '3D Gyroscope Active — Tilt or Swipe Card' : 'Interactive 3D Motion'}</span>
             </div>
           )}
         </div>
