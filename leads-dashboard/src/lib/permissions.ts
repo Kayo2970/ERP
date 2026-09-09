@@ -57,16 +57,31 @@ export function isGeneralSecretary(user: SessionUser): boolean {
   return user.tier === 5 && role.includes('general secretary') && !role.includes('senior');
 }
 
-/** Who may submit an event report — the General Secretary, or a Super User covering for them. */
+/** Check if user is a Chief Coordinator. */
+export function isChiefCoordinator(user: SessionUser): boolean {
+  if (!user) return false;
+  const role = ((user as any)?.role || '').toLowerCase();
+  return role.includes('chief coordinator');
+}
+
+/** Who may submit an event report — the General Secretary, Chief Coordinator, Super User, or someone granted EVENT_REPORTS submit/edit permission. */
 export function canSubmitEventReport(user: SessionUser): boolean {
   if (!user) return false;
-  return isGeneralSecretary(user) || user.tier === 1;
+  if (user.tier === 1) return true;
+  if (resolveModuleEditOverride(user, 'EVENT_REPORTS') === 'NONE') return false;
+  if (resolveModuleEditOverride(user, 'EVENT_REPORTS') === 'ALL' || resolveModuleEditOverride(user, 'EVENT_REPORTS') === 'OWN') return true;
+  if (hasCapability(user, 'EVENT_REPORTS_SUBMIT')) return true;
+  return isGeneralSecretary(user) || isChiefCoordinator(user);
 }
 
 /** Who reviews/approves a pending event report — Centre Head (which already
- *  folds in Advisor, see isCentreHead) or the GG Campus Events Head; any one
- *  of the three is sufficient, not all of them. */
+ *  folds in Advisor, see isCentreHead), GG Campus Events Head, or someone holding
+ *  EVENT_REPORTS_REVIEW capability. */
 export function canReviewEventReports(user: SessionUser): boolean {
+  if (!user) return false;
+  if (user.tier === 1) return true;
+  if (hasCapability(user, 'EVENT_REPORTS_REVIEW')) return true;
+  if (resolveModuleEditOverride(user, 'EVENT_REPORTS') === 'ALL') return true;
   return isCentreHead(user) || isEventsHeadGgCampus(user);
 }
 
@@ -80,17 +95,24 @@ export function canReviewDesignProofread(user: SessionUser): boolean {
 }
 
 /**
- * Full standing access to the Event Report module (submit for anyone, review
- * every submission, see every past report) — Centre Head/Advisor, GG Campus
- * Events Head, General Secretary, Chief Coordinator/President/VP, or Super
- * User. A member outside this set who was individually delegated the
- * report-writing task (see event_report_request in local-data.ts) gets
- * narrower, task-scoped access instead — resolved on the Event Reports page
- * itself, not here, since it depends on live task assignment, not role.
+ * Full standing access to the Event Report module — Centre Head/Advisor, GG Campus
+ * Events Head, General Secretary, Chief Coordinator/President/VP, Super
+ * User, or someone holding Group Policy capability or moduleAccess grants.
  */
 export function canViewEventReports(user: SessionUser): boolean {
   if (!user) return false;
-  return canReviewEventReports(user) || isGeneralSecretary(user) || isExecutiveRole(user) || user.tier === 1;
+  return (
+    canReviewEventReports(user) ||
+    canSubmitEventReport(user) ||
+    isGeneralSecretary(user) ||
+    isChiefCoordinator(user) ||
+    isExecutiveRole(user) ||
+    user.tier === 1 ||
+    hasCapability(user, 'EVENT_REPORTS_SUBMIT') ||
+    hasCapability(user, 'EVENT_REPORTS_VIEW_ALL') ||
+    hasCapability(user, 'EVENT_REPORTS_REVIEW') ||
+    hasModuleViewAllGrant(user, 'EVENT_REPORTS')
+  );
 }
 
 /** Check if user holds Alumni role/tier. */
@@ -295,6 +317,7 @@ export const CAPABILITY_CATALOG: { key: string; label: string; description: stri
   { key: 'EVENTS_EDIT', label: 'Edit Events', description: "Edit any existing event's details.", module: 'Events' },
   { key: 'EVENTS_DELETE', label: 'Delete Events', description: 'Delete any event.', module: 'Events' },
   { key: 'EVENTS_VIEW_ALL', label: 'View All Events', description: 'See every event, not just ones created by or listing this person.', module: 'Events' },
+  { key: 'FESTIVALS_MANAGE', label: 'Manage Festivals', description: 'Create, edit, and organize festival schedules and events.', module: 'Festivals' },
   { key: 'TASKS_CREATE', label: 'Create Tasks', description: 'Assign new tasks to individuals or committees.', module: 'Tasks' },
   { key: 'TASKS_EDIT', label: 'Edit Tasks', description: 'Edit any existing task.', module: 'Tasks' },
   { key: 'TASKS_DELETE', label: 'Delete Tasks', description: 'Delete any task.', module: 'Tasks' },
@@ -305,21 +328,32 @@ export const CAPABILITY_CATALOG: { key: string; label: string; description: stri
   { key: 'TERMINATE_MEMBER', label: 'Terminate/Reactivate Members', description: 'Terminate or reactivate any member account.', module: 'Members Directory' },
   { key: 'GUEST_DIRECTORY_ACCESS', label: 'Access Guest Directory', description: 'Open the Guest Directory module at all (visiting-card contacts) — same baseline as Centre Head/Faculty/Executive get by default.', module: 'Guest Directory' },
   { key: 'GUEST_DIRECTORY_DELETE', label: 'Delete Guest Records', description: 'Remove any guest from the Guest Directory, not just ones they added.', module: 'Guest Directory' },
+  { key: 'VISITING_CARD_ACCESS', label: 'Access Visiting Cards', description: 'Access and manage digital keycards and scanned visiting cards.', module: 'Visiting Card' },
   { key: 'VIEW_ALL_DESIGNS', label: 'View All Design Submissions', description: 'See every submission in the Design Portal, not just their own.', module: 'Design Portal' },
   { key: 'DESIGN_STYLE_APPROVE', label: 'Style Approve/Reject Designs', description: 'Approve or reject a design submission on the Style Review step.', module: 'Design Portal' },
   { key: 'DESIGN_DELETE', label: 'Delete Design Submissions', description: 'Delete any design submission, not just their own.', module: 'Design Portal' },
   { key: 'APPROVE_REIMBURSEMENTS_SECTOR', label: 'Approve Reimbursements (Sector Head stage)', description: 'First-pass reimbursement review and approval.', module: 'Reimbursements' },
   { key: 'APPROVE_REIMBURSEMENTS_FINANCE', label: 'Approve Reimbursements (Finance Head stage)', description: 'Final-stage reimbursement approval.', module: 'Reimbursements' },
+  { key: 'REIMBURSEMENTS_VIEW_ALL', label: 'View All Reimbursements', description: 'See all reimbursement claims across the organization.', module: 'Reimbursements' },
   { key: 'PROPOSE_BUDGET', label: 'Propose Budgets', description: 'Propose an annual or monthly budget request.', module: 'Budget & Funds' },
   { key: 'MANAGE_BUDGET', label: 'Manage Budget & Funds', description: 'Propose and manage budget requests beyond the built-in Centre Head/Finance Head roles.', module: 'Budget & Funds' },
   { key: 'BUILD_FORMS', label: 'Build Public Forms', description: 'Create and edit public-facing forms.', module: 'Public Forms' },
+  { key: 'FORMS_VIEW_RESPONSES', label: 'View Form Responses', description: 'View and export submissions for public forms.', module: 'Public Forms' },
+  { key: 'FORMS_DELETE', label: 'Delete Public Forms', description: 'Delete public forms and their configurations.', module: 'Public Forms' },
   { key: 'CREATE_ANNOUNCEMENT', label: 'Publish Announcements', description: 'Author and publish announcements to a chosen scope.', module: 'Announcements' },
   { key: 'APPROVE_ANNOUNCEMENT', label: 'Approve Announcements', description: 'Approve or reject a Pending announcement before it circulates.', module: 'Announcements' },
+  { key: 'DELETE_ANNOUNCEMENT', label: 'Delete Announcements', description: 'Delete published announcements.', module: 'Announcements' },
+  { key: 'CREATE_RATING', label: 'Create Member Ratings', description: 'Rate and evaluate performance on completed tasks.', module: 'Ratings & Reports' },
   { key: 'RATING_EDIT_ANY', label: 'Edit/Delete Any Rating', description: 'Edit or delete a rating authored by someone else.', module: 'Ratings & Reports' },
-  { key: 'VIEW_ALL_REPORTS', label: 'View All Reports', description: 'See every report/rating record, not just their own or their department’s.', module: 'Ratings & Reports' },
+  { key: 'VIEW_ALL_REPORTS', label: 'View All Performance Reports', description: 'See every report/rating record, not just their own or their department’s.', module: 'Ratings & Reports' },
+  { key: 'EVENT_REPORTS_SUBMIT', label: 'Submit Event Reports', description: 'Submit formal post-event reports for approval.', module: 'Event Reports' },
+  { key: 'EVENT_REPORTS_REVIEW', label: 'Review Event Reports', description: 'Approve or reject submitted event reports.', module: 'Event Reports' },
+  { key: 'EVENT_REPORTS_DELETE', label: 'Delete Event Reports', description: 'Delete submitted event reports.', module: 'Event Reports' },
+  { key: 'EVENT_REPORTS_VIEW_ALL', label: 'View All Event Reports', description: 'See all event reports submitted across the organization.', module: 'Event Reports' },
   { key: 'MANAGE_GUEST_INVITES', label: 'Manage Guest Invites', description: 'Access the Guest Invites mail-merge tool.', module: 'Guest Invites' },
   { key: 'MANAGE_BACKUP', label: 'Access Backup & Restore', description: 'Download system backups and restore from an archive.', module: 'Administration' },
   { key: 'MANAGE_EMAIL_SETTINGS', label: 'Access Email Management', description: 'View dispatch logs and manage email settings.', module: 'Administration' },
+  { key: 'MANAGE_GROUP_POLICIES', label: 'Manage Group Policies', description: 'Create, edit, and configure group policies and dynamic RBAC tags.', module: 'Administration' },
 ];
 
 /** True if a policy is enabled and, when it has an expiry date, hasn't passed it yet. */
@@ -374,9 +408,16 @@ export const MODULE_CATALOG: { key: ModuleAccessKey; label: string; description:
   { key: 'BUDGET', label: 'Budget & Funds', description: 'Budget proposals and verification.' },
   { key: 'FORMS', label: 'Public Forms', description: 'Public-facing forms and their submissions.' },
   { key: 'ANNOUNCEMENTS', label: 'Announcements', description: 'Published announcements.' },
-  { key: 'RATINGS', label: 'Ratings & Reports', description: 'Student performance ratings.', ownershipNote: 'Ownership = the rating’s author.' },
+  { key: 'RATINGS', label: 'Ratings & Performance', description: 'Student performance evaluations and ratings.', ownershipNote: 'Ownership = the rating’s author.' },
+  { key: 'REPORTS', label: 'Performance Reports', description: 'Performance and task deliverable analytical reports.', ownershipNote: 'Ownership = the rating’s author.' },
+  { key: 'EVENT_REPORTS', label: 'Event Reports', description: 'Post-event formal report submissions, review, and dual approvals.', ownershipNote: 'Ownership = the report’s submitter.' },
+  { key: 'FESTIVALS', label: 'Festivals', description: 'Festival schedules, committees, and events.' },
+  { key: 'VISITING_CARD', label: 'Visiting Cards', description: 'Digital keycards and visiting contacts.' },
   { key: 'GUEST_INVITES', label: 'Guest Invites', description: 'The guest-invite mail-merge tool.' },
+  { key: 'APPROVALS', label: 'Approvals Queue', description: 'Cross-module multi-department approval requests.' },
+  { key: 'BACKUP', label: 'Backup & Restore', description: 'System backups and disaster recovery restorations.' },
   { key: 'EMAIL', label: 'Email Management', description: 'Dispatch logs and email settings.' },
+  { key: 'POLICIES', label: 'Group Policies', description: 'Dynamic access control and permissions management.' },
 ];
 
 /** Active, targeting-matched policies that set a moduleAccess entry for `moduleKey` (or, for EVENTS only, the legacy eventVisibilityScope flag). */

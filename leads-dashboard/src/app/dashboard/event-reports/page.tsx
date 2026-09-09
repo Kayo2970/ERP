@@ -29,7 +29,7 @@ import {
   EventReportItem,
   TaskItem,
 } from '@/lib/local-data';
-import { canSubmitEventReport, canReviewEventReports, canViewEventReports, isCentreHead, isEventsHeadGgCampus } from '@/lib/permissions';
+import { canSubmitEventReport, canReviewEventReports, canViewEventReports, isCentreHead, isEventsHeadGgCampus, isChiefCoordinator, isGeneralSecretary, hasCapability, hasModuleViewAllGrant } from '@/lib/permissions';
 import { FileDropzone, FilePreviewRow, createProgressTracker } from '@/components/ui/file-dropzone';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -170,7 +170,7 @@ export default function EventReportsPage() {
         fileName: file.name,
         fileSize: file.size,
         fileType: file.type || 'application/octet-stream',
-        submittedBy: user?.name || 'General Secretary',
+        submittedBy: user?.name || (isChiefCoordinator(user) ? 'Chief Coordinator' : isGeneralSecretary(user) ? 'General Secretary' : 'Submitter'),
         submittedByEmail: user?.email || '',
       }, tracker);
 
@@ -202,7 +202,7 @@ export default function EventReportsPage() {
     setIsResubmitting(true);
     try {
       const tracker = createProgressTracker((pct) => setResubmitProgress(pct));
-      await resubmitEventReport(report.id, resubmitFileData, resubmitFile.name, resubmitFile.size, resubmitFile.type || 'application/octet-stream', user?.name || 'General Secretary', tracker);
+      await resubmitEventReport(report.id, resubmitFileData, resubmitFile.name, resubmitFile.size, resubmitFile.type || 'application/octet-stream', user?.name || (isChiefCoordinator(user) ? 'Chief Coordinator' : isGeneralSecretary(user) ? 'General Secretary' : 'Submitter'), tracker);
       setReports(getEventReports());
       setResubmittingId(null);
       setResubmitFile(null);
@@ -232,7 +232,7 @@ export default function EventReportsPage() {
     setReports(getEventReports());
     setRejectingId(null);
     setRejectionReasonInput('');
-    triggerSuccess('Rejected. The General Secretary can resubmit a corrected file.');
+    triggerSuccess('Rejected. The submitter can resubmit a corrected file.');
   };
 
   const handleConfirmDelete = async () => {
@@ -247,7 +247,7 @@ export default function EventReportsPage() {
     setDeletingId(null);
   };
 
-  const myReports = reports.filter(r => r.submittedByEmail === user?.email);
+  const myReports = reports.filter(r => (user?.email && r.submittedByEmail === user?.email) || (user?.name && r.submittedBy?.toLowerCase() === user.name.toLowerCase()));
   const pendingForReview = reports.filter(r => r.status === 'pending_review');
   const eligibleEvents = hasStandingAccess
     ? events.filter(ev => !ev.isHoliday && isApprovedEvent(ev, tasks))

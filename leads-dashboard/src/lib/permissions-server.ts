@@ -234,8 +234,30 @@ export function canManageGuestInvites(user: ServerUser, settings: AccessLevelSet
   return isCentreHead(user, settings);
 }
 
+export function isChiefCoordinator(user: ServerUser): boolean {
+  if (!user) return false;
+  const role = (user.role || '').toLowerCase();
+  return role.includes('chief coordinator');
+}
+
+export function isGeneralSecretary(user: ServerUser): boolean {
+  if (!user) return false;
+  const role = (user.role || '').toLowerCase();
+  return user.tier === 5 && role.includes('general secretary') && !role.includes('senior');
+}
+
+export function canSubmitEventReport(user: ServerUser): boolean {
+  if (!user) return false;
+  return isGeneralSecretary(user) || isChiefCoordinator(user) || user.tier === 1;
+}
+
 export function canReviewEventReports(user: ServerUser, settings: AccessLevelSettings): boolean {
   return isCentreHead(user, settings) || isEventsHeadGgCampus(user);
+}
+
+export function canViewEventReports(user: ServerUser, settings: AccessLevelSettings): boolean {
+  if (!user) return false;
+  return canReviewEventReports(user, settings) || canSubmitEventReport(user) || isGeneralSecretary(user) || isChiefCoordinator(user) || isExecutiveRole(user) || user.tier === 1;
 }
 
 export function canReviewDesignProofread(user: ServerUser, settings: AccessLevelSettings): boolean {

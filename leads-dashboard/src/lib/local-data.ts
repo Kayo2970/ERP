@@ -854,8 +854,15 @@ export type ModuleAccessKey =
   | 'FORMS'
   | 'ANNOUNCEMENTS'
   | 'RATINGS'
+  | 'REPORTS'
+  | 'EVENT_REPORTS'
+  | 'FESTIVALS'
+  | 'VISITING_CARD'
   | 'GUEST_INVITES'
-  | 'EMAIL';
+  | 'APPROVALS'
+  | 'BACKUP'
+  | 'EMAIL'
+  | 'POLICIES';
 
 export interface GroupPolicy {
   id: string;

@@ -36,7 +36,7 @@ import {
   AccessLevelSettings,
   ModuleAccessKey,
 } from '@/lib/local-data';
-import { CAPABILITY_CATALOG, MODULE_CATALOG, isCentreHead } from '@/lib/permissions';
+import { CAPABILITY_CATALOG, MODULE_CATALOG, isCentreHead, hasCapability, resolveModuleEditOverride } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -200,8 +200,8 @@ export default function GroupPoliciesPage() {
   const isSuperUser = user?.tier === 1;
   // Centre Head — which already folds in the Advisor role, see isCentreHead's
   // doc comment — gets the same full access to Group Policy management as
-  // the Super User, not just a read-only view.
-  const canAccessPolicies = isSuperUser || isCentreHead(user);
+  // the Super User, not just a read-only view. Also supported via Group Policy.
+  const canAccessPolicies = isSuperUser || isCentreHead(user) || hasCapability(user, 'MANAGE_GROUP_POLICIES') || resolveModuleEditOverride(user, 'POLICIES') === 'ALL';
 
   const resetForm = () => {
     setName('');
