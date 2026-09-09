@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection, readCollection } from '@/lib/server-db';
 import { saveBase64File, deleteStoredFile, deleteStoredFilesForRecord, readStoredFile } from '@/lib/file-storage';
-import { cascadeCloseAutoApprovals } from '@/lib/approval-sync';
+import { cascadeCloseAutoApprovals, deleteLinkedApprovalRequests } from '@/lib/approval-sync';
 import { requireSession, ForbiddenError } from '@/lib/session';
 import { getAccessLevelSettingsServer, canReviewEventReports } from '@/lib/permissions-server';
 import { apiError } from '@/lib/api-error';
@@ -194,6 +194,7 @@ export async function DELETE(
     });
     if (!found) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     await deleteStoredFilesForRecord('event-reports', id);
+    await deleteLinkedApprovalRequests('event-report', id);
     return NextResponse.json({ success: true });
   } catch (err: any) {
     return apiError(err, 'event-reports-id-api-delete', 500);

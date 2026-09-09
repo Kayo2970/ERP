@@ -175,3 +175,18 @@ export async function cascadeCloseAutoApprovals(
     return changed ? next : current;
   });
 }
+
+/**
+ * Purges any auto-generated or manual ApprovalRequest rows referencing an entity
+ * that has just been deleted (e.g. Task, Design, Event, Event Report, Announcement, Member),
+ * ensuring no orphaned requests or broken links remain in the Approvals inbox.
+ */
+export async function deleteLinkedApprovalRequests(
+  entityType: AutoApprovalEntityType | 'member' | 'committee',
+  entityId: string
+): Promise<void> {
+  await mutateCollection('approvalRequests', (current) => {
+    return (current || []).filter((r: any) => !(r.entityType === entityType && r.entityId === entityId));
+  });
+}
+

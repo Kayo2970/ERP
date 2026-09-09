@@ -2053,6 +2053,7 @@ export function deleteEvent(id: string, actorName: string): boolean {
 
   const updated = events.filter(e => e.id !== id);
   saveEvents(updated);
+  removeApprovalRequestsForEntity('event', id);
   serverDelete('/api/events', id);
   logAuditEvent('EVENT_DELETED', actorName, `Deleted event: ${target.title}`);
   return true;
@@ -2718,6 +2719,7 @@ export async function deleteEventReport(id: string, actorName: string): Promise<
   const ok = await serverDelete('/api/event-reports', id);
   if (ok) {
     saveEventReports(getEventReports().filter(r => r.id !== id));
+    removeApprovalRequestsForEntity('event-report', id);
     logAuditEvent('EVENT_REPORT_DELETED', actorName, `Deleted event report${target ? ` for "${target.eventTitle}"` : ''}`);
   }
   return ok;
@@ -2746,6 +2748,18 @@ export function saveApprovalRequests(requests: ApprovalRequest[]): void {
   localStorage.setItem('leads_approval_requests', JSON.stringify(requests));
   markLocalWrite('leads_approval_requests');
   window.dispatchEvent(new CustomEvent('leads-data-sync'));
+}
+
+/**
+ * Automatically purges any tracked approval requests for an entity that has been deleted,
+ * so no dead cards or broken links remain in the Approvals queue.
+ */
+export function removeApprovalRequestsForEntity(entityType: ApprovalRequest['entityType'], entityId: string): void {
+  const requests = getApprovalRequests();
+  const next = requests.filter(r => !(r.entityType === entityType && r.entityId === entityId));
+  if (next.length !== requests.length) {
+    saveApprovalRequests(next);
+  }
 }
 
 /** Ask a specific member to approve a task/committee/event. Purely a tracked
@@ -3093,6 +3107,7 @@ export function deleteTask(id: string, actorName: string): boolean {
 
   const updated = tasks.filter(t => t.id !== id);
   saveTasks(updated);
+  removeApprovalRequestsForEntity('task', id);
   serverDelete('/api/tasks', id);
   logAuditEvent('TASK_DELETED', actorName, `Deleted task: ${target.title}`);
   return true;
@@ -4145,6 +4160,7 @@ export function deleteAnnouncement(id: string, actorName: string): boolean {
 
   const updated = current.filter(a => a.id !== id);
   saveAnnouncements(updated);
+  removeApprovalRequestsForEntity('announcement', id);
   serverDelete('/api/announcements', id);
   logAuditEvent('ANNOUNCEMENT_DELETED', actorName, `Retracted announcement: "${target.title}"`);
   return true;
@@ -5025,6 +5041,7 @@ export function deleteDesign(id: string, actorName: string): boolean {
 
   const updated = current.filter(d => d.id !== id);
   saveDesigns(updated);
+  removeApprovalRequestsForEntity('design', id);
   serverDelete('/api/designs', id);
   logAuditEvent('DESIGN_DELETED', actorName, `Deleted design submission "${target.title}"`);
   return true;

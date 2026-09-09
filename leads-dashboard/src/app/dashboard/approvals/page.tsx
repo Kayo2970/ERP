@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { UserCheck, Check, X, Clock, Inbox, Send, CheckSquare, Calendar, Users, Palette, FileText, Megaphone } from 'lucide-react';
 import {
   getApprovalRequests,
+  saveApprovalRequests,
   decideApprovalRequest,
   deleteApprovalRequest,
   approveTask,
@@ -13,6 +14,12 @@ import {
   rejectEvent,
   approveAnnouncement,
   rejectAnnouncement,
+  getTasks,
+  getDesigns,
+  getEvents,
+  getAnnouncements,
+  getEventReports,
+  getMembers,
   ApprovalRequest,
 } from '@/lib/local-data';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -53,7 +60,34 @@ export default function ApprovalsPage() {
   const [decisionNoteInput, setDecisionNoteInput] = useState('');
 
   useEffect(() => {
-    const refreshData = () => setRequests(getApprovalRequests());
+    const refreshData = () => {
+      const allReqs = getApprovalRequests();
+      const tasks = getTasks();
+      const designs = getDesigns();
+      const events = getEvents();
+      const announcements = getAnnouncements();
+      const eventReports = getEventReports();
+      const members = getMembers();
+
+      // Filter out any orphaned requests referencing entities that were deleted
+      const valid = allReqs.filter(r => {
+        if (r.entityType === 'task') return tasks.some(t => t.id === r.entityId);
+        if (r.entityType === 'design') return designs.some(d => d.id === r.entityId);
+        if (r.entityType === 'event') return events.some(e => e.id === r.entityId);
+        if (r.entityType === 'announcement') return announcements.some(a => a.id === r.entityId);
+        if (r.entityType === 'event-report') return eventReports.some(er => er.id === r.entityId);
+        if (r.entityType === 'member') return members.some(m => m.id === r.entityId);
+        if (r.entityType === 'committee') {
+          return events.some(e => e.committees?.some(c => c.id === r.entityId));
+        }
+        return true;
+      });
+
+      if (valid.length !== allReqs.length) {
+        saveApprovalRequests(valid);
+      }
+      setRequests(valid);
+    };
     refreshData();
 
     const savedUser = localStorage.getItem('user');
