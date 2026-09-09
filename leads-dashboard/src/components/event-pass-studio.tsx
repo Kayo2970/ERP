@@ -35,6 +35,7 @@ import {
   EventGuestCategory,
   addEventPass,
   getEventPasses,
+  dispatchPassEmail,
 } from '@/lib/local-data';
 import styles from './event-pass-card.module.css';
 import { AppleWalletPassPreview } from './apple-wallet-pass-preview';
@@ -162,6 +163,10 @@ export function EventPassStudio({
   const [isFlipped, setIsFlipped] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [issuedPass, setIssuedPass] = useState<EventPassItem | null>(null);
+  const [isDispatchingEmail, setIsDispatchingEmail] = useState(false);
+  const [emailDispatchStatus, setEmailDispatchStatus] = useState<string>('');
+  const [manualEmailInput, setManualEmailInput] = useState('');
+  const [showManualEmailPrompt, setShowManualEmailPrompt] = useState(false);
   const [successToast, setSuccessToast] = useState('');
   const [copiedSerial, setCopiedSerial] = useState(false);
 
@@ -182,7 +187,7 @@ export function EventPassStudio({
   const displayRoom = roomOrVenue.trim() || selectedEvent?.location || 'Main Auditorium';
   const displayValidity = validityDate.trim() || formattedEventDate;
 
-  const handleIssuePass = (e: React.FormEvent) => {
+  const handleIssuePass = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!attendeeName.trim() || !selectedEvent) return;
 
@@ -221,6 +226,34 @@ export function EventPassStudio({
     }
   };
 
+  const handleDispatchIssuedPass = async (targetEmailOverride?: string) => {
+    if (!issuedPass) return;
+    const recipient = targetEmailOverride || issuedPass.attendeeEmail || manualEmailInput.trim();
+    if (!recipient) {
+      setShowManualEmailPrompt(true);
+      return;
+    }
+
+    setIsDispatchingEmail(true);
+    setEmailDispatchStatus('');
+
+    try {
+      const res = await dispatchPassEmail(issuedPass, recipient);
+      if (res.success) {
+        setEmailDispatchStatus(`Pass dispatched to ${recipient}!`);
+        setShowManualEmailPrompt(false);
+        setSuccessToast(`Pass ${issuedPass.serialNumber} dispatched to ${recipient}!`);
+        setTimeout(() => setEmailDispatchStatus(''), 6000);
+      } else {
+        setEmailDispatchStatus(`Failed: ${res.error || 'Check SMTP settings'}`);
+      }
+    } catch (err: any) {
+      setEmailDispatchStatus(`Failed: ${err?.message || 'Dispatch error'}`);
+    } finally {
+      setIsDispatchingEmail(false);
+    }
+  };
+
   const handleResetForNext = () => {
     setAttendeeName('');
     setAttendeeEmail('');
@@ -230,6 +263,9 @@ export function EventPassStudio({
     setValidityDate('');
     setNotes('');
     setIssuedPass(null);
+    setEmailDispatchStatus('');
+    setShowManualEmailPrompt(false);
+    setManualEmailInput('');
     setIsFlipped(false);
   };
 
@@ -836,7 +872,71 @@ export function EventPassStudio({
 
           {/* POST-ISSUANCE ACTIONS BAR */}
           {issuedPass ? (
-            <div className="w-full max-w-[380px] space-y-2 animate-in fade-in duration-300">
+            <div className="w-full max-w-[380px] space-y-2.5 animate-in fade-in duration-300">
+              {/* Primary 1-Click Dispatch Email Button */}
+              <button
+                type="button"
+                disabled={isDispatchingEmail}
+                onClick={() => handleDispatchIssuedPass()}
+                className="w-full py-3 px-4 bg-gradient-to-r from-sky-600 to-accent hover:from-sky-500 hover:to-accent/90 text-white rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 border border-sky-400/40 shadow-xl shadow-accent/25 cursor-pointer disabled:opacity-50"
+              >
+                {isDispatchingEmail ? (
+                  <>
+                    <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Dispatching Pass Email...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4" />
+                    <span>
+                      {issuedPass.attendeeEmail
+                        ? `Dispatch Pass to ${issuedPass.attendeeEmail}`
+                        : 'Dispatch Pass (Email)'}
+                    </span>
+                  </>
+                )}
+              </button>
+
+              {/* Status Banner */}
+              {emailDispatchStatus && (
+                <div
+                  className={`p-2.5 rounded-xl text-[11px] font-bold flex items-center gap-2 border ${
+                    emailDispatchStatus.startsWith('Failed')
+                      ? 'bg-rose-500/15 border-rose-500/30 text-rose-300'
+                      : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                  }`}
+                >
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  <span>{emailDispatchStatus}</span>
+                </div>
+              )}
+
+              {/* Manual Email Input Prompt if no email stored on pass */}
+              {showManualEmailPrompt && (
+                <div className="p-3 bg-slate-900/90 border border-sky-500/40 rounded-xl space-y-2">
+                  <span className="text-[10.5px] font-bold text-slate-300 block">
+                    Enter recipient email for {issuedPass.attendeeName}:
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="email"
+                      value={manualEmailInput}
+                      onChange={(e) => setManualEmailInput(e.target.value)}
+                      placeholder="attendee@domain.com"
+                      className="flex-1 px-3 py-1.5 bg-slate-800 border border-white/15 rounded-lg text-white text-xs focus:outline-none focus:border-accent"
+                    />
+                    <button
+                      type="button"
+                      disabled={isDispatchingEmail || !manualEmailInput.trim()}
+                      onClick={() => handleDispatchIssuedPass(manualEmailInput.trim())}
+                      className="px-3 py-1.5 bg-accent hover:bg-accent/90 text-white text-xs font-bold rounded-lg cursor-pointer disabled:opacity-50 transition-all shrink-0"
+                    >
+                      Send
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"

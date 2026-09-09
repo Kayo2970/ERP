@@ -16,25 +16,41 @@ export async function POST(request: Request) {
   try {
     await requireSession(request);
     const body = await request.json();
-    const { scope, recipientEmail, subject, bodyText, bodyHtml, category, badgeText, badgeColor } = body;
+    const {
+      scope,
+      recipientEmail,
+      to,
+      subject,
+      bodyText,
+      bodyHtml,
+      body: rawBody,
+      content,
+      category,
+      badgeText,
+      badgeColor,
+    } = body;
 
-    if (!subject || !bodyText) {
+    const emailTo = recipientEmail || to;
+    const finalSubject = subject;
+    const textContent = bodyText || rawBody || content;
+
+    if (!finalSubject || !textContent) {
       return NextResponse.json({ error: 'Subject and email content are required' }, { status: 400 });
     }
 
-    // 1. Single recipient dispatch
-    if (scope === 'SINGLE') {
-      if (!recipientEmail) {
+    // 1. Single recipient dispatch (explicit SINGLE, or to/recipientEmail passed directly)
+    if (scope === 'SINGLE' || (!scope && emailTo) || (scope !== 'ALL' && scope !== 'All Members' && emailTo)) {
+      if (!emailTo) {
         return NextResponse.json({ error: 'Recipient email address is required' }, { status: 400 });
       }
       const log = await dispatchEmail({
-        to: recipientEmail,
-        subject,
-        bodyText,
+        to: emailTo,
+        subject: finalSubject,
+        bodyText: textContent,
         bodyHtml,
-        badgeText,
+        badgeText: badgeText || (category === 'EVENT_INVITATION' || category === 'EVENT_PASS' ? 'Official Event Pass' : undefined),
         badgeColor,
-        category: category || 'DIRECT_MESSAGE',
+        category: category || (category === 'EVENT_INVITATION' || category === 'EVENT_PASS' ? category : 'DIRECT_MESSAGE'),
       });
       return NextResponse.json({ count: 1, dispatched: [log] });
     }

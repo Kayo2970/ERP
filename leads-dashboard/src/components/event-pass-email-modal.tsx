@@ -16,7 +16,7 @@ import {
   QrCode,
   RefreshCw,
 } from 'lucide-react';
-import { EventItem, EventPassItem } from '@/lib/local-data';
+import { EventItem, EventPassItem, authHeaders } from '@/lib/local-data';
 
 interface EventPassEmailModalProps {
   isOpen: boolean;
@@ -125,6 +125,7 @@ export function EventPassEmailModal({
 
     try {
       let sentCount = 0;
+      let failCount = 0;
 
       for (const pass of targets) {
         if (!pass.attendeeEmail) continue;
@@ -132,36 +133,54 @@ export function EventPassEmailModal({
         const personalizedSubject = renderMailMerge(subjectTemplate, pass);
         const personalizedBody = renderMailMerge(bodyTemplate, pass);
 
-        await fetch('/api/email/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            to: pass.attendeeEmail,
-            subject: personalizedSubject,
-            body: personalizedBody,
-            type: 'EVENT_INVITATION',
-            metadata: {
-              passId: pass.id,
-              serialNumber: pass.serialNumber,
-              eventId: pass.eventId,
-              eventName: pass.eventName,
-            },
-          }),
-        }).catch((err) => console.warn('Failed to send pass email:', err));
+        try {
+          const res = await fetch('/api/email/send', {
+            method: 'POST',
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({
+              scope: 'SINGLE',
+              recipientEmail: pass.attendeeEmail,
+              to: pass.attendeeEmail,
+              subject: personalizedSubject,
+              bodyText: personalizedBody,
+              category: 'EVENT_INVITATION',
+              badgeText: 'Official Event Pass',
+              badgeColor: '#0284c7',
+              metadata: {
+                passId: pass.id,
+                serialNumber: pass.serialNumber,
+                eventId: pass.eventId,
+                eventName: pass.eventName,
+              },
+            }),
+          });
 
-        sentCount++;
+          if (!res.ok) {
+            failCount++;
+            const errData = await res.json().catch(() => ({}));
+            console.warn(`Failed to dispatch email to ${pass.attendeeEmail}:`, errData.error);
+          } else {
+            sentCount++;
+          }
+        } catch (subErr) {
+          failCount++;
+          console.warn(`Network error dispatching email to ${pass.attendeeEmail}:`, subErr);
+        }
       }
 
-      setSuccessToast(`Queued ${sentCount} personalized pass emails for delivery!`);
-      if (onEmailsDispatched) onEmailsDispatched(sentCount);
-
-      setTimeout(() => {
-        onClose();
-        setSuccessToast('');
-      }, 2500);
+      if (sentCount > 0) {
+        setSuccessToast(`Dispatched ${sentCount} personalized pass emails successfully!${failCount > 0 ? ` (${failCount} failed)` : ''}`);
+        if (onEmailsDispatched) onEmailsDispatched(sentCount);
+        setTimeout(() => {
+          onClose();
+          setSuccessToast('');
+        }, 2000);
+      } else {
+        setErrorMessage('Failed to send pass emails. Please check your SMTP settings in Settings > Email.');
+      }
     } catch (err: any) {
       console.error(err);
-      setErrorMessage('Failed to queue pass emails.');
+      setErrorMessage('Failed to dispatch pass emails.');
     } finally {
       setIsSending(false);
     }

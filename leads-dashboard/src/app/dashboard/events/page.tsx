@@ -28,6 +28,7 @@ import {
   ShieldCheck,
   Bell,
   FileSpreadsheet,
+  Send,
 } from 'lucide-react';
 import {
   getEvents,
@@ -51,6 +52,7 @@ import {
   EventPassItem,
   getEventPasses,
   updateEventPassStatus,
+  dispatchPassEmail,
 } from '@/lib/local-data';
 import {
   canCreateEvent,
@@ -82,6 +84,7 @@ export default function EventsPage() {
   const [eventPasses, setEventPasses] = useState<EventPassItem[]>([]);
   const [passFilterEventId, setPassFilterEventId] = useState('ALL');
   const [passSearchQuery, setPassSearchQuery] = useState('');
+  const [dispatchingPassId, setDispatchingPassId] = useState<string | null>(null);
 
   // Modals & Push Broadcast
   const [isPushModalOpen, setIsPushModalOpen] = useState(false);
@@ -1070,6 +1073,36 @@ export default function EventsPage() {
                           </td>
                           <td className="py-3 px-4 text-right">
                             <div className="flex items-center justify-end gap-1.5">
+                              {/* 1-Click Dispatch Email Button */}
+                              <button
+                                type="button"
+                                disabled={dispatchingPassId === pass.id}
+                                onClick={async () => {
+                                  let email = pass.attendeeEmail;
+                                  if (!email) {
+                                    email = window.prompt(`Enter recipient email address for ${pass.attendeeName}:`) || undefined;
+                                  }
+                                  if (!email) return;
+
+                                  setDispatchingPassId(pass.id);
+                                  const res = await dispatchPassEmail(pass, email);
+                                  setDispatchingPassId(null);
+                                  if (res.success) {
+                                    triggerSuccess(`Pass ${pass.serialNumber} dispatched to ${email}!`);
+                                  } else {
+                                    triggerError(res.error || 'Failed to dispatch pass email. Check SMTP settings.');
+                                  }
+                                }}
+                                className="p-1.5 bg-sky-500/15 hover:bg-sky-500/25 text-sky-400 border border-sky-500/30 rounded-lg text-[10px] font-bold transition-all cursor-pointer disabled:opacity-50"
+                                title={`Dispatch Pass Email to ${pass.attendeeEmail || pass.attendeeName}`}
+                              >
+                                {dispatchingPassId === pass.id ? (
+                                  <span className="h-3 w-3 border-2 border-sky-400 border-t-transparent rounded-full animate-spin block" />
+                                ) : (
+                                  <Send className="h-3 w-3" />
+                                )}
+                              </button>
+
                               {pass.status !== 'Checked In' && (
                                 <button
                                   type="button"

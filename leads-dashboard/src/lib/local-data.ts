@@ -2553,6 +2553,65 @@ export function updateEventPassStatus(
   return passes[idx];
 }
 
+/**
+ * Dispatches a personalized pass invitation email to the attendee
+ * with turnstile access details and digital wallet links.
+ */
+export async function dispatchPassEmail(
+  pass: EventPassItem,
+  targetEmail?: string
+): Promise<{ success: boolean; error?: string }> {
+  const recipient = (targetEmail || pass.attendeeEmail || '').trim();
+  if (!recipient) {
+    return { success: false, error: 'No recipient email address provided.' };
+  }
+
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://leadsnextgencentre.online';
+  const passUrl = `${origin}/dashboard/events?pass=${pass.serialNumber}`;
+
+  const subject = `Your Official Pass for ${pass.eventName} — ${pass.passType}`;
+  const bodyText = `Dear ${pass.attendeeName},\n\nWe are delighted to welcome you to ${pass.eventName}. Your official credential has been issued by the LEADS Next Gen Centre.\n\n• Pass Tier: ${pass.passType}\n• Guest Category: ${pass.guestCategory || 'Guest Attendee'}\n• Assigned Venue / Room: ${pass.roomOrVenue || pass.eventVenue || 'Main Auditorium'}\n• Event Date & Validity: ${pass.validityDate || pass.eventDate || '2026'}\n• Pass Serial ID: ${pass.serialNumber}\n\nYou can access your verified digital pass, save it to Apple Wallet / Google Wallet, or view check-in details via the link below:\n${passUrl}\n\nPlease present your digital pass or QR code at official event turnstiles upon arrival.\n\nWarm regards,\nLEADS Next Gen Centre • RUAS`;
+
+  try {
+    const res = await fetch('/api/email/send', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        scope: 'SINGLE',
+        recipientEmail: recipient,
+        to: recipient,
+        subject,
+        bodyText,
+        category: 'EVENT_INVITATION',
+        badgeText: 'Official Event Pass',
+        badgeColor: '#0284c7',
+        metadata: {
+          passId: pass.id,
+          serialNumber: pass.serialNumber,
+          eventId: pass.eventId,
+          eventName: pass.eventName,
+        },
+      }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return { success: false, error: data.error || `HTTP ${res.status} error during dispatch.` };
+    }
+
+    logAuditEvent(
+      'EVENT_PASS_EMAILED' as any,
+      pass.issuedBy || 'Staff',
+      `Dispatched pass ${pass.serialNumber} via email to ${recipient}`
+    );
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Failed to dispatch pass email:', err);
+    return { success: false, error: err?.message || 'Network error dispatching email.' };
+  }
+}
+
 // -------------------------------------------------------------
 // Event Reports (General Secretary submission -> dual approval -> email)
 // -------------------------------------------------------------
