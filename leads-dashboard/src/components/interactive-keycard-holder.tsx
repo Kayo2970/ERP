@@ -12,6 +12,9 @@ const COVER_CLOSE_DURATION = 850;
 export interface InteractiveKeycardProps {
   memberName: string;
   memberRole?: string;
+  memberIdNumber?: string;
+  joinDate?: string;
+  tier?: number | string;
   phone?: string;
   email?: string;
   photoUrl?: string;
@@ -33,6 +36,9 @@ export interface InteractiveKeycardProps {
 export function InteractiveKeycardHolder({
   memberName = 'Executive Member',
   memberRole = 'LEADS Member',
+  memberIdNumber,
+  joinDate,
+  tier,
   phone = '+91 9608768647',
   email = 'member@leads-centre.org',
   photoUrl,
@@ -89,6 +95,40 @@ export function InteractiveKeycardHolder({
       .slice(0, 5);
     return `LEADS-DIR-${hash}`;
   }, [serialNumber, memberName, email]);
+
+  // Compute unique Member ID Number (Sequence: Joining Date + Tier Level + Unique Serial Hash)
+  const formattedMemberId = React.useMemo(() => {
+    if (memberIdNumber) return memberIdNumber;
+
+    let datePart = '2026';
+    if (joinDate) {
+      try {
+        const d = new Date(joinDate);
+        if (!isNaN(d.getTime())) {
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          datePart = `${y}${m}`;
+        }
+      } catch (e) {}
+    } else {
+      const now = new Date();
+      datePart = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+    }
+
+    const tierCode = tier !== undefined && tier !== null
+      ? `T${tier}`
+      : accessLevel?.includes('Tier 1') || memberRole?.toLowerCase().includes('president') || memberRole?.toLowerCase().includes('coordinator')
+      ? 'T1'
+      : 'T2';
+
+    const seed = `${memberName}-${email}-${serialNumber || ''}`;
+    const hashNum = Math.abs(
+      seed.split('').reduce((acc, char) => (acc << 5) - acc + char.charCodeAt(0), 0)
+    );
+    const seqNum = String((hashNum % 9000) + 1000); // 4-digit unique sequence number
+
+    return `LEADS-${datePart}-${tierCode}-${seqNum}`;
+  }, [memberIdNumber, joinDate, tier, memberName, email, serialNumber, accessLevel, memberRole]);
 
   // Dynamically generate QR code with LEADS logo in center
   useEffect(() => {
@@ -492,8 +532,8 @@ export function InteractiveKeycardHolder({
                       <span className={styles.backFieldVal}>{accessLevel}</span>
                     </div>
                     <div className={styles.backFieldRow}>
-                      <span className={styles.backFieldLabel}>2. Pass Serial ID</span>
-                      <span className={styles.backFieldVal}>{formattedSerial}</span>
+                      <span className={styles.backFieldLabel}>2. Member ID / Serial</span>
+                      <span className={styles.backFieldVal}>{formattedMemberId || formattedSerial}</span>
                     </div>
                     <div className={styles.backFieldRow}>
                       <span className={styles.backFieldLabel}>3. Validity Period</span>
@@ -574,6 +614,12 @@ export function InteractiveKeycardHolder({
                 <div className={styles.formSlot}>
                   <span className={styles.formSlotLabel}>Designation / Role</span>
                   <div className={styles.formSlotPill}>{memberRole}</div>
+                </div>
+                <div className={styles.formSlot}>
+                  <span className={styles.formSlotLabel}>Official Member ID</span>
+                  <div className={styles.formSlotPill} style={{ fontFamily: 'monospace', fontWeight: 800, color: '#0284c7' }}>
+                    {formattedMemberId}
+                  </div>
                 </div>
                 <div className={styles.formSlot}>
                   <span className={styles.formSlotLabel}>Phone</span>
