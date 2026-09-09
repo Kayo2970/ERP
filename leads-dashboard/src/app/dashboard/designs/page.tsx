@@ -25,7 +25,9 @@ import {
   Star,
   Plus,
   Edit2,
-  RefreshCw
+  RefreshCw,
+  GraduationCap,
+  Check
 } from 'lucide-react';
 import { FileDropzone, FilePreviewRow, createProgressTracker } from '@/components/ui/file-dropzone';
 import { RequestApprovalModal } from '@/components/request-approval-modal';
@@ -45,6 +47,7 @@ import {
   reviewDesignCaptions,
   completeDesignPosting,
   resolveDesignReviewer,
+  getEligibleFacultyProofreaders,
   DesignSubmissionItem,
   Member,
   EventItem,
@@ -267,10 +270,17 @@ export default function DesignPortalPage() {
   const [fileData, setFileData] = useState<string>('');
   const [fileError, setFileError] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  // Every submission is auto-routed to whoever resolveDesignReviewer() picks
-  // (Centre Head, then GG Campus Events Head, then Super User) — shown here
-  // purely so the submitter knows who'll be proofreading, nothing more.
-  const mandatoryReviewer = resolveDesignReviewer();
+  // Faculty Proofreaders selection: must select at least 1, can select all
+  const eligibleFaculty = React.useMemo(() => getEligibleFacultyProofreaders(members), [members]);
+  const [selectedProofreaderIds, setSelectedProofreaderIds] = useState<string[]>([]);
+  const [proofreaderSearch, setProofreaderSearch] = useState<string>('');
+
+  // Pre-populate with all eligible faculty by default
+  useEffect(() => {
+    if (selectedProofreaderIds.length === 0 && eligibleFaculty.length > 0) {
+      setSelectedProofreaderIds(eligibleFaculty.map(f => f.id));
+    }
+  }, [eligibleFaculty]);
   // Reading the file into base64 happens asynchronously (FileReader), separately
   // from the "Uploading..." server round-trip — both get their own progress state
   // so a large file doesn't look "attached and ready" before it actually is.
@@ -622,6 +632,11 @@ export default function DesignPortalPage() {
       return;
     }
 
+    if (selectedProofreaderIds.length === 0) {
+      setFileError('Please select at least one faculty member to do the proofreading.');
+      return;
+    }
+
     setIsSubmitting(true);
     setSubmitError('');
     setUploadProgress(0);
@@ -629,6 +644,11 @@ export default function DesignPortalPage() {
     try {
       const selectedEvent = events.find(ev => ev.id === eventId);
       const tracker = createProgressTracker((pct, eta) => { setUploadProgress(pct); setUploadEtaSeconds(eta); });
+
+      const selectedFacultyObjs = selectedProofreaderIds
+        .map(id => eligibleFaculty.find(f => f.id === id))
+        .filter((f): f is Member => Boolean(f))
+        .map(f => ({ id: f.id, name: f.name, email: f.email, role: f.role }));
 
       await addDesign({
         title: title.trim(),
@@ -641,10 +661,9 @@ export default function DesignPortalPage() {
         designerId: user?.id || 'guest',
         designerName: user?.name || 'Designer',
         designerEmail: user?.email || 'designer@msruas.ac.in',
-        // proofreadRequested/assignedProofreader* are always overridden by
-        // addDesign() itself (see resolveDesignReviewer) — proofreading is
-        // mandatory and auto-routed, never opt-in or manually picked here.
         proofreadRequested: true,
+        assignedProofreaderIds: selectedProofreaderIds,
+        assignedProofreaders: selectedFacultyObjs,
         eventId: selectedEvent?.id,
         eventName: selectedEvent?.title,
         ocrScan: ocrScanResult || undefined,
@@ -743,22 +762,29 @@ export default function DesignPortalPage() {
     // Category
     if (categoryFilter !== 'all' && d.category !== categoryFilter) return false;
 
+    // Helper to check if current user is an assigned proofreader or eligible reviewer
+    const isDesignActionableByMe = (d: DesignSubmissionItem) => {
+      if (!user) return false;
+      if (Array.isArray(d.assignedProofreaderIds) && d.assignedProofreaderIds.includes(user.id)) return true;
+      if (d.assignedProofreaderEmail === user.email) return true;
+      if (Array.isArray(d.assignedProofreaders) && d.assignedProofreaders.some(p => p.email === user.email || p.id === user.id)) return true;
+      return canReviewDesignProofread(user, d);
+    };
+
     // Tabs
     if (activeTab === 'mine') {
       return d.designerEmail === user?.email;
     }
     if (activeTab === 'proofread') {
-      return d.assignedProofreaderEmail === user?.email || canReviewDesignProofread(user) || canViewAllDesigns(user);
+      return isDesignActionableByMe(d) || canViewAllDesigns(user);
     }
     if (activeTab === 'expired') {
       return d.isExpired;
     }
 
-    // Default "all" tab: plain designers only see their own + anything assigned to
-    // them or actionable by them (Centre Head/Advisor/GG Campus Events Head, any
-    // one of whom can act on a pending proofread regardless of who it was routed to)
+    // Default "all" tab: plain designers only see their own + anything assigned to them or actionable
     if (!canViewAllDesigns(user)) {
-      return d.designerEmail === user?.email || d.assignedProofreaderEmail === user?.email || canReviewDesignProofread(user);
+      return d.designerEmail === user?.email || isDesignActionableByMe(d);
     }
 
     return true;
@@ -769,13 +795,16 @@ export default function DesignPortalPage() {
   const pendingProofreads = designs.filter(d => d.proofreadRequested && d.review?.status === 'Pending Proofread').length;
   const approvedDesigns = designs.filter(d => d.review?.status === 'Proofread Approved').length;
   const expiredCount = designs.filter(d => d.isExpired).length;
-  // "Assigned to me" now means any design awaiting proofread that THIS viewer can
-  // actually act on — either they're the routed assignedProofreader, or they hold
-  // one of the three eligible reviewer roles (Centre Head/Advisor/GG Events Head).
+  // "Assigned to me" means any design awaiting proofread that THIS viewer is assigned to or can act on
   const assignedToMeCount = designs.filter(d =>
     d.proofreadRequested &&
     d.review?.status === 'Pending Proofread' &&
-    (d.assignedProofreaderEmail === user?.email || canReviewDesignProofread(user))
+    (
+      (Array.isArray(d.assignedProofreaderIds) && user?.id && d.assignedProofreaderIds.includes(user.id)) ||
+      d.assignedProofreaderEmail === user?.email ||
+      (Array.isArray(d.assignedProofreaders) && user?.email && d.assignedProofreaders.some(p => p.email === user.email || p.id === user?.id)) ||
+      canReviewDesignProofread(user, d)
+    )
   ).length;
 
   // Design-brief Tasks (Tasks module, taskCategory === 'design') waiting on
@@ -1045,10 +1074,12 @@ export default function DesignPortalPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredDesigns.map(design => {
             const daysRemaining = getDaysRemaining(design.expiresAt);
-            // Any one of the three eligible reviewers (Centre Head/Advisor/GG Campus
-            // Events Head) can act on a pending proofread, not just whoever it was
-            // routed to — see canReviewDesignProofread.
-            const isAssignedToMe = design.assignedProofreaderEmail === user?.email || canReviewDesignProofread(user);
+            const isAssignedToMe = Boolean(
+              (Array.isArray(design.assignedProofreaderIds) && user?.id && design.assignedProofreaderIds.includes(user.id)) ||
+              design.assignedProofreaderEmail === user?.email ||
+              (Array.isArray(design.assignedProofreaders) && user?.email && design.assignedProofreaders.some(p => p.email === user.email || p.id === user?.id)) ||
+              canReviewDesignProofread(user, design)
+            );
 
             return (
               <div
@@ -1411,21 +1442,131 @@ export default function DesignPortalPage() {
                 )}
               </div>
 
-              {/* Mandatory Proofreading Notice — every design, regardless of
-                  category, is automatically routed to the Centre Head or the
-                  GG Campus Events Head for a required proofread. There is no
-                  opt-out and no manual reviewer picker; this is purely
-                  informational. */}
-              <div className="p-3.5 bg-muted/40 border border-border rounded-xl space-y-1.5">
-                <div className="flex items-center gap-2 font-semibold text-foreground">
-                  <MessageSquare className="h-4 w-4 text-accent" />
-                  Mandatory Proofreading
+              {/* Faculty Proofreader Selection Panel (Must select at least 1, up to all) */}
+              <div className="p-4 bg-muted/40 dark:bg-muted/20 border border-border/80 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <div className="h-7 w-7 rounded-lg bg-accent/15 border border-accent/30 flex items-center justify-center text-accent">
+                      <GraduationCap className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                        Select Faculty Proofreaders <span className="text-rose-500">*</span>
+                      </h4>
+                      <p className="text-[10px] text-muted-foreground">
+                        Proofread request emails will be dispatched <strong className="text-foreground">only</strong> to the selected faculty members.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedProofreaderIds(eligibleFaculty.map(f => f.id))}
+                      className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-accent/10 hover:bg-accent/20 text-accent border border-accent/25 transition-all cursor-pointer"
+                    >
+                      Select All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedProofreaderIds([])}
+                      className="px-2.5 py-1 text-[11px] font-medium rounded-lg bg-muted hover:bg-muted/80 text-muted-foreground border border-border transition-all cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border ${
+                      selectedProofreaderIds.length > 0
+                        ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
+                        : 'bg-rose-500/10 text-rose-500 border-rose-500/30 animate-pulse'
+                    }`}>
+                      {selectedProofreaderIds.length} / {eligibleFaculty.length} Selected
+                    </span>
+                  </div>
                 </div>
-                <p className="text-[11px] text-muted-foreground">
-                  Every design, regardless of category, is automatically sent to{' '}
-                  <strong className="text-foreground">{mandatoryReviewer?.name || 'the Centre Head'}</strong>{' '}
-                  for required proofreading before it can be approved — this cannot be skipped or reassigned.
-                </p>
+
+                {eligibleFaculty.length > 4 && (
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                    <input
+                      type="text"
+                      placeholder="Search faculty by name or role..."
+                      value={proofreaderSearch}
+                      onChange={e => setProofreaderSearch(e.target.value)}
+                      className="w-full bg-background/80 border border-border rounded-xl pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-accent placeholder:text-muted-foreground/60"
+                    />
+                  </div>
+                )}
+
+                <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar">
+                  {eligibleFaculty
+                    .filter(f =>
+                      !proofreaderSearch.trim() ||
+                      f.name.toLowerCase().includes(proofreaderSearch.toLowerCase()) ||
+                      (f.role || '').toLowerCase().includes(proofreaderSearch.toLowerCase()) ||
+                      (f.department || '').toLowerCase().includes(proofreaderSearch.toLowerCase())
+                    )
+                    .map(faculty => {
+                      const isSelected = selectedProofreaderIds.includes(faculty.id);
+                      return (
+                        <div
+                          key={faculty.id}
+                          onClick={() => {
+                            setSelectedProofreaderIds(prev =>
+                              prev.includes(faculty.id)
+                                ? prev.filter(id => id !== faculty.id)
+                                : [...prev, faculty.id]
+                            );
+                          }}
+                          className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                            isSelected
+                              ? 'bg-accent/10 border-accent/40 shadow-xs shadow-accent/10 text-foreground'
+                              : 'bg-background/60 hover:bg-muted/50 border-border/70 text-muted-foreground'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className={`h-5 w-5 rounded-md border flex items-center justify-center transition-all ${
+                              isSelected
+                                ? 'bg-accent border-accent text-white shadow-xs'
+                                : 'border-border bg-background'
+                            }`}>
+                              {isSelected && <Check className="h-3.5 w-3.5 stroke-[3]" />}
+                            </div>
+
+                            <div className="h-7 w-7 rounded-full bg-linear-to-br from-accent/30 to-sky-500/20 border border-accent/30 flex items-center justify-center text-xs font-black text-foreground shrink-0">
+                              {faculty.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
+                            </div>
+
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-foreground truncate flex items-center gap-1.5">
+                                {faculty.name}
+                                {faculty.division && (
+                                  <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded-md bg-muted text-muted-foreground border border-border">
+                                    {faculty.division}
+                                  </span>
+                                )}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground truncate">
+                                {faculty.role || faculty.department || 'Faculty Member'} • {faculty.email}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                  {eligibleFaculty.length === 0 && (
+                    <p className="text-xs text-muted-foreground text-center py-3 italic">
+                      No faculty members found in directory.
+                    </p>
+                  )}
+                </div>
+
+                {selectedProofreaderIds.length === 0 && (
+                  <p className="text-[11px] font-semibold text-rose-500 flex items-center gap-1.5 pt-0.5">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    Please select at least 1 faculty member to review this design.
+                  </p>
+                )}
               </div>
 
               {/* Real upload percent + ETA and retry now live inline on the
@@ -2065,10 +2206,13 @@ export default function DesignPortalPage() {
                 </div>
               )}
 
-              {/* Reviewer Action Controls — any one of the Centre Head, Advisor, or GG
-                  Campus Events Head can act on a pending proofread, not just whoever
-                  it happens to be routed to (see canReviewDesignProofread). */}
-              {(selectedDesign.assignedProofreaderEmail === user?.email || canReviewDesignProofread(user) || canViewAllDesigns(user)) ? (
+              {(
+                (Array.isArray(selectedDesign.assignedProofreaderIds) && user?.id && selectedDesign.assignedProofreaderIds.includes(user.id)) ||
+                selectedDesign.assignedProofreaderEmail === user?.email ||
+                (Array.isArray(selectedDesign.assignedProofreaders) && user?.email && selectedDesign.assignedProofreaders.some(p => p.email === user.email || p.id === user?.id)) ||
+                canReviewDesignProofread(user, selectedDesign) ||
+                canViewAllDesigns(user)
+              ) ? (
                 <form onSubmit={handleSaveReview} className="space-y-3 text-xs bg-muted/20 p-4 rounded-xl border border-border">
                   <p className="font-medium text-foreground">Update Proofreading Decision:</p>
 

@@ -198,7 +198,11 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
   const buildNotifications = (currentUser: any) => {
     const proofreadNotifs = getDesigns()
-      .filter(d => d.proofreadRequested && d.assignedProofreaderEmail === currentUser.email && d.review?.status === 'Pending Proofread')
+      .filter(d => d.proofreadRequested && (
+        d.assignedProofreaderEmail === currentUser.email ||
+        (Array.isArray(d.assignedProofreaderIds) && d.assignedProofreaderIds.includes(currentUser.id)) ||
+        (Array.isArray(d.assignedProofreaders) && d.assignedProofreaders.some((p: any) => p.email === currentUser.email || p.id === currentUser.id))
+      ) && d.review?.status === 'Pending Proofread')
       .map(d => ({
         id: 'pf_' + d.id,
         title: `Proofreading Request: ${d.title}`,

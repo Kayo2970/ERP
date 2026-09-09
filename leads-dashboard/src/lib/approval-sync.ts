@@ -67,6 +67,7 @@ export interface FanOutOptions {
   requesterName: string;
   requesterEmail?: string;
   message?: string;
+  customPanel?: ApprovalPanelMember[];
 }
 
 /**
@@ -76,7 +77,9 @@ export interface FanOutOptions {
  * record doesn't spam duplicate rows/emails.
  */
 export async function fanOutAutoApproval(opts: FanOutOptions): Promise<ApprovalRequest[]> {
-  const panel = await resolveApprovalPanel();
+  const panel = opts.customPanel && opts.customPanel.length > 0
+    ? opts.customPanel
+    : await resolveApprovalPanel();
   if (panel.length === 0) return [];
 
   const now = new Date().toISOString();

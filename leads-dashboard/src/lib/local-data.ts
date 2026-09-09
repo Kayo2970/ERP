@@ -734,6 +734,8 @@ export interface DesignSubmissionItem {
   assignedProofreaderId?: string;
   assignedProofreaderName?: string;
   assignedProofreaderEmail?: string;
+  assignedProofreaderIds?: string[];
+  assignedProofreaders?: { id: string; name: string; email: string; role?: string }[];
   review?: DesignProofreadReview;
   styleStatus?: 'Pending' | 'Style Approved' | 'Style Rejected';
   styleFeedback?: string;
@@ -4595,38 +4597,42 @@ export function saveDesigns(designs: DesignSubmissionItem[]): void {
  * Every design submission — regardless of category — must go to the Centre
  * Head or the GG Campus Events Head for mandatory proofreading; there is no
  * opt-out and no manual reviewer picker. Prefers a real Centre Head, falls
- * back to the GG Campus Events Head, then to the Super User as a last
- * resort so a submission is never left with no one able to review it.
+/**
+ * Returns all active faculty members eligible for selection as design proofreaders.
+ * Submissions must select at least one faculty member (up to all of them).
+ */
+export function getEligibleFacultyProofreaders(members?: Member[]): Member[] {
+  const all = (members || getMembers()).filter(m => m.status !== 'Terminated');
+  const faculty = all.filter(m => {
+    const roleLower = (m.role || '').toLowerCase();
+    const divLower = (m.division || '').toLowerCase();
+    return (
+      m.division === 'Faculty' ||
+      m.division === 'Advisory Board' ||
+      divLower.includes('faculty') ||
+      roleLower.includes('faculty') ||
+      roleLower.includes('professor') ||
+      roleLower.includes('advisor') ||
+      roleLower.includes('centre head') ||
+      roleLower.includes('center head') ||
+      roleLower.includes('dean') ||
+      roleLower.includes('director') ||
+      m.tier === 1 ||
+      m.role === 'Super User'
+    );
+  });
+  return faculty.length > 0 ? faculty : all;
+}
+
+/**
+ * Fallback resolver when no specific proofreader is selected.
  */
 export function resolveDesignReviewer(): { id: string; name: string; email: string } | undefined {
-  const members = getMembers().filter(m => m.status !== 'Terminated');
-  const settings = getAccessLevelSettings();
-  const sectorKeywords = settings.sectorHeadKeywords.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-
-  const centreHead = members.find(m => {
-    const role = (m.role || '').toLowerCase();
-    return role.includes('centre head') || role.includes('center head') || sectorKeywords.some(k => role.includes(k));
-  });
-  if (centreHead) return { id: centreHead.id, name: centreHead.name, email: centreHead.email };
-
-  // Whole-word "advisor" match, mirroring isCentreHead()/findApprovalRecipients()
-  // — deliberately excludes "Advisory Board Member" (division) etc.
-  const advisor = members.find(m => /\badvisor\b/.test((m.role || '').toLowerCase()));
-  if (advisor) return { id: advisor.id, name: advisor.name, email: advisor.email };
-
-  const ggEventsHead = members.find(m => {
-    const role = (m.role || '').toLowerCase();
-    const committee = (m.committee || '').toLowerCase();
-    return m.tier === 2.5 ||
-      (role.includes('events head') && role.includes('gg')) ||
-      (role.includes('head of events') && role.includes('gg')) ||
-      (committee.includes('gg campus') && (role.includes('head of event') || role.includes('events head')));
-  });
-  if (ggEventsHead) return { id: ggEventsHead.id, name: ggEventsHead.name, email: ggEventsHead.email };
-
-  const superUser = members.find(m => m.tier === 1 || m.role === 'Super User');
-  if (superUser) return { id: superUser.id, name: superUser.name, email: superUser.email };
-
+  const faculty = getEligibleFacultyProofreaders();
+  if (faculty.length > 0) {
+    const first = faculty[0];
+    return { id: first.id, name: first.name, email: first.email };
+  }
   return undefined;
 }
 
@@ -4640,9 +4646,30 @@ export async function addDesign(design: Omit<DesignSubmissionItem, 'id' | 'submi
   const submittedAt = now.toISOString();
   const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
-  // Proofreading is mandatory for every design, no matter its category — the
-  // submitter can no longer opt out or hand-pick a reviewer.
-  const reviewer = resolveDesignReviewer();
+  // Resolve assigned faculty proofreaders from the submitter's explicit selection
+  const allMembers = getMembers();
+  let assignedProofreaderIds = design.assignedProofreaderIds || [];
+  let assignedProofreaders = design.assignedProofreaders || [];
+
+  if (assignedProofreaderIds.length > 0 && assignedProofreaders.length === 0) {
+    assignedProofreaders = assignedProofreaderIds
+      .map(id => allMembers.find(m => m.id === id))
+      .filter((m): m is Member => Boolean(m))
+      .map(m => ({ id: m.id, name: m.name, email: m.email, role: m.role }));
+  }
+
+  // Fallback if none provided
+  if (assignedProofreaders.length === 0) {
+    const fallback = resolveDesignReviewer();
+    if (fallback) {
+      assignedProofreaders = [{ id: fallback.id, name: fallback.name, email: fallback.email }];
+      assignedProofreaderIds = [fallback.id];
+    }
+  }
+
+  const primaryReviewer = assignedProofreaders[0];
+  const proofreaderNames = assignedProofreaders.map(p => p.name).join(', ');
+
   const newDesign: DesignSubmissionItem = {
     ...design,
     id: 'des_' + Date.now(),
@@ -4650,12 +4677,14 @@ export async function addDesign(design: Omit<DesignSubmissionItem, 'id' | 'submi
     expiresAt,
     isExpired: false,
     proofreadRequested: true,
-    assignedProofreaderId: reviewer?.id,
-    assignedProofreaderName: reviewer?.name,
-    assignedProofreaderEmail: reviewer?.email,
-    review: reviewer ? {
-      proofreaderId: reviewer.id,
-      proofreaderName: reviewer.name,
+    assignedProofreaderId: primaryReviewer?.id,
+    assignedProofreaderName: proofreaderNames || primaryReviewer?.name,
+    assignedProofreaderEmail: primaryReviewer?.email,
+    assignedProofreaderIds: assignedProofreaders.map(p => p.id),
+    assignedProofreaders,
+    review: primaryReviewer ? {
+      proofreaderId: primaryReviewer.id,
+      proofreaderName: primaryReviewer.name,
       status: 'Pending Proofread',
     } : undefined,
     // Reuse the design-brief task (if this submission fulfills one) as the
@@ -4689,7 +4718,9 @@ export async function addDesign(design: Omit<DesignSubmissionItem, 'id' | 'submi
     }
   }
 
-  const proofreadMsg = reviewer ? ` (routed to ${reviewer.name} for mandatory proofread)` : ' (no Centre Head, GG Campus Events Head, or Super User found to route proofreading to)';
+  const proofreadMsg = proofreaderNames
+    ? ` (routed to ${proofreaderNames} for faculty proofreading)`
+    : ' (no faculty proofreader assigned)';
   logAuditEvent('DESIGN_SUBMITTED', design.designerName, `Submitted design "${design.title}" (${(design.fileSize / (1024 * 1024)).toFixed(2)} MB)${proofreadMsg}`, design.designerEmail);
 
   return createdDesign;

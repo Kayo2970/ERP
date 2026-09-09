@@ -260,8 +260,12 @@ export function canViewEventReports(user: ServerUser, settings: AccessLevelSetti
   return canReviewEventReports(user, settings) || canSubmitEventReport(user) || isGeneralSecretary(user) || isChiefCoordinator(user) || isExecutiveRole(user) || user.tier === 1;
 }
 
-export function canReviewDesignProofread(user: ServerUser, settings: AccessLevelSettings): boolean {
-  return isCentreHead(user, settings) || isEventsHeadGgCampus(user);
+export function canReviewDesignProofread(user: ServerUser, settings: AccessLevelSettings, design?: { assignedProofreaderIds?: string[]; assignedProofreaderEmail?: string; assignedProofreaderId?: string }): boolean {
+  if (!user) return false;
+  if (design?.assignedProofreaderIds && user.id && design.assignedProofreaderIds.includes(user.id)) return true;
+  if (design?.assignedProofreaderEmail && design.assignedProofreaderEmail === user.email) return true;
+  if (design?.assignedProofreaderId && user.id && design.assignedProofreaderId === user.id) return true;
+  return isCentreHead(user, settings) || isEventsHeadGgCampus(user) || isFaculty(user) || user.tier === 1;
 }
 
 export function isSuperUser(user: ServerUser): boolean {
