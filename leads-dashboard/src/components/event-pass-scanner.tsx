@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import jsQR from 'jsqr';
 import {
   QrCode,
   Search,
@@ -12,14 +13,9 @@ import {
   RefreshCw,
   Zap,
   ZapOff,
-  User,
-  Ticket,
-  Calendar,
-  Building2,
   Clock,
-  Sparkles,
   MapPin,
-  Tag,
+  Sparkles,
 } from 'lucide-react';
 import { EventPassItem, updateEventPassStatus } from '@/lib/local-data';
 
@@ -51,182 +47,57 @@ export function EventPassScanner({
   const [torchOn, setTorchOn] = useState(false);
   const [hasTorch, setHasTorch] = useState(false);
   const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
+  const [lastScannedFeedback, setLastScannedFeedback] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const lastScannedRef = useRef<{ code: string; time: number }>({ code: '', time: 0 });
-  const scanIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Stop camera tracks cleanly
-  const stopCamera = () => {
-    if (scanIntervalRef.current) {
-      clearInterval(scanIntervalRef.current);
-      scanIntervalRef.current = null;
+  // Cleanly stop all active video tracks
+  const stopCamera = useCallback(() => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
     }
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch (e) {}
+      });
       streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
     }
     setIsCameraActive(false);
     setTorchOn(false);
     setHasTorch(false);
-  };
-
-  // Start Camera Stream
-  const startCamera = async (facing: 'environment' | 'user' = cameraFacingMode) => {
-    stopCamera();
-    setCameraError('');
-
-    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-      setCameraError('Camera access is not supported on this browser or environment.');
-      return;
-    }
-
-    try {
-      const constraints: MediaStreamConstraints = {
-        video: {
-          facingMode: { ideal: facing },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-        audio: false,
-      };
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      streamRef.current = stream;
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play().catch(() => {});
-      }
-
-      setIsCameraActive(true);
-
-      // Check for torch & multi-camera availability
-      const track = stream.getVideoTracks()[0];
-      if (track) {
-        const capabilities: any = track.getCapabilities ? track.getCapabilities() : {};
-        if (capabilities.torch) setHasTorch(true);
-      }
-
-      const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
-      const videoInputs = devices.filter((d) => d.kind === 'videoinput');
-      if (videoInputs.length > 1) setHasMultipleCameras(true);
-
-      // Start continuous scanning loop
-      startScanningLoop();
-    } catch (err: any) {
-      console.error('Camera access error:', err);
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        setCameraError('Camera permission was denied. Please allow camera permissions in your browser settings.');
-      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-        setCameraError('No camera found on this device.');
-      } else {
-        setCameraError('Unable to start camera stream. Please check camera permissions.');
-      }
-      setIsCameraActive(false);
-    }
-  };
-
-  const toggleTorch = async () => {
-    if (!streamRef.current) return;
-    const track = streamRef.current.getVideoTracks()[0];
-    if (!track) return;
-
-    try {
-      const nextState = !torchOn;
-      await (track as any).applyConstraints({
-        advanced: [{ torch: nextState }],
-      });
-      setTorchOn(nextState);
-    } catch (err) {
-      console.warn('Torch toggle failed:', err);
-    }
-  };
-
-  const switchCamera = () => {
-    const nextFacing = cameraFacingMode === 'environment' ? 'user' : 'environment';
-    setCameraFacingMode(nextFacing);
-    startCamera(nextFacing);
-  };
-
-  // Continuous frame detection using native BarcodeDetector or fallback
-  const startScanningLoop = () => {
-    if (typeof window === 'undefined') return;
-
-    const hasBarcodeDetector = 'BarcodeDetector' in window;
-    let detector: any = null;
-
-    if (hasBarcodeDetector) {
-      try {
-        detector = new (window as any).BarcodeDetector({
-          formats: ['qr_code', 'code_128', 'pdf417'],
-        });
-      } catch (e) {
-        detector = null;
-      }
-    }
-
-    scanIntervalRef.current = setInterval(async () => {
-      if (!videoRef.current || videoRef.current.readyState < 2 || !detector) return;
-
-      try {
-        const barcodes = await detector.detect(videoRef.current);
-        if (barcodes && barcodes.length > 0) {
-          const rawValue = barcodes[0].rawValue?.trim();
-          if (rawValue) {
-            handleScannedValue(rawValue);
-          }
-        }
-      } catch (e) {
-        // Frame scan drop is normal on fast movement
-      }
-    }, 250);
-  };
-
-  // Parse scanned raw value (JSON payload, URL param, or direct serial)
-  const handleScannedValue = (raw: string) => {
-    const now = Date.now();
-    // 2.5 second cooldown per identical scan to avoid rapid duplicate triggers
-    if (lastScannedRef.current.code === raw && now - lastScannedRef.current.time < 2500) {
-      return;
-    }
-
-    lastScannedRef.current = { code: raw, time: now };
-
-    // Haptic feedback
-    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-      try {
-        navigator.vibrate([80, 40, 80]);
-      } catch (e) {}
-    }
-
-    let parsedQuery = raw;
-
-    // Check if it's a JSON string
-    if (raw.startsWith('{') && raw.endsWith('}')) {
-      try {
-        const json = JSON.parse(raw);
-        if (json.serial) parsedQuery = json.serial;
-        else if (json.passId) parsedQuery = json.passId;
-      } catch (e) {}
-    } else if (raw.includes('pass=')) {
-      // Check if it's a URL with ?pass=LEADS-EVT-XXXX
-      const match = raw.match(/pass=([^&]+)/);
-      if (match && match[1]) parsedQuery = decodeURIComponent(match[1]);
-    }
-
-    setSearchQuery(parsedQuery);
-    handleVerify(parsedQuery);
-  };
-
-  useEffect(() => {
-    return () => {
-      stopCamera();
-    };
   }, []);
 
-  const handleVerify = async (queryToUse?: string) => {
+  // Play a crisp audio beep on successful QR read
+  const playBeep = () => {
+    if (typeof window === 'undefined') return;
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime); // A5 note
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.15);
+    } catch (e) {}
+  };
+
+  const handleVerify = useCallback(async (queryToUse?: string) => {
     const q = (queryToUse || searchQuery).trim();
     if (!q) return;
 
@@ -263,7 +134,194 @@ export function EventPassScanner({
     } finally {
       setIsVerifying(false);
     }
+  }, [searchQuery]);
+
+  // Parse scanned raw value (JSON payload, URL param, or direct serial)
+  const handleScannedValue = useCallback((raw: string) => {
+    const now = Date.now();
+    // 2.5 second cooldown per identical scan to avoid rapid duplicate triggers
+    if (lastScannedRef.current.code === raw && now - lastScannedRef.current.time < 2500) {
+      return;
+    }
+
+    lastScannedRef.current = { code: raw, time: now };
+
+    // Haptic & Visual feedback
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      try {
+        navigator.vibrate([100, 40, 100]);
+      } catch (e) {}
+    }
+    playBeep();
+    setLastScannedFeedback(true);
+    setTimeout(() => setLastScannedFeedback(false), 800);
+
+    let parsedQuery = raw.trim();
+
+    // Check if it's a JSON string
+    if (parsedQuery.startsWith('{') && parsedQuery.endsWith('}')) {
+      try {
+        const json = JSON.parse(parsedQuery);
+        if (json.serial) parsedQuery = json.serial;
+        else if (json.passId) parsedQuery = json.passId;
+      } catch (e) {}
+    } else if (parsedQuery.includes('pass=')) {
+      // Check if it's a URL with ?pass=LEADS-EVT-XXXX
+      const match = parsedQuery.match(/pass=([^&]+)/);
+      if (match && match[1]) parsedQuery = decodeURIComponent(match[1]);
+    }
+
+    setSearchQuery(parsedQuery);
+    handleVerify(parsedQuery);
+  }, [handleVerify]);
+
+  // Frame scanning engine (Canvas jsQR + BarcodeDetector fallback)
+  const processFrame = useCallback(() => {
+    if (!videoRef.current || videoRef.current.readyState < 2) {
+      animationFrameRef.current = requestAnimationFrame(processFrame);
+      return;
+    }
+
+    const video = videoRef.current;
+    const w = video.videoWidth;
+    const h = video.videoHeight;
+
+    if (w > 0 && h > 0) {
+      if (!canvasRef.current) {
+        canvasRef.current = document.createElement('canvas');
+      }
+      const canvas = canvasRef.current;
+      // Downscale slightly for ultra-fast 60fps QR analysis
+      const maxDim = 640;
+      let targetW = w;
+      let targetH = h;
+      if (targetW > maxDim) {
+        targetW = maxDim;
+        targetH = Math.round((h / w) * maxDim);
+      }
+      canvas.width = targetW;
+      canvas.height = targetH;
+
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, targetW, targetH);
+        try {
+          const imageData = ctx.getImageData(0, 0, targetW, targetH);
+          const code = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: 'attemptBoth',
+          });
+          if (code && code.data && code.data.trim()) {
+            handleScannedValue(code.data.trim());
+          }
+        } catch (e) {}
+      }
+    }
+
+    animationFrameRef.current = requestAnimationFrame(processFrame);
+  }, [handleScannedValue]);
+
+  // Start Camera Stream
+  const startCamera = async (facing: 'environment' | 'user' = cameraFacingMode) => {
+    stopCamera();
+    setCameraError('');
+
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setCameraError('Camera access is not supported on this browser or environment.');
+      return;
+    }
+
+    try {
+      const constraints: MediaStreamConstraints = {
+        video: {
+          facingMode: { ideal: facing },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      streamRef.current = stream;
+      setIsCameraActive(true);
+
+      // Check for torch & multi-camera availability
+      const track = stream.getVideoTracks()[0];
+      if (track) {
+        const capabilities: any = track.getCapabilities ? track.getCapabilities() : {};
+        if (capabilities.torch) setHasTorch(true);
+      }
+
+      const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+      const videoInputs = devices.filter((d) => d.kind === 'videoinput');
+      if (videoInputs.length > 1) setHasMultipleCameras(true);
+
+      // Bind to video element once mounted
+      setTimeout(() => {
+        if (videoRef.current && streamRef.current) {
+          videoRef.current.srcObject = streamRef.current;
+          videoRef.current.setAttribute('playsinline', 'true');
+          videoRef.current.setAttribute('webkit-playsinline', 'true');
+          videoRef.current.muted = true;
+          videoRef.current.play().catch((e) => console.warn('Video play deferred:', e));
+          // Start frame detection loop
+          if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+          animationFrameRef.current = requestAnimationFrame(processFrame);
+        }
+      }, 50);
+    } catch (err: any) {
+      console.error('Camera access error:', err);
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setCameraError('Camera permission was denied. Please allow camera permissions in your browser/system settings.');
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        setCameraError('No camera found on this device.');
+      } else {
+        setCameraError('Unable to start camera stream. Please check camera permissions.');
+      }
+      setIsCameraActive(false);
+    }
   };
+
+  // Ensure stream binds whenever video mounts
+  useEffect(() => {
+    if (isCameraActive && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.setAttribute('playsinline', 'true');
+      videoRef.current.setAttribute('webkit-playsinline', 'true');
+      videoRef.current.muted = true;
+      videoRef.current.play().catch(() => {});
+      if (!animationFrameRef.current) {
+        animationFrameRef.current = requestAnimationFrame(processFrame);
+      }
+    }
+  }, [isCameraActive, processFrame]);
+
+  const toggleTorch = async () => {
+    if (!streamRef.current) return;
+    const track = streamRef.current.getVideoTracks()[0];
+    if (!track) return;
+
+    try {
+      const nextState = !torchOn;
+      await (track as any).applyConstraints({
+        advanced: [{ torch: nextState }],
+      });
+      setTorchOn(nextState);
+    } catch (err) {
+      console.warn('Torch toggle failed:', err);
+    }
+  };
+
+  const switchCamera = () => {
+    const nextFacing = cameraFacingMode === 'environment' ? 'user' : 'environment';
+    setCameraFacingMode(nextFacing);
+    startCamera(nextFacing);
+  };
+
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, [stopCamera]);
 
   const handleCheckIn = () => {
     if (!verificationResult?.pass) return;
@@ -289,7 +347,7 @@ export function EventPassScanner({
           </div>
           <div>
             <h2 className="text-base font-black text-slate-900 dark:text-white">
-              Turnstile Camera & QR Scanner
+              Turnstile Camera &amp; QR Scanner
             </h2>
             <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
               Scan passes via smartphone camera or enter serial ID for instant admission.
@@ -329,20 +387,27 @@ export function EventPassScanner({
 
       {/* LIVE CAMERA VIEWFINDER WITH HUD & RETICLE */}
       {isCameraActive && (
-        <div className="relative w-full aspect-[4/3] max-h-80 rounded-2xl overflow-hidden bg-black border-2 border-accent shadow-2xl animate-in zoom-in-95 duration-200">
+        <div className={`relative w-full aspect-[4/3] max-h-80 rounded-2xl overflow-hidden bg-black border-2 transition-colors duration-200 shadow-2xl ${
+          lastScannedFeedback ? 'border-emerald-400 ring-4 ring-emerald-400/40' : 'border-accent'
+        }`}>
           <video
             ref={videoRef}
             playsInline
             muted
             autoPlay
+            onLoadedMetadata={() => {
+              if (videoRef.current) {
+                videoRef.current.play().catch(() => {});
+              }
+            }}
             className="w-full h-full object-cover"
           />
 
           {/* Top Camera Controls Overlay */}
           <div className="absolute top-3 left-3 right-3 flex items-center justify-between z-20">
-            <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-black/60 text-white border border-white/20 backdrop-blur-md flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
-              Scanning Turnstile QR
+            <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-black/70 text-white border border-white/20 backdrop-blur-md flex items-center gap-1.5">
+              <span className={`h-2 w-2 rounded-full ${lastScannedFeedback ? 'bg-emerald-400 scale-125' : 'bg-emerald-400 animate-ping'}`} />
+              {lastScannedFeedback ? 'Pass Scanned!' : 'Scanning Turnstile QR'}
             </span>
 
             <div className="flex items-center gap-1.5">
@@ -366,7 +431,7 @@ export function EventPassScanner({
                   type="button"
                   onClick={switchCamera}
                   className="p-2 rounded-xl bg-black/60 text-white border border-white/20 hover:bg-black/80 backdrop-blur-md transition-all cursor-pointer"
-                  title="Switch Camera"
+                  title="Switch Front/Back Camera"
                 >
                   <RefreshCw className="h-4 w-4" />
                 </button>
@@ -376,7 +441,9 @@ export function EventPassScanner({
 
           {/* Viewfinder Target Reticle */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-            <div className="relative w-48 h-48 sm:w-56 sm:h-56 rounded-2xl border-2 border-white/40 shadow-[0_0_0_9999px_rgba(0,0,0,0.55)]">
+            <div className={`relative w-48 h-48 sm:w-56 sm:h-56 rounded-2xl border-2 transition-all duration-300 shadow-[0_0_0_9999px_rgba(0,0,0,0.55)] ${
+              lastScannedFeedback ? 'border-emerald-400 bg-emerald-400/10' : 'border-white/40'
+            }`}>
               {/* Corner brackets */}
               <div className="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-accent rounded-tl-lg" />
               <div className="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-accent rounded-tr-lg" />
@@ -452,7 +519,7 @@ export function EventPassScanner({
                   ) : (
                     <>
                       <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
-                      <span className="font-bold text-emerald-300 text-sm">Genuine & Verified Pass</span>
+                      <span className="font-bold text-emerald-300 text-sm">Genuine &amp; Verified Pass</span>
                     </>
                   )}
                 </div>
@@ -517,7 +584,7 @@ export function EventPassScanner({
                   className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl transition-all shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 cursor-pointer text-xs uppercase tracking-wider"
                 >
                   <CheckCircle2 className="h-4 w-4" />
-                  Admit & Mark Checked In
+                  Admit &amp; Mark Checked In
                 </button>
               )}
             </div>

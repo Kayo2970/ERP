@@ -1186,6 +1186,7 @@ export async function syncWithServer(): Promise<boolean> {
       hydrateIfStale('leads_income_sources', data.incomeSources, requestStartedAt);
       hydrateIfStale('leads_audit_logs', data.auditLogs, requestStartedAt);
       hydrateIfStale('leads_approval_requests', data.approvalRequests, requestStartedAt);
+      hydrateIfStale('leads_event_passes', data.event_passes || data.eventPasses, requestStartedAt);
       // Notify every open page in this tab to re-read localStorage and re-render.
       // The native 'storage' event only fires in OTHER tabs/windows — it never
       // fires in the tab that made the write, so this custom event is the only
@@ -1274,6 +1275,8 @@ const SYNC_LABELS: Record<string, string> = {
   ratings: 'rating',
   'group-policies': 'group policy',
   'event-reports': 'event report',
+  'event_passes': 'event pass',
+  'passes': 'event pass',
 };
 function syncLabelFor(endpoint: string): string {
   const collection = endpoint.replace(/^\/api\//, '').split('/')[0];

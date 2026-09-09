@@ -51,8 +51,10 @@ import {
   Member,
   EventPassItem,
   getEventPasses,
+  saveEventPasses,
   updateEventPassStatus,
   dispatchPassEmail,
+  authHeaders,
 } from '@/lib/local-data';
 import {
   canCreateEvent,
@@ -127,6 +129,20 @@ export default function EventsPage() {
       setEventPasses(getEventPasses());
     };
     refreshData();
+
+    // Immediate server fetch for passes to guarantee cross-device sync (e.g. mobile after desktop issue)
+    fetch('/api/events/all/passes', {
+      headers: authHeaders(),
+      cache: 'no-store',
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((serverPasses) => {
+        if (Array.isArray(serverPasses) && serverPasses.length > 0) {
+          saveEventPasses(serverPasses);
+          setEventPasses(serverPasses);
+        }
+      })
+      .catch((err) => console.warn('[events] Pass fetch error:', err));
 
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
