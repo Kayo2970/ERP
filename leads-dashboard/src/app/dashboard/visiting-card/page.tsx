@@ -477,7 +477,7 @@ export default function VisitingCardPage() {
                 </div>
                 <div>
                   <h2 className="text-sm sm:text-base font-black text-white flex items-center gap-2 flex-wrap">
-                    LEADS Executive 3D Keycard Vault
+                    LEADS Executive Keycard
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
                       <ShieldCheck className="h-3 w-3" /> Authenticated Member View
                     </span>

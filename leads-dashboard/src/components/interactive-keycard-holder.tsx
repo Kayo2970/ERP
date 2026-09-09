@@ -361,19 +361,27 @@ export function InteractiveKeycardHolder({
           </span>
         </div>
 
-        {stageState === 'opened' && (
+        {(stageState === 'opened' || stageState === 'extracted' || stageState === 'extracting') && (
           <div className={styles.mobileFlapToggle}>
             <button
+              type="button"
               className={`${styles.flapTab} ${activeTab === 'card' ? styles.flapTabActive : ''}`}
-              onClick={() => setActiveTab('card')}
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveTab('card');
+              }}
             >
               💳 Keycard
             </button>
             <button
+              type="button"
               className={`${styles.flapTab} ${activeTab === 'creds' ? styles.flapTabActive : ''}`}
-              onClick={() => setActiveTab('creds')}
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveTab('creds');
+              }}
             >
-              📋 Executive Info
+              📋 Credentials
             </button>
           </div>
         )}
