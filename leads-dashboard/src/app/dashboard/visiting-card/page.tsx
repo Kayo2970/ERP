@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Save, QrCode, Copy, ExternalLink, RotateCw, AlertCircle, Sparkles, Layers, Smartphone, Maximize2, X, ShieldCheck } from 'lucide-react';
+import { Save, QrCode, Copy, ExternalLink, RotateCw, AlertCircle, Sparkles, Maximize2, X, ShieldCheck } from 'lucide-react';
 import { getMembers, saveMembers, updateMemberCard, updateMemberCardPhoto, authHeaders } from '@/lib/local-data';
 import { FileDropzone, useUploadTask } from '@/components/ui/file-dropzone';
 import { VisitingCardView } from '@/components/visiting-card-view';
@@ -14,7 +14,6 @@ const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
 export default function VisitingCardPage() {
   const [user, setUser] = useState<any>(null);
 
-  const [cardExperienceMode, setCardExperienceMode] = useState<'profile' | 'leather'>('profile');
   const [isFullscreenLeatherOpen, setIsFullscreenLeatherOpen] = useState(false);
   const [cardEnabled, setCardEnabled] = useState(false);
   const [cardSlug, setCardSlug] = useState('');
@@ -236,7 +235,7 @@ export default function VisitingCardPage() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
-        <div className="glass-panel rounded-2xl p-6 xl:col-span-5 2xl:col-span-5 space-y-5">
+        <div className="glass-panel rounded-2xl p-6 xl:col-span-7 2xl:col-span-7 space-y-5">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-theme-text-primary">Card Details</h3>
             <label className="flex items-center gap-2 cursor-pointer shrink-0">
@@ -269,7 +268,7 @@ export default function VisitingCardPage() {
                   </div>
                 )}
               </div>
-              <div className="space-y-1.5 flex-1 max-w-sm">
+              <div className="space-y-1.5 flex-1 max-w-md">
                 <FileDropzone
                   onFilesSelected={handleCardPhotoFilesSelected}
                   accept="image/*"
@@ -383,89 +382,38 @@ export default function VisitingCardPage() {
           </form>
         </div>
 
-        <div className="flex flex-col items-center xl:items-center w-full xl:col-span-7 2xl:col-span-7 gap-4 min-w-0 overflow-visible">
-          <div className="flex items-center justify-between w-full max-w-xl px-1 flex-wrap gap-2">
-            <p className="text-[11px] font-semibold text-theme-text-secondary uppercase tracking-wider">Card Experience</p>
+        <div className="flex flex-col items-center xl:items-center w-full xl:col-span-5 2xl:col-span-5 gap-4 min-w-0 overflow-visible">
+          <div className="flex items-center justify-between w-full max-w-sm px-1 flex-wrap gap-2">
+            <p className="text-[11px] font-semibold text-theme-text-secondary uppercase tracking-wider">Visiting Card</p>
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsFullscreenLeatherOpen(true)}
-                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 via-amber-700 to-amber-800 hover:from-amber-500 hover:to-amber-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-950/40 border border-amber-400/40 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
-                title="Present Credentials with 3D Keycard"
-              >
-                <Maximize2 className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Present Credentials</span>
-                <span className="sm:hidden">Present</span>
-              </button>
-
-              <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 text-xs shadow-inner">
-                <button
-                  type="button"
-                  onClick={() => setCardExperienceMode('profile')}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                    cardExperienceMode === 'profile'
-                      ? 'bg-accent text-white shadow-sm'
-                      : 'text-theme-text-secondary hover:text-white'
-                  }`}
-                >
-                  <Smartphone className="h-3.5 w-3.5 inline mr-1.5" />
-                  3D Gyro Card
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCardExperienceMode('leather')}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                    cardExperienceMode === 'leather'
-                      ? 'bg-accent text-white shadow-sm'
-                      : 'text-theme-text-secondary hover:text-white'
-                  }`}
-                >
-                  <Sparkles className="h-3.5 w-3.5 inline mr-1.5" />
-                  3D Keycard
-                </button>
-              </div>
-            </div>
+            <button
+              type="button"
+              onClick={() => setIsFullscreenLeatherOpen(true)}
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 via-amber-700 to-amber-800 hover:from-amber-500 hover:to-amber-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-950/40 border border-amber-400/40 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+              title="Present Credentials with 3D Keycard"
+            >
+              <Maximize2 className="h-3.5 w-3.5" />
+              <span>Present Credentials</span>
+            </button>
           </div>
 
-          {cardExperienceMode === 'profile' ? (
-            <div className="w-full flex justify-center py-2">
-              <VisitingCardView
-                card={{
-                  name: user?.name || '',
-                  designation: (isWalletAdmin && cardDesignationOverride.trim()) ? cardDesignationOverride.trim() : (user?.role || ''),
-                  phone: cardPhone,
-                  email: user?.email,
-                  photoUrl: cardPhotoPreviewUrl || cardPhotoUrl || user?.avatarUrl,
-                  socials: { linkedin: cardLinkedin },
-                }}
-                slug={cardSlug || 'preview'}
-                showActions={Boolean(cardSlug)}
-                previewMode
-                appleWalletAvailable={walletAvailability.appleWalletAvailable}
-                googleWalletAvailable={walletAvailability.googleWalletAvailable}
-              />
-            </div>
-          ) : (
-            <div className="w-full max-w-2xl flex flex-col items-center justify-center overflow-visible py-2">
-              <InteractiveKeycardHolder
-                memberName={user?.name || 'Executive Member'}
-                memberRole={(isWalletAdmin && cardDesignationOverride.trim()) ? cardDesignationOverride.trim() : (user?.role || 'LEADS Member')}
-                phone={cardPhone || user?.phone || '+91 9608768647'}
-                email={user?.email || 'member@leads-centre.org'}
-                photoUrl={cardPhotoPreviewUrl || cardPhotoUrl || user?.avatarUrl}
-                serialNumber={cardSlug ? `LEADS-DIR-${cardSlug.toUpperCase()}` : 'LEADS-DIR-2026-99'}
-                accessLevel="Executive & Alumni Fellow"
-                issuingAuthority="LEADS Next Gen Centre • RUAS"
-                joinDate={user?.createdAt}
-                tier={user?.tier}
-                cardUrl={cardPublicUrl}
-                qrUrl="/card/leads-qr-code.png"
-                showActions={true}
-                autoOpen={true}
-              />
-            </div>
-          )}
+          <div className="w-full flex justify-center py-2">
+            <VisitingCardView
+              card={{
+                name: user?.name || '',
+                designation: (isWalletAdmin && cardDesignationOverride.trim()) ? cardDesignationOverride.trim() : (user?.role || ''),
+                phone: cardPhone,
+                email: user?.email,
+                photoUrl: cardPhotoPreviewUrl || cardPhotoUrl || user?.avatarUrl,
+                socials: { linkedin: cardLinkedin },
+              }}
+              slug={cardSlug || 'preview'}
+              showActions={Boolean(cardSlug)}
+              previewMode
+              appleWalletAvailable={walletAvailability.appleWalletAvailable}
+              googleWalletAvailable={walletAvailability.googleWalletAvailable}
+            />
+          </div>
         </div>
 
         {/* Fullscreen Authenticated 3D Leather Card Holder Experience */}
