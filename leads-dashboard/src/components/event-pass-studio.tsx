@@ -142,7 +142,9 @@ export function EventPassStudio({
   const activeEvents = events.filter((e) => e.status !== 'completed' && e.status !== 'archived');
   const defaultEvent = activeEvents[0] || events[0];
 
+  const [eventMode, setEventMode] = useState<'existing' | 'custom' | 'none'>('existing');
   const [selectedEventId, setSelectedEventId] = useState(defaultEvent?.id || '');
+  const [customEventTitle, setCustomEventTitle] = useState('');
   const [attendeeName, setAttendeeName] = useState('');
   const [guestCategory, setGuestCategory] = useState<EventGuestCategory>('VIP Dignitary');
   const [passType, setPassType] = useState<EventPassType>('VIP Pass');
@@ -170,7 +172,7 @@ export function EventPassStudio({
   const [successToast, setSuccessToast] = useState('');
   const [copiedSerial, setCopiedSerial] = useState(false);
 
-  const selectedEvent = events.find((e) => e.id === selectedEventId) || defaultEvent;
+  const selectedEvent = eventMode === 'existing' ? events.find((e) => e.id === selectedEventId) || defaultEvent : null;
   const currentPassMeta = PASS_TYPES.find((p) => p.type === passType) || PASS_TYPES[0];
 
   const formattedEventDate = selectedEvent
@@ -183,21 +185,39 @@ export function EventPassStudio({
         }`
     : '2026';
 
+  const resolvedEventTitle =
+    eventMode === 'custom'
+      ? customEventTitle.trim() || 'Custom Event / Symposium'
+      : eventMode === 'none'
+      ? 'General Access Credential'
+      : selectedEvent?.title || 'LEADS Official Event';
+
+  const resolvedEventId =
+    eventMode === 'custom'
+      ? `custom-${Date.now()}`
+      : eventMode === 'none'
+      ? 'standalone'
+      : selectedEvent?.id || 'standalone';
+
+  const resolvedEventVenue =
+    selectedEvent?.location || roomOrVenue.trim() || 'LEADS Next Gen Centre Auditorium';
+
   const previewSerial = `LEADS-EVT-2026-${(attendeeName || 'GUEST').slice(0, 3).toUpperCase()}-99`;
   const displayRoom = roomOrVenue.trim() || selectedEvent?.location || 'Main Auditorium';
   const displayValidity = validityDate.trim() || formattedEventDate;
 
   const handleIssuePass = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!attendeeName.trim() || !selectedEvent) return;
+    if (!attendeeName.trim()) return;
+    if (eventMode === 'custom' && !customEventTitle.trim()) return;
 
     setIsSubmitting(true);
     try {
       const newPass = addEventPass({
-        eventId: selectedEvent.id,
-        eventName: selectedEvent.title,
+        eventId: resolvedEventId,
+        eventName: resolvedEventTitle,
         eventDate: formattedEventDate,
-        eventVenue: selectedEvent.location || 'LEADS Next Gen Centre Auditorium',
+        eventVenue: resolvedEventVenue,
         attendeeName: attendeeName.trim(),
         guestCategory,
         roomOrVenue: displayRoom,
@@ -346,23 +366,86 @@ export function EventPassStudio({
           </div>
 
           <form onSubmit={handleIssuePass} className="space-y-4 text-xs">
-            {/* 1. Event Selection */}
-            <div className="space-y-1.5">
-              <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px]">
-                Active Event *
-              </label>
-              <select
-                value={selectedEventId}
-                onChange={(e) => setSelectedEventId(e.target.value)}
-                required
-                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-300 dark:border-white/15 rounded-xl text-slate-900 dark:text-white font-medium focus:outline-none focus:border-accent text-xs"
-              >
-                {events.map((evt) => (
-                  <option key={evt.id} value={evt.id} className="bg-slate-900 text-white">
-                    {evt.title} ({evt.status})
-                  </option>
-                ))}
-              </select>
+            {/* 1. Target Event / Occasion Selection */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px]">
+                  Target Event / Occasion *
+                </label>
+                <div className="flex items-center gap-1 bg-slate-200/80 dark:bg-white/10 p-0.5 rounded-lg text-[10px] font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setEventMode('existing')}
+                    className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                      eventMode === 'existing'
+                        ? 'bg-accent text-white shadow-sm'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Select Event
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEventMode('custom')}
+                    className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                      eventMode === 'custom'
+                        ? 'bg-accent text-white shadow-sm'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Type Custom
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEventMode('none')}
+                    className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                      eventMode === 'none'
+                        ? 'bg-accent text-white shadow-sm'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    No Event
+                  </button>
+                </div>
+              </div>
+
+              {eventMode === 'existing' && (
+                <select
+                  value={selectedEventId}
+                  onChange={(e) => setSelectedEventId(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-300 dark:border-white/15 rounded-xl text-slate-900 dark:text-white font-medium focus:outline-none focus:border-accent text-xs"
+                >
+                  {events.length === 0 ? (
+                    <option value="">No events found (Click &quot;Type Custom&quot; above)</option>
+                  ) : (
+                    events.map((evt) => (
+                      <option key={evt.id} value={evt.id} className="bg-slate-900 text-white">
+                        {evt.title} ({evt.status})
+                      </option>
+                    ))
+                  )}
+                </select>
+              )}
+
+              {eventMode === 'custom' && (
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    value={customEventTitle}
+                    onChange={(e) => setCustomEventTitle(e.target.value)}
+                    placeholder="Type custom event name (e.g. Annual Tech Symposium / VIP Guest Visit)"
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-300 dark:border-white/15 rounded-xl text-slate-900 dark:text-white font-semibold focus:outline-none focus:border-accent text-xs"
+                  />
+                </div>
+              )}
+
+              {eventMode === 'none' && (
+                <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-[11px] text-slate-600 dark:text-slate-300 flex items-center justify-between">
+                  <span>General All-Access Standalone Credential (No event assigned)</span>
+                  <span className="text-[10px] text-emerald-400 font-bold uppercase">Generic Pass</span>
+                </div>
+              )}
             </div>
 
             {/* Pass Header Branding Customization */}
@@ -718,7 +801,7 @@ export function EventPassStudio({
                     {/* Event Info */}
                     <div className={styles.eventRow}>
                       <div className={styles.eventTitleText}>
-                        {selectedEvent?.title || 'Selected Event Name'}
+                        {resolvedEventTitle}
                       </div>
                       <div className={styles.eventDateText}>
                         <Calendar className="h-3 w-3 text-sky-400 shrink-0" />
@@ -859,7 +942,7 @@ export function EventPassStudio({
               guestCategory={guestCategory}
               passType={passType}
               roomOrVenue={displayRoom}
-              eventName={selectedEvent?.title || 'Official Event'}
+              eventName={resolvedEventTitle}
               eventDate={formattedEventDate}
               validityDate={displayValidity}
               serialNumber={issuedPass ? issuedPass.serialNumber : previewSerial}
