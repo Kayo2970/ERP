@@ -31,6 +31,16 @@ export interface InteractiveKeycardProps {
   walletError?: string;
   showActions?: boolean;
   autoOpen?: boolean;
+
+  // Event Pass Specific Props
+  isEventPass?: boolean;
+  eventName?: string;
+  eventDate?: string;
+  passType?: string;
+  guestCategory?: string;
+  roomOrVenue?: string;
+  attendeeOrg?: string;
+  brandHeader?: string;
 }
 
 export function InteractiveKeycardHolder({
@@ -55,6 +65,16 @@ export function InteractiveKeycardHolder({
   walletError,
   showActions = true,
   autoOpen = false,
+
+  // Event Pass Specific Props
+  isEventPass,
+  eventName,
+  eventDate,
+  passType,
+  guestCategory,
+  roomOrVenue,
+  attendeeOrg,
+  brandHeader,
 }: InteractiveKeycardProps) {
   const [stageState, setStageState] = useState<'init' | 'entered' | 'opened' | 'extracting' | 'extracted' | 'tucking' | 'closing'>('init');
   const [activeTab, setActiveTab] = useState<'card' | 'creds'>('card');
@@ -63,6 +83,8 @@ export function InteractiveKeycardHolder({
   const cardRef = useRef<HTMLDivElement>(null);
   const dragInfo = useRef({ isDragging: false, startY: 0, currentDeltaY: 0, hasDragged: false });
   const holderDragInfo = useRef({ isDragging: false, startY: 0, hasDragged: false });
+
+  const isEvent = Boolean(isEventPass || eventName || passType);
 
   const memberInitials = (memberName || '?')
     .trim()
@@ -458,67 +480,154 @@ export function InteractiveKeycardHolder({
             >
               <div className={styles.passInner}>
                 {/* FRONT FACE */}
-                <div className={`${styles.passFace} ${styles.passFront}`}>
-                  {/* Luxury Holographic Foil Shimmer */}
-                  <div className={styles.holographicFoil} />
+                {isEvent ? (
+                  /* EVENT PASS LUXURY TURNSTILE CREDENTIAL (MATCHES STUDIO DESIGN) */
+                  <div className={`${styles.passFace} ${styles.eventPassFront}`}>
+                    {/* Luxury Holographic Foil Shimmer */}
+                    <div className={styles.holographicFoil} />
 
-                  <div>
-                    <div className={styles.passHeader}>
-                      <img src="/card/leads-logo.png" alt="LEADS Logo" className={styles.passMiniLogo} />
-                      <span className={styles.passBadgePill}>EXECUTIVE PASS</span>
+                    <div>
+                      <div className={styles.eventPassHeader}>
+                        <div className={styles.eventBrandWrap}>
+                          <img src="/card/leads-logo.png" alt="LEADS Logo" className={styles.eventBrandLogo} />
+                          <div className={styles.eventBrandText}>
+                            <span className={styles.eventBrandTitle}>{brandHeader || 'LEADS Next Gen Centre'}</span>
+                            <span className={styles.eventBrandSubtitle}>RUAS Executive Credential</span>
+                          </div>
+                        </div>
+                        <span className={styles.eventPassTypeBadge}>
+                          {passType || 'VIP PASS'}
+                        </span>
+                      </div>
+
+                      {/* Event Info Section */}
+                      <div className={styles.eventInfoSection}>
+                        <div className={styles.eventTitleHeader}>
+                          {eventName || 'Official LEADS Event'}
+                        </div>
+                        <div className={styles.eventDateBadge}>
+                          <span>🗓️</span>
+                          <span>{validityPeriod || eventDate || '2026'}</span>
+                        </div>
+                      </div>
+
+                      {/* Guest Identity Card */}
+                      <div className={styles.guestIdentityCard}>
+                        <div className={styles.guestTagPill}>
+                          <span>🏷️</span>
+                          <span>{guestCategory || 'Guest Attendee'}</span>
+                        </div>
+                        <div className={styles.guestAttendeeName}>
+                          {memberName}
+                        </div>
+
+                        <div className={styles.guestMetaGrid}>
+                          <div className={styles.guestMetaItem}>
+                            <span className={styles.guestMetaLabel}>Assigned Room / Venue</span>
+                            <span className={styles.guestMetaVal}>📍 {roomOrVenue || 'Main Auditorium'}</span>
+                          </div>
+                          <div className={styles.guestMetaItem}>
+                            <span className={styles.guestMetaLabel}>Affiliation / Tier</span>
+                            <span className={styles.guestMetaVal}>{attendeeOrg || memberRole || 'Guest Invitee'}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Turnstile QR Code Module */}
+                      <div className={styles.turnstileQrContainer}>
+                        <div className={styles.turnstileMetaLeft}>
+                          <span className={styles.turnstileSerialText}>
+                            {serialNumber || formattedSerial}
+                          </span>
+                          <span className={styles.turnstileSignedBadge}>
+                            <span>🛡️</span> Cryptographically Signed
+                          </span>
+                          <span className={styles.turnstileHintSub}>
+                            Valid at all official event turnstiles
+                          </span>
+                        </div>
+                        <img
+                          src={dynamicQrUrl || qrUrl || '/card/leads-qr-code.png'}
+                          alt="Turnstile QR"
+                          className={styles.turnstileQrImage}
+                        />
+                      </div>
                     </div>
 
-                    {/* Member Photo & Executive Identity */}
-                    <div className={styles.passAvatarArea}>
-                      <div className={styles.passPhotoWrap}>
-                        {photoUrl ? (
-                          <img src={photoUrl} alt={memberName} className={styles.passPhotoImage} />
-                        ) : (
-                          <div className={styles.passPhotoInitials}>{memberInitials}</div>
-                        )}
+                    <div className={styles.passCardFooter}>
+                      <div className={styles.flipAffordanceHint}>
+                        <span>↻</span>
+                        <span>Tap to Flip for Pass Terms & Security Protocol</span>
                       </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div className={styles.passLabel}>{memberRole}</div>
-                        <div className={styles.passName} style={{ fontSize: '15px' }}>{memberName}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '8px', color: '#94a3b8' }}>
+                        <span>💳 {issuingAuthority || 'LEADS Next Gen Centre • RUAS'}</span>
+                        <span>SECURE CREDENTIAL</span>
                       </div>
-                      <img src="/card/leads-logo-clean.png" alt="LEADS RUAS" className={styles.passSideLogo} />
-                    </div>
-
-                    <div className={styles.passGrid}>
-                      <div>
-                        <div className={styles.passLabel}>Phone Number</div>
-                        <div className={styles.passVal}>{phone || '—'}</div>
-                      </div>
-                      <div>
-                        <div className={styles.passLabel}>Email ID</div>
-                        <div className={styles.passVal} title={email}>{email}</div>
-                      </div>
-                    </div>
-
-                    <div className={styles.passQrBox}>
-                      <img src={dynamicQrUrl || qrUrl || '/card/leads-qr-code.png'} alt="Card QR Code" />
                     </div>
                   </div>
+                ) : (
+                  /* MEMBER VISITING CARD */
+                  <div className={`${styles.passFace} ${styles.passFront}`}>
+                    {/* Luxury Holographic Foil Shimmer */}
+                    <div className={styles.holographicFoil} />
 
+                    <div>
+                      <div className={styles.passHeader}>
+                        <img src="/card/leads-logo.png" alt="LEADS Logo" className={styles.passMiniLogo} />
+                        <span className={styles.passBadgePill}>EXECUTIVE PASS</span>
+                      </div>
 
-                  <div className={styles.passCardFooter}>
-                    <div className={styles.flipAffordanceHint}>
-                      <span>↻</span>
-                      <span>Tap to Flip for 5 Verification Fields</span>
+                      {/* Member Photo & Executive Identity */}
+                      <div className={styles.passAvatarArea}>
+                        <div className={styles.passPhotoWrap}>
+                          {photoUrl ? (
+                            <img src={photoUrl} alt={memberName} className={styles.passPhotoImage} />
+                          ) : (
+                            <div className={styles.passPhotoInitials}>{memberInitials}</div>
+                          )}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div className={styles.passLabel}>{memberRole}</div>
+                          <div className={styles.passName} style={{ fontSize: '15px' }}>{memberName}</div>
+                        </div>
+                        <img src="/card/leads-logo-clean.png" alt="LEADS RUAS" className={styles.passSideLogo} />
+                      </div>
+
+                      <div className={styles.passGrid}>
+                        <div>
+                          <div className={styles.passLabel}>Phone Number</div>
+                          <div className={styles.passVal}>{phone || '—'}</div>
+                        </div>
+                        <div>
+                          <div className={styles.passLabel}>Email ID</div>
+                          <div className={styles.passVal} title={email}>{email}</div>
+                        </div>
+                      </div>
+
+                      <div className={styles.passQrBox}>
+                        <img src={dynamicQrUrl || qrUrl || '/card/leads-qr-code.png'} alt="Card QR Code" />
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '8.5px' }}>
-                      <span>💳</span>
-                      <span>{issuingAuthority}</span>
+
+                    <div className={styles.passCardFooter}>
+                      <div className={styles.flipAffordanceHint}>
+                        <span>↻</span>
+                        <span>Tap to Flip for 5 Verification Fields</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '8.5px' }}>
+                        <span>💳</span>
+                        <span>{issuingAuthority}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 {/* BACK FACE */}
                 <div className={`${styles.passFace} ${styles.passBack}`}>
                   <div className={styles.passBackHeader}>
                     <div>
-                      <div className={styles.passLabel}>EXECUTIVE CREDENTIALS</div>
-                      <div className={styles.passBackTitle}>LEADS Pass Info</div>
+                      <div className={styles.passLabel}>{isEvent ? 'PASS TERMS & PROTOCOL' : 'EXECUTIVE CREDENTIALS'}</div>
+                      <div className={styles.passBackTitle}>{isEvent ? 'RUAS Secure Event Pass' : 'LEADS Pass Info'}</div>
                     </div>
                     <button className={styles.btnFlipPill} onClick={toggleFlip} title="Flip to front">
                       <span>↺</span>
@@ -526,27 +635,37 @@ export function InteractiveKeycardHolder({
                     </button>
                   </div>
 
+                  {isEvent && <div className={styles.magneticStripeGraphic} />}
+
                   <div className={styles.passBackFields}>
                     <div className={styles.backFieldRow}>
-                      <span className={styles.backFieldLabel}>1. Access Level</span>
-                      <span className={styles.backFieldVal}>{accessLevel}</span>
+                      <span className={styles.backFieldLabel}>1. Access Level & Tier</span>
+                      <span className={styles.backFieldVal}>{passType || accessLevel}</span>
                     </div>
                     <div className={styles.backFieldRow}>
-                      <span className={styles.backFieldLabel}>2. Member ID / Serial</span>
-                      <span className={styles.backFieldVal}>{formattedMemberId || formattedSerial}</span>
+                      <span className={styles.backFieldLabel}>2. {isEvent ? 'Pass ID / Serial' : 'Member ID / Serial'}</span>
+                      <span className={styles.backFieldVal} style={{ fontFamily: 'monospace', color: '#0284c7' }}>
+                        {isEvent ? (serialNumber || formattedSerial) : (formattedMemberId || formattedSerial)}
+                      </span>
                     </div>
                     <div className={styles.backFieldRow}>
-                      <span className={styles.backFieldLabel}>3. Validity Period</span>
-                      <span className={styles.backFieldVal}>{formattedValidity}</span>
+                      <span className={styles.backFieldLabel}>3. {isEvent ? 'Event & Validity' : 'Validity Period'}</span>
+                      <span className={styles.backFieldVal}>
+                        {isEvent ? `${eventName || 'Official Event'} (${validityPeriod || '2026'})` : formattedValidity}
+                      </span>
                     </div>
                     <div className={styles.backFieldRow}>
-                      <span className={styles.backFieldLabel}>4. Issuing Authority</span>
-                      <span className={styles.backFieldVal}>{issuingAuthority}</span>
+                      <span className={styles.backFieldLabel}>4. {isEvent ? 'Designated Venue / Hall' : 'Issuing Authority'}</span>
+                      <span className={styles.backFieldVal}>
+                        {isEvent ? `📍 ${roomOrVenue || 'Main Auditorium'}` : issuingAuthority}
+                      </span>
                     </div>
                     <div className={styles.backFieldRow}>
                       <span className={styles.backFieldLabel}>5. Terms & Entry Verification</span>
                       <p className={styles.backNoticeText}>
-                        Scan front QR code at entry turnstiles. Non-transferable pass.
+                        {isEvent
+                          ? 'Scan front QR code at entry turnstiles. Pass is strictly non-transferable.'
+                          : 'Scan front QR code at entry turnstiles. Non-transferable pass.'}
                       </p>
                     </div>
                   </div>
@@ -601,30 +720,49 @@ export function InteractiveKeycardHolder({
               <div className={styles.leftPanelHeader}>
                 <div>
                   <div className={styles.leftPanelTitle}>LEADS Centre</div>
-                  <div className={styles.leftPanelSub}>Executive Pass</div>
+                  <div className={styles.leftPanelSub}>{isEvent ? 'Official Event Pass' : 'Executive Pass'}</div>
                 </div>
-                <span className={styles.leftBadgeTag}>Official</span>
+                <span className={styles.leftBadgeTag}>{isEvent ? 'Verified' : 'Official'}</span>
               </div>
 
               <div className={styles.leftFormFields}>
                 <div className={styles.formSlot}>
-                  <span className={styles.formSlotLabel}>Member Name</span>
+                  <span className={styles.formSlotLabel}>{isEvent ? 'Attendee Name' : 'Member Name'}</span>
                   <div className={styles.formSlotPill}>{memberName}</div>
                 </div>
                 <div className={styles.formSlot}>
-                  <span className={styles.formSlotLabel}>Designation / Role</span>
-                  <div className={styles.formSlotPill}>{memberRole}</div>
-                </div>
-                <div className={styles.formSlot}>
-                  <span className={styles.formSlotLabel}>Official Member ID</span>
-                  <div className={styles.formSlotPill} style={{ fontFamily: 'monospace', fontWeight: 800, color: '#0284c7' }}>
-                    {formattedMemberId}
+                  <span className={styles.formSlotLabel}>{isEvent ? 'Guest Category / Tier' : 'Designation / Role'}</span>
+                  <div className={styles.formSlotPill}>
+                    {isEvent
+                      ? (guestCategory ? `${guestCategory} (${passType || 'Pass'})` : (passType || memberRole))
+                      : memberRole}
                   </div>
                 </div>
                 <div className={styles.formSlot}>
-                  <span className={styles.formSlotLabel}>Phone</span>
-                  <div className={styles.formSlotPill}>{phone || '—'}</div>
+                  <span className={styles.formSlotLabel}>{isEvent ? 'Pass ID' : 'Official Member ID'}</span>
+                  <div className={styles.formSlotPill} style={{ fontFamily: 'monospace', fontWeight: 800, color: '#38bdf8' }}>
+                    {isEvent ? (serialNumber || formattedSerial) : formattedMemberId}
+                  </div>
                 </div>
+                {isEvent ? (
+                  <>
+                    <div className={styles.formSlot}>
+                      <span className={styles.formSlotLabel}>Event / Occasion</span>
+                      <div className={styles.formSlotPill}>{eventName || 'LEADS Official Event'}</div>
+                    </div>
+                    <div className={styles.formSlot}>
+                      <span className={styles.formSlotLabel}>Assigned Room / Venue</span>
+                      <div className={styles.formSlotPill}>📍 {roomOrVenue || 'Main Auditorium'}</div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className={styles.formSlot}>
+                      <span className={styles.formSlotLabel}>Phone</span>
+                      <div className={styles.formSlotPill}>{phone || '—'}</div>
+                    </div>
+                  </>
+                )}
                 <div className={styles.formSlot}>
                   <span className={styles.formSlotLabel}>Email</span>
                   <div className={styles.formSlotPill}>{email}</div>
