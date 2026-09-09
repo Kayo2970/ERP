@@ -331,13 +331,24 @@ export function EventPassStudio({
             <span className="font-semibold">{successToast}</span>
           </div>
           {issuedPass && (
-            <button
-              type="button"
-              onClick={handleResetForNext}
-              className="px-3 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/30 text-emerald-200 text-xs font-bold rounded-lg cursor-pointer transition-all"
-            >
-              Issue Next Pass →
-            </button>
+            <div className="flex items-center gap-2">
+              <a
+                href={`/pass/${issuedPass.serialNumber}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1 bg-accent hover:bg-accent/80 text-white text-xs font-bold rounded-lg cursor-pointer transition-all flex items-center gap-1.5 shadow-sm"
+              >
+                <Eye className="h-3.5 w-3.5" />
+                View Pass ↗
+              </a>
+              <button
+                type="button"
+                onClick={handleResetForNext}
+                className="px-3 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/30 text-emerald-200 text-xs font-bold rounded-lg cursor-pointer transition-all"
+              >
+                Issue Next Pass →
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -1020,13 +1031,21 @@ export function EventPassStudio({
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
+                <a
+                  href={`/pass/${issuedPass.serialNumber}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="py-2.5 px-3 bg-accent/25 hover:bg-accent/35 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border border-accent/40 cursor-pointer shadow-md"
+                >
+                  <Eye className="h-4 w-4" /> View Pass
+                </a>
                 <button
                   type="button"
                   onClick={handlePrint}
-                  className="py-2.5 px-4 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 border border-white/15 cursor-pointer shadow-md"
+                  className="py-2.5 px-3 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border border-white/15 cursor-pointer shadow-md"
                 >
-                  <Printer className="h-4 w-4" /> Print Badge
+                  <Printer className="h-4 w-4" /> Print
                 </button>
                 <button
                   type="button"
@@ -1035,10 +1054,10 @@ export function EventPassStudio({
                     setCopiedSerial(true);
                     setTimeout(() => setCopiedSerial(false), 2000);
                   }}
-                  className="py-2.5 px-4 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 border border-sky-500/30 cursor-pointer shadow-md"
+                  className="py-2.5 px-3 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border border-sky-500/30 cursor-pointer shadow-md"
                 >
                   <Copy className="h-4 w-4" />
-                  {copiedSerial ? 'Copied Serial' : 'Copy Serial'}
+                  {copiedSerial ? 'Copied' : 'Copy ID'}
                 </button>
               </div>
 

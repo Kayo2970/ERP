@@ -29,6 +29,9 @@ import {
   Bell,
   FileSpreadsheet,
   Send,
+  Eye,
+  ExternalLink,
+  Copy,
 } from 'lucide-react';
 import {
   getEvents,
@@ -1039,8 +1042,17 @@ export default function EventsPage() {
                       })
                       .map((pass) => (
                         <tr key={pass.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
-                          <td className="py-3 px-4 font-mono font-bold text-sky-500 dark:text-sky-400">
-                            {pass.serialNumber}
+                          <td className="py-3 px-4 font-mono font-bold">
+                            <a
+                              href={`/pass/${pass.serialNumber}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sky-500 dark:text-sky-400 hover:text-sky-300 hover:underline inline-flex items-center gap-1 group"
+                              title={`Open verified pass for ${pass.attendeeName} (${pass.serialNumber})`}
+                            >
+                              <span>{pass.serialNumber}</span>
+                              <ExternalLink className="h-2.5 w-2.5 opacity-60 group-hover:opacity-100 transition-opacity" />
+                            </a>
                           </td>
                           <td className="py-3 px-4">
                             <div className="font-bold text-theme-text-primary">{pass.attendeeName}</div>
@@ -1089,6 +1101,18 @@ export default function EventsPage() {
                           </td>
                           <td className="py-3 px-4 text-right">
                             <div className="flex items-center justify-end gap-1.5">
+                              {/* View Live Pass Button */}
+                              <a
+                                href={`/pass/${pass.serialNumber}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-2.5 py-1 bg-accent/15 hover:bg-accent/25 text-accent border border-accent/30 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer"
+                                title={`View Pass for ${pass.attendeeName}`}
+                              >
+                                <Eye className="h-3 w-3" />
+                                <span>View</span>
+                              </a>
+
                               {/* 1-Click Dispatch Email Button */}
                               <button
                                 type="button"
