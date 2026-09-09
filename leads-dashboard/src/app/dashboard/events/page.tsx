@@ -900,17 +900,18 @@ export default function EventsPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="border-b border-white/10 text-theme-text-secondary text-[11px] uppercase tracking-wider">
+                    <tr className="border-b border-slate-200/90 dark:border-white/10 text-theme-text-secondary text-[11px] uppercase tracking-wider">
                       <th className="py-3 px-4">Serial ID</th>
-                      <th className="py-3 px-4">Attendee</th>
+                      <th className="py-3 px-4">Attendee & Category</th>
+                      <th className="py-3 px-4">Assigned Room / Venue</th>
                       <th className="py-3 px-4">Event</th>
-                      <th className="py-3 px-4">Type</th>
+                      <th className="py-3 px-4">Pass Tier</th>
                       <th className="py-3 px-4">Issued By</th>
                       <th className="py-3 px-4">Status</th>
                       <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/5">
+                  <tbody className="divide-y divide-slate-200/50 dark:divide-white/5">
                     {eventPasses
                       .filter((p) => {
                         if (passFilterEventId !== 'ALL' && p.eventId !== passFilterEventId) return false;
@@ -920,23 +921,40 @@ export default function EventsPage() {
                             p.attendeeName.toLowerCase().includes(q) ||
                             p.serialNumber.toLowerCase().includes(q) ||
                             (p.attendeeOrg && p.attendeeOrg.toLowerCase().includes(q)) ||
+                            (p.roomOrVenue && p.roomOrVenue.toLowerCase().includes(q)) ||
+                            (p.guestCategory && p.guestCategory.toLowerCase().includes(q)) ||
                             p.passType.toLowerCase().includes(q)
                           );
                         }
                         return true;
                       })
                       .map((pass) => (
-                        <tr key={pass.id} className="hover:bg-white/5 transition-colors">
-                          <td className="py-3 px-4 font-mono font-bold text-sky-400">
+                        <tr key={pass.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
+                          <td className="py-3 px-4 font-mono font-bold text-sky-500 dark:text-sky-400">
                             {pass.serialNumber}
                           </td>
                           <td className="py-3 px-4">
                             <div className="font-bold text-theme-text-primary">{pass.attendeeName}</div>
-                            {pass.attendeeOrg && (
-                              <div className="text-[10px] text-theme-text-secondary">{pass.attendeeOrg}</div>
-                            )}
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              {pass.guestCategory && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-accent/15 text-accent border border-accent/25">
+                                  {pass.guestCategory}
+                                </span>
+                              )}
+                              {pass.attendeeOrg && (
+                                <span className="text-[10px] text-theme-text-secondary truncate max-w-[150px]">
+                                  {pass.attendeeOrg}
+                                </span>
+                              )}
+                            </div>
                           </td>
-                          <td className="py-3 px-4 text-theme-text-secondary max-w-xs truncate">
+                          <td className="py-3 px-4">
+                            <span className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                              <MapPin className="h-3 w-3 text-accent shrink-0" />
+                              {pass.roomOrVenue || pass.eventVenue || 'Main Auditorium'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-theme-text-secondary max-w-[180px] truncate">
                             {pass.eventName}
                           </td>
                           <td className="py-3 px-4">
@@ -951,10 +969,10 @@ export default function EventsPage() {
                             <span
                               className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
                                 pass.status === 'Checked In'
-                                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
                                   : pass.status === 'Cancelled'
-                                  ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
-                                  : 'bg-sky-500/15 text-sky-300 border border-sky-500/30'
+                                  ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
+                                  : 'bg-sky-500/15 text-sky-600 dark:text-sky-300 border border-sky-500/30'
                               }`}
                             >
                               {pass.status}
@@ -969,7 +987,7 @@ export default function EventsPage() {
                                   setEventPasses(getEventPasses());
                                   triggerSuccess(`Checked in ${pass.attendeeName}!`);
                                 }}
-                                className="px-3 py-1 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-lg text-[10px] font-bold transition-all cursor-pointer mr-2"
+                                className="px-3 py-1 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30 rounded-lg text-[10px] font-bold transition-all cursor-pointer mr-2"
                               >
                                 Admit
                               </button>
@@ -980,7 +998,7 @@ export default function EventsPage() {
                                 navigator.clipboard.writeText(pass.serialNumber);
                                 triggerSuccess(`Copied serial ${pass.serialNumber}`);
                               }}
-                              className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                              className="px-2.5 py-1 bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 text-slate-800 dark:text-white rounded-lg text-[10px] font-bold transition-all cursor-pointer"
                               title="Copy Serial ID"
                             >
                               Copy ID

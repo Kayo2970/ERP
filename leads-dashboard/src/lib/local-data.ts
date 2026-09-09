@@ -276,6 +276,17 @@ export type EventPassType =
   | 'Press / Media'
   | 'Organizer';
 
+export type EventGuestCategory =
+  | 'Student'
+  | 'Faculty'
+  | 'VIP Dignitary'
+  | 'Keynote Speaker'
+  | 'Industry Partner'
+  | 'Alumni'
+  | 'Press / Media'
+  | 'Organizer / Crew'
+  | 'Special Guest';
+
 export interface EventPassItem {
   id: string;
   serialNumber: string;
@@ -284,6 +295,8 @@ export interface EventPassItem {
   eventDate?: string;
   eventVenue?: string;
   attendeeName: string;
+  guestCategory?: EventGuestCategory;
+  roomOrVenue?: string;
   attendeeEmail?: string;
   attendeePhone?: string;
   attendeeOrg?: string;
