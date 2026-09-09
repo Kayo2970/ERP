@@ -191,6 +191,74 @@ export async function createEventWalletPass(
 }
 
 /**
+ * Updates an issued event access pass (Apple Wallet + Google Wallet) via WalletWallet API
+ * (PUT /api/passes/:serialNumber). Updates fields and pushes live update to attendee's wallet.
+ */
+export async function updateEventWalletPass(
+  apiKey: string,
+  eventPass: WalletEventPassData,
+  passUrl: string,
+  notificationMsg?: string
+): Promise<{ success: boolean; detail?: any }> {
+  const headerFields = [
+    { label: 'ACCESS', value: (eventPass.passType || 'VIP PASS').toUpperCase(), changeMessage: '%@' },
+  ];
+
+  const primaryFields = [
+    {
+      label: (eventPass.guestCategory || 'GUEST ATTENDEE').toUpperCase(),
+      value: eventPass.attendeeName,
+      changeMessage: '%@',
+    },
+  ];
+
+  const secondaryFields = [
+    {
+      label: 'ROOM / VENUE',
+      value: eventPass.roomOrVenue || eventPass.eventVenue || 'Main Auditorium',
+      changeMessage: '%@',
+    },
+    {
+      label: 'VALIDITY',
+      value: eventPass.validityDate || eventPass.eventDate || '2026',
+      changeMessage: '%@',
+    },
+  ];
+
+  const backFields = [
+    { label: 'Event Name', value: eventPass.eventName },
+    { label: 'Pass Serial ID', value: eventPass.serialNumber },
+    { label: 'Issuing Authority', value: 'LEADS Next Gen Centre • RUAS' },
+    { label: 'Access Policy', value: 'Strictly non-transferable. Present at event check-in turnstiles.' },
+    { label: 'Digital Pass Link', value: passUrl },
+    { label: 'Notifications', value: notificationMsg || 'Pass details updated.', changeMessage: '%@' },
+  ];
+
+  const res = await fetch(`${API_BASE}/api/passes/${encodeURIComponent(eventPass.serialNumber)}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      color: eventPass.passColor || '#0b1526',
+      headerFields,
+      primaryFields,
+      secondaryFields,
+      backFields,
+    }),
+  });
+
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+    throw new Error(`Wallet pass update failed: ${detail.error || res.statusText}`);
+  }
+
+  const data = await res.json().catch(() => ({}));
+  return { success: true, detail: data };
+}
+
+/**
  * Pushes a live lock-screen update / notification to an issued Apple & Google Wallet pass
  * via WalletWallet PUT /api/passes/:serialNumber.
  */
@@ -229,5 +297,6 @@ export async function updateEventPassPushNotification(
   const data = await res.json().catch(() => ({}));
   return { success: true, detail: data };
 }
+
 
 

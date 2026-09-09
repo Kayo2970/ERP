@@ -2559,6 +2559,72 @@ export function updateEventPassStatus(
   return passes[idx];
 }
 
+export async function updateEventPass(
+  passId: string,
+  updates: Partial<EventPassItem>,
+  actorName: string
+): Promise<{ pass: EventPassItem; walletUpdated?: boolean; walletError?: string } | null> {
+  const passes = getEventPasses();
+  const idx = passes.findIndex((p) => p.id === passId || p.serialNumber === passId);
+  if (idx === -1) return null;
+
+  const original = passes[idx];
+  const updated: EventPassItem = {
+    ...original,
+    ...updates,
+  };
+
+  // Re-generate QR payload if core fields changed
+  if (
+    updates.attendeeName !== undefined ||
+    updates.passType !== undefined ||
+    updates.eventId !== undefined
+  ) {
+    updated.qrPayload = JSON.stringify({
+      passId: updated.id,
+      serial: updated.serialNumber,
+      eventId: updated.eventId,
+      attendee: updated.attendeeName,
+      type: updated.passType,
+      issuedAt: updated.issuedAt,
+    });
+  }
+
+  passes[idx] = updated;
+  saveEventPasses(passes);
+
+  let walletUpdated = false;
+  let walletError: string | undefined;
+
+  try {
+    const res = await fetch(`/api/events/${updated.eventId}/passes`, {
+      method: 'PATCH',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        passId: updated.id,
+        ...updates,
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.walletUpdated) walletUpdated = true;
+      if (data.walletNotice) walletError = data.walletNotice;
+    }
+  } catch (err: any) {
+    console.warn('Failed to sync event pass update with server:', err);
+    walletError = err?.message;
+  }
+
+  logAuditEvent(
+    'EVENT_PASS_UPDATED' as any,
+    actorName,
+    `Updated pass details for "${updated.serialNumber}" (${updated.attendeeName})`
+  );
+
+  return { pass: updated, walletUpdated, walletError };
+}
+
+
 /**
  * Dispatches a personalized pass invitation email to the attendee
  * with turnstile access details and digital wallet links.

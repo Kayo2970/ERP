@@ -18,6 +18,7 @@ import {
   Calendar,
   Sparkles,
   Layers,
+  Edit3,
 } from 'lucide-react';
 import {
   EventItem,
@@ -37,6 +38,7 @@ import {
 import { EventPassStudio } from '@/components/event-pass-studio';
 import { EventPassScanner } from '@/components/event-pass-scanner';
 import { EventPassPushModal } from '@/components/event-pass-push-modal';
+import { EventPassEditModal } from '@/components/event-pass-edit-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 
 export default function EventPassesPage() {
@@ -65,6 +67,10 @@ export default function EventPassesPage() {
   // Push Alert Modal State
   const [isPushModalOpen, setIsPushModalOpen] = useState(false);
   const [selectedPushPass, setSelectedPushPass] = useState<EventPassItem | null>(null);
+
+  // Edit Pass Modal State
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [selectedEditPass, setSelectedEditPass] = useState<EventPassItem | null>(null);
 
   // Notifications / Toast
   const [successMsg, setSuccessMsg] = useState('');
@@ -452,6 +458,21 @@ export default function EventPassesPage() {
                                 <span>View</span>
                               </a>
 
+                              {/* Edit Pass Button */}
+                              {canManagePasses && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedEditPass(pass);
+                                    setIsEditModalOpen(true);
+                                  }}
+                                  className="p-1.5 bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-400 border border-indigo-500/30 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                                  title={`Edit pass details for ${pass.attendeeName}`}
+                                >
+                                  <Edit3 className="h-3 w-3" />
+                                </button>
+                              )}
+
                               {/* 1-Click Dispatch Email Button */}
                               <button
                                 type="button"
@@ -541,6 +562,21 @@ export default function EventPassesPage() {
           />
         </div>
       )}
+
+      {/* EDIT PASS MODAL */}
+      <EventPassEditModal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setSelectedEditPass(null);
+        }}
+        pass={selectedEditPass}
+        currentUserName={user?.name || 'Staff'}
+        onPassUpdated={(updated) => {
+          setEventPasses(getEventPasses());
+          triggerSuccess(`Updated pass for ${updated.attendeeName} (${updated.serialNumber}) — Apple & Google Wallet sync triggered.`);
+        }}
+      />
 
       {/* PUSH ALERT NOTIFICATION MODAL */}
       <EventPassPushModal
