@@ -36,7 +36,7 @@ import {
   AccessLevelSettings,
   ModuleAccessKey,
 } from '@/lib/local-data';
-import { CAPABILITY_CATALOG, MODULE_CATALOG, isCentreHead, hasCapability, resolveModuleEditOverride } from '@/lib/permissions';
+import { CAPABILITY_CATALOG, MODULE_CATALOG, isCentreHead, isEventsHeadGgCampus, hasCapability, resolveModuleEditOverride, canAccessGroupPolicies } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -198,10 +198,9 @@ export default function GroupPoliciesPage() {
   };
 
   const isSuperUser = user?.tier === 1;
-  // Centre Head — which already folds in the Advisor role, see isCentreHead's
-  // doc comment — gets the same full access to Group Policy management as
-  // the Super User, not just a read-only view. Also supported via Group Policy.
-  const canAccessPolicies = isSuperUser || isCentreHead(user) || hasCapability(user, 'MANAGE_GROUP_POLICIES') || resolveModuleEditOverride(user, 'POLICIES') === 'ALL';
+  // Super User, Centre Head, and GG Campus Events Head get full access to Group Policy
+  // management, as do members holding the MANAGE_GROUP_POLICIES capability or POLICIES edit override.
+  const canAccessPolicies = canAccessGroupPolicies(user);
 
   const resetForm = () => {
     setName('');
@@ -441,7 +440,7 @@ export default function GroupPoliciesPage() {
         <EmptyState
           icon={ShieldAlert}
           title="Access Required"
-          description="Group Policy Management controls who can access what across the entire dashboard. Only the Super User, Centre Head, and Advisor can view or change these settings."
+          description="Group Policy Management controls who can access what across the entire dashboard. Only the Super User, Centre Head, Events Head (GG Campus), and Faculty Advisor can view or change these settings."
         />
       </div>
     );

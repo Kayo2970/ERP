@@ -912,6 +912,7 @@ export type ModuleAccessKey =
   | 'APPROVALS'
   | 'BACKUP'
   | 'EMAIL'
+  | 'EVENT_PASSES'
   | 'POLICIES';
 
 export interface GroupPolicy {

@@ -352,8 +352,9 @@ export const CAPABILITY_CATALOG: { key: string; label: string; description: stri
   { key: 'EVENT_REPORTS_SUBMIT', label: 'Submit Event Reports', description: 'Submit formal post-event reports for approval.', module: 'Event Reports' },
   { key: 'EVENT_REPORTS_REVIEW', label: 'Review Event Reports', description: 'Approve or reject submitted event reports.', module: 'Event Reports' },
   { key: 'EVENT_REPORTS_DELETE', label: 'Delete Event Reports', description: 'Delete submitted event reports.', module: 'Event Reports' },
-  { key: 'EVENT_REPORTS_VIEW_ALL', label: 'View All Event Reports', description: 'See all event reports submitted across the organization.', module: 'Event Reports' },
   { key: 'MANAGE_GUEST_INVITES', label: 'Manage Guest Invites', description: 'Access the Guest Invites mail-merge tool.', module: 'Guest Invites' },
+  { key: 'MANAGE_EVENT_PASSES', label: 'Manage Event Passes & Tickets', description: 'Issue digital and on-the-spot verified luxury passes, manage rosters, and broadcast push alerts.', module: 'Event Passes' },
+  { key: 'SCAN_EVENT_PASSES', label: 'Scan & Admit Turnstile Passes', description: 'Operate turnstile camera QR scanner and check in attendees at venue gates.', module: 'Event Passes' },
   { key: 'MANAGE_BACKUP', label: 'Access Backup & Restore', description: 'Download system backups and restore from an archive.', module: 'Administration' },
   { key: 'MANAGE_EMAIL_SETTINGS', label: 'Access Email Management', description: 'View dispatch logs and manage email settings.', module: 'Administration' },
   { key: 'MANAGE_GROUP_POLICIES', label: 'Manage Group Policies', description: 'Create, edit, and configure group policies and dynamic RBAC tags.', module: 'Administration' },
@@ -403,6 +404,7 @@ export function hasCapability(user: SessionUser, capability: string): boolean {
  */
 export const MODULE_CATALOG: { key: ModuleAccessKey; label: string; description: string; ownershipNote?: string }[] = [
   { key: 'EVENTS', label: 'Events', description: 'Event records and their committees.', ownershipNote: 'Ownership = the event’s creator or a listed committee member.' },
+  { key: 'EVENT_PASSES', label: 'Event Passes & Tickets', description: 'On-the-spot pass studio, attendee rosters, wallet credentials, and turnstile gate scanner.', ownershipNote: 'Ownership = passes issued by the member or for events they manage.' },
   { key: 'TASKS', label: 'Tasks', description: 'Assigned task deliverables.', ownershipNote: 'Ownership = the task’s creator or assignee.' },
   { key: 'DIRECTORY', label: 'Members Directory', description: 'The member roster.', ownershipNote: 'Ownership = whoever added the member record. Edit ‘Own’ is one-time, within 24 hours of adding.' },
   { key: 'GUEST_DIRECTORY', label: 'Guest Directory', description: 'Visiting-card guest contacts.', ownershipNote: 'Ownership = whoever added the guest record. Edit ‘Own’ is one-time, within 24 hours of adding.' },
@@ -784,13 +786,33 @@ export function canManageEvents(user: SessionUser): boolean {
 /** Check if user is authorized to issue and manage on-the-spot event passes and tickets. */
 export function canManageEventPasses(user: SessionUser): boolean {
   if (!user) return false;
+  if (user.tier === 1) return true;
+  const override = resolveModuleEditOverride(user, 'EVENT_PASSES');
+  if (override === 'NONE') return false;
+  if (override === 'ALL') return true;
   return isBaseLeadership(user) || isHeadRole(user) || user.tier === 2.5 || hasCapability(user, 'MANAGE_EVENT_PASSES') || hasCapability(user, 'EVENTS_EDIT');
 }
 
 /** Check if user is authorized to scan QR passes at turnstiles/entrances to verify and check in attendees. */
 export function canScanEventPasses(user: SessionUser): boolean {
   if (!user) return false;
-  return canManageEventPasses(user) || hasCapability(user, 'SCAN_EVENT_PASSES');
+  if (user.tier === 1) return true;
+  const editOverride = resolveModuleEditOverride(user, 'EVENT_PASSES');
+  const viewOverride = resolveModuleViewOverride(user, 'EVENT_PASSES');
+  if (editOverride === 'NONE' && viewOverride === 'OWN') return false;
+  return canManageEventPasses(user) || hasCapability(user, 'SCAN_EVENT_PASSES') || viewOverride === 'ALL';
+}
+
+/** Check if user is authorized to see and open the Event Passes navigation module. */
+export function canAccessEventPassesModule(user: SessionUser): boolean {
+  if (!user) return false;
+  return canManageEventPasses(user) || canScanEventPasses(user) || hasCapability(user, 'MANAGE_EVENT_PASSES') || hasCapability(user, 'SCAN_EVENT_PASSES') || resolveModuleViewOverride(user, 'EVENT_PASSES') === 'ALL';
+}
+
+/** Check if user is authorized to view and manage Group Policies (Super User, Centre Head, Events Head GG Campus, or capability). */
+export function canAccessGroupPolicies(user: SessionUser): boolean {
+  if (!user) return false;
+  return user.tier === 1 || isCentreHead(user) || isEventsHeadGgCampus(user) || hasCapability(user, 'MANAGE_GROUP_POLICIES') || resolveModuleEditOverride(user, 'POLICIES') === 'ALL';
 }
 
 /**

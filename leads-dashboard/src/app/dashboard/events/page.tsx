@@ -22,16 +22,6 @@ import {
   Sparkles,
   UserCheck,
   Ticket,
-  QrCode,
-  Search,
-  Printer,
-  ShieldCheck,
-  Bell,
-  FileSpreadsheet,
-  Send,
-  Eye,
-  ExternalLink,
-  Copy,
 } from 'lucide-react';
 import {
   getEvents,
@@ -52,12 +42,6 @@ import {
   EventItem,
   EventSponsor,
   Member,
-  EventPassItem,
-  getEventPasses,
-  saveEventPasses,
-  updateEventPassStatus,
-  dispatchPassEmail,
-  authHeaders,
 } from '@/lib/local-data';
 import {
   canCreateEvent,
@@ -67,17 +51,11 @@ import {
   canViewEvent,
   canApprovePendingEvent,
   getEventApprovalRequirement,
-  canManageEventPasses,
-  canScanEventPasses,
 } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useDropTarget } from '@/components/ui/file-dropzone';
 import { RequestApprovalModal } from '@/components/request-approval-modal';
-import { EventPassStudio } from '@/components/event-pass-studio';
-import { EventPassScanner } from '@/components/event-pass-scanner';
-import { EventPassPushModal } from '@/components/event-pass-push-modal';
-
 
 type EventStatusFilter = 'ALL' | 'ONGOING' | 'COMPLETED' | 'ARCHIVED';
 
@@ -85,15 +63,7 @@ export default function EventsPage() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [user, setUser] = useState<any>(null);
   const [statusFilter, setStatusFilter] = useState<EventStatusFilter>('ALL');
-  const [mainTab, setMainTab] = useState<'events' | 'passes' | 'scanner'>('events');
-  const [eventPasses, setEventPasses] = useState<EventPassItem[]>([]);
-  const [passFilterEventId, setPassFilterEventId] = useState('ALL');
-  const [passSearchQuery, setPassSearchQuery] = useState('');
-  const [dispatchingPassId, setDispatchingPassId] = useState<string | null>(null);
 
-  // Modals & Push Broadcast
-  const [isPushModalOpen, setIsPushModalOpen] = useState(false);
-  const [selectedPushPass, setSelectedPushPass] = useState<EventPassItem | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
   const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
@@ -102,7 +72,6 @@ export default function EventsPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [approvalRequestEvent, setApprovalRequestEvent] = useState<EventItem | null>(null);
 
-
   // Form State
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -110,10 +79,6 @@ export default function EventsPage() {
   const [endDate, setEndDate] = useState('');
   const [datesTBD, setDatesTBD] = useState(false);
   const [planningStartDate, setPlanningStartDate] = useState('');
-  // Optional convenience: pick how many days the event runs and let End Date
-  // compute itself from Start Date, instead of picking both dates by hand.
-  // Purely a UI helper — startDate/endDate are still the values actually
-  // saved, and typing directly into End Date always overrides this.
   const [durationDays, setDurationDays] = useState('');
   const [location, setLocation] = useState('');
   const [campus, setCampus] = useState<'GG Campus' | 'RTC Campus' | 'Both Campuses'>('GG Campus');
@@ -129,23 +94,8 @@ export default function EventsPage() {
     const refreshData = () => {
       setEvents(getEvents());
       setMembers(getMembers());
-      setEventPasses(getEventPasses());
     };
     refreshData();
-
-    // Immediate server fetch for passes to guarantee cross-device sync (e.g. mobile after desktop issue)
-    fetch('/api/events/all/passes', {
-      headers: authHeaders(),
-      cache: 'no-store',
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((serverPasses) => {
-        if (Array.isArray(serverPasses) && serverPasses.length > 0) {
-          saveEventPasses(serverPasses);
-          setEventPasses(serverPasses);
-        }
-      })
-      .catch((err) => console.warn('[events] Pass fetch error:', err));
 
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
@@ -191,66 +141,6 @@ export default function EventsPage() {
     link.click();
     document.body.removeChild(link);
   };
-
-  const handleExportAttendance = () => {
-    const filtered = eventPasses.filter((p) => {
-      if (passFilterEventId !== 'ALL' && p.eventId !== passFilterEventId) return false;
-      return true;
-    });
-
-    if (filtered.length === 0) {
-      triggerError('No pass records found to export.');
-      return;
-    }
-
-    const headers = [
-      'Serial ID',
-      'Attendee Name',
-      'Guest Category',
-      'Affiliation / Org',
-      'Email',
-      'Phone / WhatsApp',
-      'Event Name',
-      'Pass Type / Tier',
-      'Allocated Room / Venue',
-      'Attendance Status',
-      'Check-In Time',
-      'Checked In By',
-      'Issued By',
-      'Issued Date',
-    ];
-
-    const rows = filtered.map((p) => [
-      `"${p.serialNumber}"`,
-      `"${(p.attendeeName || '').replace(/"/g, '""')}"`,
-      `"${(p.guestCategory || '').replace(/"/g, '""')}"`,
-      `"${(p.attendeeOrg || '').replace(/"/g, '""')}"`,
-      `"${(p.attendeeEmail || '').replace(/"/g, '""')}"`,
-      `"${(p.attendeePhone || '').replace(/"/g, '""')}"`,
-      `"${(p.eventName || '').replace(/"/g, '""')}"`,
-      `"${(p.passType || '').replace(/"/g, '""')}"`,
-      `"${(p.roomOrVenue || p.eventVenue || '').replace(/"/g, '""')}"`,
-      `"${p.status === 'Checked In' ? 'Checked In' : 'Not Attended (Registered)'}"`,
-      `"${p.checkedInAt ? new Date(p.checkedInAt).toLocaleString() : 'N/A'}"`,
-      `"${(p.checkedInBy || 'N/A').replace(/"/g, '""')}"`,
-      `"${(p.issuedBy || '').replace(/"/g, '""')}"`,
-      `"${p.issuedAt ? new Date(p.issuedAt).toLocaleDateString() : new Date().toLocaleDateString()}"`,
-    ]);
-
-    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    const targetEventTitle = events.find((e) => e.id === passFilterEventId)?.title || 'All_Events';
-    const cleanTitle = targetEventTitle.replace(/[^a-zA-Z0-9_-]/g, '_');
-    link.setAttribute('download', `Attendance_Roster_${cleanTitle}_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    triggerSuccess(`Downloaded attendance roster for ${filtered.length} attendees!`);
-  };
-
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();
@@ -545,8 +435,6 @@ export default function EventsPage() {
 
   const canManage = canManageEvents(user);
   const canCreate = canCreateEvent(user);
-  const canManagePasses = canManageEventPasses(user);
-  const canScanPasses = canScanEventPasses(user);
 
   const getStatusBadge = (eventStatus: EventItem['status']) => {
     switch (eventStatus) {
@@ -620,119 +508,74 @@ export default function EventsPage() {
         </div>
       )}
 
-      {/* Top View Switcher */}
-      <div className="flex items-center gap-2 border-b border-slate-200/90 dark:border-white/10 pb-4">
-        <button
-          type="button"
-          onClick={() => setMainTab('events')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-            mainTab === 'events'
-              ? 'bg-accent text-white shadow-md shadow-accent/25'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5'
-          }`}
-        >
-          <Calendar className="h-4 w-4" />
-          Events Directory
-        </button>
+      {/* Header section with Create Button */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Events & Milestone Operations</h1>
+          <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">Manage symposiums, create event-specific sub-committees, and assign student teams</p>
+        </div>
+        {canManage && (
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              onClick={handleDownloadTemplate}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/15 text-slate-800 dark:text-white text-xs font-bold rounded-xl transition-all cursor-pointer border border-slate-300 dark:border-white/15 shadow-sm"
+              title="Download CSV Template"
+            >
+              <Download className="h-4 w-4" />
+              Download Template
+            </button>
 
-        {canManagePasses && (
-          <button
-            type="button"
-            onClick={() => setMainTab('passes')}
-            className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-              mainTab === 'passes'
-                ? 'bg-accent text-white shadow-md shadow-accent/25'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5'
-            }`}
-          >
-            <Ticket className="h-4 w-4" />
-            Passes & Tickets Studio
-            {eventPasses.length > 0 && (
-              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-mono">
-                {eventPasses.length}
-              </span>
+            <button
+              onClick={handleUploadClick}
+              {...csvDragHandlers}
+              className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer border shadow-sm ${
+                isCsvDragOver
+                  ? 'border-accent bg-accent/15 shadow-md shadow-accent/25 ring-2 ring-accent/30 text-accent'
+                  : 'border-slate-300 dark:border-white/15 bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/15 text-slate-800 dark:text-white'
+              }`}
+              title="Upload Filled CSV File — click or drag and drop"
+            >
+              <Upload className="h-4 w-4" />
+              {isCsvDragOver ? 'Drop CSV here' : 'Upload Events (CSV)'}
+            </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              accept=".csv"
+              className="hidden"
+            />
+
+            <Link
+              href="/dashboard/event-passes"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-accent/15 border border-accent/35 text-accent hover:bg-accent/25 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm"
+            >
+              <Ticket className="h-4 w-4" />
+              Event Passes
+            </Link>
+
+            <Link
+              href="/dashboard/festivals"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/15 text-slate-800 dark:text-white border border-slate-300 dark:border-white/15 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm"
+            >
+              <Sparkles className="h-4 w-4" />
+              Festivals & Observances
+            </Link>
+
+            {canCreate && (
+              <button
+                onClick={handleOpenCreate}
+                className="flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent/90 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-accent/25 cursor-pointer uppercase tracking-wider"
+              >
+                <Plus className="h-4 w-4" />
+                Create New Event
+              </button>
             )}
-          </button>
-        )}
-
-        {canScanPasses && (
-          <button
-            type="button"
-            onClick={() => setMainTab('scanner')}
-            className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-              mainTab === 'scanner'
-                ? 'bg-accent text-white shadow-md shadow-accent/25'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5'
-            }`}
-          >
-            <QrCode className="h-4 w-4" />
-            Turnstile QR Scanner
-          </button>
+          </div>
         )}
       </div>
 
-      {mainTab === 'events' && (
-        <div className="space-y-6">
-          {/* Header section with Create Button */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Events & Milestone Operations</h1>
-              <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">Manage symposiums, create event-specific sub-committees, and assign student teams</p>
-            </div>
-            {canManage && (
-              <div className="flex flex-wrap items-center gap-2.5">
-                <button
-                  onClick={handleDownloadTemplate}
-                  className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/15 text-slate-800 dark:text-white text-xs font-bold rounded-xl transition-all cursor-pointer border border-slate-300 dark:border-white/15 shadow-sm"
-                  title="Download CSV Template"
-                >
-                  <Download className="h-4 w-4" />
-                  Download Template
-                </button>
-
-                <button
-                  onClick={handleUploadClick}
-                  {...csvDragHandlers}
-                  className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer border shadow-sm ${
-                    isCsvDragOver
-                      ? 'border-accent bg-accent/15 shadow-md shadow-accent/25 ring-2 ring-accent/30 text-accent'
-                      : 'border-slate-300 dark:border-white/15 bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/15 text-slate-800 dark:text-white'
-                  }`}
-                  title="Upload Filled CSV File — click or drag and drop"
-                >
-                  <Upload className="h-4 w-4" />
-                  {isCsvDragOver ? 'Drop CSV here' : 'Upload Events (CSV)'}
-                </button>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileUpload}
-                  accept=".csv"
-                  className="hidden"
-                />
-
-                <Link
-                  href="/dashboard/festivals"
-                  className="flex items-center gap-1.5 px-3.5 py-2 bg-accent/15 border border-accent/35 text-accent hover:bg-accent/25 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm"
-                >
-                  <Sparkles className="h-4 w-4" />
-                  Festivals & Observances
-                </Link>
-
-                {canCreate && (
-                  <button
-                    onClick={handleOpenCreate}
-                    className="flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent/90 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-accent/25 cursor-pointer uppercase tracking-wider"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Create New Event
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Status Filter Tabs */}
+      {/* Status Filter Tabs */}
           {visibleEvents.length > 0 && (
             <div className="flex items-center gap-1.5 bg-slate-100/90 dark:bg-slate-900/80 rounded-2xl p-1.5 w-fit border border-slate-200/90 dark:border-white/15 shadow-sm">
               {([
@@ -924,283 +767,6 @@ export default function EventsPage() {
               </div>
             );
           })}
-        </div>
-      )}
-        </div>
-      )}
-
-      {/* PASSES & TICKETS STUDIO VIEW */}
-      {mainTab === 'passes' && canManagePasses && (
-        <div className="space-y-8 animate-in fade-in duration-300">
-          <EventPassStudio
-            events={events}
-            currentUserId={user?.id}
-            currentUserName={user?.name || 'Authorized Staff'}
-            currentUserEmail={user?.email}
-            onPassIssued={(newPass) => {
-              setEventPasses(getEventPasses());
-            }}
-          />
-
-          {/* ISSUED PASSES LEDGER TABLE */}
-          <div className="glass-panel rounded-3xl p-6 md:p-8 space-y-5 border border-white/15 bg-theme-card/90 shadow-2xl">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
-              <div>
-                <h3 className="text-base font-bold text-theme-text-primary">Issued Event Passes & Turnstile Roster</h3>
-                <p className="text-xs text-theme-text-secondary">
-                  Real-time list of all on-the-spot and digital passes issued for events.
-                </p>
-              </div>
-
-              {/* Filters & Actions */}
-              <div className="flex flex-wrap items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={handleExportAttendance}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-600 dark:text-emerald-400 border border-emerald-500/35 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
-                  title="Export Attendance & Registration Roster to CSV for Audits"
-                >
-                  <FileSpreadsheet className="h-3.5 w-3.5" />
-                  Export Attendance (CSV)
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedPushPass(null);
-                    setIsPushModalOpen(true);
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-accent/15 hover:bg-accent/25 text-accent border border-accent/35 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
-                  title="Broadcast lock-screen push notification to attendees"
-                >
-                  <Bell className="h-3.5 w-3.5 animate-pulse" />
-                  Broadcast Push
-                </button>
-
-                <div className="relative">
-                  <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-theme-text-secondary" />
-                  <input
-                    type="text"
-                    value={passSearchQuery}
-                    onChange={(e) => setPassSearchQuery(e.target.value)}
-                    placeholder="Search attendee or serial..."
-                    className="pl-8 pr-3 py-1.5 bg-theme-background/50 border border-theme-card-border rounded-xl text-theme-text-primary text-xs focus:outline-none focus:border-accent"
-                  />
-                </div>
-
-                <select
-                  value={passFilterEventId}
-                  onChange={(e) => setPassFilterEventId(e.target.value)}
-                  className="px-3 py-1.5 bg-theme-background/50 border border-theme-card-border rounded-xl text-theme-text-primary text-xs focus:outline-none focus:border-accent"
-                >
-                  <option value="ALL" className="bg-slate-900 text-white">All Events</option>
-                  {events.map((evt) => (
-                    <option key={evt.id} value={evt.id} className="bg-slate-900 text-white">
-                      {evt.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Passes Table */}
-            {eventPasses.length === 0 ? (
-              <div className="py-12 text-center text-theme-text-secondary text-xs">
-                No event passes issued yet. Use the studio above to issue the first pass!
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200/90 dark:border-white/10 text-theme-text-secondary text-[11px] uppercase tracking-wider">
-                      <th className="py-3 px-4">Serial ID</th>
-                      <th className="py-3 px-4">Attendee & Category</th>
-                      <th className="py-3 px-4">Assigned Room / Venue</th>
-                      <th className="py-3 px-4">Event</th>
-                      <th className="py-3 px-4">Pass Tier</th>
-                      <th className="py-3 px-4">Issued By</th>
-                      <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200/50 dark:divide-white/5">
-                    {eventPasses
-                      .filter((p) => {
-                        if (passFilterEventId !== 'ALL' && p.eventId !== passFilterEventId) return false;
-                        if (passSearchQuery.trim()) {
-                          const q = passSearchQuery.toLowerCase();
-                          return (
-                            p.attendeeName.toLowerCase().includes(q) ||
-                            p.serialNumber.toLowerCase().includes(q) ||
-                            (p.attendeeOrg && p.attendeeOrg.toLowerCase().includes(q)) ||
-                            (p.roomOrVenue && p.roomOrVenue.toLowerCase().includes(q)) ||
-                            (p.guestCategory && p.guestCategory.toLowerCase().includes(q)) ||
-                            p.passType.toLowerCase().includes(q)
-                          );
-                        }
-                        return true;
-                      })
-                      .map((pass) => (
-                        <tr key={pass.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
-                          <td className="py-3 px-4 font-mono font-bold">
-                            <a
-                              href={`/pass/${pass.serialNumber}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-sky-500 dark:text-sky-400 hover:text-sky-300 hover:underline inline-flex items-center gap-1 group"
-                              title={`Open verified pass for ${pass.attendeeName} (${pass.serialNumber})`}
-                            >
-                              <span>{pass.serialNumber}</span>
-                              <ExternalLink className="h-2.5 w-2.5 opacity-60 group-hover:opacity-100 transition-opacity" />
-                            </a>
-                          </td>
-                          <td className="py-3 px-4">
-                            <div className="font-bold text-theme-text-primary">{pass.attendeeName}</div>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              {pass.guestCategory && (
-                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-accent/15 text-accent border border-accent/25">
-                                  {pass.guestCategory}
-                                </span>
-                              )}
-                              {pass.attendeeOrg && (
-                                <span className="text-[10px] text-theme-text-secondary truncate max-w-[150px]">
-                                  {pass.attendeeOrg}
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-3 px-4">
-                            <span className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1">
-                              <MapPin className="h-3 w-3 text-accent shrink-0" />
-                              {pass.roomOrVenue || pass.eventVenue || 'Main Auditorium'}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-theme-text-secondary max-w-[180px] truncate">
-                            {pass.eventName}
-                          </td>
-                          <td className="py-3 px-4">
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent/15 text-accent border border-accent/30">
-                              {pass.passType}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-theme-text-secondary text-[11px]">
-                            {pass.issuedBy}
-                          </td>
-                          <td className="py-3 px-4">
-                            <span
-                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                                pass.status === 'Checked In'
-                                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                                  : pass.status === 'Cancelled'
-                                  ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
-                                  : 'bg-sky-500/15 text-sky-600 dark:text-sky-300 border border-sky-500/30'
-                              }`}
-                            >
-                              {pass.status}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              {/* View Live Pass Button */}
-                              <a
-                                href={`/pass/${pass.serialNumber}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="px-2.5 py-1 bg-accent/15 hover:bg-accent/25 text-accent border border-accent/30 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer"
-                                title={`View Pass for ${pass.attendeeName}`}
-                              >
-                                <Eye className="h-3 w-3" />
-                                <span>View</span>
-                              </a>
-
-                              {/* 1-Click Dispatch Email Button */}
-                              <button
-                                type="button"
-                                disabled={dispatchingPassId === pass.id}
-                                onClick={async () => {
-                                  let email = pass.attendeeEmail;
-                                  if (!email) {
-                                    email = window.prompt(`Enter recipient email address for ${pass.attendeeName}:`) || undefined;
-                                  }
-                                  if (!email) return;
-
-                                  setDispatchingPassId(pass.id);
-                                  const res = await dispatchPassEmail(pass, email);
-                                  setDispatchingPassId(null);
-                                  if (res.success) {
-                                    triggerSuccess(`Pass ${pass.serialNumber} dispatched to ${email}!`);
-                                  } else {
-                                    triggerError(res.error || 'Failed to dispatch pass email. Check SMTP settings.');
-                                  }
-                                }}
-                                className="p-1.5 bg-sky-500/15 hover:bg-sky-500/25 text-sky-400 border border-sky-500/30 rounded-lg text-[10px] font-bold transition-all cursor-pointer disabled:opacity-50"
-                                title={`Dispatch Pass Email to ${pass.attendeeEmail || pass.attendeeName}`}
-                              >
-                                {dispatchingPassId === pass.id ? (
-                                  <span className="h-3 w-3 border-2 border-sky-400 border-t-transparent rounded-full animate-spin block" />
-                                ) : (
-                                  <Send className="h-3 w-3" />
-                                )}
-                              </button>
-
-                              {pass.status !== 'Checked In' && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    updateEventPassStatus(pass.id, 'Checked In', user?.name || 'Staff');
-                                    setEventPasses(getEventPasses());
-                                    triggerSuccess(`Checked in ${pass.attendeeName}!`);
-                                  }}
-                                  className="px-2.5 py-1 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
-                                >
-                                  Admit
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedPushPass(pass);
-                                  setIsPushModalOpen(true);
-                                }}
-                                className="p-1.5 bg-accent/10 hover:bg-accent/20 text-accent border border-accent/25 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
-                                title="Send Lock-Screen Push Alert to this Attendee"
-                              >
-                                <Bell className="h-3 w-3" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(pass.serialNumber);
-                                  triggerSuccess(`Copied serial ${pass.serialNumber}`);
-                                }}
-                                className="px-2 py-1 bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 text-slate-800 dark:text-white rounded-lg text-[10px] font-bold transition-all cursor-pointer"
-                                title="Copy Serial ID"
-                              >
-                                Copy ID
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-
-      {/* TURNSTILE SCANNER VIEW */}
-      {mainTab === 'scanner' && canScanPasses && (
-        <div className="animate-in fade-in duration-300">
-          <EventPassScanner
-            currentUserName={user?.name || 'Staff'}
-            onPassCheckedIn={(pass) => {
-              setEventPasses(getEventPasses());
-              triggerSuccess(`Checked in ${pass.attendeeName} for ${pass.eventName}!`);
-            }}
-          />
         </div>
       )}
 
@@ -1473,30 +1039,6 @@ export default function EventsPage() {
             </button>
           </div>
         </div>
-      )}
-
-      {/* Push Notification Broadcast Modal */}
-      {isPushModalOpen && (
-        <EventPassPushModal
-          isOpen={isPushModalOpen}
-          onClose={() => {
-            setIsPushModalOpen(false);
-            setSelectedPushPass(null);
-          }}
-          eventId={passFilterEventId !== 'ALL' ? passFilterEventId : events[0]?.id || ''}
-          eventName={
-            (passFilterEventId !== 'ALL'
-              ? events.find((e) => e.id === passFilterEventId)?.title
-              : events[0]?.title) || 'LEADS Official Event'
-          }
-          passes={
-            passFilterEventId !== 'ALL'
-              ? eventPasses.filter((p) => p.eventId === passFilterEventId)
-              : eventPasses
-          }
-          initialSelectedPass={selectedPushPass}
-          onBroadcastSuccess={() => triggerSuccess('Push notification alert sent to pass holders!')}
-        />
       )}
 
     </div>

@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { requireSession, requirePermission } from '@/lib/session';
-import { isSuperUser } from '@/lib/permissions-server';
+import { isSuperUser, canAccessGroupPoliciesServer, getAccessLevelSettingsServer } from '@/lib/permissions-server';
 import { apiError } from '@/lib/api-error';
 
 export async function GET(request: Request) {
   try {
     const actor = await requireSession(request);
-    requirePermission(isSuperUser(actor), 'Only a Super User can view Group Policies.');
+    const settings = await getAccessLevelSettingsServer();
+    requirePermission(canAccessGroupPoliciesServer(actor, settings), 'Only Centre Head, Events Head (GG Campus), or Super User can view Group Policies.');
     const items = await readCollection('groupPolicies');
     return NextResponse.json(items);
   } catch (err: any) {
@@ -18,7 +19,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const actor = await requireSession(request);
-    requirePermission(isSuperUser(actor), 'Only a Super User can create Group Policies.');
+    const settings = await getAccessLevelSettingsServer();
+    requirePermission(canAccessGroupPoliciesServer(actor, settings), 'Only Centre Head, Events Head (GG Campus), or Super User can create Group Policies.');
 
     const item = await request.json();
     const updated = await mutateCollection('groupPolicies', (current) => {

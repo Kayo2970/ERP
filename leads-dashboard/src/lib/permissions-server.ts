@@ -272,6 +272,11 @@ export function isSuperUser(user: ServerUser): boolean {
   return user?.tier === 1;
 }
 
+export function canAccessGroupPoliciesServer(user: ServerUser, settings: AccessLevelSettings): boolean {
+  if (!user) return false;
+  return isSuperUser(user) || isCentreHead(user, settings) || isEventsHeadGgCampus(user);
+}
+
 // --- Events / Tasks / Ratings composite checks (ported from permissions.ts) ---
 
 export type ServerTask = {

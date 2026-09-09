@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection } from '@/lib/server-db';
 import { requireSession, requirePermission } from '@/lib/session';
-import { isSuperUser } from '@/lib/permissions-server';
+import { isSuperUser, canAccessGroupPoliciesServer, getAccessLevelSettingsServer } from '@/lib/permissions-server';
 import { apiError } from '@/lib/api-error';
 
 export async function PATCH(
@@ -10,7 +10,8 @@ export async function PATCH(
 ) {
   try {
     const actor = await requireSession(request);
-    requirePermission(isSuperUser(actor), 'Only a Super User can update Group Policies.');
+    const settings = await getAccessLevelSettingsServer();
+    requirePermission(canAccessGroupPoliciesServer(actor, settings), 'Only Centre Head, Events Head (GG Campus), or Super User can update Group Policies.');
 
     const { id } = await params;
     const updates = await request.json();
@@ -33,7 +34,8 @@ export async function DELETE(
 ) {
   try {
     const actor = await requireSession(request);
-    requirePermission(isSuperUser(actor), 'Only a Super User can delete Group Policies.');
+    const settings = await getAccessLevelSettingsServer();
+    requirePermission(canAccessGroupPoliciesServer(actor, settings), 'Only Centre Head, Events Head (GG Campus), or Super User can delete Group Policies.');
 
     const { id } = await params;
     let found = false;
