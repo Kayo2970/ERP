@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Plus,
   X,
@@ -60,9 +61,21 @@ import { RequestApprovalModal } from '@/components/request-approval-modal';
 type EventStatusFilter = 'ALL' | 'ONGOING' | 'COMPLETED' | 'ARCHIVED';
 
 export default function EventsPage() {
+  const router = useRouter();
   const [events, setEvents] = useState<EventItem[]>([]);
   const [user, setUser] = useState<any>(null);
   const [statusFilter, setStatusFilter] = useState<EventStatusFilter>('ALL');
+
+  // Handle any direct/legacy pass param navigations
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const passSerial = searchParams.get('pass') || searchParams.get('passId') || searchParams.get('serial');
+      if (passSerial) {
+        router.replace(`/pass/${encodeURIComponent(passSerial)}`);
+      }
+    }
+  }, [router]);
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);

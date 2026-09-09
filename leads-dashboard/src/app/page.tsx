@@ -166,6 +166,17 @@ export default function LoginPage() {
   const [isKeyConfigured, setIsKeyConfigured] = useState(false);
   const [suggestedKey, setSuggestedKey] = useState('');
 
+  // Check if user is navigating with a pass serial parameter (e.g. from an invite link)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const passSerial = searchParams.get('pass') || searchParams.get('passId') || searchParams.get('serial');
+      if (passSerial) {
+        router.replace(`/pass/${encodeURIComponent(passSerial)}`);
+      }
+    }
+  }, [router]);
+
   // Check if system requires initial setup
   useEffect(() => {
     fetch('/api/setup')

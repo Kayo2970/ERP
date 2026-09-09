@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Ticket,
   QrCode,
@@ -39,10 +40,22 @@ import { EventPassPushModal } from '@/components/event-pass-push-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 
 export default function EventPassesPage() {
+  const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [eventPasses, setEventPasses] = useState<EventPassItem[]>([]);
   const [activeTab, setActiveTab] = useState<'studio' | 'scanner'>('studio');
+
+  // Handle any direct/legacy pass param navigations
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const passSerial = searchParams.get('pass') || searchParams.get('passId') || searchParams.get('serial');
+      if (passSerial) {
+        router.replace(`/pass/${encodeURIComponent(passSerial)}`);
+      }
+    }
+  }, [router]);
 
   // Filters & State for Issued Passes Table
   const [passSearchQuery, setPassSearchQuery] = useState('');

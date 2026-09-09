@@ -339,6 +339,17 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
     setIsSidebarCollapsed(localStorage.getItem('sidebarCollapsed') === 'true');
 
+    // Public Pass Redirection: If an attendee/guest visits a legacy link (e.g. /dashboard/events?pass=XYZ),
+    // redirect them directly to the public pass page (/pass/XYZ) without requiring login.
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const passSerial = searchParams.get('pass') || searchParams.get('passId') || searchParams.get('serial');
+      if (passSerial) {
+        router.replace(`/pass/${encodeURIComponent(passSerial)}`);
+        return;
+      }
+    }
+
     const savedUser = localStorage.getItem('user');
     const token = getSessionToken();
     if (!savedUser || !token) {
