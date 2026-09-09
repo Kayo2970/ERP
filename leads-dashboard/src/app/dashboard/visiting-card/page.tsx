@@ -391,12 +391,12 @@ export default function VisitingCardPage() {
               <button
                 type="button"
                 onClick={() => setIsFullscreenLeatherOpen(true)}
-                className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 via-amber-700 to-amber-800 hover:from-amber-500 hover:to-amber-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-950/40 border border-amber-400/40 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
-                title="View Fullscreen 3D Leather Card Holder with Authenticated Credentials"
+                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 via-amber-700 to-amber-800 hover:from-amber-500 hover:to-amber-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-950/40 border border-amber-400/40 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                title="Present Credentials with 3D Keycard"
               >
                 <Maximize2 className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Fullscreen 3D Holder</span>
-                <span className="sm:hidden">Fullscreen</span>
+                <span className="hidden sm:inline">Present Credentials</span>
+                <span className="sm:hidden">Present</span>
               </button>
 
               <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 text-xs shadow-inner">
@@ -422,7 +422,7 @@ export default function VisitingCardPage() {
                   }`}
                 >
                   <Sparkles className="h-3.5 w-3.5 inline mr-1.5" />
-                  Leather Holder
+                  3D Keycard
                 </button>
               </div>
             </div>
