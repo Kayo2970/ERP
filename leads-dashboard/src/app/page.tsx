@@ -471,7 +471,7 @@ export default function LoginPage() {
           restored to the originally requested 0.8.) */}
       <div className="absolute inset-0 pointer-events-none -z-10 opacity-70 dark:opacity-85">
         <GhostFibers
-          lineColor="#001f53"
+          lineColor="#361C6A"
           glowColor="#03d8fc"
           speed={0.2}
           scale={2}
