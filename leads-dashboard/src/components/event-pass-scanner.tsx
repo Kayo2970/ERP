@@ -17,7 +17,7 @@ import {
   MapPin,
   Sparkles,
 } from 'lucide-react';
-import { EventPassItem, updateEventPassStatus } from '@/lib/local-data';
+import { EventPassItem, updateEventPassStatus, authHeaders } from '@/lib/local-data';
 
 interface EventPassScannerProps {
   currentUserName: string;
@@ -108,7 +108,7 @@ export function EventPassScanner({
     try {
       const res = await fetch('/api/events/all/passes', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ query: q }),
       });
 
@@ -123,7 +123,7 @@ export function EventPassScanner({
       } else {
         setVerificationResult({
           valid: false,
-          reason: data.reason || 'Invalid or unrecognized event pass.',
+          reason: data.reason || data.error || 'Invalid or unrecognized event pass.',
         });
       }
     } catch (err: any) {
