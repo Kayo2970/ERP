@@ -26,7 +26,7 @@ export function LoadingScreen({ duration = 500, subtitle, onComplete }: LoadingS
       {/* Background Animated GhostFibers WebGL Shader with LEADS Palette */}
       <div className="absolute inset-0 pointer-events-none z-0 opacity-75 dark:opacity-90">
         <GhostFibers
-          lineColor="#001f53"
+          lineColor="#361C6A"
           glowColor="#03d8fc"
           speed={0.4}
           scale={2}

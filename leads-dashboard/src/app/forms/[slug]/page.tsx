@@ -109,7 +109,7 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
   const backgroundShader = (
     <div className="fixed inset-0 pointer-events-none -z-10 opacity-75 dark:opacity-90 overflow-hidden">
       <GhostFibers
-        lineColor="#001f53"
+        lineColor="#361C6A"
         glowColor="#03d8fc"
         speed={0.2}
         scale={2}
