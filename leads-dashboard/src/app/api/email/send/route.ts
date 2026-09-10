@@ -1,9 +1,28 @@
 import { NextResponse } from 'next/server';
-import { dispatchEmail } from '@/lib/email-service';
+import { dispatchEmail, SendEmailPayload } from '@/lib/email-service';
 import { readCollection } from '@/lib/server-db';
 import { Member } from '@/lib/local-data';
 import { requireSession } from '@/lib/session';
 import { apiError } from '@/lib/api-error';
+
+/**
+ * Client-supplied attachments arrive as base64 (JSON has no Buffer type) —
+ * decode here into the Buffer shape dispatchEmail/nodemailer expect. Used
+ * e.g. to attach a generated .pkpass wallet file to an event pass email.
+ */
+function decodeAttachments(
+  raw: unknown
+): SendEmailPayload['attachments'] {
+  if (!Array.isArray(raw)) return undefined;
+  const decoded = raw
+    .filter((a) => a && typeof a === 'object' && typeof a.filename === 'string' && typeof a.contentBase64 === 'string')
+    .map((a) => ({
+      filename: a.filename,
+      content: Buffer.from(a.contentBase64, 'base64'),
+      contentType: typeof a.contentType === 'string' ? a.contentType : undefined,
+    }));
+  return decoded.length > 0 ? decoded : undefined;
+}
 
 // This route is used by real app features beyond the admin Email Management
 // panel (e.g. member-termination notices from Directory, guest-invite
@@ -28,8 +47,10 @@ export async function POST(request: Request) {
       category,
       badgeText,
       badgeColor,
+      attachments: rawAttachments,
     } = body;
 
+    const attachments = decodeAttachments(rawAttachments);
     const emailTo = recipientEmail || to;
     const finalSubject = subject;
     const textContent = bodyText || rawBody || content;
@@ -51,6 +72,7 @@ export async function POST(request: Request) {
         badgeText: badgeText || (category === 'EVENT_INVITATION' || category === 'EVENT_PASS' ? 'Official Event Pass' : undefined),
         badgeColor,
         category: category || (category === 'EVENT_INVITATION' || category === 'EVENT_PASS' ? category : 'DIRECT_MESSAGE'),
+        attachments,
       });
       return NextResponse.json({ count: 1, dispatched: [log] });
     }
