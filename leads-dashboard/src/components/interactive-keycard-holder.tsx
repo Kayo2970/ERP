@@ -486,7 +486,7 @@ export function InteractiveKeycardHolder({
                     {/* Luxury Holographic Foil Shimmer */}
                     <div className={styles.holographicFoil} />
 
-                    <div>
+                    <div className={styles.eventPassBody}>
                       <div className={styles.eventPassHeader}>
                         <div className={styles.eventBrandWrap}>
                           <img src="/card/leads-logo.png" alt="LEADS Logo" className={styles.eventBrandLogo} />
@@ -535,6 +535,11 @@ export function InteractiveKeycardHolder({
 
                       {/* Turnstile QR Code Module */}
                       <div className={styles.turnstileQrContainer}>
+                        <img
+                          src={dynamicQrUrl || qrUrl || '/card/leads-qr-code.png'}
+                          alt="Turnstile QR"
+                          className={styles.turnstileQrImage}
+                        />
                         <div className={styles.turnstileMetaLeft}>
                           <span className={styles.turnstileSerialText}>
                             {serialNumber || formattedSerial}
@@ -546,11 +551,6 @@ export function InteractiveKeycardHolder({
                             Valid at all official event turnstiles
                           </span>
                         </div>
-                        <img
-                          src={dynamicQrUrl || qrUrl || '/card/leads-qr-code.png'}
-                          alt="Turnstile QR"
-                          className={styles.turnstileQrImage}
-                        />
                       </div>
                     </div>
 
