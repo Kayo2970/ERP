@@ -1,0 +1,3 @@
+## 2024-05-24 - Add focus visible styling to base buttons
+**Learning:** Base interactive components (like `Button` and `RippleButton`) require explicit `focus-visible` classes (e.g., `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent`) to ensure keyboard users can navigate properly. Default browser focus styles may get hidden or inconsistent across different browsers, especially when components have custom interactive styling.
+**Action:** Always ensure that base interactive elements explicitly define their focus states via standard `focus-visible` utility classes in Tailwind.
