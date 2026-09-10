@@ -168,7 +168,10 @@ export async function createEventWalletPass(
     body: JSON.stringify({
       organizationName: ORG_NAME,
       logoText: 'LEADS Next Gen Centre',
-      colorPreset: 'custom',
+      // Solid hex color only — WalletWallet's colorPreset field only accepts
+      // its fixed preset names (dark/blue/green/red/purple/orange), not "custom".
+      // Sending an unrecognized preset value made the API reject every event
+      // pass creation call, so we send just the hex `color` field instead.
       color: eventPass.passColor || '#0b1526',
       logoURL: logoUrl,
       iconURL: logoUrl,
