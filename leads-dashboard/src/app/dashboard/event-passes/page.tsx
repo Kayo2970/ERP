@@ -19,6 +19,7 @@ import {
   Sparkles,
   Layers,
   Edit3,
+  Trash2,
 } from 'lucide-react';
 import {
   EventItem,
@@ -27,6 +28,7 @@ import {
   getEventPasses,
   saveEventPasses,
   updateEventPassStatus,
+  deleteEventPass,
   dispatchPassEmail,
   authHeaders,
 } from '@/lib/local-data';
@@ -538,6 +540,28 @@ export default function EventPassesPage() {
                               >
                                 Copy ID
                               </button>
+
+                              {/* Delete Pass Button */}
+                              {canManagePasses && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (
+                                      window.confirm(
+                                        `Delete pass ${pass.serialNumber} for ${pass.attendeeName}? This cannot be undone.`
+                                      )
+                                    ) {
+                                      deleteEventPass(pass.id, user?.name || 'Staff');
+                                      setEventPasses(getEventPasses());
+                                      triggerSuccess(`Deleted pass ${pass.serialNumber}.`);
+                                    }
+                                  }}
+                                  className="p-1.5 bg-rose-500/15 hover:bg-rose-500/25 text-rose-500 dark:text-rose-400 border border-rose-500/30 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                                  title={`Delete pass for ${pass.attendeeName}`}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>

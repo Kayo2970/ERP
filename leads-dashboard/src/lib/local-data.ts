@@ -2559,6 +2559,28 @@ export function updateEventPassStatus(
   return passes[idx];
 }
 
+export function deleteEventPass(passId: string, actorName: string = 'Staff'): boolean {
+  const passes = getEventPasses();
+  const target = passes.find((p) => p.id === passId || p.serialNumber === passId);
+  if (!target) return false;
+
+  const updated = passes.filter((p) => p.id !== target.id);
+  saveEventPasses(updated);
+
+  fetch(`/api/events/${target.eventId}/passes/${target.id}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  }).catch((err) => console.warn('Failed to sync event pass deletion with server:', err));
+
+  logAuditEvent(
+    'EVENT_PASS_DELETED' as any,
+    actorName,
+    `Deleted pass "${target.serialNumber}" (${target.attendeeName}) for event "${target.eventName}"`
+  );
+
+  return true;
+}
+
 export async function updateEventPass(
   passId: string,
   updates: Partial<EventPassItem>,
