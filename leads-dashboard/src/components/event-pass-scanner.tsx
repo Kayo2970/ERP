@@ -165,10 +165,20 @@ export function EventPassScanner({
         if (json.serial) parsedQuery = json.serial;
         else if (json.passId) parsedQuery = json.passId;
       } catch (e) {}
-    } else if (parsedQuery.includes('pass=')) {
-      // Check if it's a URL with ?pass=LEADS-EVT-XXXX
-      const match = parsedQuery.match(/pass=([^&]+)/);
-      if (match && match[1]) parsedQuery = decodeURIComponent(match[1]);
+    } else if (/^https?:\/\//i.test(parsedQuery)) {
+      // Handle a scanned pass URL, e.g. https://.../pass/LEADS-EVT-XXXX or ?pass=LEADS-EVT-XXXX
+      try {
+        const url = new URL(parsedQuery);
+        const queryParam = url.searchParams.get('pass');
+        if (queryParam) {
+          parsedQuery = decodeURIComponent(queryParam);
+        } else {
+          const segments = url.pathname.split('/').filter(Boolean);
+          const passIndex = segments.indexOf('pass');
+          const serialSegment = passIndex !== -1 ? segments[passIndex + 1] : segments[segments.length - 1];
+          if (serialSegment) parsedQuery = decodeURIComponent(serialSegment);
+        }
+      } catch (e) {}
     }
 
     setSearchQuery(parsedQuery);

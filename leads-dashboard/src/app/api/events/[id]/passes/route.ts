@@ -175,7 +175,26 @@ export async function PUT(
       // not json, treat as plain serial string
     }
 
-    const targetSerial = parsedPayload?.serial || query.trim();
+    let rawTarget = parsedPayload?.serial || query.trim();
+    // If a full pass URL slipped through unparsed (e.g. https://.../pass/LEADS-EVT-XXXX),
+    // fall back to extracting the serial from the URL server-side too.
+    if (/^https?:\/\//i.test(rawTarget)) {
+      try {
+        const url = new URL(rawTarget);
+        const queryParam = url.searchParams.get('pass');
+        if (queryParam) {
+          rawTarget = decodeURIComponent(queryParam);
+        } else {
+          const segments = url.pathname.split('/').filter(Boolean);
+          const passIndex = segments.indexOf('pass');
+          const serialSegment = passIndex !== -1 ? segments[passIndex + 1] : segments[segments.length - 1];
+          if (serialSegment) rawTarget = decodeURIComponent(serialSegment);
+        }
+      } catch {
+        // leave rawTarget as-is
+      }
+    }
+    const targetSerial = rawTarget;
     const targetPassId = parsedPayload?.passId;
 
     const passes = await readCollection<EventPassItem>('event_passes');
