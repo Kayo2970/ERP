@@ -514,9 +514,11 @@
   box-shadow:
     0 4px 14px -2px rgba(2, 132, 199, 0.15),
     0 0 0 1px rgba(226, 232, 240, 0.8);
-  margin: 32px auto 8px auto;
+  margin: 10px auto 8px auto;
   width: 135px;
   height: 135px;
+  position: relative;
+  z-index: 9;
 }
 
 .passQrBox img {
@@ -1173,6 +1175,8 @@
   gap: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
   margin-bottom: 4px;
+  position: relative;
+  z-index: 9;
 }
 
 .turnstileMetaLeft {

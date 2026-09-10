@@ -113,6 +113,38 @@ export function EventPassEmailModal({
       .replace(/@pass_link|\{\{pass_link\}\}/gi, passUrl);
   };
 
+  // Fetches (or, via the existing VPS cache, reuses) the wallet pass for this
+  // event pass and returns it as an email attachment payload. Never blocks
+  // the send on failure — the email still goes out with just the pass link.
+  const fetchWalletAttachment = async (
+    pass: EventPassItem
+  ): Promise<{ filename: string; contentBase64: string; contentType: string } | null> => {
+    try {
+      const walletRes = await fetch(`/api/events/${pass.eventId}/passes/${pass.id}/wallet`, {
+        headers: authHeaders(),
+      });
+      if (!walletRes.ok) return null;
+      const walletData = await walletRes.json();
+      if (!walletData.appleUrl) return null;
+
+      const fileRes = await fetch(walletData.appleUrl);
+      if (!fileRes.ok) return null;
+      const buffer = await fileRes.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+
+      return {
+        filename: `${pass.serialNumber}.pkpass`,
+        contentBase64: btoa(binary),
+        contentType: 'application/vnd.apple.pkpass',
+      };
+    } catch (err) {
+      console.warn(`Failed to fetch wallet pass for ${pass.serialNumber}:`, err);
+      return null;
+    }
+  };
+
   const handleSendEmails = async () => {
     const targets = eventPasses.filter((p) => selectedPassIds.includes(p.id));
     if (targets.length === 0) {
@@ -132,6 +164,7 @@ export function EventPassEmailModal({
 
         const personalizedSubject = renderMailMerge(subjectTemplate, pass);
         const personalizedBody = renderMailMerge(bodyTemplate, pass);
+        const walletAttachment = await fetchWalletAttachment(pass);
 
         try {
           const res = await fetch('/api/email/send', {
@@ -146,6 +179,7 @@ export function EventPassEmailModal({
               category: 'EVENT_INVITATION',
               badgeText: 'Official Event Pass',
               badgeColor: '#0284c7',
+              attachments: walletAttachment ? [walletAttachment] : undefined,
               metadata: {
                 passId: pass.id,
                 serialNumber: pass.serialNumber,
