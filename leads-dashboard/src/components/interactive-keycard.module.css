@@ -1162,11 +1162,14 @@
 
 .turnstileQrContainer {
   background: rgba(255, 255, 255, 0.98);
-  border-radius: 12px;
-  padding: 6px 8px;
+  border-radius: 16px;
+  padding: 14px 12px 12px;
   display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
   margin-bottom: 4px;
@@ -1175,9 +1178,10 @@
 .turnstileMetaLeft {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 2px;
   min-width: 0;
-  flex: 1;
+  text-align: center;
 }
 
 .turnstileSerialText {
@@ -1209,12 +1213,20 @@
 }
 
 .turnstileQrImage {
-  width: 58px;
-  height: 58px;
-  border-radius: 6px;
+  width: min(170px, 60%);
+  height: auto;
+  aspect-ratio: 1 / 1;
+  border-radius: 10px;
   object-fit: contain;
   flex-shrink: 0;
   border: 1px solid #cbd5e1;
+}
+
+.eventPassBody {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .magneticStripeGraphic {
