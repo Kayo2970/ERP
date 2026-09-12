@@ -37,10 +37,11 @@ export async function GET(
   try {
     const { googleSaveUrl } = await getOrCreateWalletPass(apiKey, member, cardUrl);
     return NextResponse.json({ saveUrl: googleSaveUrl });
-  } catch (err) {
+  } catch (err: any) {
     if (err instanceof WalletPassRateLimitError) {
       return NextResponse.json({ error: err.message, retryAt: err.retryAt }, { status: 429 });
     }
-    throw err;
+    console.error('Google Wallet pass fetch error:', err);
+    return NextResponse.json({ error: err?.message || 'Could not fetch the Google Wallet pass.' }, { status: 500 });
   }
 }

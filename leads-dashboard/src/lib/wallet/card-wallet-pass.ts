@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { mutateCollection } from '@/lib/server-db';
-import { saveBase64File, deleteStoredFile } from '@/lib/file-storage';
+import { saveBase64File, deleteStoredFile, readStoredFile } from '@/lib/file-storage';
 import { effectiveCardDesignation } from '@/lib/member-guard';
 import { createWalletPass } from './walletwallet-client';
 
@@ -85,7 +85,12 @@ export async function getOrCreateWalletPass(apiKey: string, member: any, cardUrl
   const hash = contentHashFor(member, cardUrl);
 
   if (member.cardPassContentHash === hash && member.cardPassAppleUrl && member.cardPassGoogleSaveUrl) {
-    return { appleUrl: member.cardPassAppleUrl, googleSaveUrl: member.cardPassGoogleSaveUrl };
+    try {
+      await readStoredFile(member.cardPassAppleUrl.replace('/api/files/', ''));
+      return { appleUrl: member.cardPassAppleUrl, googleSaveUrl: member.cardPassGoogleSaveUrl };
+    } catch {
+      // Stale cache — stored file missing from disk. Fall through to regenerate below.
+    }
   }
 
   // A real regeneration is about to happen — enforce the per-member quota

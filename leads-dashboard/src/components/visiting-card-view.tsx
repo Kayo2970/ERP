@@ -58,15 +58,16 @@ export function VisitingCardView({
     setWalletError('');
     setIsOpeningAppleWallet(true);
     try {
-      const res = await fetch(`/api/card/${slug}/apple-pass${cacheOnlySuffix}`);
+      const passUrl = `/api/card/${slug}/apple-pass${cacheOnlySuffix}`;
+      const res = await fetch(passUrl);
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setWalletError(data.error || 'Could not fetch the Apple Wallet pass.');
         return;
       }
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      window.location.href = blobUrl;
+      // On iOS Safari, blob: URLs cannot be passed to Apple Wallet.
+      // Direct HTTP navigation lets Safari process application/vnd.apple.pkpass natively.
+      window.location.href = passUrl;
     } catch {
       setWalletError('Could not fetch the Apple Wallet pass.');
     } finally {

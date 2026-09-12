@@ -34,13 +34,17 @@ export async function GET(
     if (!cached) {
       return NextResponse.json({ error: 'Not generated yet — save & publish your card to generate it.' }, { status: 404 });
     }
-    const pkpass = await readStoredFile(cached.appleUrl.replace('/api/files/', ''));
-    return new NextResponse(new Uint8Array(pkpass), {
-      headers: {
-        'Content-Type': 'application/vnd.apple.pkpass',
-        'Content-Disposition': `attachment; filename="${slug}.pkpass"`,
-      },
-    });
+    try {
+      const pkpass = await readStoredFile(cached.appleUrl.replace('/api/files/', ''));
+      return new NextResponse(new Uint8Array(pkpass), {
+        headers: {
+          'Content-Type': 'application/vnd.apple.pkpass',
+          'Content-Disposition': `attachment; filename="${slug}.pkpass"`,
+        },
+      });
+    } catch {
+      return NextResponse.json({ error: 'Pass file missing on server — save & publish your card to regenerate it.' }, { status: 404 });
+    }
   }
 
   const cardUrl = `${getAppBaseUrl(request)}/card/${slug}`;
@@ -54,10 +58,11 @@ export async function GET(
         'Content-Disposition': `attachment; filename="${slug}.pkpass"`,
       },
     });
-  } catch (err) {
+  } catch (err: any) {
     if (err instanceof WalletPassRateLimitError) {
       return NextResponse.json({ error: err.message, retryAt: err.retryAt }, { status: 429 });
     }
-    throw err;
+    console.error('Apple Wallet pass fetch error:', err);
+    return NextResponse.json({ error: err?.message || 'Could not fetch the Apple Wallet pass.' }, { status: 500 });
   }
 }

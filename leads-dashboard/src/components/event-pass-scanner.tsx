@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+// @ts-ignore
 import jsQR from 'jsqr';
 import {
   QrCode,

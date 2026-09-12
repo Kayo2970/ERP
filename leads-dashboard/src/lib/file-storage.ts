@@ -132,6 +132,7 @@ export async function deleteStoredFilesForRecord(category: string, recordId: str
 }
 
 const MIME_BY_EXTENSION: Record<string, string> = {
+  '.pkpass': 'application/vnd.apple.pkpass',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
