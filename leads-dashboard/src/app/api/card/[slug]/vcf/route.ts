@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { readCollection } from '@/lib/server-db';
 import { readStoredFile, guessMimeType } from '@/lib/file-storage';
 import { effectiveCardDesignation } from '@/lib/member-guard';
+import { getSessionMember } from '@/lib/session';
 
 // Escapes a value for use inside a VCARD 3.0 text field (RFC 6350 §3.4):
 // backslash, comma, semicolon and newline must be backslash-escaped.
@@ -25,14 +26,22 @@ function foldVCardLine(line: string): string {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ slug: string }> }
 ) {
   const { slug } = await params;
+  const cleanSlug = decodeURIComponent(slug || '').trim().toLowerCase();
   const members = await readCollection<any>('members');
-  const member = members.find((m) => m.cardSlug === slug);
+  const actor = await getSessionMember(request);
 
-  if (!member || !member.cardEnabled || member.status === 'Terminated') {
+  let member = members.find((m) => m.cardSlug && m.cardSlug.toLowerCase() === cleanSlug);
+  if (!member && cleanSlug === 'preview' && actor) {
+    member = actor;
+  }
+
+  const isOwnerOrAdmin = actor && member && (actor.id === member.id || actor.role === 'SUPER_USER' || actor.tier === 1);
+
+  if (!member || member.status === 'Terminated' || (!member.cardEnabled && !isOwnerOrAdmin)) {
     return NextResponse.json({ error: 'Card not found' }, { status: 404 });
   }
 
@@ -86,7 +95,7 @@ export async function GET(
   return new NextResponse(body, {
     headers: {
       'Content-Type': 'text/vcard; charset=utf-8',
-      'Content-Disposition': `attachment; filename="${slug}.vcf"`,
+      'Content-Disposition': `attachment; filename="${member.cardSlug || 'contact'}.vcf"`,
     },
   });
 }

@@ -2,37 +2,48 @@ import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { isWalletWalletConfigured } from '@/lib/wallet/walletwallet-config';
 import { effectiveCardDesignation } from '@/lib/member-guard';
+import { getSessionMember } from '@/lib/session';
 
 // Public, no-auth endpoint — same pattern as /api/forms/[slug]: anyone with
 // the link can view a published card. Only ever returns the safe public
 // subset of a Member record (never email, id, tier, bank details, etc.).
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ slug: string }> }
 ) {
   const { slug } = await params;
+  const cleanSlug = decodeURIComponent(slug || '').trim().toLowerCase();
   const members = await readCollection<any>('members');
-  const member = members.find((m) => m.cardSlug === slug);
+  const actor = await getSessionMember(request);
 
-  if (!member || !member.cardEnabled || member.status === 'Terminated') {
+  let member = members.find((m) => m.cardSlug && m.cardSlug.toLowerCase() === cleanSlug);
+  if (!member && cleanSlug === 'preview' && actor) {
+    member = actor;
+  }
+
+  const isOwnerOrAdmin = actor && member && (actor.id === member.id || actor.role === 'SUPER_USER' || actor.tier === 1);
+
+  if (!member || member.status === 'Terminated' || (!member.cardEnabled && !isOwnerOrAdmin)) {
     return NextResponse.json({ error: 'Card not found' }, { status: 404 });
   }
 
-  // Fire-and-forget view counter — never block the response on it.
-  mutateCollection('members', (current: any[]) => {
-    const idx = current.findIndex((m) => m.id === member.id);
-    if (idx === -1) return current;
-    const next = [...current];
-    next[idx] = { ...next[idx], cardViews: (next[idx].cardViews || 0) + 1 };
-    return next;
-  }).catch(() => {});
+  // Fire-and-forget view counter — only for public visits to published cards
+  if (member.cardEnabled && member.cardSlug) {
+    mutateCollection('members', (current: any[]) => {
+      const idx = current.findIndex((m) => m.id === member.id);
+      if (idx === -1) return current;
+      const next = [...current];
+      next[idx] = { ...next[idx], cardViews: (next[idx].cardViews || 0) + 1 };
+      return next;
+    }).catch(() => {});
+  }
 
   // One WalletWallet API key issues both Apple and Google passes together
   // (see src/lib/wallet/walletwallet-client.ts), so a single check gates both.
   const walletWalletAvailable = await isWalletWalletConfigured();
 
   return NextResponse.json({
-    slug: member.cardSlug,
+    slug: member.cardSlug || 'preview',
     name: member.name,
     designation: effectiveCardDesignation(member),
     phone: member.cardPhone || '',

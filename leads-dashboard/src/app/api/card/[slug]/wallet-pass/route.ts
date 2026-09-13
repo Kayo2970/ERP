@@ -22,10 +22,15 @@ export async function POST(
   try {
     const actor = await requireSession(request);
     const { slug } = await params;
+    const cleanSlug = decodeURIComponent(slug || '').trim().toLowerCase();
     const members = await readCollection<any>('members');
-    const member = members.find((m) => m.cardSlug === slug);
+    
+    let member = members.find((m) => m.cardSlug && m.cardSlug.toLowerCase() === cleanSlug);
+    if (!member && (cleanSlug === 'preview' || cleanSlug === actor.id)) {
+      member = members.find((m) => m.id === actor.id);
+    }
 
-    if (!member || !member.cardEnabled || member.status === 'Terminated') {
+    if (!member || member.status === 'Terminated') {
       return NextResponse.json({ error: 'Card not found' }, { status: 404 });
     }
     if (actor.id !== member.id && !isSuperUser(actor)) {
@@ -39,7 +44,7 @@ export async function POST(
       return NextResponse.json({ generated: false });
     }
 
-    const cardUrl = `${getAppBaseUrl(request)}/card/${slug}`;
+    const cardUrl = `${getAppBaseUrl(request)}/card/${member.cardSlug || cleanSlug}`;
     await getOrCreateWalletPass(apiKey, member, cardUrl);
     return NextResponse.json({ generated: true });
   } catch (err) {

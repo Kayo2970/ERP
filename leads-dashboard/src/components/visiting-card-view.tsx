@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { ProfileCard } from '@/components/profile-card';
+import { authHeaders } from '@/lib/local-data';
 
 export interface VisitingCardData {
   name: string;
@@ -58,8 +59,8 @@ export function VisitingCardView({
     setWalletError('');
     setIsOpeningAppleWallet(true);
     try {
-      const passUrl = `/api/card/${slug}/apple-pass${cacheOnlySuffix}`;
-      const res = await fetch(passUrl);
+      const passUrl = `/api/card/${slug || 'preview'}/apple-pass${cacheOnlySuffix}`;
+      const res = await fetch(passUrl, { headers: authHeaders() });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setWalletError(data.error || 'Could not fetch the Apple Wallet pass.');
@@ -79,7 +80,7 @@ export function VisitingCardView({
     setWalletError('');
     setIsOpeningGoogleWallet(true);
     try {
-      const res = await fetch(`/api/card/${slug}/google-pass${cacheOnlySuffix}`);
+      const res = await fetch(`/api/card/${slug || 'preview'}/google-pass${cacheOnlySuffix}`, { headers: authHeaders() });
       const data = await res.json();
       if (res.ok && data.saveUrl) {
         window.location.href = data.saveUrl;
@@ -102,6 +103,7 @@ export function VisitingCardView({
       contactText="Save Contact (vCard)"
       avatarUrl={card.photoUrl}
       showUserInfo={true}
+      showActions={showActions}
       enableTilt={true}
       enableMobileTilt={true}
       behindGlowEnabled={true}

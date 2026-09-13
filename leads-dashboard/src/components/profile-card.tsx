@@ -23,6 +23,7 @@ export interface ProfileCardProps {
   contactText?: string;
   avatarUrl?: string;
   showUserInfo?: boolean;
+  showActions?: boolean;
   enableTilt?: boolean;
   enableMobileTilt?: boolean;
   behindGlowEnabled?: boolean;
@@ -50,6 +51,7 @@ export function ProfileCard({
   contactText = 'Save Contact',
   avatarUrl,
   showUserInfo = true,
+  showActions = true,
   enableTilt = true,
   enableMobileTilt = true,
   behindGlowEnabled = true,
@@ -307,26 +309,46 @@ export function ProfileCard({
           )}
 
           {/* Action Buttons */}
-          <div className={styles.actionsContainer}>
-            {slug ? (
-              <a
-                href={`/api/card/${slug}/vcf`}
-                onClick={onContactClick}
-                className={styles.primaryActionButton}
-              >
-                <Download className="h-4 w-4" />
-                {contactText}
-              </a>
-            ) : (
+          {showActions && (
+            <div className={styles.actionsContainer}>
               <button
                 type="button"
-                onClick={onContactClick}
+                onClick={(e) => {
+                  if (onContactClick) {
+                    onContactClick();
+                    return;
+                  }
+                  if (!slug || slug === 'preview') {
+                    e.preventDefault();
+                    const vcardLines = [
+                      'BEGIN:VCARD',
+                      'VERSION:3.0',
+                      `FN:${name || 'LEADS Member'}`,
+                      title ? `TITLE:${title}` : '',
+                      phone ? `TEL;TYPE=CELL:${phone}` : '',
+                      email ? `EMAIL:${email}` : '',
+                      linkedin ? `URL;TYPE=LinkedIn:${linkedin}` : '',
+                      'ORG:LEADS Next Gen Centre',
+                      'END:VCARD',
+                    ].filter(Boolean).join('\r\n') + '\r\n';
+                    const blob = new Blob([vcardLines], { type: 'text/vcard;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${(name || 'contact').toLowerCase().replace(/\s+/g, '-')}.vcf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                  } else {
+                    window.location.href = `/api/card/${slug}/vcf`;
+                  }
+                }}
                 className={styles.primaryActionButton}
               >
                 <Download className="h-4 w-4" />
                 {contactText}
               </button>
-            )}
 
             {/* Apple & Google Wallet Buttons */}
             <div className={styles.walletGrid}>
@@ -385,6 +407,7 @@ export function ProfileCard({
               </button>
             )}
           </div>
+        )}
 
           {/* iOS Safari Gyroscope Permission Prompt or Active Status */}
           {needsIosPermission && !gyroActive ? (
