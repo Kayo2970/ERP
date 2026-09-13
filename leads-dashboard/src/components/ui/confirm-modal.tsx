@@ -1,5 +1,6 @@
 'use client';
 
+import { useId } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 
 interface ConfirmModalProps {
@@ -23,6 +24,7 @@ export function ConfirmModal({
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
+  const modalId = useId();
   if (!isOpen) return null;
 
   const buttonStyles = {
@@ -33,39 +35,46 @@ export function ConfirmModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="glass-panel w-full max-w-md rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/20 shadow-2xl animate-in zoom-in-95 duration-200">
+      <div
+        className="glass-panel w-full max-w-md rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/20 shadow-2xl animate-in zoom-in-95 duration-200"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={`${modalId}-title`}
+        aria-describedby={`${modalId}-desc`}
+      >
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
             <div className={`p-2.5 rounded-2xl ${variant === 'danger' ? 'bg-red-500/15 text-red-500' : 'bg-amber-500/15 text-amber-500'}`}>
-              <AlertTriangle className="h-5 w-5" />
+              <AlertTriangle className="h-5 w-5" aria-hidden="true" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-theme-text-primary">{title}</h3>
+              <h3 id={`${modalId}-title`} className="text-sm font-bold text-theme-text-primary">{title}</h3>
               <p className="text-xs text-theme-text-secondary mt-0.5">Please confirm your action</p>
             </div>
           </div>
           <button
             onClick={onCancel}
-            className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
+            aria-label="Close dialog"
+            className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
-            <X className="h-4 w-4" />
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
 
-        <p className="text-xs text-theme-text-secondary leading-relaxed bg-theme-background/30 p-3.5 rounded-xl border border-theme-border/30">
+        <p id={`${modalId}-desc`} className="text-xs text-theme-text-secondary leading-relaxed bg-theme-background/30 p-3.5 rounded-xl border border-theme-border/30">
           {message}
         </p>
 
         <div className="flex items-center justify-end gap-2.5 pt-2">
           <button
             onClick={onCancel}
-            className="px-4 py-2.5 text-xs font-semibold text-theme-text-primary bg-theme-border/30 hover:bg-theme-border/50 rounded-xl transition-all cursor-pointer"
+            className="px-4 py-2.5 text-xs font-semibold text-theme-text-primary bg-theme-border/30 hover:bg-theme-border/50 rounded-xl transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             {cancelLabel}
           </button>
           <button
             onClick={onConfirm}
-            className={`px-4 py-2.5 text-xs font-semibold rounded-xl transition-all shadow-md cursor-pointer ${buttonStyles}`}
+            className={`px-4 py-2.5 text-xs font-semibold rounded-xl transition-all shadow-md cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${buttonStyles}`}
           >
             {confirmLabel}
           </button>
