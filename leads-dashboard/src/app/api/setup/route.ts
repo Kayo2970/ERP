@@ -8,8 +8,6 @@ import { hashPassword } from '@/lib/password';
 import { parseJsonBody } from '@/lib/validation';
 import { apiError } from '@/lib/api-error';
 
-const FALLBACK_KEY = 'LEADS_ERP_MASTER_SECRET_KEY_2026';
-
 const SetupSchema = z.object({
   name: z.string().trim().min(1).max(200),
   email: z.string().trim().min(1).max(254).email(),
@@ -47,8 +45,7 @@ export async function GET() {
     const hasAccounts = Array.isArray(members) && members.length > 0;
     const isKeyConfigured = Boolean(
       process.env.DATA_ENCRYPTION_KEY &&
-      process.env.DATA_ENCRYPTION_KEY.trim() !== '' &&
-      process.env.DATA_ENCRYPTION_KEY !== FALLBACK_KEY
+      process.env.DATA_ENCRYPTION_KEY.trim() !== ''
     );
 
     return NextResponse.json({
@@ -83,7 +80,7 @@ export async function POST(request: Request) {
       finalKey = encryptionKey.trim();
       process.env.DATA_ENCRYPTION_KEY = finalKey;
       writeEncryptionKeyToEnv(finalKey);
-    } else if (!finalKey || finalKey === FALLBACK_KEY) {
+    } else if (!finalKey) {
       // Auto-generate strong key if none provided
       finalKey = crypto.randomBytes(32).toString('hex');
       process.env.DATA_ENCRYPTION_KEY = finalKey;
