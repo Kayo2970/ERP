@@ -1,12 +1,14 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Save, QrCode, Copy, ExternalLink, RotateCw, AlertCircle, Sparkles, Maximize2, X, ShieldCheck } from 'lucide-react';
+import { Save, QrCode, Copy, ExternalLink, RotateCw, AlertCircle, Sparkles, Maximize2, X, ShieldCheck, Crop } from 'lucide-react';
 import { getMembers, saveMembers, updateMemberCard, updateMemberCardPhoto, authHeaders } from '@/lib/local-data';
+import { isCentreHead } from '@/lib/permissions';
 import { FileDropzone, useUploadTask } from '@/components/ui/file-dropzone';
 import { VisitingCardView } from '@/components/visiting-card-view';
 import { InteractiveKeycardHolder } from '@/components/interactive-keycard-holder';
 import { CardQrModal } from '@/components/card-qr-modal';
+import { ImageCropModal } from '@/components/image-crop-modal';
 import { Linkedin } from '@/components/ui/linkedin-icon';
 
 const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
@@ -25,6 +27,10 @@ export default function VisitingCardPage() {
   const [cardPhotoPreviewUrl, setCardPhotoPreviewUrl] = useState<string | null>(null);
   const [cardPhotoSizeError, setCardPhotoSizeError] = useState('');
   const [isCardQrOpen, setIsCardQrOpen] = useState(false);
+
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  const [cropFileName, setCropFileName] = useState('card-photo.jpg');
 
   const [isSavingCard, setIsSavingCard] = useState(false);
 
@@ -46,6 +52,8 @@ export default function VisitingCardPage() {
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
+  const isWalletAdmin = !!(user && (user.role === 'SUPER_USER' || isCentreHead(user)));
+
   const triggerSuccess = (msg: string) => {
     setSuccessMsg(msg);
     setErrorMsg('');
@@ -57,31 +65,33 @@ export default function VisitingCardPage() {
     setTimeout(() => setErrorMsg(''), 4000);
   };
 
-  const isWalletAdmin = user && user.tier === 1;
-
   useEffect(() => {
-    const savedUser = localStorage.getItem('user');
-    if (!savedUser) return;
+    const raw = localStorage.getItem('user');
+    if (!raw) return;
     try {
-      const u = JSON.parse(savedUser);
+      const u = JSON.parse(raw);
       setUser(u);
-      const allMembers = getMembers();
-      const me = allMembers.find(m => m.id === u.id || m.email.toLowerCase() === u.email.toLowerCase());
-      setCardEnabled(Boolean(me?.cardEnabled));
+      const members = getMembers();
+      const me = members.find(m => m.id === u.id) || u;
+      setCardEnabled(!!me?.cardEnabled);
       setCardSlug(me?.cardSlug || '');
       setCardDesignationOverride(me?.cardDesignationOverride || '');
       setCardPhone(me?.cardPhone || '');
       setCardLinkedin(me?.cardSocials?.linkedin || '');
       setCardPhotoUrl(me?.cardPhotoUrl || '');
-      if (u.tier === 1) fetchWalletStatus();
-    } catch (e) {
-      console.error(e);
+    } catch {
+      // non-fatal
     }
-    fetchWalletAvailability();
   }, []);
 
+  useEffect(() => {
+    if (!user) return;
+    fetchWalletStatus();
+    fetchWalletAvailability();
+  }, [user]);
+
   const fetchWalletStatus = async () => {
-    const res = await fetch('/api/admin/wallet-settings', { headers: authHeaders() });
+    const res = await fetch('/api/wallet-status', { headers: authHeaders() });
     if (res.ok) setWalletStatus(await res.json());
   };
 
@@ -118,8 +128,30 @@ export default function VisitingCardPage() {
       return;
     }
     setCardPhotoSizeError('');
-    setCardPhotoFile(file);
-    cardPhotoUpload.start(file);
+    setCropFileName(file.name);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setCropImageSrc(reader.result);
+        setCropModalOpen(true);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleCardCropComplete = (croppedFile: File, dataUrl: string) => {
+    setCardPhotoFile(croppedFile);
+    setCardPhotoPreviewUrl(dataUrl);
+    cardPhotoUpload.start(croppedFile);
+  };
+
+  const handleOpenCurrentCardCrop = () => {
+    const currentSrc = cardPhotoPreviewUrl || cardPhotoUrl || user?.avatarUrl;
+    if (!currentSrc) return;
+    setCropFileName('card-photo.jpg');
+    setCropImageSrc(currentSrc);
+    setCropModalOpen(true);
   };
 
   useEffect(() => {
@@ -252,20 +284,33 @@ export default function VisitingCardPage() {
 
           <form onSubmit={handleUpdateCard} className="space-y-4 text-xs">
             <div className="flex items-center gap-4 pb-2">
-              <div className="h-16 w-16 shrink-0 rounded-2xl bg-accent flex items-center justify-center shadow-md shadow-accent/20 overflow-hidden relative">
-                {cardPhotoPreviewUrl ? (
-                  <img src={cardPhotoPreviewUrl} alt={user?.name} className="h-full w-full object-cover" />
-                ) : cardPhotoUrl ? (
-                  <img src={cardPhotoUrl} alt={user?.name} className="h-full w-full object-cover" />
-                ) : (
-                  <span className="text-white font-bold text-base">
-                    {(user?.name || '').split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
-                  </span>
-                )}
-                {cardPhotoUpload.status === 'uploading' && (
-                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-[10px] font-bold">
-                    {cardPhotoUpload.progress}%
-                  </div>
+              <div className="flex flex-col items-center">
+                <div className="h-16 w-16 shrink-0 rounded-2xl bg-accent flex items-center justify-center shadow-md shadow-accent/20 overflow-hidden relative">
+                  {cardPhotoPreviewUrl ? (
+                    <img src={cardPhotoPreviewUrl} alt={user?.name} className="h-full w-full object-cover" />
+                  ) : cardPhotoUrl ? (
+                    <img src={cardPhotoUrl} alt={user?.name} className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="text-white font-bold text-base">
+                      {(user?.name || '').split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                    </span>
+                  )}
+                  {cardPhotoUpload.status === 'uploading' && (
+                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-[10px] font-bold">
+                      {cardPhotoUpload.progress}%
+                    </div>
+                  )}
+                </div>
+                {(cardPhotoPreviewUrl || cardPhotoUrl || user?.avatarUrl) && cardPhotoUpload.status !== 'uploading' && (
+                  <button
+                    type="button"
+                    onClick={handleOpenCurrentCardCrop}
+                    className="mt-1.5 text-[10px] font-medium text-accent hover:underline flex items-center gap-1 cursor-pointer transition-colors"
+                    title="Re-frame and crop photo"
+                  >
+                    <Crop className="h-2.5 w-2.5" />
+                    Adjust crop
+                  </button>
                 )}
               </div>
               <div className="space-y-1.5 flex-1 max-w-md">
@@ -528,6 +573,17 @@ export default function VisitingCardPage() {
           </div>
         )}
       </div>
+
+      {/* Image Crop Modal for Visiting Card Photo */}
+      <ImageCropModal
+        isOpen={cropModalOpen}
+        imageSrc={cropImageSrc}
+        fileName={cropFileName}
+        title="Frame Visiting Card Photo"
+        description="Drag to reposition and zoom to frame your photo for 3D card display and wallet passes."
+        onCropComplete={handleCardCropComplete}
+        onClose={() => setCropModalOpen(false)}
+      />
     </div>
   );
 }

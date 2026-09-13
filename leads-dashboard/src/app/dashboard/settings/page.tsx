@@ -18,11 +18,13 @@ import {
   RefreshCw,
   FileText,
   RotateCw,
-  AlertCircle
+  AlertCircle,
+  Crop,
 } from 'lucide-react';
 import { getAuditLogs, getMembers, saveMembers, updateMember, updateMemberAvatar, logAuditEvent, AuditLogItem, getEmailLogs, requestEmailChange, confirmEmailChange, confirmNewEmailChange, authHeaders } from '@/lib/local-data';
 import { isCentreHead } from '@/lib/permissions';
 import { FileDropzone, useUploadTask, formatFileSize } from '@/components/ui/file-dropzone';
+import { ImageCropModal } from '@/components/image-crop-modal';
 import DOMPurify from 'isomorphic-dompurify';
 
 const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
@@ -223,6 +225,10 @@ export default function SettingsPage() {
 
   const [avatarSizeError, setAvatarSizeError] = useState('');
 
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  const [cropFileName, setCropFileName] = useState('avatar.jpg');
+
   // File stays in `avatarFile` state (not cleared on failure) so a dropped
   // connection mid-upload can be retried with one tap instead of forcing the
   // user to reselect the same photo.
@@ -262,8 +268,30 @@ export default function SettingsPage() {
       return;
     }
     setAvatarSizeError('');
-    setAvatarFile(file);
-    avatarUpload.start(file);
+    setCropFileName(file.name);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setCropImageSrc(reader.result);
+        setCropModalOpen(true);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleAvatarCropComplete = (croppedFile: File, dataUrl: string) => {
+    setAvatarFile(croppedFile);
+    setAvatarPreviewUrl(dataUrl);
+    avatarUpload.start(croppedFile);
+  };
+
+  const handleOpenCurrentAvatarCrop = () => {
+    const currentSrc = avatarPreviewUrl || user?.avatarUrl;
+    if (!currentSrc) return;
+    setCropFileName('avatar.jpg');
+    setCropImageSrc(currentSrc);
+    setCropModalOpen(true);
   };
 
   useEffect(() => {
@@ -489,20 +517,33 @@ export default function SettingsPage() {
 
             <form onSubmit={handleUpdateAccount} className="space-y-4 text-xs">
               <div className="flex items-center gap-4 pb-2">
-                <div className="h-16 w-16 shrink-0 rounded-2xl bg-accent flex items-center justify-center shadow-md shadow-accent/20 overflow-hidden relative">
-                  {avatarPreviewUrl ? (
-                    <img src={avatarPreviewUrl} alt={user?.name} className="h-full w-full object-cover" />
-                  ) : user?.avatarUrl ? (
-                    <img src={user.avatarUrl} alt={user.name} className="h-full w-full object-cover" />
-                  ) : (
-                    <span className="text-white font-bold text-base">
-                      {(user?.name || '').split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
-                    </span>
-                  )}
-                  {avatarUpload.status === 'uploading' && (
-                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-[10px] font-bold">
-                      {avatarUpload.progress}%
-                    </div>
+                <div className="flex flex-col items-center">
+                  <div className="h-16 w-16 shrink-0 rounded-2xl bg-accent flex items-center justify-center shadow-md shadow-accent/20 overflow-hidden relative">
+                    {avatarPreviewUrl ? (
+                      <img src={avatarPreviewUrl} alt={user?.name} className="h-full w-full object-cover" />
+                    ) : user?.avatarUrl ? (
+                      <img src={user.avatarUrl} alt={user.name} className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="text-white font-bold text-base">
+                        {(user?.name || '').split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                      </span>
+                    )}
+                    {avatarUpload.status === 'uploading' && (
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-[10px] font-bold">
+                        {avatarUpload.progress}%
+                      </div>
+                    )}
+                  </div>
+                  {(avatarPreviewUrl || user?.avatarUrl) && avatarUpload.status !== 'uploading' && (
+                    <button
+                      type="button"
+                      onClick={handleOpenCurrentAvatarCrop}
+                      className="mt-1.5 text-[10px] font-medium text-accent hover:underline flex items-center gap-1 cursor-pointer transition-colors"
+                      title="Re-frame and crop photo"
+                    >
+                      <Crop className="h-2.5 w-2.5" />
+                      Adjust crop
+                    </button>
                   )}
                 </div>
                 <div className="space-y-1.5 flex-1 max-w-sm">
@@ -1219,6 +1260,17 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+
+      {/* Image Crop Modal for Avatar / Profile Photo */}
+      <ImageCropModal
+        isOpen={cropModalOpen}
+        imageSrc={cropImageSrc}
+        fileName={cropFileName}
+        title="Frame Profile Photo"
+        description="Drag to reposition and zoom to frame your profile picture for avatars, sidebars, and cards."
+        onCropComplete={handleAvatarCropComplete}
+        onClose={() => setCropModalOpen(false)}
+      />
 
     </div>
   );
