@@ -272,6 +272,14 @@ export function isSuperUser(user: ServerUser): boolean {
   return user?.tier === 1;
 }
 
+export function isAdvisor(user: ServerUser): boolean {
+  if (!user) return false;
+  if (isSuperUser(user)) return false;
+  const role = (user.role || '').toLowerCase();
+  const division = ((user as any).division || '').toLowerCase();
+  return keywordMatches(role, 'advisor') || role.includes('advisor') || division.includes('advisory');
+}
+
 export function canAccessGroupPoliciesServer(user: ServerUser, settings: AccessLevelSettings): boolean {
   if (!user) return false;
   return isSuperUser(user) || isCentreHead(user, settings) || isEventsHeadGgCampus(user);
@@ -448,18 +456,18 @@ export function canApprovePendingTask(task: ServerTask, user: ServerUser, settin
  */
 export function canEvaluateEventStudent(user: ServerUser, settings: AccessLevelSettings): boolean {
   if (!user) return false;
-  return isCentreHead(user, settings) || isEventsHeadGgCampus(user) || user.tier === 2.5;
+  return isSuperUser(user) || isCentreHead(user, settings) || isAdvisor(user) || isEventsHeadGgCampus(user) || user.tier === 2.5;
 }
 
 /**
- * Rating edit/delete permission: the rating's own author, Centre Head, or
+ * Rating edit/delete permission: the rating's own author, Centre Head, Advisor, or
  * the Super User. Ported from permissions.ts's canEditRating (Group Policy
  * RATING_EDIT_ANY grant / moduleAccess.RATINGS.edit override out of scope).
  */
 export function canEditRating(rating: ServerRating, user: ServerUser, settings: AccessLevelSettings): boolean {
   if (!user || !rating) return false;
   const isAuthor = user.name === rating.raterName;
-  return user.tier === 1 || isAuthor || isCentreHead(user, settings);
+  return user.tier === 1 || isAuthor || isCentreHead(user, settings) || isAdvisor(user);
 }
 
 // --- Designs / Forms / Announcements / Guests / Event Reports (ported from

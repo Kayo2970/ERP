@@ -513,14 +513,11 @@ export interface RatingItem {
   targetId: string; // Member ID
   targetName: string; // Member Name
   raterName: string;
-  // Which fixed reviewer slot this rating fills — see permissions.ts's
-  // resolveRatingReviewerRole. CENTRE_HEAD and GG_HEAD are the two required
-  // reviewers averaged together into the task's ratingScore (see
-  // recomputeTaskAggregateScore below); DESIGN_HEAD is the separate,
-  // unaveraged design-deliverable lane. Undefined on ratings created before
-  // this field existed — treated as neither slot, so old ratings keep
-  // displaying exactly as before rather than retroactively joining an average.
-  reviewerRole?: 'CENTRE_HEAD' | 'GG_HEAD' | 'DESIGN_HEAD';
+  // Which reviewer slot this rating fills — see permissions.ts's
+  // resolveRatingReviewerRole. SUPER_USER, CENTRE_HEAD, ADVISOR, and GG_HEAD are
+  // averaged together into the task's ratingScore (see recomputeTaskAggregateScore below);
+  // DESIGN_HEAD is the design-deliverable lane.
+  reviewerRole?: 'SUPER_USER' | 'CENTRE_HEAD' | 'ADVISOR' | 'GG_HEAD' | 'DESIGN_HEAD';
   quality: number;
   timeliness: number;
   initiative: number;
@@ -3480,17 +3477,20 @@ export function saveRatings(ratings: RatingItem[]): void {
 
 /**
  * Recomputes a task's single ratingScore summary field as the average of its
- * CENTRE_HEAD and GG_HEAD reviews (the two fixed reviewer slots — see
+ * SUPER_USER, CENTRE_HEAD, ADVISOR, and GG_HEAD reviews (see
  * permissions.ts's resolveRatingReviewerRole) for the given targetId (the
  * parent rating's target — the actual assignee for an individual task, or
- * the committee/group identifier for a fan-out task). DESIGN_HEAD reviews and
- * pre-this-feature ratings with no reviewerRole are excluded from the
- * average, matching the "live average of whichever of the two reviewers has
- * submitted so far" behavior — 1 review shows as-is, 2 show the true average.
+ * the committee/group identifier for a fan-out task). The score is the live average
+ * of whichever reviewers have submitted so far.
  */
 function recomputeTaskAggregateScore(taskId: string, targetId: string, actorName: string): void {
   const relevant = getRatings().filter(
-    r => r.taskId === taskId && r.targetId === targetId && (r.reviewerRole === 'CENTRE_HEAD' || r.reviewerRole === 'GG_HEAD')
+    r => r.taskId === taskId && r.targetId === targetId && (
+      r.reviewerRole === 'SUPER_USER' ||
+      r.reviewerRole === 'CENTRE_HEAD' ||
+      r.reviewerRole === 'ADVISOR' ||
+      r.reviewerRole === 'GG_HEAD'
+    )
   );
   if (relevant.length === 0) return;
   const avg = parseFloat((relevant.reduce((sum, r) => sum + r.overallScore, 0) / relevant.length).toFixed(2));

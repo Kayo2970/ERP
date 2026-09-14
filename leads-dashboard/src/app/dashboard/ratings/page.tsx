@@ -123,7 +123,7 @@ export default function RatingsPage() {
     const eventCampus = linkedEvent?.campus || task.eventCampus || 'GG Campus';
 
     if (!canEvaluateEventStudent(user, eventCampus, isDesignTask(task))) {
-      setAlertMsg(`Campus Evaluation Rule: Events Head for ${user?.role || 'your campus'} cannot evaluate student performance for ${eventCampus} events.`);
+      setAlertMsg(`Evaluation Access Denied: You are not authorized to evaluate student performance for this deliverable.`);
       setTimeout(() => setAlertMsg(''), 5000);
       return;
     }
@@ -167,7 +167,7 @@ export default function RatingsPage() {
       const linkedEvent = events.find(ev => ev.id === selectedTask.eventId || ev.title === selectedTask.event);
       const eventCampus = linkedEvent?.campus || selectedTask.eventCampus || 'GG Campus';
       if (!canEvaluateEventStudent(user, eventCampus, isDesignTask(selectedTask))) {
-        setFormError(`Evaluation Access Denied: Only the Centre Head or Head of Events (${eventCampus}) are authorized to evaluate student performance.`);
+        setFormError(`Evaluation Access Denied: Only authorized reviewers (Super User, Centre Head, Advisor, Head of Events) may evaluate performance.`);
         return;
       }
     }
@@ -191,13 +191,12 @@ export default function RatingsPage() {
       const targetId = assigneeMember ? assigneeMember.id : (selectedTask.assigneeId || selectedTask.assignee);
       const reviewerRole = resolveRatingReviewerRole(user, isDesignTask(selectedTask));
 
-      // Every task gets exactly two reviewers — Centre Head and the GG Campus
-      // Events Head — whose scores are averaged. If this reviewer (identified
-      // by their fixed role slot, not by name) already reviewed this exact
-      // task/target, re-submitting edits their existing review in place
-      // instead of adding a duplicate second row from the same slot.
+      // Reviewers (Super User, Centre Head, Advisor, GG Campus Events Head)
+      // submit separate ratings that are averaged together. If this reviewer
+      // already reviewed this exact task/target, re-submitting edits their existing
+      // review in place instead of adding a duplicate row from the same reviewer.
       const ownExisting = ratings.find(
-        r => r.taskId === selectedTask.id && r.targetId === targetId && reviewerRole !== null && r.reviewerRole === reviewerRole
+        r => r.taskId === selectedTask.id && r.targetId === targetId && reviewerRole !== null && (r.reviewerRole === reviewerRole || r.raterName === user.name)
       );
 
       if (ownExisting) {
@@ -233,8 +232,8 @@ export default function RatingsPage() {
         : isGroup
           ? ' (Evaluation propagated to all students in this group)'
           : '';
-      const averageNotice = reviewerRole === 'CENTRE_HEAD' || reviewerRole === 'GG_HEAD'
-        ? ' — shown score is the live average of the Centre Head and GG Events Head reviews so far'
+      const averageNotice = reviewerRole === 'SUPER_USER' || reviewerRole === 'CENTRE_HEAD' || reviewerRole === 'ADVISOR' || reviewerRole === 'GG_HEAD'
+        ? ' — shown score is the live average of evaluations submitted so far'
         : '';
       triggerSuccess(`Submitted performance score of ${overall}/5.0 for ${selectedTask.assignee} on "${selectedTask.title}"${committeeNotice}${averageNotice}`);
     }
@@ -257,14 +256,14 @@ export default function RatingsPage() {
 
   const isAdmin = user && (user.tier <= 3 || user.tier === 5); // Tiers 1-3 & 5 can evaluate tasks
 
-  // Whether the CURRENT viewer's own reviewer slot (Centre Head / GG Head / Design
-  // Head) has already scored this task — used both for the "pending first" sort
-  // and to decide whether a queue card offers "Evaluate" or "Edit My Review".
+  // Whether the CURRENT viewer's own reviewer slot has already scored this task
+  // — used both for the "pending first" sort and to decide whether a queue card offers
+  // "Evaluate" or "Edit My Review".
   const hasMyRating = (task: TaskItem): boolean => {
     const reviewerRole = resolveRatingReviewerRole(user, isDesignTask(task));
     if (!reviewerRole) return false;
     const targetId = getRatingTargetId(task);
-    return ratings.some(r => r.taskId === task.id && r.targetId === targetId && r.reviewerRole === reviewerRole);
+    return ratings.some(r => r.taskId === task.id && r.targetId === targetId && (r.reviewerRole === reviewerRole || r.raterName === user?.name));
   };
 
   // Task Evaluation Queue only ever surfaces fully Completed deliverables — a task
@@ -464,11 +463,13 @@ export default function RatingsPage() {
                       const canEval = canEvaluateEventStudent(user, eventCampus, isDesignDeliverable);
                       const reviewerRole = resolveRatingReviewerRole(user, isDesignDeliverable);
                       const targetId = getRatingTargetId(task);
-                      const dualReview = reviewerRole === 'CENTRE_HEAD' || reviewerRole === 'GG_HEAD';
+                      const isMultiReviewer = reviewerRole === 'SUPER_USER' || reviewerRole === 'CENTRE_HEAD' || reviewerRole === 'ADVISOR' || reviewerRole === 'GG_HEAD';
                       const myExistingRating = reviewerRole
-                        ? ratings.find(r => r.taskId === task.id && r.targetId === targetId && r.reviewerRole === reviewerRole)
+                        ? ratings.find(r => r.taskId === task.id && r.targetId === targetId && (r.reviewerRole === reviewerRole || r.raterName === user?.name))
                         : undefined;
+                      const hasSuperUserReview = ratings.some(r => r.taskId === task.id && r.targetId === targetId && r.reviewerRole === 'SUPER_USER');
                       const hasCentreHeadReview = ratings.some(r => r.taskId === task.id && r.targetId === targetId && r.reviewerRole === 'CENTRE_HEAD');
+                      const hasAdvisorReview = ratings.some(r => r.taskId === task.id && r.targetId === targetId && r.reviewerRole === 'ADVISOR');
                       const hasGgHeadReview = ratings.some(r => r.taskId === task.id && r.targetId === targetId && r.reviewerRole === 'GG_HEAD');
 
                       return (
@@ -519,23 +520,27 @@ export default function RatingsPage() {
                             <div className="pt-1 border-t border-theme-border/20 space-y-1">
                               <div className="flex items-center justify-between text-[11px]">
                                 <span className="text-theme-text-secondary">
-                                  {dualReview ? 'Average Score:' : 'Evaluated Score:'}
+                                  {isMultiReviewer ? 'Average Score:' : 'Evaluated Score:'}
                                 </span>
                                 <span className="font-bold text-accent flex items-center gap-1">
                                   <Star className="h-3 w-3 fill-accent" />
                                   {task.ratingScore.toFixed(1)}/5.0
                                 </span>
                               </div>
-                              {dualReview && (
-                                <div className="flex items-center gap-1.5 text-[9px] text-theme-text-secondary">
-                                  <span className={hasCentreHeadReview ? 'text-success font-semibold' : 'opacity-60'}>
-                                    {hasCentreHeadReview ? '✓' : '○'} Centre Head
-                                  </span>
-                                  <span className={hasGgHeadReview ? 'text-success font-semibold' : 'opacity-60'}>
-                                    {hasGgHeadReview ? '✓' : '○'} GG Head
-                                  </span>
-                                </div>
-                              )}
+                              <div className="flex items-center flex-wrap gap-1.5 text-[9px] text-theme-text-secondary">
+                                <span className={hasSuperUserReview ? 'text-amber-400 font-semibold' : 'opacity-60'}>
+                                  {hasSuperUserReview ? '✓' : '○'} Super User
+                                </span>
+                                <span className={hasCentreHeadReview ? 'text-success font-semibold' : 'opacity-60'}>
+                                  {hasCentreHeadReview ? '✓' : '○'} Centre Head
+                                </span>
+                                <span className={hasAdvisorReview ? 'text-blue-400 font-semibold' : 'opacity-60'}>
+                                  {hasAdvisorReview ? '✓' : '○'} Advisor
+                                </span>
+                                <span className={hasGgHeadReview ? 'text-primary-light font-semibold' : 'opacity-60'}>
+                                  {hasGgHeadReview ? '✓' : '○'} GG Head
+                                </span>
+                              </div>
                             </div>
                           ) : null}
 
@@ -543,8 +548,8 @@ export default function RatingsPage() {
                             {!canEval ? (
                               <span className="text-[10px] text-warning font-medium italic">
                                 {isDesignDeliverable
-                                  ? 'Evaluations restricted to Centre Head, Head of Events (GG Campus), or Design Head'
-                                  : 'Evaluations restricted to Centre Head or Head of Events (GG Campus)'}
+                                  ? 'Evaluations restricted to Super User, Centre Head, Advisor, Head of Events (GG Campus), or Design Head'
+                                  : 'Evaluations restricted to Super User, Centre Head, Advisor, or Head of Events (GG Campus)'}
                               </span>
                             ) : (
                               <span className="text-[10px] text-theme-text-secondary">
@@ -640,13 +645,25 @@ export default function RatingsPage() {
                           {rating.raterName}
                           {rating.reviewerRole && (
                             <span className={`ml-1.5 inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${
-                              rating.reviewerRole === 'CENTRE_HEAD'
-                                ? 'bg-accent/10 text-accent border-accent/20'
-                                : rating.reviewerRole === 'GG_HEAD'
-                                  ? 'bg-primary/10 text-primary-light border-primary/20'
-                                  : 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                              rating.reviewerRole === 'SUPER_USER'
+                                ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                : rating.reviewerRole === 'CENTRE_HEAD'
+                                  ? 'bg-accent/10 text-accent border-accent/20'
+                                  : rating.reviewerRole === 'ADVISOR'
+                                    ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                                    : rating.reviewerRole === 'GG_HEAD'
+                                      ? 'bg-primary/10 text-primary-light border-primary/20'
+                                      : 'bg-purple-500/10 text-purple-400 border-purple-500/20'
                             }`}>
-                              {rating.reviewerRole === 'CENTRE_HEAD' ? 'Centre Head' : rating.reviewerRole === 'GG_HEAD' ? 'GG Head' : 'Design Head'}
+                              {rating.reviewerRole === 'SUPER_USER'
+                                ? 'Super User'
+                                : rating.reviewerRole === 'CENTRE_HEAD'
+                                  ? 'Centre Head'
+                                  : rating.reviewerRole === 'ADVISOR'
+                                    ? 'Advisor'
+                                    : rating.reviewerRole === 'GG_HEAD'
+                                      ? 'GG Head'
+                                      : 'Design Head'}
                             </span>
                           )}
                         </td>
@@ -738,10 +755,17 @@ export default function RatingsPage() {
               </p>
               {!editingRating && selectedTask && (() => {
                 const role = resolveRatingReviewerRole(user, isDesignTask(selectedTask));
-                if (role === 'CENTRE_HEAD' || role === 'GG_HEAD') {
+                if (role === 'SUPER_USER' || role === 'CENTRE_HEAD' || role === 'ADVISOR' || role === 'GG_HEAD') {
+                  const roleLabel = role === 'SUPER_USER'
+                    ? 'Super User'
+                    : role === 'CENTRE_HEAD'
+                      ? 'Centre Head'
+                      : role === 'ADVISOR'
+                        ? 'Advisor'
+                        : 'Head of Events (GG Campus)';
                   return (
                     <p className="text-[10px] text-theme-text-secondary/80 italic">
-                      Reviewing as {role === 'CENTRE_HEAD' ? 'Centre Head' : 'Head of Events (GG Campus)'} — the score shown for this task is the live average of the Centre Head and GG Events Head reviews.
+                      Reviewing as {roleLabel} — the score shown for this task is the live average of evaluations submitted so far.
                     </p>
                   );
                 }
