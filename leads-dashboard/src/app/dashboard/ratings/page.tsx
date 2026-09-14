@@ -390,7 +390,7 @@ export default function RatingsPage() {
           </div>
 
           {/* Student / event filters + sort — mirrors the Tasks page filter bar */}
-          <div className="space-y-1.5 relative z-20">
+          <div className="space-y-1.5 relative z-10">
             <div className="grid grid-cols-2 gap-1.5">
               <SearchableSelect
                 value={queueStudentFilter}

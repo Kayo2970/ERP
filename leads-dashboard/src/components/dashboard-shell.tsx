@@ -1284,7 +1284,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       </aside>
 
       {/* Mobile Header / Nav */}
-      <header className="md:hidden flex items-center justify-between h-16 px-3 sm:px-4 glass-panel bg-theme-sidebar/95 border-b border-theme-sidebar-border sticky top-0 z-40 w-full gap-2">
+      <header className="md:hidden flex items-center justify-between h-16 px-3 sm:px-4 glass-panel bg-theme-sidebar/95 border-b border-theme-sidebar-border sticky top-0 z-[60] w-full gap-2">
         <Link 
           href="/dashboard/home" 
           className="flex items-center gap-2 hover:opacity-90 transition-all cursor-pointer select-none min-w-0 max-w-[65%]"
@@ -1322,8 +1322,14 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
       {/* Mobile Menu Overlay */}
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-30 md:hidden bg-background/40 backdrop-blur-md">
-          <div className="absolute top-16 left-0 right-0 glass-panel bg-theme-sidebar/95 border-b border-theme-sidebar-border max-h-[calc(100vh-4rem)] overflow-y-auto p-4 flex flex-col gap-4">
+        <div 
+          className="fixed inset-0 top-16 z-[55] md:hidden bg-black/60 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setIsMobileMenuOpen(false)}
+        >
+          <div 
+            className="absolute top-0 left-0 right-0 glass-panel bg-theme-sidebar/98 border-b border-theme-sidebar-border max-h-[calc(100vh-4rem)] overflow-y-auto p-4 flex flex-col gap-4 shadow-2xl animate-in slide-in-from-top-2 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
             <nav className="flex flex-col gap-4">
               {navSections.map((section) => (
                 <div key={section.title} className="space-y-1">
