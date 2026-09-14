@@ -1247,22 +1247,76 @@
   .experienceStage {
     perspective: 1500px;
     width: 100%;
-    overflow-x: clip;
+    overflow: visible;
     display: flex;
     justify-content: center;
     align-items: center;
+    min-height: 520px;
   }
+
+  /* Default mobile open state when 'card' is selected: perfectly center Keycard holder and hide the left cover flap */
   .opened {
     transform: translateY(0) translateX(0) translateZ(0) scale(0.92);
   }
+
   .cardExtracted {
     transform: translateY(0) translateX(0) translateZ(0) scale(0.95);
   }
-  .showCreds {
-    transform: translateY(0) translateX(305px) translateZ(0) scale(0.92) !important;
+
+  /* When on 'card' tab on mobile, smoothly hide the open left leaf so no sliced edges stick out */
+  .opened:not(.showCreds):not(.showBookfold) .coverLeaf,
+  .cardExtracted:not(.showCreds):not(.showBookfold) .coverLeaf {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
   }
+
+  /* When 'creds' tab is active: center the credentials sleeve cleanly on mobile with no right-edge overflow */
+  .showCreds {
+    transform: translateY(0) translateX(0) translateZ(0) scale(0.92) !important;
+  }
+
+  .showCreds .holderBase {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transition: opacity 0.3s ease;
+  }
+
   .showCreds .coverLeaf {
+    transform: translateZ(16px) rotateY(0deg) !important;
+    animation: none !important;
+    opacity: 1 !important;
     z-index: 200 !important;
+    pointer-events: auto !important;
+    transition: opacity 0.3s ease;
+  }
+
+  .showCreds .coverLeaf .coverFront {
+    display: none !important;
+  }
+
+  .showCreds .coverLeaf .coverBack {
+    transform: rotateY(0deg) !important;
+    position: relative !important;
+    height: 100% !important;
+    width: 100% !important;
+    border-radius: 26px !important;
+    box-shadow: 0 30px 70px -15px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(255, 255, 255, 0.12) !important;
+  }
+
+  /* When 'bookfold' tab is active: scale the entire 2-page bookfold to fit mobile width seamlessly without overflowing */
+  .showBookfold {
+    transform: translateY(0) translateX(85px) translateZ(0) scale(0.53) !important;
+  }
+
+  .showBookfold .coverLeaf {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    transform: translateZ(4px) rotateY(-180deg) !important;
+  }
+
+  .showBookfold .holderBase {
+    opacity: 1 !important;
     pointer-events: auto !important;
   }
 }

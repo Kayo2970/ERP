@@ -77,7 +77,7 @@ export function InteractiveKeycardHolder({
   brandHeader,
 }: InteractiveKeycardProps) {
   const [stageState, setStageState] = useState<'init' | 'entered' | 'opened' | 'extracting' | 'extracted' | 'tucking' | 'closing'>('init');
-  const [activeTab, setActiveTab] = useState<'card' | 'creds'>('card');
+  const [activeTab, setActiveTab] = useState<'card' | 'creds' | 'bookfold'>('card');
   const [isFlipped, setIsFlipped] = useState(false);
   const [dynamicQrUrl, setDynamicQrUrl] = useState<string>('');
   const cardRef = useRef<HTMLDivElement>(null);
@@ -386,6 +386,8 @@ export function InteractiveKeycardHolder({
     }
     if (activeTab === 'creds') {
       classes.push(styles.showCreds);
+    } else if (activeTab === 'bookfold') {
+      classes.push(styles.showBookfold);
     }
     return classes.join(' ');
   };
@@ -414,7 +416,12 @@ export function InteractiveKeycardHolder({
           <span>
             {stageState === 'init' && 'Minting Credentials...'}
             {stageState === 'entered' && 'Tap leather holder to open'}
-            {stageState === 'opened' && 'Tap card to pull forward'}
+            {stageState === 'opened' &&
+              (activeTab === 'card'
+                ? 'Tap card to pull forward'
+                : activeTab === 'creds'
+                ? 'Viewing Member Credentials Sleeve'
+                : 'Viewing Complete 3D Bookfold')}
             {stageState === 'extracting' && 'Extracting card...'}
             {stageState === 'extracted' &&
               (isFlipped ? 'Viewing Back Details (5 Fields) · Tap to Flip ↻' : 'Card Ready · Tap card to flip ↻')}
@@ -444,6 +451,16 @@ export function InteractiveKeycardHolder({
               }}
             >
               📋 Credentials
+            </button>
+            <button
+              type="button"
+              className={`${styles.flapTab} ${activeTab === 'bookfold' ? styles.flapTabActive : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveTab('bookfold');
+              }}
+            >
+              📖 Bookfold
             </button>
           </div>
         )}
