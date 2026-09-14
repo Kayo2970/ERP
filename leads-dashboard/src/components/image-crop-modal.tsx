@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
@@ -340,16 +340,16 @@ export function ImageCropModal({
       role="dialog"
       aria-modal="true"
     >
-      <div className="bg-theme-card-bg border border-theme-card-border rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-theme-card-bg border border-theme-card-border rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[94vh]">
         {/* Header */}
-        <div className="p-4 sm:p-5 border-b border-theme-card-border flex items-center justify-between bg-theme-header-bg/50">
+        <div className="p-4 sm:px-5 sm:py-3.5 border-b border-theme-card-border flex items-center justify-between bg-theme-header-bg/50 shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-xl bg-accent/15 border border-accent/25 flex items-center justify-center text-accent">
-              <Sparkles className="h-4.5 w-4.5" />
+            <div className="h-8 w-8 rounded-xl bg-accent/15 border border-accent/25 flex items-center justify-center text-accent shrink-0">
+              <Sparkles className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="font-semibold text-base text-theme-text-primary">{title}</h3>
-              <p className="text-xs text-theme-text-secondary mt-0.5">{description}</p>
+              <h3 className="font-semibold text-sm sm:text-base text-theme-text-primary">{title}</h3>
+              <p className="text-[11px] sm:text-xs text-theme-text-secondary mt-0.5">{description}</p>
             </div>
           </div>
           <button
@@ -363,7 +363,7 @@ export function ImageCropModal({
         </div>
 
         {/* Viewport / Crop Canvas Area */}
-        <div className="p-5 flex flex-col items-center justify-center gap-4 bg-theme-background/30 select-none">
+        <div className="p-4 sm:p-5 flex flex-col items-center justify-center gap-3.5 bg-theme-background/30 select-none overflow-y-auto flex-1 min-h-0">
           <div
             ref={viewportRef}
             onPointerDown={handlePointerDown}
@@ -371,7 +371,7 @@ export function ImageCropModal({
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
             onWheel={handleWheel}
-            className="relative w-[300px] h-[300px] sm:w-[320px] sm:h-[320px] rounded-2xl overflow-hidden bg-neutral-950 flex items-center justify-center border-2 border-theme-card-border shadow-inner cursor-grab active:cursor-grabbing touch-none"
+            className="relative w-[240px] h-[240px] sm:w-[280px] sm:h-[280px] rounded-2xl overflow-hidden bg-neutral-950 flex items-center justify-center border-2 border-theme-card-border shadow-inner cursor-grab active:cursor-grabbing touch-none shrink-0"
           >
             {/* Base Image with transforms applied */}
             <div
@@ -389,10 +389,10 @@ export function ImageCropModal({
                 crossOrigin={imageSrc.startsWith('http://') || imageSrc.startsWith('https://') ? 'anonymous' : undefined}
                 className="max-w-none pointer-events-none select-none"
                 style={{
-                  width: isLandscape ? 'auto' : '320px',
-                  height: isLandscape ? '320px' : 'auto',
-                  minWidth: '320px',
-                  minHeight: '320px',
+                  width: isLandscape ? 'auto' : '280px',
+                  height: isLandscape ? '280px' : 'auto',
+                  minWidth: '240px',
+                  minHeight: '240px',
                   objectFit: 'cover',
                   display: 'block',
                 }}
@@ -436,9 +436,9 @@ export function ImageCropModal({
           </div>
 
           {/* Controls Bar */}
-          <div className="w-full max-w-md flex flex-col gap-3">
+          <div className="w-full max-w-sm flex flex-col gap-2.5">
             {/* Zoom Slider */}
-            <div className="flex items-center gap-3 bg-theme-background/50 p-2.5 rounded-xl border border-theme-card-border">
+            <div className="flex items-center gap-2.5 bg-theme-background/50 px-3 py-2 rounded-xl border border-theme-card-border">
               <button
                 type="button"
                 onClick={() => setZoom((z) => Math.max(z - 0.15, 0.8))}
@@ -470,7 +470,7 @@ export function ImageCropModal({
             </div>
 
             {/* Quick Actions & Live Mini Preview */}
-            <div className="flex items-center justify-between gap-3 pt-1">
+            <div className="flex items-center justify-between gap-3 pt-0.5">
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -493,20 +493,20 @@ export function ImageCropModal({
               </div>
 
               {/* Side-by-side Mini Previews (Circular Avatar & Card Badge) */}
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2">
                 <div className="text-right">
-                  <p className="text-[10px] uppercase tracking-wider font-semibold text-theme-text-secondary">Preview</p>
+                  <p className="text-[9px] uppercase tracking-wider font-semibold text-theme-text-secondary">Preview</p>
                 </div>
                 {/* Circular preview */}
                 <div
-                  className="h-10 w-10 rounded-full overflow-hidden border-2 border-accent/60 bg-neutral-900 shadow-md flex items-center justify-center shrink-0"
+                  className="h-8 w-8 sm:h-9 sm:w-9 rounded-full overflow-hidden border-2 border-accent/60 bg-neutral-900 shadow-md flex items-center justify-center shrink-0"
                   title="Avatar framing"
                 >
                   <canvas ref={miniCanvasRef} className="h-full w-full object-cover" />
                 </div>
                 {/* Card-rounded preview */}
                 <div
-                  className="h-10 w-10 rounded-xl overflow-hidden border border-white/20 bg-neutral-900 shadow-md flex items-center justify-center shrink-0"
+                  className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl overflow-hidden border border-white/20 bg-neutral-900 shadow-md flex items-center justify-center shrink-0"
                   title="Visiting Card badge framing"
                 >
                   <canvas ref={miniCardCanvasRef} className="h-full w-full object-cover" />
@@ -517,7 +517,7 @@ export function ImageCropModal({
         </div>
 
         {/* Footer Actions */}
-        <div className="p-4 border-t border-theme-card-border flex items-center justify-end gap-3 bg-theme-header-bg/50">
+        <div className="p-3.5 sm:p-4 border-t border-theme-card-border flex items-center justify-end gap-3 bg-theme-header-bg/50 shrink-0">
           <button
             type="button"
             onClick={onClose}
