@@ -711,7 +711,7 @@ export interface DesignSubmissionItem {
   id: string;
   title: string;
   description?: string;
-  category: 'Poster' | 'Banner' | 'Social Media' | 'Brochure' | 'Certificates' | 'Other';
+  category: 'Poster' | 'Postage' | 'Banner' | 'Social Media' | 'Brochure' | 'Certificates' | 'Other';
   fileData?: string;      // legacy: inline base64 — new uploads use fileUrl/storageKey instead
   fileUrl?: string;       // servable path under /api/files, backed by a real file on disk
   storageKey?: string;    // path relative to data/uploads
@@ -4690,30 +4690,39 @@ export function saveDesigns(designs: DesignSubmissionItem[]): void {
  * Head or the GG Campus Events Head for mandatory proofreading; there is no
  * opt-out and no manual reviewer picker. Prefers a real Centre Head, falls
 /**
- * Returns all active faculty members eligible for selection as design proofreaders.
- * Submissions must select at least one faculty member (up to all of them).
+ * Returns all active members eligible for selection as design proofreaders.
+ * Only Social Media Heads, Centre Head, and Advisor are allowed.
+ * Dr. Ajay R is explicitly excluded.
  */
 export function getEligibleFacultyProofreaders(members?: Member[]): Member[] {
   const all = (members || getMembers()).filter(m => m.status !== 'Terminated');
-  const faculty = all.filter(m => {
+  return all.filter(m => {
+    const nameLower = (m.name || '').toLowerCase();
+    const emailLower = (m.email || '').toLowerCase();
     const roleLower = (m.role || '').toLowerCase();
-    const divLower = (m.division || '').toLowerCase();
-    return (
-      m.division === 'Faculty' ||
-      m.division === 'Advisory Board' ||
-      divLower.includes('faculty') ||
-      roleLower.includes('faculty') ||
-      roleLower.includes('professor') ||
-      roleLower.includes('advisor') ||
-      roleLower.includes('centre head') ||
-      roleLower.includes('center head') ||
-      roleLower.includes('dean') ||
-      roleLower.includes('director') ||
-      m.tier === 1 ||
-      m.role === 'Super User'
-    );
+    const deptLower = (m.department || '').toLowerCase();
+
+    // Explicitly exclude Dr. Ajay R
+    if (nameLower.includes('ajay') || emailLower.includes('ajay')) {
+      return false;
+    }
+
+    // 1. Centre Head / Center Head
+    const isCentreHead = roleLower.includes('centre head') || roleLower.includes('center head') || m.tier === 2;
+
+    // 2. Advisor
+    const isAdvisor = roleLower.includes('advisor');
+
+    // 3. Social Media Heads / Design Heads
+    const isSocialMediaHead =
+      roleLower.includes('social media') ||
+      roleLower.includes('head design') ||
+      roleLower.includes('design head') ||
+      roleLower.includes('head of design') ||
+      (deptLower.includes('design') && roleLower.includes('head'));
+
+    return isCentreHead || isAdvisor || isSocialMediaHead;
   });
-  return faculty.length > 0 ? faculty : all;
 }
 
 /**

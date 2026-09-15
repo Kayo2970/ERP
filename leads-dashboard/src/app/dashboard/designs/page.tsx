@@ -275,10 +275,22 @@ export default function DesignPortalPage() {
   const [selectedProofreaderIds, setSelectedProofreaderIds] = useState<string[]>([]);
   const [proofreaderSearch, setProofreaderSearch] = useState<string>('');
 
-  // Pre-populate with all eligible faculty by default
+  // Pre-populate with Centre Head and Advisor by default (Social Media Heads are optional)
   useEffect(() => {
     if (selectedProofreaderIds.length === 0 && eligibleFaculty.length > 0) {
-      setSelectedProofreaderIds(eligibleFaculty.map(f => f.id));
+      const defaultSelected = eligibleFaculty.filter(f => {
+        const roleLower = (f.role || '').toLowerCase();
+        return (
+          roleLower.includes('centre head') ||
+          roleLower.includes('center head') ||
+          roleLower.includes('advisor') ||
+          f.tier === 2
+        );
+      });
+      const defaultIds = defaultSelected.length > 0
+        ? defaultSelected.map(f => f.id)
+        : eligibleFaculty.map(f => f.id);
+      setSelectedProofreaderIds(defaultIds);
     }
   }, [eligibleFaculty]);
   // Reading the file into base64 happens asynchronously (FileReader), separately
@@ -1324,6 +1336,7 @@ export default function DesignPortalPage() {
                     className="w-full bg-background border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent"
                   >
                     <option value="Poster">Poster</option>
+                    <option value="Postage">Postage</option>
                     <option value="Banner">Banner</option>
                     <option value="Social Media">Social Media</option>
                     <option value="Brochure">Brochure</option>
@@ -1451,10 +1464,10 @@ export default function DesignPortalPage() {
                     </div>
                     <div>
                       <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                        Select Faculty Proofreaders <span className="text-rose-500">*</span>
+                        Select Design Proofreaders <span className="text-rose-500">*</span>
                       </h4>
                       <p className="text-[10px] text-muted-foreground">
-                        Proofread request emails will be dispatched <strong className="text-foreground">only</strong> to the selected faculty members.
+                        Centre Head & Advisor are selected by default. Social Media Heads receive notification only if selected.
                       </p>
                     </div>
                   </div>
@@ -1462,8 +1475,22 @@ export default function DesignPortalPage() {
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
-                      onClick={() => setSelectedProofreaderIds(eligibleFaculty.map(f => f.id))}
+                      onClick={() => {
+                        const defaults = eligibleFaculty.filter(f => {
+                          const r = (f.role || '').toLowerCase();
+                          return r.includes('centre head') || r.includes('center head') || r.includes('advisor') || f.tier === 2;
+                        });
+                        setSelectedProofreaderIds(defaults.length > 0 ? defaults.map(f => f.id) : eligibleFaculty.map(f => f.id));
+                      }}
                       className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-accent/10 hover:bg-accent/20 text-accent border border-accent/25 transition-all cursor-pointer"
+                      title="Reset selection to default reviewers (Centre Head & Advisor)"
+                    >
+                      Defaults
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedProofreaderIds(eligibleFaculty.map(f => f.id))}
+                      className="px-2.5 py-1 text-[11px] font-medium rounded-lg bg-muted hover:bg-muted/80 text-foreground border border-border transition-all cursor-pointer"
                     >
                       Select All
                     </button>
