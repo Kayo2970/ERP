@@ -27,8 +27,14 @@ export function StudentProfileModal({ memberIdOrName, onClose }: StudentProfileM
   const { member, stats, tasks, assignedEvents, ratings } = profile;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in duration-200">
-      <div className="glass-panel w-full max-w-2xl rounded-3xl p-6 md:p-8 flex flex-col space-y-6 relative border border-white/15 shadow-2xl max-h-[90vh] overflow-y-auto">
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in duration-200"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="glass-panel w-full max-w-2xl rounded-3xl p-6 md:p-8 flex flex-col space-y-6 relative border border-white/15 shadow-2xl max-h-[90vh] overflow-y-auto"
+      >
         
         {/* Modal Header */}
         <div className="flex items-start justify-between gap-4">
@@ -62,6 +68,7 @@ export function StudentProfileModal({ memberIdOrName, onClose }: StudentProfileM
           </div>
 
           <button
+            type="button"
             onClick={onClose}
             className="h-8 w-8 flex items-center justify-center rounded-xl bg-theme-border/20 hover:bg-theme-border/40 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer shrink-0"
           >

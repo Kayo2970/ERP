@@ -73,8 +73,14 @@ export function RequestApprovalModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="glass-panel w-full max-w-md rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/20 shadow-2xl animate-in zoom-in-95 duration-200">
+    <div
+      onClick={handleClose}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="glass-panel w-full max-w-md rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/20 shadow-2xl animate-in zoom-in-95 duration-200"
+      >
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-2xl bg-accent/15 text-accent">
@@ -86,6 +92,7 @@ export function RequestApprovalModal({
             </div>
           </div>
           <button
+            type="button"
             onClick={handleClose}
             className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
           >
@@ -113,6 +120,7 @@ export function RequestApprovalModal({
               {candidates.map(m => (
                 <button
                   key={m.id}
+                  type="button"
                   onClick={() => setTargetId(m.id)}
                   className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors cursor-pointer ${targetId === m.id ? 'bg-accent/15 text-accent font-semibold' : 'text-theme-text-primary hover:bg-theme-border/20'}`}
                 >
@@ -137,6 +145,7 @@ export function RequestApprovalModal({
 
         <div className="flex items-center justify-end gap-2.5 pt-2">
           <button
+            type="button"
             onClick={handleClose}
             className="px-4 py-2.5 text-xs font-semibold text-theme-text-primary bg-theme-border/30 hover:bg-theme-border/50 rounded-xl transition-all cursor-pointer"
           >
