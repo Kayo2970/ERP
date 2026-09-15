@@ -1116,7 +1116,7 @@ export function canViewHiddenAccounts(user: SessionUser): boolean {
  */
 export function canViewRating(rating: RatingItem, user: SessionUser): boolean {
   if (!user) return false;
-  if (isBaseLeadership(user) || isCentreHead(user) || isDrSubhadeep(user) || hasCapability(user, 'VIEW_ALL_REPORTS') || hasModuleViewAllGrant(user, 'RATINGS')) return true;
+  if (isBaseLeadership(user) || isCentreHead(user) || isAdvisor(user) || isDrSubhadeep(user) || hasCapability(user, 'VIEW_ALL_REPORTS') || hasModuleViewAllGrant(user, 'RATINGS')) return true;
 
   const isOwn =
     rating.targetId === user.id ||
@@ -1136,7 +1136,7 @@ export function canViewRating(rating: RatingItem, user: SessionUser): boolean {
 }
 
 /**
- * Rating edit/delete permission: the rating's own author, Centre Head, a
+ * Rating edit/delete permission: the rating's own author, Centre Head, Advisor, a
  * RATING_EDIT_ANY grant, or a moduleAccess.RATINGS.edit override ('ALL'
  * grants edit-any, 'NONE' revokes even the author's own edit rights).
  */
@@ -1146,7 +1146,7 @@ export function canEditRating(rating: RatingItem, user: SessionUser): boolean {
   const isAuthor = user.name === rating.raterName;
   if (override === 'NONE') return false;
   if (override === 'ALL') return true;
-  if (user.tier === 1 || isAuthor || isCentreHead(user) || hasCapability(user, 'RATING_EDIT_ANY')) return true;
+  if (user.tier === 1 || isAuthor || isCentreHead(user) || isAdvisor(user) || hasCapability(user, 'RATING_EDIT_ANY')) return true;
   if (override === 'OWN') return isAuthor;
 
   return false;
