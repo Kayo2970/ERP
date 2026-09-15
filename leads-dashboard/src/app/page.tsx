@@ -231,11 +231,13 @@ export default function LoginPage() {
       localStorage.removeItem('logoutReason');
     }
 
-    // If already logged in with an active session token, route to home
+    // If already logged in with an active session token, route to home or target URL
     const currentUser = localStorage.getItem('user');
     const token = getSessionToken();
     if (currentUser && token) {
-      router.push('/dashboard/home');
+      const redirectTarget = sessionStorage.getItem('redirect_after_login') || '/dashboard/home';
+      sessionStorage.removeItem('redirect_after_login');
+      router.push(redirectTarget);
     } else if (currentUser && !token) {
       localStorage.removeItem('user');
     }
@@ -443,11 +445,17 @@ export default function LoginPage() {
   if (!themeLoaded) return null;
 
   if (showLoginSplash) {
+    const handleLoginComplete = () => {
+      const redirectTarget = sessionStorage.getItem('redirect_after_login') || '/dashboard/home';
+      sessionStorage.removeItem('redirect_after_login');
+      router.push(redirectTarget);
+    };
+
     return (
       <LoadingScreen
         duration={1000}
         subtitle="Signing you in..."
-        onComplete={() => router.push('/dashboard/home')}
+        onComplete={handleLoginComplete}
       />
     );
   }

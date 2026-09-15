@@ -117,17 +117,33 @@ export async function fanOutAutoApproval(opts: FanOutOptions): Promise<ApprovalR
     if (!row.targetMemberEmail) continue;
     try {
       const entityLabel = ENTITY_LABELS[opts.entityType];
+      const { getAppBaseUrl } = await import('./app-url');
+      const baseUrl = getAppBaseUrl();
+
+      let targetLink = `${baseUrl}/dashboard/approvals?id=${row.id}&entityId=${row.entityId}`;
+      if (opts.entityType === 'event') targetLink = `${baseUrl}/dashboard/events/${opts.entityId}`;
+      else if (opts.entityType === 'task') targetLink = `${baseUrl}/dashboard/tasks?highlight=${opts.entityId}`;
+      else if (opts.entityType === 'design') targetLink = `${baseUrl}/dashboard/designs?highlight=${opts.entityId}`;
+      else if (opts.entityType === 'event-report') targetLink = `${baseUrl}/dashboard/event-reports?highlight=${opts.entityId}`;
+
       const bodyHtml = `
-        <p>Hello ${row.targetMemberName || 'there'},</p>
-        <p>A new ${entityLabel.toLowerCase()} needs your sign-off as ${row.approverLabel}:</p>
-        <p style="font-weight: 700; font-size: 15px; color: #0f172a;">${row.entityTitle}</p>
-        ${row.message ? `<p style="background: #f8fafc; border-left: 3px solid #38bdf8; padding: 10px 14px; border-radius: 4px; color: #475569;">"${row.message}"</p>` : ''}
-        <p>Please sign in to the LEADS Dashboard and visit <strong>Approvals</strong> to approve or reject this request.</p>
+        <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello <strong>${row.targetMemberName || 'there'}</strong>,</p>
+        <p style="color: #334155; font-size: 14px; line-height: 1.6;">A new <strong>${entityLabel.toLowerCase()}</strong> needs your sign-off as <strong>${row.approverLabel}</strong>:</p>
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #d97706; padding: 14px 18px; border-radius: 8px; margin: 18px 0;">
+          <p style="margin: 0; font-weight: 700; font-size: 15px; color: #0f172a;">${row.entityTitle}</p>
+          ${row.message ? `<p style="margin: 8px 0 0 0; color: #475569; font-size: 13px;">"${row.message}"</p>` : ''}
+        </div>
+        <div style="text-align: center; margin: 24px 0;">
+          <a href="${targetLink}" target="_blank" style="display: inline-block; background: #0284c7; color: #ffffff; font-weight: 700; font-size: 14px; padding: 12px 28px; border-radius: 10px; text-decoration: none;">
+            Review & Sign Off ${entityLabel} &rarr;
+          </a>
+        </div>
+        <p style="color: #64748b; font-size: 12px; line-height: 1.5; margin-bottom: 0;">If the button does not open, copy and paste this link into your browser:<br /><span style="word-break: break-all; color: #0284c7;">${targetLink}</span></p>
       `;
       await dispatchEmail({
         to: row.targetMemberEmail,
         subject: `Approval requested: ${row.entityTitle}`,
-        bodyText: `${entityLabel} "${row.entityTitle}" needs your sign-off as ${row.approverLabel}. Sign in to the LEADS Dashboard's Approvals page to respond.`,
+        bodyText: `${entityLabel} "${row.entityTitle}" needs your sign-off as ${row.approverLabel}. Review here: ${targetLink}`,
         bodyHtml: wrapInMasterEmailTemplate({
           pageTitle: `Approval requested: ${row.entityTitle}`,
           headerTitle: 'Approval Requested',

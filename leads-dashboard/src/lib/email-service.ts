@@ -3,6 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { mutateCollection, readCollection } from './server-db';
 import { DirectSendTransport } from './direct-smtp-transport';
+import { getAppBaseUrl } from './app-url';
 
 // Referenced as cid:leads-logo in wrapInMasterEmailTemplate — attach this
 // to every sendMail() call so the header logo is embedded, not fetched
@@ -615,6 +616,7 @@ export function generateNewMemberWelcomeTemplate(member: {
   const roleStr = member.role || 'Member';
   const divisionStr = member.division || 'Core Committee';
   const departmentStr = member.department ? ` (${member.department})` : '';
+  const baseUrl = getAppBaseUrl();
 
   const subject = `LEADS Portal Account Created: ${member.name}`;
   const bodyText = `Hello ${member.name},\n\n` +
@@ -624,7 +626,7 @@ export function generateNewMemberWelcomeTemplate(member: {
     `• Division: ${divisionStr}${departmentStr}\n` +
     `• Registered Email: ${member.email}\n\n` +
     `Password Setup:\n` +
-    `When you log in for the first time at https://leadsnextgencentre.online using your email (${member.email}), you will be prompted directly to set your password.\n\n` +
+    `When you log in for the first time at ${baseUrl} using your email (${member.email}), you will be prompted directly to set your password.\n\n` +
     `Regards,\nLEADS Next Gen Centre, MSRUAS`;
 
   const bodyHtml = wrapInMasterEmailTemplate({
@@ -649,7 +651,7 @@ export function generateNewMemberWelcomeTemplate(member: {
       </div>
 
       <div style="text-align: center; margin: 28px 0;">
-        <a href="https://leadsnextgencentre.online" style="display: inline-block; background: #0284c7; color: #ffffff; font-weight: 700; font-size: 14px; padding: 12px 28px; border-radius: 10px; text-decoration: none;">
+        <a href="${baseUrl}" style="display: inline-block; background: #0284c7; color: #ffffff; font-weight: 700; font-size: 14px; padding: 12px 28px; border-radius: 10px; text-decoration: none;">
           Log In & Set Up Password &rarr;
         </a>
       </div>
@@ -740,6 +742,7 @@ export function generateNewEmailConfirmationOtpTemplate(name: string, otp: strin
  */
 export function generateAnnouncementEmailTemplate(memberName: string, title: string, content: string, author: string): { subject: string; bodyText: string; bodyHtml: string } {
   const subject = `LEADS Notice: ${title}`;
+  const baseUrl = getAppBaseUrl();
   const bodyText = `Hello ${memberName},\n\nA new announcement has been published on the LEADS Dashboard by ${author}:\n\n` +
     `Title: ${title}\n\n` +
     `Details: ${content}\n\n` +
@@ -755,7 +758,7 @@ export function generateAnnouncementEmailTemplate(memberName: string, title: str
       <p style="margin-top: 0; color: #334155;">Hello <strong>${memberName}</strong>,</p>
       <p style="color: #0f172a; white-space: pre-wrap; font-size: 14px; line-height: 1.7;">${content}</p>
       <div style="margin-top: 24px; padding-top: 18px; border-top: 1px solid #e2e8f0; text-align: center;">
-        <a href="https://leadsnextgencentre.online/dashboard/announcements" style="background: #0284c7; color: #ffffff; padding: 10px 20px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 12px; display: inline-block;">View in Dashboard &rarr;</a>
+        <a href="${baseUrl}/dashboard/announcements" style="background: #0284c7; color: #ffffff; padding: 10px 20px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 12px; display: inline-block;">View in Dashboard &rarr;</a>
       </div>
     `
   });
@@ -768,6 +771,7 @@ export function generateAnnouncementEmailTemplate(memberName: string, title: str
  */
 export function generateTaskEmailTemplate(memberName: string, taskTitle: string, eventName: string, dueDate: string, creatorName: string): { subject: string; bodyText: string; bodyHtml: string } {
   const subject = `LEADS Task Assignment: ${taskTitle}`;
+  const baseUrl = getAppBaseUrl();
   const bodyText = `Hello ${memberName},\n\nYou have been assigned a new task on LEADS Dashboard.\n\n` +
     `Task: ${taskTitle}\n` +
     `Context: ${eventName || 'LEADS Operations'}\n` +
@@ -797,7 +801,7 @@ export function generateTaskEmailTemplate(memberName: string, taskTitle: string,
       </table>
 
       <div style="margin-top: 20px; text-align: center;">
-        <a href="https://leadsnextgencentre.online/dashboard/tasks" style="background: #0284c7; color: #ffffff; padding: 10px 20px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 12px; display: inline-block;">Open Tasks Desk &rarr;</a>
+        <a href="${baseUrl}/dashboard/tasks" style="background: #0284c7; color: #ffffff; padding: 10px 20px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 12px; display: inline-block;">Open Tasks Desk &rarr;</a>
       </div>
     `
   });
@@ -810,6 +814,7 @@ export function generateTaskEmailTemplate(memberName: string, taskTitle: string,
  */
 export function generateEventRosterEmailTemplate(memberName: string, eventTitle: string, committeeName: string, startDate: string): { subject: string; bodyText: string; bodyHtml: string } {
   const subject = `LEADS Event Assignment: ${eventTitle}`;
+  const baseUrl = getAppBaseUrl();
   const bodyText = `Hello ${memberName},\n\nYou have been added to the "${committeeName}" committee for the upcoming event "${eventTitle}".\n\n` +
     `Event Start Date: ${startDate}\n\n` +
     `Check the LEADS Dashboard for details.`;
@@ -829,7 +834,7 @@ export function generateEventRosterEmailTemplate(memberName: string, eventTitle:
       </div>
 
       <div style="margin-top: 20px; text-align: center;">
-        <a href="https://leadsnextgencentre.online/dashboard/events" style="background: #0284c7; color: #ffffff; padding: 10px 20px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 12px; display: inline-block;">View Event Details &rarr;</a>
+        <a href="${baseUrl}/dashboard/events" style="background: #0284c7; color: #ffffff; padding: 10px 20px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 12px; display: inline-block;">View Event Details &rarr;</a>
       </div>
     `
   });

@@ -86,6 +86,25 @@ export default function ApprovalsPage() {
   const [decisionNoteFor, setDecisionNoteFor] = useState<{ id: string; decision: 'approved' | 'rejected' } | null>(null);
   const [decisionNoteInput, setDecisionNoteInput] = useState('');
   const [overviewModalRequest, setOverviewModalRequest] = useState<ApprovalRequest | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [hasScrolled, setHasScrolled] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const target = params.get('id') || params.get('highlight') || params.get('entityId');
+      if (target) setHighlightId(target);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!highlightId || hasScrolled || requests.length === 0) return;
+    const el = document.getElementById(`appr-${highlightId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHasScrolled(true);
+    }
+  }, [highlightId, hasScrolled, requests]);
 
   const [entitiesData, setEntitiesData] = useState<{
     tasks: TaskItem[];
@@ -299,9 +318,16 @@ export default function ApprovalsPage() {
           {list.map(req => {
             const Icon = entityIcon(req.entityType);
             const entityResolved = getEntityForReq(req);
+            const isHighlighted = highlightId && (req.id === highlightId || req.entityId === highlightId);
             
             return (
-              <div key={req.id} className="glass-panel rounded-2xl p-4 space-y-3 text-xs border border-theme-border/20 flex flex-col justify-between hover:border-accent/40 transition-all duration-200">
+              <div
+                key={req.id}
+                id={`appr-${req.id}`}
+                className={`glass-panel rounded-2xl p-4 space-y-3 text-xs flex flex-col justify-between transition-all duration-200 ${
+                  isHighlighted ? 'border-accent ring-2 ring-accent/50 bg-accent/5' : 'border border-theme-border/20 hover:border-accent/40'
+                }`}
+              >
                 <div className="space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-start gap-2.5">

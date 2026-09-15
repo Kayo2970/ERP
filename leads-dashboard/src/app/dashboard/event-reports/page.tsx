@@ -59,6 +59,25 @@ export default function EventReportsPage() {
 
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [hasScrolled, setHasScrolled] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const target = params.get('id') || params.get('highlight');
+      if (target) setHighlightId(target);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!highlightId || hasScrolled || reports.length === 0) return;
+    const el = document.getElementById(`report-${highlightId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHasScrolled(true);
+    }
+  }, [highlightId, hasScrolled, reports]);
 
   useEffect(() => {
     const refresh = () => {
@@ -358,8 +377,16 @@ export default function EventReportsPage() {
             <EmptyState icon={FileCheck2} title="Nothing pending" description="Every submitted event report has been decided." />
           ) : (
             <div className="space-y-3">
-              {pendingForReview.map(report => (
-                <div key={report.id} className="p-4 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2.5 text-xs">
+              {pendingForReview.map(report => {
+                const isHighlighted = highlightId && (report.id === highlightId || report.eventId === highlightId);
+                return (
+                  <div
+                    key={report.id}
+                    id={`report-${report.id}`}
+                    className={`p-4 rounded-xl space-y-2.5 text-xs transition-all ${
+                      isHighlighted ? 'bg-accent/10 border-2 border-accent ring-2 ring-accent/50' : 'bg-theme-border/10 border border-theme-border/20'
+                    }`}
+                  >
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <h4 className="font-bold text-theme-text-primary text-xs">{report.eventTitle}</h4>
@@ -389,7 +416,8 @@ export default function EventReportsPage() {
                     </button>
                   </div>
                 </div>
-              ))}
+              );
+            })}
             </div>
           )}
         </div>
