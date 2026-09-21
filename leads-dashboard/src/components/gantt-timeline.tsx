@@ -79,23 +79,19 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
   // window was selected before.
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // 1st click = select event & show info banner on timeline.
-  // 2nd click = open full event detail modal window without leaving home.
+  // A single click selects/deselects a row and shows its info banner on the
+  // timeline. The full event detail modal only opens from an explicit
+  // "Open Event Window" button/icon — never from a second click on the row.
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [modalEvent, setModalEvent] = useState<EventItem | null>(null);
+  const [isLegendOpen, setIsLegendOpen] = useState(false);
 
   const selectedEvent = useMemo(() => {
     return events.find(e => e.id === selectedEventId) || null;
   }, [events, selectedEventId]);
 
   const handleEventClick = (event: EventItem) => {
-    if (selectedEventId === event.id) {
-      // 2nd click on the same event: opens the detail window modal!
-      setModalEvent(event);
-    } else {
-      // 1st click: selects the event and displays the info on the timeline!
-      setSelectedEventId(event.id);
-    }
+    setSelectedEventId(prev => (prev === event.id ? null : event.id));
   };
 
   useEffect(() => {
@@ -217,7 +213,7 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
             Project Timeline
           </h3>
           <p className="text-xs text-theme-text-secondary">
-            Click once to inspect timeline info &middot; Click again to open full event window
+            Click a row to inspect it &middot; use &ldquo;Open Event Window&rdquo; for full details
           </p>
           {!userPickedWindow && windowKey !== '30' && (
             <p className="text-[10px] text-warning font-medium pt-0.5">Auto-widened to {windowOpt.label.toLowerCase()} — nothing fell in the default window</p>
@@ -305,7 +301,7 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
             )}
 
             <p className="text-[11px] text-accent/90 font-semibold pt-0.5 flex items-center gap-1">
-              <span>👉 Click this event row again on the timeline, or press the button to open full details window.</span>
+              <span>👉 Press the button to open the full details window, or click this row again to dismiss.</span>
             </p>
           </div>
 
@@ -337,10 +333,10 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
       ) : (
         <>
           <div className={isExpanded ? 'flex-1 min-h-0 overflow-auto rounded-xl border border-theme-border/20' : 'overflow-x-auto rounded-xl border border-theme-border/20'}>
-            <div style={{ minWidth: timelineWidth + 176 }}>
+            <div style={{ minWidth: timelineWidth + 224 }}>
               {/* Header: date scale */}
               <div className="flex sticky top-0 z-20">
-                <div className="sticky left-0 z-30 w-44 shrink-0 bg-theme-card border-b border-r border-theme-border/20 px-3 py-2">
+                <div className="sticky left-0 z-30 w-56 shrink-0 bg-theme-card border-b border-r border-theme-border/20 px-3 py-2">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-theme-text-secondary">Timeline</span>
                 </div>
                 <div className="relative bg-theme-card border-b border-theme-border/20" style={{ width: timelineWidth, height: 32 }}>
@@ -378,7 +374,7 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
                     }`}
                   >
                     <div
-                      className={`sticky left-0 z-10 w-44 shrink-0 border-r border-theme-border/20 px-3 py-2 transition-all ${
+                      className={`sticky left-0 z-10 w-56 shrink-0 border-r border-theme-border/20 px-3 py-2 transition-all ${
                         isSelected ? 'bg-accent/15 border-l-4 border-l-accent' : 'bg-theme-card group-hover:bg-accent/5'
                       }`}
                     >
@@ -391,7 +387,7 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
                         className={`text-[11px] transition-all truncate block w-full text-left cursor-pointer ${
                           isSelected ? 'font-bold text-accent' : 'font-semibold text-theme-text-primary hover:text-accent'
                         }`}
-                        title={isSelected ? `${event.title} (Click again to open full event window)` : `${event.title} (Click to inspect on timeline)`}
+                        title={isSelected ? `${event.title} (click to dismiss)` : `${event.title} (click to inspect)`}
                       >
                         {event.title}
                       </button>
@@ -411,7 +407,7 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
                             isSelected ? 'ring-2 ring-warning ring-offset-1 ring-offset-theme-card' : ''
                           }`}
                           style={{ left: planningLeft, width: planningWidth }}
-                          title={isSelected ? `${event.title} · prep phase (Click again to open event window)` : `${event.title} · prep phase from ${event.planningStartDate} (Click to inspect)`}
+                          title={isSelected ? `${event.title} · prep phase (click to dismiss)` : `${event.title} · prep phase from ${event.planningStartDate} (click to inspect)`}
                         />
                       )}
                       <button
@@ -426,7 +422,7 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
                             : 'opacity-80 hover:opacity-100'
                         } transition-all shadow-sm cursor-pointer`}
                         style={{ left, width }}
-                        title={isSelected ? `${event.title} · ${effective} (Click again to open event window)` : `${event.title} · ${effective} (Click to inspect)`}
+                        title={isSelected ? `${event.title} · ${effective} (click to dismiss)` : `${event.title} · ${effective} (click to inspect)`}
                       />
                       {eventTasks.map(task => (
                         <Link
@@ -448,7 +444,7 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
               {/* Standalone tasks row */}
               {standaloneTasks.length > 0 && (
                 <div className="flex items-center h-11 border-b border-theme-border/10 group">
-                  <div className="sticky left-0 z-10 w-44 shrink-0 bg-theme-card group-hover:bg-accent/5 border-r border-theme-border/20 px-3 py-2 transition-all">
+                  <div className="sticky left-0 z-10 w-56 shrink-0 bg-theme-card group-hover:bg-accent/5 border-r border-theme-border/20 px-3 py-2 transition-all">
                     <Link
                       href="/dashboard/tasks"
                       className="text-[11px] font-semibold text-theme-text-secondary hover:text-accent transition-all truncate block"
@@ -477,15 +473,32 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
             </div>
           </div>
 
-          {/* Legend */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[10px] text-theme-text-secondary pt-1">
-            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-accent" /> Planned</span>
-            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-warning" /> Active</span>
-            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-success" /> Completed</span>
-            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-theme-text-secondary/50" /> Archived</span>
-            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-warning/40 border border-dashed border-warning/70" /> Planning/prep phase</span>
-            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rotate-45 bg-white border border-theme-text-secondary/40 inline-block" /> Task due</span>
-            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rotate-45 bg-success inline-block" /> Task completed</span>
+          {/* Legend: collapsed behind an info icon so it doesn't crowd the timeline */}
+          <div className="relative flex justify-end pt-1">
+            <button
+              type="button"
+              onClick={() => setIsLegendOpen(v => !v)}
+              className="flex items-center gap-1.5 text-[10px] font-semibold text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
+              title="Show legend"
+            >
+              <Info className="h-3.5 w-3.5" />
+              Legend
+            </button>
+
+            {isLegendOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setIsLegendOpen(false)} />
+                <div className="absolute right-0 top-full mt-1.5 z-20 w-64 glass-panel rounded-2xl p-3 shadow-xl border border-theme-border/30 flex flex-col gap-1.5 text-[10px] text-theme-text-secondary bg-theme-card">
+                  <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-accent" /> Planned</span>
+                  <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-warning" /> Active</span>
+                  <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-success" /> Completed</span>
+                  <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-theme-text-secondary/50" /> Archived</span>
+                  <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-warning/40 border border-dashed border-warning/70" /> Planning/prep phase</span>
+                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rotate-45 bg-white border border-theme-text-secondary/40 inline-block" /> Task due</span>
+                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rotate-45 bg-success inline-block" /> Task completed</span>
+                </div>
+              </>
+            )}
           </div>
         </>
       )}

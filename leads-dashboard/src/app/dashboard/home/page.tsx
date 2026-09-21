@@ -52,6 +52,7 @@ export default function DashboardHome() {
   const [overallAvgScore, setOverallAvgScore] = useState<number>(0);
   const [hasRatings, setHasRatings] = useState(false);
   const [selectedStudentForProfile, setSelectedStudentForProfile] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
 
   useEffect(() => {
     const refreshData = () => {
@@ -60,10 +61,10 @@ export default function DashboardHome() {
 
       const allTasks = getTasks();
       setTasks(allTasks);
-      
+
       setMembersCount(getMembers().length);
       setAnnouncements(getAnnouncements());
-      
+
       // Dynamic Individual Student Leaderboard
       const studentRanks = getStudentLeaderboard();
       setLeaderboard(studentRanks.slice(0, 5));
@@ -74,6 +75,8 @@ export default function DashboardHome() {
         const totalScore = ratingsList.reduce((acc, r) => acc + r.overallScore, 0);
         setOverallAvgScore(parseFloat((totalScore / ratingsList.length).toFixed(1)));
       }
+
+      setLastUpdatedAt(new Date());
     };
     refreshData();
 
@@ -151,7 +154,15 @@ export default function DashboardHome() {
   // same non-personal number regardless of what's actually theirs to act on.
   const pendingAckCount = tasks.filter(t => t.status === 'Assigned' && isTaskAssignee(t, user)).length;
 
+  const completedTasksCount = displayedTasks.filter(t => t.status === 'Completed').length;
+  const pendingTasksCount = displayedTasks.length - completedTasksCount;
+
   const scorePercentage = Math.min(100, Math.max(0, (overallAvgScore / 5.0) * 100));
+
+  const ratingsList = getRatings();
+  const performanceBreakdown = hasRatings
+    ? `Average of ${ratingsList.length} evaluation${ratingsList.length === 1 ? '' : 's'} across ${new Set(ratingsList.map(r => r.targetId)).size} member(s), on a 5.0 scale covering quality, timeliness, initiative, and collaboration.`
+    : 'No evaluations submitted yet — visit Ratings to score task deliverables.';
 
   return (
     <div className="p-6 md:p-8 space-y-6">
@@ -194,9 +205,13 @@ export default function DashboardHome() {
 
       {/* Grid: Stats Widgets */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        
+
         {/* Active Events */}
-        <div className="glass-panel rounded-2xl p-5 flex items-center justify-between">
+        <Link
+          href="/dashboard/events"
+          className="glass-panel rounded-2xl p-5 flex items-center justify-between transition-all hover:ring-2 hover:ring-accent/30 cursor-pointer"
+          title="Open the Events module"
+        >
           <div className="space-y-1.5">
             <span className="text-xs font-semibold text-theme-text-secondary uppercase tracking-wider">Active Events</span>
             <h3 className="text-2xl font-bold text-theme-text-primary">{activeEventsCount}</h3>
@@ -207,24 +222,34 @@ export default function DashboardHome() {
           <div className="h-11 w-11 bg-accent/15 rounded-xl flex items-center justify-center border border-accent/15">
             <Calendar className="h-5 w-5 text-accent" />
           </div>
-        </div>
+        </Link>
 
         {/* Tasks Assigned */}
-        <div className="glass-panel rounded-2xl p-5 flex items-center justify-between">
+        <Link
+          href="/dashboard/tasks"
+          className="glass-panel rounded-2xl p-5 flex items-center justify-between transition-all hover:ring-2 hover:ring-success/30 cursor-pointer"
+          title="Open the Tasks module"
+        >
           <div className="space-y-1.5">
             <span className="text-xs font-semibold text-theme-text-secondary uppercase tracking-wider">Assigned Tasks</span>
             <h3 className="text-2xl font-bold text-theme-text-primary">{displayedTasks.length}</h3>
-            <span className="text-[11px] text-success font-semibold">
-              {displayedTasks.filter(t => t.status === 'Completed').length} completed
+            <span className="text-[11px] font-semibold flex items-center gap-1.5">
+              <span className="text-success">{completedTasksCount} completed</span>
+              <span className="text-theme-text-secondary font-normal">&middot;</span>
+              <span className="text-warning">{pendingTasksCount} pending</span>
             </span>
           </div>
           <div className="h-11 w-11 bg-success/15 rounded-xl flex items-center justify-center border border-success/15">
             <CheckSquare className="h-5 w-5 text-success" />
           </div>
-        </div>
+        </Link>
 
         {/* Members / Roster Count */}
-        <div className="glass-panel rounded-2xl p-5 flex items-center justify-between">
+        <Link
+          href="/dashboard/directory"
+          className="glass-panel rounded-2xl p-5 flex items-center justify-between transition-all hover:ring-2 hover:ring-primary/30 cursor-pointer"
+          title="Open the Member Directory"
+        >
           <div className="space-y-1.5">
             <span className="text-xs font-semibold text-theme-text-secondary uppercase tracking-wider">Member Roster</span>
             <h3 className="text-2xl font-bold text-theme-text-primary">{membersCount}</h3>
@@ -233,10 +258,14 @@ export default function DashboardHome() {
           <div className="h-11 w-11 bg-primary/15 rounded-xl flex items-center justify-center border border-primary/15">
             <Users className="h-5 w-5 text-accent" />
           </div>
-        </div>
+        </Link>
 
         {/* Performance Rollup */}
-        <div className="glass-panel rounded-2xl p-5 flex items-center justify-between">
+        <Link
+          href="/dashboard/ratings"
+          className="glass-panel rounded-2xl p-5 flex items-center justify-between transition-all hover:ring-2 hover:ring-emerald-500/30 cursor-pointer"
+          title={performanceBreakdown}
+        >
           <div className="space-y-1.5 flex-1 pr-2">
             <span className="text-xs font-semibold text-theme-text-secondary uppercase tracking-wider">Performance Rollup</span>
             {hasRatings ? (
@@ -253,13 +282,22 @@ export default function DashboardHome() {
                 style={{ width: `${hasRatings ? scorePercentage : 0}%` }}
               ></div>
             </div>
+            <span className="text-[10px] text-theme-text-secondary font-medium">
+              {hasRatings ? `Avg of ${ratingsList.length} evaluation${ratingsList.length === 1 ? '' : 's'}` : 'Hover for details'}
+            </span>
           </div>
           <div className="h-11 w-11 bg-emerald-500/15 rounded-xl flex items-center justify-center border border-emerald-500/20">
             <Star className="h-5 w-5 text-emerald-500 fill-emerald-500" />
           </div>
-        </div>
+        </Link>
 
       </div>
+
+      {lastUpdatedAt && (
+        <p className="text-[10px] text-theme-text-secondary font-medium -mt-2 text-right">
+          Last updated {lastUpdatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </p>
+      )}
 
       {/* Cross-Module Project Timeline (Gantt) */}
       <GanttTimeline events={visibleEvents} tasks={displayedTasks} />

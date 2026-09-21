@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   Plus, 
   Download, 
@@ -66,6 +67,7 @@ import { RequestApprovalModal } from '@/components/request-approval-modal';
 import { canViewFullDirectory, canEditDirectory, canAddMember, getMemberApprovalRequirement, canApprovePendingMember, canEditMemberRecordRow, isRestrictedDirectoryEditor, isCentreHead, canViewHiddenAccounts, canSetMemberPassword, isKayomarzPavri } from '@/lib/permissions';
 
 export default function DirectoryPage() {
+  const router = useRouter();
   const [members, setMembers] = useState<Member[]>([]);
   const [user, setUser] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1100,7 +1102,7 @@ export default function DirectoryPage() {
         </div>
         <StudentProfileModal
           memberIdOrName={user.id || user.name}
-          onClose={() => {}}
+          onClose={() => router.push('/dashboard/home')}
         />
       </div>
     );
