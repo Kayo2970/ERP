@@ -1814,8 +1814,14 @@ export default function DesignPortalPage() {
               </div>
             </div>
 
-            {/* Inspector Tab Bar — splits the review into focused screens instead of one long scroll */}
-            <div className="flex items-center gap-1.5 overflow-x-auto -mx-1 px-1 pb-1 border-b border-border">
+            {/* Inspector Tab Bar — splits the review into focused screens instead of one long scroll.
+                shrink-0 is load-bearing: this div's overflow-x-auto makes its flexbox automatic
+                minimum height resolve to 0 instead of its content size (a well-known Flexbox
+                gotcha for any overflow != visible flex item), so inside this modal's flex-col +
+                max-h-[90vh] layout it would otherwise get crushed to a few px tall whenever the
+                rest of the modal's content is tall enough to need the height budget — squeezing
+                the tab labels into a sliver and making them render as an overlapping smear. */}
+            <div className="flex items-center gap-1.5 overflow-x-auto -mx-1 px-1 pb-1 border-b border-border shrink-0">
               {([
                 { id: 'overview', label: 'Overview', icon: FileText },
                 { id: 'proofreading', label: 'Proofreading', icon: UserCheck },

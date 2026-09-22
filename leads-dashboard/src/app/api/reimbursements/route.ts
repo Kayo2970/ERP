@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { saveBase64File } from '@/lib/file-storage';
 import { requireSession } from '@/lib/session';
+import { getAccessLevelSettingsServer, isCentreHead } from '@/lib/permissions-server';
+import { dispatchEmail, generateReimbursementSubmittedEmailTemplate } from '@/lib/email-service';
 import { apiError } from '@/lib/api-error';
 
 export const maxDuration = 60; // 60s execution limit for large uploads
@@ -59,6 +61,40 @@ export async function POST(request: Request) {
 
     const updated = await mutateCollection('reimbursements', (current) => [item, ...current]);
     const created = updated.find((r: any) => r.id === item.id);
+
+    // Let the Centre Head(s) know a new claim needs their verification —
+    // fire-and-log, mirroring the low-stakes tone of the Tasks assignment
+    // and Events roster emails rather than the higher-stakes Designs
+    // decision-email pattern.
+    if (created) {
+      try {
+        const [members, settings] = await Promise.all([
+          readCollection('members'),
+          getAccessLevelSettingsServer(),
+        ]);
+        const approvers = (members as any[]).filter(
+          (m) => m.status !== 'Terminated' && m.email && isCentreHead(m, settings)
+        );
+        for (const approver of approvers) {
+          const template = generateReimbursementSubmittedEmailTemplate(
+            approver.name,
+            created.memberName,
+            created.amount,
+            created.category
+          );
+          await dispatchEmail({
+            to: approver.email,
+            subject: template.subject,
+            bodyText: template.bodyText,
+            bodyHtml: template.bodyHtml,
+            category: 'REIMBURSEMENT',
+          });
+        }
+      } catch (emailErr) {
+        console.error('[reimbursements-api] Failed to notify approver of new claim:', emailErr);
+      }
+    }
+
     return NextResponse.json(created, { status: 201 });
   } catch (err: any) {
     return apiError(err, 'reimbursements-api-post', 400);

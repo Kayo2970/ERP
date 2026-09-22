@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
-import { mutateCollection } from '@/lib/server-db';
+import { mutateCollection, readCollection } from '@/lib/server-db';
 import { fanOutAutoApproval, cascadeCloseAutoApprovals, deleteLinkedApprovalRequests } from '@/lib/approval-sync';
 import { requireSession, requirePermission, ForbiddenError } from '@/lib/session';
 import { canDeleteEvent, canApprovePendingEvent, getAccessLevelSettingsServer } from '@/lib/permissions-server';
+import { dispatchEmail, generateEventRosterEmailTemplate } from '@/lib/email-service';
 import { apiError } from '@/lib/api-error';
 
 const PENDING_APPROVAL_MESSAGE: Record<string, string> = {
@@ -74,6 +75,47 @@ export async function PATCH(
         } catch (approvalErr) {
           console.error('[events-api] Approval cascade-close failed:', approvalErr);
         }
+      }
+    }
+
+    // A member added to a committee after the event already existed never
+    // got the roster email a brand-new event's committee members get on
+    // creation (see events/route.ts POST). Diff old vs new committees by id
+    // and email just the newly-added members — never re-email members
+    // already on the roster, and do nothing on removal.
+    if (result && Array.isArray(result.committees) && previous) {
+      try {
+        const previousMemberIds = new Map<string, Set<string>>(
+          (previous.committees || []).map((c: any) => [c.id, new Set(c.memberIds || [])])
+        );
+        const newlyAdded: Array<{ memberId: string; committeeName: string }> = [];
+        for (const committee of result.committees) {
+          const priorIds = previousMemberIds.get(committee.id);
+          for (const memberId of committee.memberIds || []) {
+            if (!priorIds || !priorIds.has(memberId)) {
+              newlyAdded.push({ memberId, committeeName: committee.name });
+            }
+          }
+        }
+
+        if (newlyAdded.length > 0) {
+          const members = await readCollection('members');
+          for (const { memberId, committeeName } of newlyAdded) {
+            const member = (members as any[]).find((m) => m.id === memberId);
+            if (member && member.email) {
+              const template = generateEventRosterEmailTemplate(member.name, result.title, committeeName, result.startDate);
+              await dispatchEmail({
+                to: member.email,
+                subject: template.subject,
+                bodyText: template.bodyText,
+                bodyHtml: template.bodyHtml,
+                category: 'EVENT_ROSTER',
+              });
+            }
+          }
+        }
+      } catch (emailErr) {
+        console.error('[events-api] Roster re-sync email dispatch failed:', emailErr);
       }
     }
 

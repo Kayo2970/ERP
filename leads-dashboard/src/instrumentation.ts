@@ -2,10 +2,12 @@
 // node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/instrumentation.md.
 // Used here to start the in-process daily birthday-email scheduler
 // (src/lib/birthday-scheduler.ts), the weekly Indian-holiday sync +
-// social-media approval-task scheduler (src/lib/holiday-scheduler.ts), and
-// the daily event-lapse social-media/event-report task scheduler
-// (src/lib/event-social-scheduler.ts) rather than requiring an external VPS
-// crontab entry, since this app runs continuously under PM2.
+// social-media approval-task scheduler (src/lib/holiday-scheduler.ts), the
+// daily event-lapse social-media/event-report task scheduler
+// (src/lib/event-social-scheduler.ts), and the daily 1-day-before-deadline
+// task reminder scheduler (src/lib/task-deadline-reminder-scheduler.ts)
+// rather than requiring an external VPS crontab entry, since this app runs
+// continuously under PM2.
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     const { startBirthdayScheduler } = await import('./lib/birthday-scheduler');
@@ -16,5 +18,8 @@ export async function register() {
 
     const { startEventSocialScheduler } = await import('./lib/event-social-scheduler');
     startEventSocialScheduler();
+
+    const { startTaskDeadlineReminderScheduler } = await import('./lib/task-deadline-reminder-scheduler');
+    startTaskDeadlineReminderScheduler();
   }
 }

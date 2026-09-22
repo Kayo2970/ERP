@@ -20,7 +20,7 @@ export interface EmailLog {
   subject: string;
   bodyText: string;
   bodyHtml: string;
-  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION' | 'BIRTHDAY' | 'EVENT_REPORT_APPROVAL' | 'DESIGN_APPROVAL' | 'APPROVAL_REQUEST' | 'EVENT_PASS' | 'EVENT_INVITATION';
+  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION' | 'BIRTHDAY' | 'EVENT_REPORT_APPROVAL' | 'DESIGN_APPROVAL' | 'APPROVAL_REQUEST' | 'EVENT_PASS' | 'EVENT_INVITATION' | 'REIMBURSEMENT' | 'BUDGET';
   status: 'SENT' | 'FAILED';
   sentAt: string;
   // Diagnostics for "shows SENT but never arrives" — a resolved sendMail()
@@ -39,7 +39,7 @@ export interface SendEmailPayload {
   bodyHtml?: string;
   badgeText?: string;
   badgeColor?: string;
-  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION' | 'BIRTHDAY' | 'EVENT_REPORT_APPROVAL' | 'DESIGN_APPROVAL' | 'APPROVAL_REQUEST' | 'EVENT_PASS' | 'EVENT_INVITATION';
+  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION' | 'BIRTHDAY' | 'EVENT_REPORT_APPROVAL' | 'DESIGN_APPROVAL' | 'APPROVAL_REQUEST' | 'EVENT_PASS' | 'EVENT_INVITATION' | 'REIMBURSEMENT' | 'BUDGET';
   // Files attached to the outgoing message, e.g. an approved event report
   // or design asset read straight off disk via file-storage.ts's
   // readStoredFile(). Not persisted on the EmailLog entry (only the fact
@@ -421,6 +421,8 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
     else if (payload.category === 'ACCOUNT_ACTIVATION') badgeTextToUse = 'Account Notice';
     else if (payload.category === 'BIRTHDAY') badgeTextToUse = 'Greetings';
     else if (payload.category === 'EVENT_PASS' || payload.category === 'EVENT_INVITATION') badgeTextToUse = 'Official Event Pass';
+    else if (payload.category === 'REIMBURSEMENT') badgeTextToUse = 'Reimbursement';
+    else if (payload.category === 'BUDGET') badgeTextToUse = 'Budget Request';
     else badgeTextToUse = undefined;
   }
 
@@ -862,6 +864,170 @@ export function generateBirthdayEmailTemplate(memberName: string): { subject: st
       <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Dear <strong>${memberName}</strong>,</p>
       <p style="color: #334155; font-size: 14px; line-height: 1.6;">On behalf of the entire LEADS Next Gen Centre family, we wish you a wonderful birthday! Thank you for your energy and dedication.</p>
       <p style="color: #64748b; font-size: 13px; line-height: 1.6; margin-bottom: 0;">Have a fantastic year ahead!</p>
+    `
+  });
+
+  return { subject, bodyText, bodyHtml };
+}
+
+/**
+ * Template Generator: Reimbursement Claim Submitted (to the Centre Head who
+ * needs to verify it)
+ */
+export function generateReimbursementSubmittedEmailTemplate(approverName: string, claimantName: string, amount: number, category: string): { subject: string; bodyText: string; bodyHtml: string } {
+  const subject = `Reimbursement Claim Awaiting Verification: ${claimantName}`;
+  const baseUrl = getAppBaseUrl();
+  const bodyText = `Hello ${approverName},\n\n${claimantName} has submitted a reimbursement claim of Rs. ${amount} (${category}) that needs your verification.\n\n` +
+    `Please review it on the LEADS Dashboard.`;
+
+  // category/claimantName are member-supplied free text — escape before
+  // interpolating into HTML.
+  const safeClaimant = escapeHtmlForTitle(claimantName);
+  const safeCategory = escapeHtmlForTitle(category);
+  const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
+    headerTitle: `New Reimbursement Claim`,
+    headerSubtitle: `Submitted by ${safeClaimant}`,
+    badgeText: `Verification Needed`,
+    badgeColor: `#0284c7`,
+    bodyContentHtml: `
+      <p style="margin-top: 0; color: #334155;">Hello <strong>${escapeHtmlForTitle(approverName)}</strong>,</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;"><strong>${safeClaimant}</strong> has submitted a reimbursement claim that needs your verification before it can go to Finance.</p>
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #334155; margin: 16px 0;">
+        <tr><td style="padding: 8px 0; color: #64748b; width: 120px;">Amount:</td><td style="padding: 8px 0; font-weight: 700; color: #0f172a;">Rs. ${amount}</td></tr>
+        <tr><td style="padding: 8px 0; color: #64748b;">Category:</td><td style="padding: 8px 0; font-weight: 600; color: #0f172a;">${safeCategory}</td></tr>
+      </table>
+      <div style="margin-top: 20px; text-align: center;">
+        <a href="${baseUrl}/dashboard/reimbursements" style="background: #0284c7; color: #ffffff; padding: 10px 20px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 12px; display: inline-block;">Review Claim &rarr;</a>
+      </div>
+    `
+  });
+
+  return { subject, bodyText, bodyHtml };
+}
+
+/**
+ * Template Generator: Reimbursement Claim Decision (to the claimant, at any
+ * of the three stage outcomes)
+ */
+export function generateReimbursementDecisionEmailTemplate(
+  claimantName: string,
+  outcome: 'verified' | 'approved' | 'denied',
+  amount: number,
+  category: string,
+  decidedByName?: string
+): { subject: string; bodyText: string; bodyHtml: string } {
+  const baseUrl = getAppBaseUrl();
+  const copy = {
+    verified: { label: 'Verified — Awaiting Finance Approval', color: '#0284c7', line: `Your reimbursement claim has been verified by the Centre Head and forwarded to the Finance Head for final approval.` },
+    approved: { label: 'Approved', color: '#15803d', line: `Your reimbursement claim has been approved and payment will be processed.` },
+    denied: { label: 'Denied', color: '#dc2626', line: `Your reimbursement claim has been denied.` },
+  }[outcome];
+
+  const subject = `Reimbursement Claim ${copy.label}: Rs. ${amount}`;
+  const bodyText = `Dear ${claimantName},\n\n${copy.line}\n\n` +
+    `Amount: Rs. ${amount}\nCategory: ${category}${decidedByName ? `\nDecided by: ${decidedByName}` : ''}\n\n` +
+    `View details on the LEADS Dashboard.`;
+
+  const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
+    headerTitle: `Reimbursement Claim ${copy.label}`,
+    badgeText: copy.label,
+    badgeColor: copy.color,
+    bodyContentHtml: `
+      <p style="margin-top: 0; color: #334155;">Dear <strong>${escapeHtmlForTitle(claimantName)}</strong>,</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">${copy.line}</p>
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #334155; margin: 16px 0;">
+        <tr><td style="padding: 8px 0; color: #64748b; width: 120px;">Amount:</td><td style="padding: 8px 0; font-weight: 700; color: #0f172a;">Rs. ${amount}</td></tr>
+        <tr><td style="padding: 8px 0; color: #64748b;">Category:</td><td style="padding: 8px 0; font-weight: 600; color: #0f172a;">${escapeHtmlForTitle(category)}</td></tr>
+        ${decidedByName ? `<tr><td style="padding: 8px 0; color: #64748b;">Decided By:</td><td style="padding: 8px 0; font-weight: 600; color: #0f172a;">${escapeHtmlForTitle(decidedByName)}</td></tr>` : ''}
+      </table>
+      <div style="margin-top: 20px; text-align: center;">
+        <a href="${baseUrl}/dashboard/reimbursements" style="background: ${copy.color}; color: #ffffff; padding: 10px 20px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 12px; display: inline-block;">View Claim &rarr;</a>
+      </div>
+    `
+  });
+
+  return { subject, bodyText, bodyHtml };
+}
+
+/**
+ * Template Generator: Budget Request Submitted (to the Centre Head who
+ * needs to verify it)
+ */
+export function generateBudgetSubmittedEmailTemplate(approverName: string, submitterName: string, amount: number, label: string): { subject: string; bodyText: string; bodyHtml: string } {
+  const subject = `Budget Request Awaiting Verification: ${label}`;
+  const baseUrl = getAppBaseUrl();
+  const bodyText = `Hello ${approverName},\n\n${submitterName} has submitted a budget request of Rs. ${amount} (${label}) that needs your verification.\n\n` +
+    `Please review it on the LEADS Dashboard.`;
+
+  // label/submitterName can carry a free-text event/month title — escape
+  // before interpolating into HTML.
+  const safeSubmitter = escapeHtmlForTitle(submitterName);
+  const safeLabel = escapeHtmlForTitle(label);
+  const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
+    headerTitle: `New Budget Request`,
+    headerSubtitle: `Submitted by ${safeSubmitter}`,
+    badgeText: `Verification Needed`,
+    badgeColor: `#0284c7`,
+    bodyContentHtml: `
+      <p style="margin-top: 0; color: #334155;">Hello <strong>${escapeHtmlForTitle(approverName)}</strong>,</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;"><strong>${safeSubmitter}</strong> has submitted a budget request that needs your verification before it can go to Finance.</p>
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #334155; margin: 16px 0;">
+        <tr><td style="padding: 8px 0; color: #64748b; width: 120px;">Amount:</td><td style="padding: 8px 0; font-weight: 700; color: #0f172a;">Rs. ${amount}</td></tr>
+        <tr><td style="padding: 8px 0; color: #64748b;">Request:</td><td style="padding: 8px 0; font-weight: 600; color: #0f172a;">${safeLabel}</td></tr>
+      </table>
+      <div style="margin-top: 20px; text-align: center;">
+        <a href="${baseUrl}/dashboard/budget" style="background: #0284c7; color: #ffffff; padding: 10px 20px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 12px; display: inline-block;">Review Request &rarr;</a>
+      </div>
+    `
+  });
+
+  return { subject, bodyText, bodyHtml };
+}
+
+/**
+ * Template Generator: Budget Request Decision (to the submitter, at either
+ * the verify or final-decide stage)
+ */
+export function generateBudgetDecisionEmailTemplate(
+  submitterName: string,
+  outcome: 'verified' | 'approved' | 'rejected',
+  amount: number,
+  label: string,
+  decidedByName?: string,
+  decisionNotes?: string
+): { subject: string; bodyText: string; bodyHtml: string } {
+  const baseUrl = getAppBaseUrl();
+  const copy = {
+    verified: { label: 'Verified — Awaiting Finance Approval', color: '#0284c7', line: `Your budget request has been verified by the Centre Head and forwarded to the Finance Head for final approval.` },
+    approved: { label: 'Approved', color: '#15803d', line: `Your budget request has been approved.` },
+    rejected: { label: 'Rejected', color: '#dc2626', line: `Your budget request has been rejected.` },
+  }[outcome];
+
+  const subject = `Budget Request ${copy.label}: ${label}`;
+  const bodyText = `Dear ${submitterName},\n\n${copy.line}\n\n` +
+    `Amount: Rs. ${amount}\nRequest: ${label}${decidedByName ? `\nDecided by: ${decidedByName}` : ''}${decisionNotes ? `\nNotes: ${decisionNotes}` : ''}\n\n` +
+    `View details on the LEADS Dashboard.`;
+
+  const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
+    headerTitle: `Budget Request ${copy.label}`,
+    badgeText: copy.label,
+    badgeColor: copy.color,
+    bodyContentHtml: `
+      <p style="margin-top: 0; color: #334155;">Dear <strong>${escapeHtmlForTitle(submitterName)}</strong>,</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">${copy.line}</p>
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #334155; margin: 16px 0;">
+        <tr><td style="padding: 8px 0; color: #64748b; width: 120px;">Amount:</td><td style="padding: 8px 0; font-weight: 700; color: #0f172a;">Rs. ${amount}</td></tr>
+        <tr><td style="padding: 8px 0; color: #64748b;">Request:</td><td style="padding: 8px 0; font-weight: 600; color: #0f172a;">${escapeHtmlForTitle(label)}</td></tr>
+        ${decidedByName ? `<tr><td style="padding: 8px 0; color: #64748b;">Decided By:</td><td style="padding: 8px 0; font-weight: 600; color: #0f172a;">${escapeHtmlForTitle(decidedByName)}</td></tr>` : ''}
+        ${decisionNotes ? `<tr><td style="padding: 8px 0; color: #64748b;">Notes:</td><td style="padding: 8px 0; font-weight: 600; color: #0f172a;">${escapeHtmlForTitle(decisionNotes)}</td></tr>` : ''}
+      </table>
+      <div style="margin-top: 20px; text-align: center;">
+        <a href="${baseUrl}/dashboard/budget" style="background: ${copy.color}; color: #ffffff; padding: 10px 20px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 12px; display: inline-block;">View Request &rarr;</a>
+      </div>
     `
   });
 

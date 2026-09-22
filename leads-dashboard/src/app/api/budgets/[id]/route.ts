@@ -7,7 +7,9 @@ import {
   canDecideBudget,
   canSubmitBudget,
   isCentreHead,
+  isFinanceHead,
 } from '@/lib/permissions-server';
+import { dispatchEmail, generateBudgetSubmittedEmailTemplate, generateBudgetDecisionEmailTemplate } from '@/lib/email-service';
 import { apiError } from '@/lib/api-error';
 
 export async function PATCH(
@@ -62,7 +64,53 @@ export async function PATCH(
       next[idx] = { ...next[idx], ...updates };
       return next;
     });
-    return NextResponse.json(updated.find((b: any) => b.id === id));
+    let result = updated.find((b: any) => b.id === id);
+
+    // Notify the submitter on every decision (verify/approve/reject), and
+    // the Finance Head(s) once a request clears Centre Head verification —
+    // mirrors the Reimbursements module's decision-email wiring.
+    if (result && (isVerifyStage || isDecideStage)) {
+      try {
+        const members = await readCollection('members');
+        const label = result.eventName || result.month || result.financialYear || result.type;
+
+        if (isVerifyStage) {
+          const financeHeads = (members as any[]).filter(
+            (m) => m.status !== 'Terminated' && m.email && isFinanceHead(m, settings)
+          );
+          for (const fh of financeHeads) {
+            const template = generateBudgetSubmittedEmailTemplate(fh.name, result.submittedBy, result.amount, label);
+            await dispatchEmail({ to: fh.email, subject: template.subject, bodyText: template.bodyText, bodyHtml: template.bodyHtml, category: 'BUDGET' });
+          }
+        }
+
+        if (result.submittedByEmail) {
+          const outcome = isVerifyStage ? 'verified' : result.status === 'Approved' ? 'approved' : 'rejected';
+          const template = generateBudgetDecisionEmailTemplate(result.submittedBy, outcome, result.amount, label, result.decidedBy, result.decisionNotes);
+          const log = await dispatchEmail({
+            to: result.submittedByEmail,
+            subject: template.subject,
+            bodyText: template.bodyText,
+            bodyHtml: template.bodyHtml,
+            category: 'BUDGET',
+          });
+
+          await mutateCollection('budgets', (current) => current.map((b: any) =>
+            b.id === id ? { ...b, decisionEmailSent: log.status === 'SENT', decisionEmailError: log.errorMessage } : b
+          ));
+          result = { ...result, decisionEmailSent: log.status === 'SENT', decisionEmailError: log.errorMessage };
+        }
+      } catch (emailErr: any) {
+        console.error('[budgets-api] Decision email dispatch failed:', emailErr);
+        const message = emailErr?.message || 'Failed to send the decision email.';
+        await mutateCollection('budgets', (current) => current.map((b: any) =>
+          b.id === id ? { ...b, decisionEmailSent: false, decisionEmailError: message } : b
+        ));
+        result = { ...result, decisionEmailSent: false, decisionEmailError: message };
+      }
+    }
+
+    return NextResponse.json(result);
   } catch (err: any) {
     return apiError(err, 'budgets-id-api-patch', 400);
   }
