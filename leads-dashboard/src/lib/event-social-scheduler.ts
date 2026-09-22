@@ -1,4 +1,5 @@
 import { readCollection, mutateCollection } from './server-db';
+import { enqueueTaskEmailNotification } from './task-email-queue';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -80,6 +81,27 @@ export async function runEventLapseSocialTasks(): Promise<{ created: number }> {
     }
     return next;
   });
+
+  // This scheduler writes straight to the tasks collection via
+  // mutateCollection — unlike a task created through POST /api/tasks (the
+  // normal Tasks page flow), which enqueues the debounced assignment email
+  // itself, so that never happens here on its own. Enqueue it explicitly
+  // for every pool member on every newly-created event-lapse task, same as
+  // a manually-assigned task would get.
+  for (const e of toCreate) {
+    for (const member of pool) {
+      if (!member.email) continue;
+      await enqueueTaskEmailNotification({
+        id: `task_event_social_${e.id}`,
+        title: `Social media posts required for "${e.title}" (event concluded ${e.endDate})`,
+        event: e.title,
+        dueDate: today,
+        creatorName: 'Event Scheduler',
+        assigneeEmail: member.email,
+        assigneeName: member.name,
+      });
+    }
+  }
 
   return { created };
 }
