@@ -118,9 +118,20 @@ export function isFinanceHead(user: ServerUser, settings: AccessLevelSettings): 
   return user.tier === 1 || isFinanceRole || isFinanceDept;
 }
 
+// Mirrors permissions.ts's isChiefAdvisor — the view-only Faculty position,
+// deliberately excluded from isCentreHead/isAdvisor below despite its role
+// text containing the word "Advisor", so it's never mistaken for the real,
+// edit-capable Advisor position.
+export function isChiefAdvisor(user: ServerUser): boolean {
+  if (!user) return false;
+  const role = (user.role || '').toLowerCase();
+  return role.includes('chief advisor');
+}
+
 export function isCentreHead(user: ServerUser, settings: AccessLevelSettings): boolean {
   if (!user) return false;
   if (user.tier === 1) return true;
+  if (isChiefAdvisor(user)) return false;
   const role = user.role || '';
   return (typeof user.tier === 'number' && user.tier <= settings.sectorHeadMaxTier) || anyKeywordMatches(role, settings.sectorHeadKeywords) || keywordMatches(role, 'advisor');
 }
@@ -269,6 +280,7 @@ export function canViewEventReports(user: ServerUser, settings: AccessLevelSetti
 
 export function canReviewDesignProofread(user: ServerUser, settings: AccessLevelSettings, design?: { assignedProofreaderIds?: string[]; assignedProofreaderEmail?: string; assignedProofreaderId?: string }): boolean {
   if (!user) return false;
+  if (isChiefAdvisor(user)) return false; // view-only
   if (design?.assignedProofreaderIds && user.id && design.assignedProofreaderIds.includes(user.id)) return true;
   if (design?.assignedProofreaderEmail && design.assignedProofreaderEmail === user.email) return true;
   if (design?.assignedProofreaderId && user.id && design.assignedProofreaderId === user.id) return true;
@@ -282,6 +294,7 @@ export function isSuperUser(user: ServerUser): boolean {
 export function isAdvisor(user: ServerUser): boolean {
   if (!user) return false;
   if (isSuperUser(user)) return false;
+  if (isChiefAdvisor(user)) return false;
   const role = (user.role || '').toLowerCase();
   const division = ((user as any).division || '').toLowerCase();
   return keywordMatches(role, 'advisor') || role.includes('advisor') || division.includes('advisory');
@@ -513,6 +526,7 @@ export function canBuildForms(user: ServerUser, settings: AccessLevelSettings): 
  */
 export function canCreateAnnouncement(user: ServerUser, settings: AccessLevelSettings): boolean {
   if (!user || isAlumniRole(user)) return false;
+  if (isChiefAdvisor(user)) return false; // view-only
   return isBaseLeadership(user, settings) || isCoreCommitteeTier(user, settings) || user.tier === 4 || user.tier === 5 || isFaculty(user) || isHeadRole(user, settings);
 }
 
