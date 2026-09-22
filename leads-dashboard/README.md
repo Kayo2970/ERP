@@ -31,6 +31,7 @@ pm2 restart leads-dashboard
 - **Cross-Module Project Timeline (Gantt)**: Event bars plotted against start/end dates with task markers at due dates. Interactive 2-Weeks / 30-Days / 90-Days window toggle with auto-widening fallback and lead-in planning phase segments.
 - **Quick Action Hub**: Shortcuts for event creation, task assignment, design uploads, and announcement broadcasting.
 - **Personal Deliverables**: Tailored dashboard widget highlighting deliverables assigned to the current user.
+- **Assigned Tasks Tile**: Counts only tasks still needing action (not Completed), scoped to the current calendar year so it resets each January instead of accumulating stale, long-overdue tasks.
 
 #### 2. Calendar Module (`/dashboard/calendar`)
 - **Inter-Campus Operational Timeline**: Interactive calendar displaying event schedules, sub-committee milestones, and university deadlines.
@@ -74,6 +75,7 @@ pm2 restart leads-dashboard
 - **Asset Management**: File uploads with image previews, OCR text scanning, and automated completed task synchronization.
 - **Design Task Requests Queue**: Design-brief Tasks awaiting a submission surface here for whoever they're assigned to, including committee assignments.
 - **Tabbed Review Inspector**: The proofread/style/social-workflow review modal is split into focused tabs (Overview, Proofreading, Style Approval, Social Workflow) instead of one long scroll.
+- **Faculty-Only Proofreaders**: Proofreader selection is restricted to Faculty division members; within that, only Centre Head, Advisor, or Head of Design.
 
 #### 8. Event Passes & Gate QR Scanner (`/dashboard/event-passes`)
 - **Digital Event Passes**: High-resolution event pass cards with unique serial numbers, security QR codes, and automated email dispatch with pass attachments.

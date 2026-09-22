@@ -71,6 +71,8 @@ Everything that's changed since this README was last updated (2026-09-15). Full 
 - **Events**: adding a member to a committee after the event already exists now sends them the same roster-assignment email a member gets when the event is first created — previously only creation-time committee members were ever notified (#141).
 - **Design Portal**: fixed the new tabbed review UI's tab bar rendering as an overlapping smear of text — a Flexbox sizing bug (`overflow-x-auto` collapsing the tab bar's height to a few pixels inside the modal's constrained layout) (#141).
 - **Account activation**: fixed the "Welcome to the Centre" keycard animation on the activation success screen pushing the "Proceed to Sign In" button off-screen on mobile with no indication that scrolling would reveal it (#141).
+- **Design Portal**: proofreader selection restricted to Faculty division members only, and the "Head" category narrowed from a broad Social Media Head match to specifically Head of Design.
+- **Home Dashboard**: the "Assigned Tasks" tile now counts only tasks still needing action (not Completed), scoped to the current calendar year so it resets each January instead of accumulating stale, long-overdue tasks.
 
 ### 2026-09-21
 - Dashboard Home: stat cards (Active Events, Assigned Tasks, Member Roster, Performance Rollup) are now clickable deep links into their module; Assigned Tasks card shows completed vs. pending separately; Performance Rollup gets a breakdown tooltip; added a "Last updated" timestamp.
@@ -256,6 +258,7 @@ Configuration lives in `leads-dashboard/.env`:
 - **Asset Management**: File uploads with image previews, OCR text scanning, and automated completed task synchronization.
 - **Design Task Requests Queue**: Design-brief Tasks (Tasks module, `taskCategory: 'design'`) awaiting a submission surface here for whoever they're assigned to — correctly resolving committee assignment (not just individual/group) via the linked event's committee membership.
 - **Tabbed Review Inspector**: The proofread/style/social-workflow review modal is split into focused tabs (Overview, Proofreading, Style Approval, Social Workflow) instead of one long scroll.
+- **Faculty-Only Proofreaders**: Proofreader selection is restricted to Faculty division members; within that, only Centre Head, Advisor, or Head of Design.
 
 #### 8. Event Passes & Gate QR Scanner (`/dashboard/event-passes`)
 - **Digital Event Passes**: High-resolution event pass cards with unique serial numbers, security QR codes, and automated email dispatch with pass attachments.

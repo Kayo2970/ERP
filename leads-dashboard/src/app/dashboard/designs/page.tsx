@@ -773,7 +773,7 @@ export default function DesignPortalPage() {
   // Filtered designs
   const filteredDesigns = designs.filter(d => {
     // Search
-    const matchesSearch = 
+    const matchesSearch =
       d.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       d.designerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (d.eventName && d.eventName.toLowerCase().includes(searchQuery.toLowerCase()));
