@@ -66,6 +66,9 @@ import { StudentProfileModal } from '@/components/student-profile-modal';
 import { RequestApprovalModal } from '@/components/request-approval-modal';
 import { canViewFullDirectory, canEditDirectory, canAddMember, getMemberApprovalRequirement, canApprovePendingMember, canEditMemberRecordRow, isRestrictedDirectoryEditor, isCentreHead, canViewHiddenAccounts, canSetMemberPassword, isKayomarzPavri } from '@/lib/permissions';
 
+const capitalizeFirstLetter = (value: string) =>
+  value.length > 0 ? value.charAt(0).toUpperCase() + value.slice(1) : value;
+
 export default function DirectoryPage() {
   const router = useRouter();
   const [members, setMembers] = useState<Member[]>([]);
@@ -1726,7 +1729,7 @@ export default function DirectoryPage() {
                     type="text"
                     required
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    onChange={(e) => setName(capitalizeFirstLetter(e.target.value))}
                     placeholder="e.g. Ananya Sharma"
                     className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   />
@@ -1935,7 +1938,7 @@ export default function DirectoryPage() {
                     type="text"
                     required
                     value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
+                    onChange={(e) => setEditName(capitalizeFirstLetter(e.target.value))}
                     className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   />
                 </div>
