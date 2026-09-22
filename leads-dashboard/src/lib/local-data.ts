@@ -141,7 +141,8 @@ export interface Member {
 
 // A person encountered outside the org (event guest, sponsor contact, vendor,
 // etc.) — sourced from a visiting card, kept in a directory of its own,
-// separate from the Member roster and from the ad-hoc Guest Invites tool.
+// separate from the Member roster and from the ad-hoc Mail Merge tool
+// (displayed name — internally still "Guest Invites"/GUEST_INVITES).
 export interface Guest {
   id: string;
   name: string;

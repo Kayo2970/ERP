@@ -100,6 +100,7 @@ export async function POST(request: Request) {
         badgeText,
         badgeColor,
         category: category || 'ANNOUNCEMENT',
+        attachments,
       });
       dispatchedLogs.push(log);
     }
