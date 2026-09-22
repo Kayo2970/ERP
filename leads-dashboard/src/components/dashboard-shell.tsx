@@ -423,15 +423,17 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         const lastTierNum = parseInt(storedLastTier, 10);
         // In LEADS ERP, lower tier number indicates higher rank (Tier 1 = Super User, Tier 2 = Leadership, Tier 3 = Core)
         const isTierElevated = !isNaN(lastTierNum) && parsedUser.tier < lastTierNum;
+        const isTierDemoted = !isNaN(lastTierNum) && parsedUser.tier > lastTierNum;
         const isRolePromoted = isTierElevated || (storedLastRole !== (parsedUser.role || '') && parsedUser.tier <= lastTierNum);
 
-        if (isRolePromoted && !isImpersonatingSession) {
+        if ((isRolePromoted || isTierDemoted) && !isImpersonatingSession) {
           setPromotionData({
             previousTier: lastTierNum,
             previousRole: storedLastRole,
             newTier: parsedUser.tier,
             newRole: parsedUser.role || 'Elevated Member',
             newDivision: parsedUser.division,
+            changeType: isTierDemoted ? 'demotion' : 'promotion',
           });
           setTimeout(() => setIsPromotionModalOpen(true), 600);
         }
@@ -502,15 +504,17 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           if (storedLastTier !== null && storedLastRole !== null) {
             const lastTierNum = parseInt(storedLastTier, 10);
             const isTierElevated = !isNaN(lastTierNum) && liveRecord.tier < lastTierNum;
+            const isTierDemoted = !isNaN(lastTierNum) && liveRecord.tier > lastTierNum;
             const isRolePromoted = isTierElevated || (storedLastRole !== (liveRecord.role || '') && liveRecord.tier <= lastTierNum);
 
-            if (isRolePromoted) {
+            if (isRolePromoted || isTierDemoted) {
               setPromotionData({
                 previousTier: lastTierNum,
                 previousRole: storedLastRole,
                 newTier: liveRecord.tier,
                 newRole: liveRecord.role || 'Elevated Member',
                 newDivision: liveRecord.division,
+                changeType: isTierDemoted ? 'demotion' : 'promotion',
               });
               setIsPromotionModalOpen(true);
             }
