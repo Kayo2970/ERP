@@ -226,11 +226,7 @@ export default function EventsPage() {
             location: locationIndex !== -1 ? values[locationIndex] : '',
             status: evStatus,
             createdBy: user?.name || 'User',
-            committees: [
-              { id: 'c_' + Date.now() + '_' + i + '_1', name: 'Logistics & Venue Committee', memberIds: [] },
-              { id: 'c_' + Date.now() + '_' + i + '_2', name: 'Technical & AV Committee', memberIds: [] },
-              { id: 'c_' + Date.now() + '_' + i + '_3', name: 'Design & Media Committee', memberIds: [] }
-            ]
+            committees: []
           });
           importCount++;
         }
@@ -382,11 +378,7 @@ export default function EventsPage() {
         status,
         sponsors: cleanedSponsors,
         createdBy: user?.name || 'User',
-        committees: [
-          { id: 'c_' + Date.now() + '_1', name: 'Logistics & Venue Committee', memberIds: [] },
-          { id: 'c_' + Date.now() + '_2', name: 'Technical & AV Committee', memberIds: [] },
-          { id: 'c_' + Date.now() + '_3', name: 'Design & Media Committee', memberIds: [] }
-        ]
+        committees: []
       };
       const approval = getEventApprovalRequirement(user, 'CREATE');
       if (approval.requiresApproval) {
@@ -403,7 +395,7 @@ export default function EventsPage() {
         triggerSuccess(`Event submitted for approval from ${approval.approverName}. It will go live once approved.`);
       } else {
         addEvent(newEventBase);
-        triggerSuccess('New event created with its own directory and sub-committees.');
+        triggerSuccess('New event created with its own directory.');
       }
       setIsCreateModalOpen(false);
     }
