@@ -179,7 +179,12 @@ export async function PATCH(
 
         if (to.length > 0) {
           const fileBuffer = await readStoredFile(mergedRecord.storageKey);
-          const template = generateDesignApprovedEmailTemplate(mergedRecord.title || 'Design', mergedRecord.designerName || 'Designer');
+          const template = generateDesignApprovedEmailTemplate(
+            mergedRecord.title || 'Design',
+            mergedRecord.designerName || 'Designer',
+            mergedRecord.submittedAt,
+            mergedRecord.styleDecidedBy || 'the Design Head'
+          );
 
           const log = await dispatchEmail({
             to: to.join(','),

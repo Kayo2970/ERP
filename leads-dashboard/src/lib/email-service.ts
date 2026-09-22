@@ -997,12 +997,25 @@ export function generateCaptionsApprovedEmailTemplate(
 
 /**
  * Template Generator: Design Style Approved (sent with the design asset
- * attached once the Design Head marks it Style Approved).
+ * attached once the Design Head marks it Style Approved). Doubles as the
+ * Centre Head's approval-of-record notice, so it names who submitted the
+ * design, when, and who approved it, alongside the attached final asset.
  */
-export function generateDesignApprovedEmailTemplate(designTitle: string, designerName: string): { subject: string; bodyText: string; bodyHtml: string } {
+export function generateDesignApprovedEmailTemplate(
+  designTitle: string,
+  designerName: string,
+  submittedAt?: string,
+  approvedByName?: string
+): { subject: string; bodyText: string; bodyHtml: string } {
   const subject = `Design Approved: ${designTitle}`;
+  const submittedAtFormatted = submittedAt ? new Date(submittedAt).toLocaleString() : undefined;
+
   const bodyText = `Hello,\n\n` +
-    `The design "${designTitle}", submitted by ${designerName}, has been Style Approved.\n\n` +
+    `The design "${designTitle}", submitted by ${designerName}` +
+    (submittedAtFormatted ? ` on ${submittedAtFormatted}` : '') +
+    `, has been Style Approved` +
+    (approvedByName ? ` by ${approvedByName}` : '') +
+    `.\n\n` +
     `The final asset is attached to this email.\n\n` +
     `Regards,\nLEADS Next Gen Centre, MSRUAS`;
 
@@ -1014,7 +1027,8 @@ export function generateDesignApprovedEmailTemplate(designTitle: string, designe
     badgeColor: `#15803d`,
     bodyContentHtml: `
       <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello,</p>
-      <p style="color: #334155; font-size: 14px; line-height: 1.6;">The design <strong>${designTitle}</strong>, submitted by <strong>${designerName}</strong>, has been Style Approved.</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">The design <strong>${designTitle}</strong> has been Style Approved${approvedByName ? ` by <strong>${approvedByName}</strong>` : ''}.</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">Submitted by <strong>${designerName}</strong>${submittedAtFormatted ? ` on <strong>${submittedAtFormatted}</strong>` : ''}.</p>
       <p style="color: #334155; font-size: 14px; line-height: 1.6;">The final asset is attached to this email.</p>
     `
   });
