@@ -66,6 +66,66 @@ export function resolveTaskEmailRecipients(
   return email ? [{ email, name: name || 'Member' }] : [];
 }
 
+/**
+ * Immediately (non-debounced) emails a recipient that a task they're
+ * assigned to was substantively edited — a distinct notice from the
+ * assignment digest above, since an update is a discrete admin action, not
+ * something that benefits from batching into a 10-minute digest.
+ */
+export async function sendTaskUpdateEmail(
+  task: { id: string; title: string; event?: string; eventName?: string; dueDate?: string },
+  recipient: TaskEmailRecipient
+) {
+  const baseUrl = getAppBaseUrl();
+  const taskUrl = `${baseUrl}/dashboard/tasks`;
+  const eventLabel = task.event || task.eventName || 'LEADS Operations';
+
+  const subject = `Task Updated: ${task.title}`;
+  const bodyText = `Dear ${recipient.name},\n\nA task assigned to you has been updated:\n\n` +
+    `- ${task.title} (Context: ${eventLabel}, Due: ${task.dueDate || 'Flexible'})\n\n` +
+    `Please review the latest details here:\n${taskUrl}\n\nRegards,\nLEADS Committee Management`;
+
+  const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
+    badgeText: 'Task Updated',
+    badgeColor: '#f59e0b',
+    headerTitle: task.title,
+    bodyContentHtml: `
+      <p style="margin: 0 0 16px; font-size: 14px; color: #475569; line-height: 1.6;">
+        Dear <strong>${escapeHtml(recipient.name)}</strong>,<br/>
+        A task assigned to you has been updated. Please review the latest details:
+      </p>
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #334155; margin: 16px 0;">
+        <tr>
+          <td style="padding: 8px 0; color: #64748b; width: 120px;">Task:</td>
+          <td style="padding: 8px 0; font-weight: 700; color: #0f172a;">${escapeHtml(task.title)}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: #64748b;">Context:</td>
+          <td style="padding: 8px 0; font-weight: 600; color: #0f172a;">${escapeHtml(eventLabel)}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: #64748b;">Due Date:</td>
+          <td style="padding: 8px 0; font-weight: 700; color: #0f172a;">${escapeHtml(task.dueDate || 'Flexible')}</td>
+        </tr>
+      </table>
+      <div style="text-align: center; margin: 20px 0 4px;">
+        <a href="${taskUrl}" target="_blank" style="display: inline-block; background: #f59e0b; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 12px; font-weight: 600; font-size: 14px;">
+          Open Tasks Desk &rarr;
+        </a>
+      </div>
+    `,
+  });
+
+  await dispatchEmail({
+    to: recipient.email,
+    subject,
+    bodyText,
+    bodyHtml,
+    category: 'TASK_ASSIGNMENT',
+  });
+}
+
 interface PendingTaskItem {
   id: string;
   title: string;
@@ -292,4 +352,33 @@ export function cancelAllTaskEmailQueues(): number {
   });
   pendingQueues.clear();
   return count;
+}
+
+// The debounce queue above lives only in this process's memory. This repo's
+// deploy workflow restarts the server (`pm2 restart`) on every push to
+// main, so any task assigned inside an open 10-minute debounce window at
+// the moment of a restart would otherwise have its queued email silently
+// dropped. Flushing every pending queue on SIGTERM/SIGINT — the signals
+// pm2/systemd send for a graceful stop — sends those emails immediately
+// instead of losing them. Guarded the same way the daily schedulers guard
+// against double-registration across dev-mode module reloads.
+const g = globalThis as unknown as { __taskEmailShutdownFlushRegistered?: boolean };
+if (!g.__taskEmailShutdownFlushRegistered) {
+  g.__taskEmailShutdownFlushRegistered = true;
+  // Registering a SIGTERM/SIGINT listener suppresses Node's default
+  // terminate-the-process behavior for that signal, so this must call
+  // process.exit() itself once done — otherwise the process would hang
+  // around after a `pm2 restart` instead of actually restarting. Capped at
+  // 5s so a stuck SMTP call can't block the restart indefinitely; pm2 would
+  // SIGKILL past its own timeout anyway.
+  const flushAllOnShutdown = async () => {
+    const emails = Array.from(pendingQueues.keys());
+    const flush = Promise.all(emails.map(email => flushTaskEmailDigest(email).catch(err => {
+      console.error(`[task-email-queue] Shutdown flush failed for ${email}:`, err);
+    })));
+    await Promise.race([flush, new Promise(resolve => setTimeout(resolve, 5000))]);
+    process.exit(0);
+  };
+  process.on('SIGTERM', flushAllOnShutdown);
+  process.on('SIGINT', flushAllOnShutdown);
 }

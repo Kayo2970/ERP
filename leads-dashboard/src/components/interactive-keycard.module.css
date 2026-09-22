@@ -1251,7 +1251,21 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: 520px;
+    /* Shrunk from the desktop 520px floor — this used to only get a
+       horizontal transform/scale adjustment on mobile, never a real
+       reduction in layout footprint, so the stage kept reserving enough
+       vertical space to push the page's own "Proceed to Sign In" button
+       (on the activation success screen, see activate/page.tsx) below the
+       fold on a typical phone viewport. holderWrap below is shrunk to
+       match, since transform: scale() alone doesn't reduce a box's layout
+       size. */
+    min-height: 320px;
+  }
+
+  .holderWrap {
+    /* Same 320:510 aspect ratio as the desktop size, scaled down. */
+    width: 200px;
+    height: 319px;
   }
 
   /* Default mobile open state when 'card' is selected: perfectly center Keycard holder and hide the left cover flap */

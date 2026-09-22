@@ -167,6 +167,46 @@ export async function PATCH(
       }
     }
 
+    // A rejected report's submitter is never told otherwise — let them know
+    // why, same emailSent/emailError write-back as the approval branch above
+    // (shared field, since a report is only ever approved or rejected once).
+    if (justRejected && mergedRecord?.submittedByEmail) {
+      try {
+        const { dispatchEmail, wrapInMasterEmailTemplate } = await import('@/lib/email-service');
+        const reasonHtml = mergedRecord.rejectionReason
+          ? `<p style="color: #334155; font-size: 14px; line-height: 1.6;"><strong>Reason:</strong> ${mergedRecord.rejectionReason}</p>`
+          : '';
+        const log = await dispatchEmail({
+          to: mergedRecord.submittedByEmail,
+          subject: `Event Report Rejected: ${mergedRecord.eventTitle || 'Event'}`,
+          bodyText: `Hello ${mergedRecord.submittedBy || ''},\n\nYour event report was not accepted and needs revision.\n\n` +
+            (mergedRecord.rejectionReason ? `Reason: ${mergedRecord.rejectionReason}\n\n` : '') +
+            `Please resubmit on the LEADS Dashboard.\n\nRegards,\nLEADS Next Gen Centre, MSRUAS`,
+          bodyHtml: wrapInMasterEmailTemplate({
+            pageTitle: `Event Report Rejected`,
+            headerTitle: 'Report Needs Revision',
+            headerSubtitle: mergedRecord.eventTitle || 'Event',
+            badgeText: 'REJECTED',
+            badgeColor: '#dc2626',
+            bodyContentHtml: `<p style="margin-top:0;color:#0f172a;font-size:14px;">Hello ${mergedRecord.submittedBy || ''},</p><p style="color:#334155;font-size:14px;line-height:1.6;">Your event report was not accepted and needs revision.</p>${reasonHtml}`,
+          }),
+          category: 'EVENT_REPORT_APPROVAL',
+        });
+
+        await mutateCollection('eventReports', (current) => (current || []).map((r: any) =>
+          r.id === id ? { ...r, emailSent: log.status === 'SENT', emailError: log.errorMessage } : r
+        ));
+        mergedRecord = { ...mergedRecord, emailSent: log.status === 'SENT', emailError: log.errorMessage };
+      } catch (emailErr: any) {
+        console.error('[event-reports-api] Rejection email dispatch failed:', emailErr);
+        const message = emailErr?.message || 'Failed to send the rejection email.';
+        await mutateCollection('eventReports', (current) => (current || []).map((r: any) =>
+          r.id === id ? { ...r, emailSent: false, emailError: message } : r
+        ));
+        mergedRecord = { ...mergedRecord, emailSent: false, emailError: message };
+      }
+    }
+
     return NextResponse.json(mergedRecord || updated.find((r: any) => r.id === id));
   } catch (err: any) {
     return apiError(err, 'event-reports-id-api-patch', 500);

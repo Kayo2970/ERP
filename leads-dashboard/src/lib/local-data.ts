@@ -408,6 +408,11 @@ export interface TaskItem {
   // as real files under data/uploads/tasks/<taskId>/ (see saveBase64File) —
   // this array only ever holds name/url/storageKey/type, never raw bytes.
   attachments?: ReceiptFile[];
+  // Set once by task-deadline-reminder-scheduler.ts the first (and only)
+  // time the 1-day-before-deadline reminder email is sent for this task —
+  // a one-time flag, unlike birthdayEmailLog's per-year log, since a task's
+  // deadline only ever needs reminding about once.
+  deadlineReminderSentAt?: string;
 }
 
 export interface TaskDelegationEvent {
@@ -562,6 +567,12 @@ export interface ReimbursementItem {
   decidedAt?: string;
   eventId?: string;
   eventName?: string;
+  // Honest delivery status for the claimant-facing decision email (verified/
+  // approved/denied) — mirrors DesignItem's designerDecisionEmailSent/Error
+  // and EventReportItem's emailSent/emailError, so a failed send is visible
+  // in the UI instead of silently swallowed.
+  decisionEmailSent?: boolean;
+  decisionEmailError?: string;
 }
 
 export interface BudgetLineItem {
@@ -602,6 +613,11 @@ export interface BudgetItem {
   decidedBy?: string;
   decidedAt?: string;
   decisionNotes?: string;
+  // Honest delivery status for the submitter-facing decision email
+  // (verified/approved/rejected) — mirrors ReimbursementItem's
+  // decisionEmailSent/Error.
+  decisionEmailSent?: boolean;
+  decisionEmailError?: string;
 }
 
 export interface IncomeSourceItem {

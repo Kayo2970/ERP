@@ -8,7 +8,9 @@ import {
   canVerifyReimbursementCentreHead,
   canApproveAsFinanceHead,
   isCentreHead,
+  isFinanceHead,
 } from '@/lib/permissions-server';
+import { dispatchEmail, generateReimbursementSubmittedEmailTemplate, generateReimbursementDecisionEmailTemplate } from '@/lib/email-service';
 import { apiError } from '@/lib/api-error';
 
 export async function PATCH(
@@ -65,7 +67,52 @@ export async function PATCH(
       next[idx] = { ...next[idx], ...updates };
       return next;
     });
-    return NextResponse.json(updated.find((r: any) => r.id === id));
+    let result = updated.find((r: any) => r.id === id);
+
+    // Notify the claimant on every decision (verify/approve/deny), and the
+    // Finance Head(s) once a claim clears Centre Head verification — mirrors
+    // the Designs portal's "email on every decision" pattern, with the
+    // send outcome written back onto the record so a failure is visible.
+    if (result && (isCentreHeadVerifyAction || isFinanceDecision || isFirstPassReject)) {
+      try {
+        const members = await readCollection('members');
+
+        if (isCentreHeadVerifyAction) {
+          const financeHeads = (members as any[]).filter(
+            (m) => m.status !== 'Terminated' && m.email && isFinanceHead(m, settings)
+          );
+          for (const fh of financeHeads) {
+            const template = generateReimbursementSubmittedEmailTemplate(fh.name, result.memberName, result.amount, result.category);
+            await dispatchEmail({ to: fh.email, subject: template.subject, bodyText: template.bodyText, bodyHtml: template.bodyHtml, category: 'REIMBURSEMENT' });
+          }
+        }
+
+        const outcome = isCentreHeadVerifyAction ? 'verified' : result.status === 'Approved' ? 'approved' : 'denied';
+        const decidedByName = result.finalApprover || result.firstPassReviewer;
+        const template = generateReimbursementDecisionEmailTemplate(result.memberName, outcome, result.amount, result.category, decidedByName);
+        const log = await dispatchEmail({
+          to: result.memberEmail,
+          subject: template.subject,
+          bodyText: template.bodyText,
+          bodyHtml: template.bodyHtml,
+          category: 'REIMBURSEMENT',
+        });
+
+        await mutateCollection('reimbursements', (current) => current.map((r: any) =>
+          r.id === id ? { ...r, decisionEmailSent: log.status === 'SENT', decisionEmailError: log.errorMessage } : r
+        ));
+        result = { ...result, decisionEmailSent: log.status === 'SENT', decisionEmailError: log.errorMessage };
+      } catch (emailErr: any) {
+        console.error('[reimbursements-api] Decision email dispatch failed:', emailErr);
+        const message = emailErr?.message || 'Failed to send the decision email.';
+        await mutateCollection('reimbursements', (current) => current.map((r: any) =>
+          r.id === id ? { ...r, decisionEmailSent: false, decisionEmailError: message } : r
+        ));
+        result = { ...result, decisionEmailSent: false, decisionEmailError: message };
+      }
+    }
+
+    return NextResponse.json(result);
   } catch (err: any) {
     return apiError(err, 'reimbursements-id-api-patch', 400);
   }

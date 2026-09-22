@@ -92,9 +92,9 @@ function ActivateAccountForm() {
   if (status === 'done') {
     const dynamicQr = cardSlug ? `/api/card/${cardSlug}/qr` : '/card/leads-qr-code.png';
     return (
-      <div className="min-h-screen bg-space-theme text-theme-text-primary flex flex-col items-center justify-center p-4 py-10 relative z-0 overflow-x-hidden">
+      <div className="min-h-screen bg-space-theme text-theme-text-primary flex flex-col items-center justify-center p-4 py-6 sm:py-10 relative z-0 overflow-x-hidden">
         {/* Top Celebration Header */}
-        <div className="w-full max-w-2xl text-center space-y-3 mb-4 animate-in fade-in slide-in-from-top-4 duration-500">
+        <div className="w-full max-w-2xl text-center space-y-2 sm:space-y-3 mb-2 sm:mb-4 animate-in fade-in slide-in-from-top-4 duration-500">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent/15 border border-accent/30 text-accent text-[11px] font-bold tracking-wider uppercase">
             <Sparkles className="h-3.5 w-3.5" /> Official Induction & Credentials Issued
           </div>

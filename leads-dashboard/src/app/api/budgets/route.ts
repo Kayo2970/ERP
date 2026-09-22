@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { requireSession, requirePermission } from '@/lib/session';
-import { getAccessLevelSettingsServer, canSubmitBudget } from '@/lib/permissions-server';
+import { getAccessLevelSettingsServer, canSubmitBudget, isCentreHead } from '@/lib/permissions-server';
+import { dispatchEmail, generateBudgetSubmittedEmailTemplate } from '@/lib/email-service';
 import { apiError } from '@/lib/api-error';
 
 export async function GET(request: Request) {
@@ -35,6 +36,32 @@ export async function POST(request: Request) {
     });
 
     const created = updated.find((b: any) => b.id === budget.id);
+
+    // Let the Centre Head(s) know a new budget request needs their
+    // verification — same low-stakes, fire-and-log tone as the
+    // Reimbursements submit notice.
+    if (created) {
+      try {
+        const members = await readCollection('members');
+        const approvers = (members as any[]).filter(
+          (m) => m.status !== 'Terminated' && m.email && isCentreHead(m, settings)
+        );
+        const label = created.eventName || created.month || created.financialYear || created.type;
+        for (const approver of approvers) {
+          const template = generateBudgetSubmittedEmailTemplate(approver.name, created.submittedBy, created.amount, label);
+          await dispatchEmail({
+            to: approver.email,
+            subject: template.subject,
+            bodyText: template.bodyText,
+            bodyHtml: template.bodyHtml,
+            category: 'BUDGET',
+          });
+        }
+      } catch (emailErr) {
+        console.error('[budgets-api] Failed to notify approver of new request:', emailErr);
+      }
+    }
+
     return NextResponse.json(created, { status: 201 });
   } catch (err: any) {
     return apiError(err, 'budgets-api-post', 400);

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection, readCollection } from '@/lib/server-db';
-import { enqueueTaskEmailNotification } from '@/lib/task-email-queue';
+import { enqueueTaskEmailNotification, sendTaskUpdateEmail, resolveTaskEmailRecipients } from '@/lib/task-email-queue';
 import { deleteStoredFilesForRecord } from '@/lib/file-storage';
 import { fanOutAutoApproval, cascadeCloseAutoApprovals, deleteLinkedApprovalRequests } from '@/lib/approval-sync';
 import { requireSession, requirePermission, ForbiddenError } from '@/lib/session';
@@ -83,13 +83,14 @@ export async function PATCH(
     // local-data.ts) just got approved and changed who it's assigned to —
     // let the new assignee know, mirroring the notification a brand-new
     // task gets on creation (see the tasks POST route).
-    if (
+    const isReassignmentApproval = !!(
       result &&
       previous?.approvalStatus === 'pending_edit' &&
       result.approvalStatus === 'approved' &&
       result.assigneeEmail &&
       result.assigneeEmail !== previous.assigneeEmail
-    ) {
+    );
+    if (isReassignmentApproval) {
       try {
         await enqueueTaskEmailNotification({
           id: result.id,
@@ -102,6 +103,34 @@ export async function PATCH(
         });
       } catch (emailErr) {
         console.error('[tasks-api] Failed to enqueue reassignment notification:', emailErr);
+      }
+    }
+
+    // A substantive edit (due date, title, description, event, or
+    // assignee/assignees changed) gets its own immediate notice — distinct
+    // from a plain status toggle (e.g. a student marking their own task "In
+    // Progress"/"Completed"), which the assignee already knows about and
+    // shouldn't be emailed for. Skipped when the reassignment-approval email
+    // above already covers this exact change, to avoid double-sending.
+    const SUBSTANTIVE_FIELDS = [
+      'title', 'dueDate', 'event', 'eventId', 'eventCommitteeId', 'briefDescription',
+      'assignee', 'assigneeId', 'assigneeEmail', 'assigneeIds', 'assigneeType',
+    ] as const;
+    const changedSubstantively = !!previous && SUBSTANTIVE_FIELDS.some(
+      (field) => JSON.stringify(previous[field]) !== JSON.stringify((result as any)?.[field])
+    );
+    if (result && changedSubstantively && !isReassignmentApproval) {
+      try {
+        const [members, events] = await Promise.all([
+          readCollection('members'),
+          readCollection('events'),
+        ]);
+        const recipients = resolveTaskEmailRecipients(result, members as any, events as any);
+        for (const recipient of recipients) {
+          await sendTaskUpdateEmail(result, recipient);
+        }
+      } catch (emailErr) {
+        console.error('[tasks-api] Failed to send task update notification:', emailErr);
       }
     }
 
