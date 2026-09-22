@@ -1777,7 +1777,7 @@ export default function DesignPortalPage() {
             onClick={(e) => e.stopPropagation()}
             className="glass-panel bg-slate-900/95 dark:bg-[#0B1B2E]/95 bg-white/95 backdrop-blur-2xl border border-white/20 dark:border-white/15 rounded-2xl max-w-2xl w-full p-6 space-y-6 shadow-2xl relative max-h-[90vh] overflow-y-auto flex flex-col"
           >
-            <div className="sticky -top-6 -mx-6 -mt-6 p-6 bg-slate-900/95 dark:bg-[#0B1B2E]/95 bg-white/95 backdrop-blur-xl border-b border-border z-30 flex items-start justify-between gap-4 rounded-t-2xl">
+            <div className="sticky -top-6 -mx-6 -mt-6 p-6 bg-slate-900/95 dark:bg-[#0B1B2E]/95 bg-white/95 border-b border-border z-30 flex items-start justify-between gap-4 rounded-t-2xl">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-accent/10 text-accent border border-accent/20">
@@ -1815,7 +1815,7 @@ export default function DesignPortalPage() {
             </div>
 
             {/* Inspector Tab Bar — splits the review into focused screens instead of one long scroll */}
-            <div className="flex items-center gap-1.5 overflow-x-auto -mx-1 px-1 pb-1 border-b border-border">
+            <div className="shrink-0 flex items-center gap-1.5 overflow-x-auto -mx-1 px-1 pb-1 border-b border-border">
               {([
                 { id: 'overview', label: 'Overview', icon: FileText },
                 { id: 'proofreading', label: 'Proofreading', icon: UserCheck },
@@ -2452,7 +2452,7 @@ export default function DesignPortalPage() {
             )}
 
             {/* Sticky Bottom Close Inspector Bar */}
-            <div className="sticky -bottom-6 -mx-6 -mb-6 p-4 bg-slate-900/95 dark:bg-[#0B1B2E]/95 bg-white/95 backdrop-blur-xl border-t border-border z-30 flex items-center justify-between rounded-b-2xl mt-6">
+            <div className="sticky -bottom-6 -mx-6 -mb-6 p-4 bg-slate-900/95 dark:bg-[#0B1B2E]/95 bg-white/95 border-t border-border z-30 flex items-center justify-between rounded-b-2xl mt-6">
               <span className="text-xs text-muted-foreground font-medium">
                 Design Inspection & Proofread Desk
               </span>
