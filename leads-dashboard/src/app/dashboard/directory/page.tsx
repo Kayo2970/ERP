@@ -112,7 +112,7 @@ export default function DirectoryPage() {
     'Operations & Logistics',
   ];
 
-  type FacultyPosition = 'Events Head' | 'Industrial Connects' | 'Finance Head' | 'Centre Head' | 'Advisor';
+  type FacultyPosition = 'Events Head' | 'Industrial Connects' | 'Finance Head' | 'Centre Head' | 'Advisor' | 'Chief Advisor';
   type CorePosition = 'President' | 'Vice President' | 'General Secretary' | 'Chief Coordinator' | 'Faculty Ambassador' | 'Department Head';
   type AssociatePosition = 'Associate' | 'Department Associate';
 
@@ -154,6 +154,18 @@ export default function DirectoryPage() {
         role = 'Advisor';
         department = 'Faculty Advisory';
         tier = 2;
+      } else if (pos === 'Chief Advisor') {
+        // View-only across the app, deliberately never given the (edit-
+        // capable) Advisor's tier or role-keyword privileges — see
+        // isCentreHead/isAdvisor in permissions.ts and permissions-server.ts,
+        // which both explicitly exclude this role from their "advisor"
+        // keyword match so it's never mistaken for the real Advisor
+        // position above. Tier 4 (same as a plain Faculty Member) keeps it
+        // clear of both the sector-head and base-leadership tier
+        // thresholds that would otherwise grant edit access.
+        role = 'Chief Advisor';
+        department = 'Chief Advisor Office';
+        tier = 4;
       } else {
         role = 'Faculty Member';
         department = opts.departmentSelect || 'Faculty';
@@ -544,6 +556,10 @@ export default function DirectoryPage() {
       setEditFacultyPosition('Finance Head');
     } else if (r.includes('Centre Head') || r.includes('Center Head')) {
       setEditFacultyPosition('Centre Head');
+    } else if (r.includes('Chief Advisor')) {
+      // Must be checked before the plain 'Advisor' match below — "Chief
+      // Advisor" also contains the substring "Advisor".
+      setEditFacultyPosition('Chief Advisor');
     } else if (r.includes('Advisor')) {
       setEditFacultyPosition('Advisor');
     } else {
@@ -1791,6 +1807,7 @@ export default function DirectoryPage() {
                         <option value="Finance Head">Finance Head</option>
                         <option value="Centre Head">Centre Head</option>
                         <option value="Advisor">Advisor</option>
+                        <option value="Chief Advisor">Chief Advisor (view-only)</option>
                       </select>
                     </div>
                   )}
@@ -2021,6 +2038,7 @@ export default function DirectoryPage() {
                         <option value="Finance Head">Finance Head</option>
                         <option value="Centre Head">Centre Head</option>
                         <option value="Advisor">Advisor</option>
+                        <option value="Chief Advisor">Chief Advisor (view-only)</option>
                       </select>
                     </div>
                   )}

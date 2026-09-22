@@ -92,6 +92,7 @@ export function canReviewEventReports(user: SessionUser): boolean {
  *  faculty proofreader, Centre Head, Advisor, GG Campus Events Head, Faculty, or Super User. */
 export function canReviewDesignProofread(user: SessionUser, design?: { assignedProofreaderIds?: string[]; assignedProofreaderEmail?: string; assignedProofreaderId?: string }): boolean {
   if (!user) return false;
+  if (isChiefAdvisor(user)) return false; // view-only — never an editing/approval action
   if (design?.assignedProofreaderIds && user.id && design.assignedProofreaderIds.includes(user.id)) return true;
   if (design?.assignedProofreaderEmail && design.assignedProofreaderEmail === user.email) return true;
   if (design?.assignedProofreaderId && user.id && design.assignedProofreaderId === user.id) return true;
@@ -198,9 +199,25 @@ export function isSuperUser(user: SessionUser): boolean {
 }
 
 /** Check if user is an Advisor (role contains advisor or division is Advisory Board). */
+/**
+ * The "Chief Advisor" Faculty position (directory/page.tsx's FacultyPosition
+ * options) — a deliberately view-only designation, never to be confused
+ * with the real, edit-capable "Advisor" position despite the role text
+ * containing the word "Advisor". isAdvisor() and isCentreHead() below both
+ * explicitly exclude this check's match before doing their own "advisor"
+ * keyword matching, so a Chief Advisor never inherits either position's
+ * privileges.
+ */
+export function isChiefAdvisor(user: SessionUser): boolean {
+  if (!user) return false;
+  const role = ((user as any)?.role || '').toLowerCase();
+  return role.includes('chief advisor');
+}
+
 export function isAdvisor(user: SessionUser): boolean {
   if (!user) return false;
   if (isSuperUser(user)) return false;
+  if (isChiefAdvisor(user)) return false;
   const role = ((user as any)?.role || '').toLowerCase();
   const division = ((user as any)?.division || '').toLowerCase();
   return keywordMatches(role, 'advisor') || role.includes('advisor') || division.includes('advisory');
@@ -210,6 +227,7 @@ export function isAdvisor(user: SessionUser): boolean {
 export function isCentreHead(user: SessionUser): boolean {
   if (!user) return false;
   if (user.tier === 1) return true;
+  if (isChiefAdvisor(user)) return false;
   const role = (user as any)?.role || '';
   const settings = getAccessLevelSettings();
   // Whole-word match on "advisor" so "Faculty Advisor" qualifies but "Advisory
@@ -1332,6 +1350,7 @@ export function canCreateAnnouncement(user: SessionUser): boolean {
   const override = resolveModuleEditOverride(user, 'ANNOUNCEMENTS');
   if (override === 'NONE') return false;
   if (override === 'ALL') return true;
+  if (isChiefAdvisor(user)) return false; // view-only
   return isBaseLeadership(user) || isCoreCommitteeTier(user) || user.tier === 4 || user.tier === 5 || isFaculty(user) || isHeadRole(user) || hasCapability(user, 'CREATE_ANNOUNCEMENT');
 }
 
@@ -1366,6 +1385,7 @@ export function canRequestTaskExtension(task: TaskItem, user: SessionUser): bool
 
 /** Task extension approval/rejection: base leadership, or Faculty. */
 export function canDecideTaskExtension(user: SessionUser): boolean {
+  if (isChiefAdvisor(user)) return false; // view-only
   return isBaseLeadership(user) || isFaculty(user) || hasCapability(user, 'DECIDE_TASK_EXTENSION');
 }
 
