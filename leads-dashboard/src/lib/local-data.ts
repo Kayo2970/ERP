@@ -4692,12 +4692,16 @@ export function saveDesigns(designs: DesignSubmissionItem[]): void {
  * opt-out and no manual reviewer picker. Prefers a real Centre Head, falls
 /**
  * Returns all active members eligible for selection as design proofreaders.
- * Only Social Media Heads, Centre Head, and Advisor are allowed.
- * Dr. Ajay R is explicitly excluded.
+ * Restricted to Faculty division members only, and within that, only
+ * Centre Head, Advisor, or Head of Design department. Dr. Ajay R is
+ * explicitly excluded.
  */
 export function getEligibleFacultyProofreaders(members?: Member[]): Member[] {
   const all = (members || getMembers()).filter(m => m.status !== 'Terminated');
   return all.filter(m => {
+    // Only Faculty division members can be selected as proofreaders.
+    if (m.division !== 'Faculty') return false;
+
     const nameLower = (m.name || '').toLowerCase();
     const emailLower = (m.email || '').toLowerCase();
     const roleLower = (m.role || '').toLowerCase();
@@ -4714,15 +4718,14 @@ export function getEligibleFacultyProofreaders(members?: Member[]): Member[] {
     // 2. Advisor
     const isAdvisor = roleLower.includes('advisor');
 
-    // 3. Social Media Heads / Design Heads
-    const isSocialMediaHead =
-      roleLower.includes('social media') ||
+    // 3. Head of Design department only
+    const isHeadOfDesign =
       roleLower.includes('head design') ||
       roleLower.includes('design head') ||
       roleLower.includes('head of design') ||
       (deptLower.includes('design') && roleLower.includes('head'));
 
-    return isCentreHead || isAdvisor || isSocialMediaHead;
+    return isCentreHead || isAdvisor || isHeadOfDesign;
   });
 }
 

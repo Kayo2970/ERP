@@ -1474,7 +1474,7 @@ export default function DesignPortalPage() {
                         Select Design Proofreaders <span className="text-rose-500">*</span>
                       </h4>
                       <p className="text-[10px] text-muted-foreground">
-                        Centre Head & Advisor are selected by default. Social Media Heads receive notification only if selected.
+                        Only Faculty members can be selected. Centre Head & Advisor are selected by default; Head of Design receives notification only if selected.
                       </p>
                     </div>
                   </div>
