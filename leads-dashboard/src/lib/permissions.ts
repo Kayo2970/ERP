@@ -29,11 +29,14 @@ function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** Check if user holds an executive role: President, Vice President, or Chief Coordinator. */
+/** Check if user holds an executive role: President, Vice President, Chief
+ *  Coordinator, or Faculty Ambassador (Core Committee/Advisory Board — see
+ *  directory/page.tsx's CorePosition options — deliberately given identical
+ *  standing to Chief Coordinator by matching here). */
 export function isExecutiveRole(user: SessionUser): boolean {
   if (!user) return false;
   const role = ((user as any)?.role || '').toLowerCase();
-  return role.includes('president') || role.includes('vice president') || role.includes('chief coordinator');
+  return role.includes('president') || role.includes('vice president') || role.includes('chief coordinator') || role.includes('faculty ambassador');
 }
 
 /** President specifically (not Vice President) — used to resolve who gets
