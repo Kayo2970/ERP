@@ -2,6 +2,24 @@
 
 An enterprise-grade, institutional management and operations platform designed for the **LEADS Next Gen Centre** at **M.S. Ramaiah University of Applied Sciences (MSRUAS)**.
 
+> See the [repository root README](../README.md) for the full project structure, environment variables, and a detailed changelog. This file covers the app itself.
+
+---
+
+## 🖥️ Production Deployment
+
+Runs on **AWS EC2** (`ap-south-1`) under **PM2** (`leads-dashboard`, `next start -p 3030`), served at **[portal-leads.msruas.ac.in](https://portal-leads.msruas.ac.in)** through an AWS Application Load Balancer. Administered via AWS Systems Manager Session Manager (no direct SSH).
+
+```bash
+cd /home/ssm-user/ERP/leads-dashboard
+git pull origin main
+npm install
+npm run build
+pm2 restart leads-dashboard
+```
+
+> Previously hosted on a Hostinger KVM VPS at `leadsnextgencentre.online` — that domain is now a stale, unrelated deployment and should not be used for anything expected to reach the live app.
+
 ---
 
 ## 🚀 Comprehensive Module Breakdown
@@ -26,6 +44,7 @@ An enterprise-grade, institutional management and operations platform designed f
 - **Sub-Committee Formation**: Create specialized committees (Logistics, Technical, Media, Operations).
 - **Approval Engine**: Executive Council event creations trigger Centre Head sign-off requirements.
 - **Festivals & Observances**: Synced national holidays require explicit social media post sign-off (`holiday_social_approval`).
+- **No Default Committees**: new events start with zero sub-committees instead of 3 auto-seeded ones.
 
 #### 4. Tasks Desk (`/dashboard/tasks`)
 - **Task Delegation**: Assign tasks to individuals or sub-committees with priority tagging (*Urgent*, *High*, *Normal*, *Low*).
@@ -52,6 +71,7 @@ An enterprise-grade, institutional management and operations platform designed f
   - *Proofreading Gate*: Assign proofreaders with change requests or plain approval.
   - *Style Approval Gate*: Final Design Head / Centre Head sign-off.
 - **Asset Management**: File uploads with image previews, OCR text scanning, and automated completed task synchronization.
+- **Design Task Requests Queue**: Design-brief Tasks awaiting a submission surface here for whoever they're assigned to, including committee assignments.
 
 #### 8. Event Passes & Gate QR Scanner (`/dashboard/event-passes`)
 - **Digital Event Passes**: High-resolution event pass cards with unique serial numbers, security QR codes, and automated email dispatch with pass attachments.
@@ -61,7 +81,7 @@ An enterprise-grade, institutional management and operations platform designed f
 #### 9. Digital Visiting Card & Wallet Passes (`/dashboard/visiting-card` & `/card/[slug]`)
 - **Public Visiting Card**: Dynamic `/card/[slug]` landing page featuring member profile, designation, direct phone/LinkedIn links, and instant VCF vCard download.
 - **Interactive Image Cropper**: Multi-aspect ratio image cropping modal with zoom, pan, and centering controls for avatars and visiting cards.
-- **Apple & Google Wallet Passes**: Automated wallet pass generation via WalletWallet API with QR codes, caching, and rate-limited regeneration (2 per 15-day window).
+- **Apple & Google Wallet Passes**: Automated wallet pass generation via WalletWallet API with QR codes, caching, and rate-limited regeneration (2 per 15-day window). Logo/photo URLs now point at the live production domain rather than a stale pre-migration one.
 
 ---
 
@@ -95,12 +115,18 @@ An enterprise-grade, institutional management and operations platform designed f
 - **Central Roster**: Complete roster management covering Advisory Board, Core Committee, Training Associates, and Alumni across Tiers 1–7.
 - **Bulk CSV Importer**: Template-based batch member creation.
 - **Account Termination Engine**: Requires typed reason and dispatches automated termination notification emails.
+- **Add/Remove Hard-Locked**: Restricted to Centre Head, Advisor, and Super User — not delegable via Group Policy.
+- **New Designations**: Faculty Ambassador (Core Committee/Advisory Board) and Chief Advisor (Faculty, view-only).
+- **"Pending Activation / Reset" Filter Tab** and **auto-capitalized names** on entry.
+- **Promotion/Demotion Notice**: a tier change now pops up a notice either direction.
 
 #### 16. Guest Directory (`/dashboard/guest-directory`)
 - **External VIP Directory**: Directory for guest speakers, VIPs, and corporate contacts with CSV bulk import.
 
-#### 17. Guest Invites Dispatcher (`/dashboard/guest-invites`)
+#### 17. Mail Merge (`/dashboard/guest-invites`)
+- Renamed from "Guest Invites" — same route and permission keys, display-only rename.
 - **Mass Email Dispatcher**: Batch invitation engine with mail-merge placeholders (`{{name}}`, `{{email}}`, `{{role}}`) and live delivery progress bar.
+- **File Attachments**: Attach files (15MB cap) sent to every recipient in the batch.
 
 #### 18. Dynamic Group Policies (`/dashboard/policies`)
 - **Granular RBAC Engine**: Super User capability grants across 15 privilege keys with division/tier targeting, `Select All` controls, and approval gateways.
@@ -110,6 +136,8 @@ An enterprise-grade, institutional management and operations platform designed f
 
 #### 20. Email Management & Client (`/dashboard/email`)
 - **SMTP Engine**: Diagnostic testing, live queue monitoring, test email delivery, and dispatch logs.
+- **File Attachments** on the Broadcast Composer, same as Mail Merge.
+- **Debounced Task-Assignment Digest**: batches task-assignment emails per recipient over a 10-minute window — now fires correctly for tasks created automatically by the in-process schedulers, not just ones created via the Tasks page.
 
 #### 21. System & Account Settings (`/dashboard/settings`)
 - **Profile & Security**: Avatar upload, OTP-verified email updates, password change, and Super User Emergency System Lockdown.

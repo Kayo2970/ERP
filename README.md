@@ -10,6 +10,7 @@ This platform replaces a scattered mix of WhatsApp groups, spreadsheets, and ema
 
 ## Table of Contents
 
+- [Recent Updates](#-recent-updates)
 - [Project Structure](#-project-structure)
 - [Tech Stack](#-tech-stack)
 - [Getting Started](#-getting-started--first-time-setup)
@@ -39,12 +40,43 @@ This platform replaces a scattered mix of WhatsApp groups, spreadsheets, and ema
   - [21. System & Account Settings](#21-system--account-settings-dashboardsettings)
 - [Access Level Tiers & Privileges Matrix](#-access-level-tiers--privileges-matrix)
 - [Super User Features](#-super-user-features)
-- [Self-Hosted Deployment (Hostinger KVM VPS)](#️-self-hosted-deployment-hostinger-kvm-vps)
+- [Production Deployment (AWS EC2)](#️-production-deployment-aws-ec2)
 - [Data Persistence & Encryption](#-data-persistence--encryption)
 - [System Architecture & Engineering Diagrams](#-system-architecture--engineering-diagrams)
 - [UI Aesthetics & Mobile Design](#-ui-aesthetics--mobile-design)
 - [Comprehensive Operations Manual](#-comprehensive-operations-manual)
 - [Intellectual Property & Licensing Notice](#️-intellectual-property--licensing-notice)
+
+---
+
+## 🆕 Recent Updates
+
+Everything that's changed since this README was last updated (2026-09-15). Full detail is in the git history (`git log`); this is the summary.
+
+### Infrastructure — moved to AWS
+- **Migrated production hosting from a Hostinger KVM VPS to AWS EC2** (region `ap-south-1`), now served at **`portal-leads.msruas.ac.in`** through an AWS Application Load Balancer, administered via AWS Systems Manager Session Manager instead of direct SSH. See [Production Deployment (AWS EC2)](#️-production-deployment-aws-ec2) below.
+- Fixed a bug left over from that migration: several places (wallet pass logo/photo URLs, background-worker email links) were still hardcoded to the old `leadsnextgencentre.online` domain — a completely different, stale deployment — instead of the real live domain. This was the root cause of Apple/Google Wallet passes silently failing to generate.
+
+### 2026-09-22
+- **Members Directory**: add/remove access hard-locked to Centre Head, Advisor, and Super User — no longer delegable via Group Policy (#129, #134); new **Faculty Ambassador** (#132) and **Chief Advisor**, view-only (#133) designations; new **"Pending Activation / Reset"** filter tab (#139); member names auto-capitalize as typed (#128); "Present Credentials" 3D keycard now opens on the closed cover instead of skipping the animation (#127).
+- **Digital Visiting Card / Wallet Passes**: fixed the "Configured" status badge never showing (#126), fixed the stale-domain bug that broke wallet pass generation entirely (#131), and wallet pass failures now surface the real error instead of failing silently (#130).
+- **Promotion/demotion notice**: a tier change now pops up a notice either direction — promotion keeps its celebratory copy, a tier increase (demotion) now shows a matching notice instead of nothing (#134).
+- **Mail Merge** (renamed from "Guest Invites", internals unchanged) and **Email Management**: both composers can now attach files (15MB cap) with a one-click attachment-note helper (#135).
+- **Events**: new events start with zero pre-seeded committees instead of 3 auto-created defaults (#136).
+- **Design Portal**: fixed design-brief tasks assigned to a committee never showing up in the "Design Task Requests" queue for that committee's members (#137).
+- **Task assignment emails**: fixed automatically-created tasks (the weekly holiday social-media approval task, the daily event-lapse social-media task) never sending their assignee an email at all — they bypassed the normal task-creation email pipeline entirely (#138).
+
+### 2026-09-21
+- Dashboard Home: stat cards (Active Events, Assigned Tasks, Member Roster, Performance Rollup) are now clickable deep links into their module; Assigned Tasks card shows completed vs. pending separately; Performance Rollup gets a breakdown tooltip; added a "Last updated" timestamp.
+- Project Timeline (Gantt): wider sticky label column, single-click row interaction instead of two-click inspect-then-open.
+- Members Directory: fixed the profile-view close button doing nothing for restricted-access members.
+
+### 2026-09-15
+- Ratings: Task Evaluation Queue now shows pending items and groups scorecards with aggregate scores; Advisor granted edit/delete permissions; averaged ratings per deliverable added to the Reports page.
+- Email: fixed deep-link navigation, post-login target URL preservation, and activity highlighting.
+- Members Directory: fixed modal close-button issues, added backdrop-click-to-close and an Escape key listener.
+- Design Portal: excluded a specific proofreader, restricted the proofreader pool to Centre Head / Advisor / Social Media Heads with Centre Head & Advisor auto-selected by default.
+- Digital Visiting Card: fixed mobile overflow/cut-off in the 3D luxury leather bookfold view.
 
 ---
 
@@ -188,6 +220,7 @@ Configuration lives in `leads-dashboard/.env`:
 - **Bulk Roster Import**: Download CSV template and bulk-upload events.
 - **Approval Engine**: Executive Council event creations trigger Centre Head sign-off requirements.
 - **Festivals & Observances**: Synced national holidays require explicit social media post sign-off (`holiday_social_approval`) before appearing in selection dropdowns.
+- **No Default Committees**: New events start with zero sub-committees — the 3 auto-seeded defaults (Logistics & Venue, Technical & AV, Design & Media) were removed; committees are still fully supported, just no longer pre-created.
 
 #### 4. Tasks Desk (`/dashboard/tasks`)
 - **Task Delegation**: Assign tasks to individual members or entire sub-committees with priority tagging (*Urgent*, *High*, *Normal*, *Low*).
@@ -214,6 +247,7 @@ Configuration lives in `leads-dashboard/.env`:
   - *Proofreading Gate*: Assign proofreaders with change requests or plain approval.
   - *Style Approval Gate*: Final Design Head / Centre Head sign-off.
 - **Asset Management**: File uploads with image previews, OCR text scanning, and automated completed task synchronization.
+- **Design Task Requests Queue**: Design-brief Tasks (Tasks module, `taskCategory: 'design'`) awaiting a submission surface here for whoever they're assigned to — correctly resolving committee assignment (not just individual/group) via the linked event's committee membership.
 
 #### 8. Event Passes & Gate QR Scanner (`/dashboard/event-passes`)
 - **Digital Event Passes**: High-resolution event pass cards with unique serial numbers, security QR codes, and automated email dispatch with pass attachments.
@@ -223,7 +257,8 @@ Configuration lives in `leads-dashboard/.env`:
 #### 9. Digital Visiting Card & Wallet Passes (`/dashboard/visiting-card` & `/card/[slug]`)
 - **Public Visiting Card**: Dynamic `/card/[slug]` landing page featuring member profile, designation, direct phone/LinkedIn links, and instant VCF vCard download.
 - **Interactive Image Cropper**: Multi-aspect ratio image cropping modal with zoom, pan, and centering controls for avatars and visiting cards.
-- **Apple & Google Wallet Passes**: Automated wallet pass generation via WalletWallet API with QR codes, caching, and rate-limited regeneration (2 per 15-day window).
+- **Apple & Google Wallet Passes**: Automated wallet pass generation via WalletWallet API with QR codes, caching, and rate-limited regeneration (2 per 15-day window). The image URLs sent to WalletWallet now point at the live production domain (`portal-leads.msruas.ac.in`) instead of a stale domain from before the AWS migration; generation failures also now surface the real error on the Save & Publish toast instead of failing silently.
+- **3D Leather Keycard ("Present Credentials")**: Mobile overflow/cut-off in the 3D bookfold view fixed; opens on the closed leather cover (tap-to-open animation) rather than jumping straight to the extracted card.
 
 ---
 
@@ -259,12 +294,19 @@ Configuration lives in `leads-dashboard/.env`:
 - **Central Roster**: Complete roster management covering Advisory Board, Core Committee, Training Associates, and Alumni across Tiers 1–7.
 - **Bulk CSV Importer**: Template-based batch member creation.
 - **Account Termination Engine**: Requires typed reason and dispatches automated termination notification emails.
+- **Add/Remove Hard-Locked**: Adding or removing a member is restricted to Centre Head, Advisor, and Super User only — a Group Policy grant can no longer be used to delegate this (it can still grant read-only directory access, or a one-time edit of a record someone personally added).
+- **New Designations**: **Faculty Ambassador** (Core Committee / Advisory Board — same standing as Chief Coordinator) and **Chief Advisor** (Faculty — deliberately view-only, kept distinct from the edit-capable Advisor position despite the shared word in the title).
+- **"Pending Activation / Reset" Filter Tab**: Quickly find members who haven't completed account activation or are flagged to set up a new password.
+- **Auto-Capitalized Names**: The first letter of a member's name is capitalized automatically as it's typed in the Add/Edit forms.
+- **Promotion / Demotion Notice**: A tier or role change now pops up a notice for the affected member either way — a genuine promotion still gets the celebratory "Congratulations on Your Promotion!" card, and a tier increase (demotion) now shows a matching "Congratulations on Your New Designation — you have been demoted" notice instead of staying silent.
 
 #### 16. Guest Directory (`/dashboard/guest-directory`)
 - **External VIP Directory**: Directory for guest speakers, VIPs, and corporate contacts with CSV bulk import.
 
-#### 17. Guest Invites Dispatcher (`/dashboard/guest-invites`)
+#### 17. Mail Merge (`/dashboard/guest-invites`)
+- Renamed from "Guest Invites" — same tool, same route, same underlying `GUEST_INVITES`/`MANAGE_GUEST_INVITES` permission keys (a display-only rename).
 - **Mass Email Dispatcher**: Batch invitation engine with mail-merge placeholders (`{{name}}`, `{{email}}`, `{{role}}`) and live delivery progress bar.
+- **File Attachments**: Attach one or more files (15MB total cap) sent identically to every recipient in the batch, with a one-click "Please find attached the following file(s)" note inserted into the message body.
 
 #### 18. Dynamic Group Policies (`/dashboard/policies`)
 - **Granular RBAC Engine**: Super User capability grants across 15 privilege keys with division/tier targeting, `Select All` controls, and approval gateways.
@@ -274,6 +316,8 @@ Configuration lives in `leads-dashboard/.env`:
 
 #### 20. Email Management & Client (`/dashboard/email`)
 - **SMTP Engine**: Diagnostic testing, live queue monitoring, test email delivery, and dispatch logs.
+- **File Attachments**: The Broadcast Composer can attach files to a single-recipient or division-scope send (same 15MB cap and attachment-note helper as Mail Merge).
+- **Debounced Task-Assignment Digest**: Task assignment emails batch into one digest per recipient over a 10-minute quiet window — now correctly fires for tasks the in-process schedulers create automatically (holiday social-media approval tasks, event-lapse social-media tasks), not just tasks created through the Tasks page.
 
 #### 21. System & Account Settings (`/dashboard/settings`)
 - **Profile & Security**: Avatar upload, OTP-verified email updates, password change, and Super User Emergency System Lockdown.
@@ -304,13 +348,20 @@ Configuration lives in `leads-dashboard/.env`:
 
 ---
 
-## 🖥️ Self-Hosted Deployment (Hostinger KVM VPS)
+## 🖥️ Production Deployment (AWS EC2)
 
-The application runs under **PM2** on a Hostinger KVM VPS at **[leadsnextgencentre.online](https://leadsnextgencentre.online)**, reverse-proxied with **Nginx** and automated SSL.
+> **Migration note:** the application previously ran on a Hostinger KVM VPS at `leadsnextgencentre.online`. It has since moved to an **AWS EC2** instance; that old domain is no longer the live deployment and should not be used for anything that needs to reach the real server (e.g. asset/logo URLs baked into the wallet-pass code once pointed at it by mistake — see Recent Updates below).
+
+- **Host:** AWS EC2, region `ap-south-1` (Mumbai), instance tagged **"LEADS Next Gen"**.
+- **Access:** no direct SSH — administration is done through **AWS Systems Manager Session Manager** (browser-based shell from the EC2 console).
+- **Public domain:** **[portal-leads.msruas.ac.in](https://portal-leads.msruas.ac.in)**, routed through an AWS Application Load Balancer (`msruas-ac-in-prod-...`) straight to the instance.
+- **Process manager:** **PM2**, single fork-mode process named `leads-dashboard`, serving `next start -p 3030`.
+- **Repo path on the instance:** `/home/ssm-user/ERP/leads-dashboard`.
 
 ```bash
-# Production deployment workflow
-git pull
+# Production deployment workflow — run from the SSM shell, inside leads-dashboard/
+cd /home/ssm-user/ERP/leads-dashboard
+git pull origin main
 npm install
 npm run build
 pm2 restart leads-dashboard
