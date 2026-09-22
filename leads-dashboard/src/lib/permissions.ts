@@ -354,7 +354,7 @@ export const CAPABILITY_CATALOG: { key: string; label: string; description: stri
   { key: 'TASKS_DELETE', label: 'Delete Tasks', description: 'Delete any task.', module: 'Tasks' },
   { key: 'TASKS_VIEW_ALL', label: 'View All Tasks', description: "See every task, not just this person's own or their department's.", module: 'Tasks' },
   { key: 'DECIDE_TASK_EXTENSION', label: 'Decide Task Extensions', description: 'Approve or reject a Pending Extension request on a task.', module: 'Tasks' },
-  { key: 'EDIT_DIRECTORY', label: 'Edit Member Directory', description: 'Add, edit, remove, and bulk-manage member records.', module: 'Members Directory' },
+  { key: 'EDIT_DIRECTORY', label: 'Edit Own Directory Records', description: 'One-time edit of a member record this person personally added — never adding, removing, or bulk-managing the roster. That stays locked to Centre Head, Advisor, and Super User and cannot be delegated here.', module: 'Members Directory' },
   { key: 'VIEW_FULL_DIRECTORY', label: 'View Full Directory', description: 'See the entire member roster, not just their own profile.', module: 'Members Directory' },
   { key: 'TERMINATE_MEMBER', label: 'Terminate/Reactivate Members', description: 'Terminate or reactivate any member account.', module: 'Members Directory' },
   { key: 'GUEST_DIRECTORY_ACCESS', label: 'Access Guest Directory', description: 'Open the Guest Directory module at all (visiting-card contacts) — same baseline as Centre Head/Faculty/Executive get by default.', module: 'Guest Directory' },
@@ -434,7 +434,7 @@ export const MODULE_CATALOG: { key: ModuleAccessKey; label: string; description:
   { key: 'EVENTS', label: 'Events', description: 'Event records and their committees.', ownershipNote: 'Ownership = the event’s creator or a listed committee member.' },
   { key: 'EVENT_PASSES', label: 'Event Passes & Tickets', description: 'On-the-spot pass studio, attendee rosters, wallet credentials, and turnstile gate scanner.', ownershipNote: 'Ownership = passes issued by the member or for events they manage.' },
   { key: 'TASKS', label: 'Tasks', description: 'Assigned task deliverables.', ownershipNote: 'Ownership = the task’s creator or assignee.' },
-  { key: 'DIRECTORY', label: 'Members Directory', description: 'The member roster.', ownershipNote: 'Ownership = whoever added the member record. Edit ‘Own’ is one-time, within 24 hours of adding.' },
+  { key: 'DIRECTORY', label: 'Members Directory', description: 'The member roster.', ownershipNote: 'Ownership = whoever added the member record. Edit ‘Own’ is one-time, within 24 hours of adding. Edit here only ever affects editing an existing record’s fields — adding a new member or removing one is locked to Centre Head, Advisor, and Super User and cannot be granted through this Edit column.' },
   { key: 'GUEST_DIRECTORY', label: 'Guest Directory', description: 'Visiting-card guest contacts.', ownershipNote: 'Ownership = whoever added the guest record. Edit ‘Own’ is one-time, within 24 hours of adding.' },
   { key: 'DESIGNS', label: 'Design Portal', description: 'Design submissions and proofreading.' },
   { key: 'REIMBURSEMENTS', label: 'Reimbursements', description: 'Reimbursement claims.', ownershipNote: 'Ownership = the claimant.' },
@@ -1186,19 +1186,21 @@ export function canViewFullDirectory(user: SessionUser): boolean {
 
 /**
  * Roster CRUD access at all (shows the Add Member button, CSV import, and
- * the Remove Member action) — restricted to Centre Head, Advisor, and Super
- * User (all covered by isCentreHead — see its own doc comment) by default,
- * or an explicit Group Policy grant (EDIT_DIRECTORY capability, or a
- * moduleAccess 'ALL' override) for anyone else an admin chooses to trust
- * with it. Everyone else still gets read-only access via
- * canViewFullDirectory. PER-ROW edit permission for a specific member is
- * narrower and handled separately by canEditMemberRecordRow, which
- * restricts a non-leadership grantee to only the records they personally
- * added.
+ * the Remove Member action) — a hard lock to Centre Head, Advisor, and
+ * Super User (all covered by isCentreHead — see its own doc comment).
+ * Deliberately NOT overridable by a Group Policy grant (no EDIT_DIRECTORY
+ * capability, no moduleAccess 'ALL' override consulted here) — granting
+ * someone Members Directory access through Group Policies can only ever
+ * give them view access (canViewFullDirectory / moduleAccess.DIRECTORY.view),
+ * never the ability to add or remove a member; see the Policies page, whose
+ * Module Access row for Members Directory omits the Edit column for this
+ * exact reason. PER-ROW edit permission for a specific member (fixing a
+ * typo in a record you personally added) is a separate, narrower mechanism
+ * — see canEditMemberRecordRow — and is unaffected by this restriction.
  */
 export function canEditDirectory(user: SessionUser): boolean {
   if (isExecutiveRole(user) || isAlumniRole(user)) return false;
-  return isCentreHead(user) || hasCapability(user, 'EDIT_DIRECTORY') || resolveModuleEditOverride(user, 'DIRECTORY') === 'ALL';
+  return isCentreHead(user);
 }
 
 /**
