@@ -564,7 +564,7 @@ export default function GuestDirectoryPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-theme-text-primary">Guest Directory</h1>
-          <p className="text-xs text-theme-text-secondary">Guests, sponsors, and visitors met at events — sourced from visiting cards. Separate from the Member roster and Guest Invites tool.</p>
+          <p className="text-xs text-theme-text-secondary">Guests, sponsors, and visitors met at events — sourced from visiting cards. Separate from the Member roster and Mail Merge tool.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button

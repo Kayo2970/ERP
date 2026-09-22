@@ -380,7 +380,7 @@ export const CAPABILITY_CATALOG: { key: string; label: string; description: stri
   { key: 'EVENT_REPORTS_SUBMIT', label: 'Submit Event Reports', description: 'Submit formal post-event reports for approval.', module: 'Event Reports' },
   { key: 'EVENT_REPORTS_REVIEW', label: 'Review Event Reports', description: 'Approve or reject submitted event reports.', module: 'Event Reports' },
   { key: 'EVENT_REPORTS_DELETE', label: 'Delete Event Reports', description: 'Delete submitted event reports.', module: 'Event Reports' },
-  { key: 'MANAGE_GUEST_INVITES', label: 'Manage Guest Invites', description: 'Access the Guest Invites mail-merge tool.', module: 'Guest Invites' },
+  { key: 'MANAGE_GUEST_INVITES', label: 'Manage Mail Merge', description: 'Access the Mail Merge tool (personalized bulk email — formerly "Guest Invites").', module: 'Mail Merge' },
   { key: 'MANAGE_EVENT_PASSES', label: 'Manage Event Passes & Tickets', description: 'Issue digital and on-the-spot verified luxury passes, manage rosters, and broadcast push alerts.', module: 'Event Passes' },
   { key: 'SCAN_EVENT_PASSES', label: 'Scan & Admit Turnstile Passes', description: 'Operate turnstile camera QR scanner and check in attendees at venue gates.', module: 'Event Passes' },
   { key: 'MANAGE_BACKUP', label: 'Access Backup & Restore', description: 'Download system backups and restore from an archive.', module: 'Administration' },
@@ -446,7 +446,7 @@ export const MODULE_CATALOG: { key: ModuleAccessKey; label: string; description:
   { key: 'EVENT_REPORTS', label: 'Event Reports', description: 'Post-event formal report submissions, review, and dual approvals.', ownershipNote: 'Ownership = the report’s submitter.' },
   { key: 'FESTIVALS', label: 'Festivals', description: 'Festival schedules, committees, and events.' },
   { key: 'VISITING_CARD', label: 'Visiting Cards', description: 'Digital keycards and visiting contacts.' },
-  { key: 'GUEST_INVITES', label: 'Guest Invites', description: 'The guest-invite mail-merge tool.' },
+  { key: 'GUEST_INVITES', label: 'Mail Merge', description: 'Personalized bulk email tool (formerly "Guest Invites").' },
   { key: 'APPROVALS', label: 'Approvals Queue', description: 'Cross-module multi-department approval requests.' },
   { key: 'BACKUP', label: 'Backup & Restore', description: 'System backups and disaster recovery restorations.' },
   { key: 'EMAIL', label: 'Email Management', description: 'Dispatch logs and email settings.' },
@@ -1408,7 +1408,7 @@ export function canChangeTaskStatus(task: TaskItem, user: SessionUser): boolean 
   return isTaskAssignee(task, user);
 }
 
-/** Guest Invites mail-merge tool — Centre Head/Super User by default, or a MANAGE_GUEST_INVITES/moduleAccess grant. */
+/** Mail Merge tool (displayed name — internally still "Guest Invites"/GUEST_INVITES/MANAGE_GUEST_INVITES to avoid touching routes, permission keys, or stored data) — Centre Head/Super User by default, or a MANAGE_GUEST_INVITES/moduleAccess grant. */
 export function canManageGuestInvites(user: SessionUser): boolean {
   const override = resolveModuleEditOverride(user, 'GUEST_INVITES');
   if (override === 'NONE') return false;
