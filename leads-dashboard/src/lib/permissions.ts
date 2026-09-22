@@ -1165,30 +1165,31 @@ export function canViewFullDirectory(user: SessionUser): boolean {
 
 /**
  * Roster CRUD access at all (shows the Add Member button, CSV import, and
- * bulk tools) — base leadership, or an explicit Group Policy grant. This is
- * the umbrella "can manage the directory" gate; PER-ROW edit permission for
- * a specific member is narrower and handled separately by
- * canEditMemberRecordRow, which restricts a non-leadership grantee to only
- * the records they personally added.
+ * the Remove Member action) — restricted to Centre Head, Advisor, and Super
+ * User (all covered by isCentreHead — see its own doc comment) by default,
+ * or an explicit Group Policy grant (EDIT_DIRECTORY capability, or a
+ * moduleAccess 'ALL' override) for anyone else an admin chooses to trust
+ * with it. Everyone else still gets read-only access via
+ * canViewFullDirectory. PER-ROW edit permission for a specific member is
+ * narrower and handled separately by canEditMemberRecordRow, which
+ * restricts a non-leadership grantee to only the records they personally
+ * added.
  */
 export function canEditDirectory(user: SessionUser): boolean {
   if (isExecutiveRole(user) || isAlumniRole(user)) return false;
-  return isBaseLeadership(user) || hasCapability(user, 'EDIT_DIRECTORY') || resolveModuleEditOverride(user, 'DIRECTORY') === 'ALL';
+  return isCentreHead(user) || hasCapability(user, 'EDIT_DIRECTORY') || resolveModuleEditOverride(user, 'DIRECTORY') === 'ALL';
 }
 
 /**
- * Whether `user` may open the Add Member flow at all — everything
- * canEditDirectory already allows, PLUS an Executive role (President, Vice
- * President, Chief Coordinator). Unlike canEditDirectory (which stays a hard
- * "no" for Executives — they don't get CSV import/bulk tools/edit-any-row),
- * this is deliberately wider: Executives ARE trusted, by their own
- * designation, to add a name to the roster and allot people to events/
- * committees/tasks immediately — see getMemberApprovalRequirement below,
- * which does not gate this addition behind sign-off.
+ * Whether `user` may open the Add Member flow — Centre Head, Advisor, and
+ * Super User only (same restriction as canEditDirectory; an Executive role
+ * like President/Vice President/Chief Coordinator no longer gets an
+ * exception here — adding and removing roster members is limited to
+ * leadership that already manages the directory).
  */
 export function canAddMember(user: SessionUser): boolean {
   if (isAlumniRole(user)) return false;
-  return isExecutiveRole(user) || canEditDirectory(user);
+  return canEditDirectory(user);
 }
 
 /**

@@ -156,14 +156,19 @@ export function canSetMemberPassword(user: ServerUser): boolean {
   return user?.tier === 1;
 }
 
+// Directory add/remove is restricted to Centre Head, Advisor, and Super
+// User (all covered by isCentreHead) — mirrors permissions.ts's
+// canEditDirectory/canAddMember. Everyone else keeps read-only directory
+// access; this file's disclosed limitation (no Group Policy capability
+// override check) still applies, same as every other check here.
 export function canEditDirectory(user: ServerUser, settings: AccessLevelSettings): boolean {
   if (isExecutiveRole(user) || isAlumniRole(user)) return false;
-  return isBaseLeadership(user, settings);
+  return isCentreHead(user, settings);
 }
 
 export function canAddMember(user: ServerUser, settings: AccessLevelSettings): boolean {
   if (isAlumniRole(user)) return false;
-  return isExecutiveRole(user) || canEditDirectory(user, settings);
+  return canEditDirectory(user, settings);
 }
 
 export function canApproveAsSectorHead(user: ServerUser, settings: AccessLevelSettings): boolean {
