@@ -585,11 +585,7 @@ export default function BudgetPage() {
       campus: newEventCampus,
       status: 'planned' as EventItem['status'],
       createdBy: user?.name || 'User',
-      committees: [
-        { id: 'c_' + Date.now() + '_1', name: 'Logistics & Venue Committee', memberIds: [] },
-        { id: 'c_' + Date.now() + '_2', name: 'Technical & AV Committee', memberIds: [] },
-        { id: 'c_' + Date.now() + '_3', name: 'Design & Media Committee', memberIds: [] },
-      ],
+      committees: [],
     };
 
     const approval = getEventApprovalRequirement(user, 'CREATE');
