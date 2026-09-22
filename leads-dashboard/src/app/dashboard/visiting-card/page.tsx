@@ -91,7 +91,7 @@ export default function VisitingCardPage() {
   }, [user]);
 
   const fetchWalletStatus = async () => {
-    const res = await fetch('/api/wallet-status', { headers: authHeaders() });
+    const res = await fetch('/api/admin/wallet-settings', { headers: authHeaders() });
     if (res.ok) setWalletStatus(await res.json());
   };
 
