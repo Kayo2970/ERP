@@ -65,6 +65,12 @@ Everything that's changed since this README was last updated (2026-09-15). Full 
 - **Events**: new events start with zero pre-seeded committees instead of 3 auto-created defaults (#136).
 - **Design Portal**: fixed design-brief tasks assigned to a committee never showing up in the "Design Task Requests" queue for that committee's members (#137).
 - **Task assignment emails**: fixed automatically-created tasks (the weekly holiday social-media approval task, the daily event-lapse social-media task) never sending their assignee an email at all — they bypassed the normal task-creation email pipeline entirely (#138).
+- **Task auto-emails, round two**: assignment-digest emails could be silently dropped if the server restarted mid-debounce (`pm2 restart` fires on every deploy) — now flushed on shutdown instead of lost; a substantive task edit (due date, title, assignee, brief, etc.) never emailed anyone besides one narrow reassignment case — now sends the (new) assignee(s) an update notice, while a plain status toggle still stays silent; and there was no reminder before a deadline at all — added a new daily scheduler that emails everyone assigned to a task due tomorrow, once per task (#141).
+- **Reimbursements & Budget**: neither module had *any* email hooks before this — both now email the Centre Head(s) when a claim/request is submitted, and the claimant/submitter plus the Finance Head(s) at every decision stage (verified, approved, denied), with the send outcome recorded on the record so a failed email is visible instead of silent (#141).
+- **Event Reports**: a rejected report's submitter is now emailed why — previously only an approval sent any notice at all (#141).
+- **Events**: adding a member to a committee after the event already exists now sends them the same roster-assignment email a member gets when the event is first created — previously only creation-time committee members were ever notified (#141).
+- **Design Portal**: fixed the new tabbed review UI's tab bar rendering as an overlapping smear of text — a Flexbox sizing bug (`overflow-x-auto` collapsing the tab bar's height to a few pixels inside the modal's constrained layout) (#141).
+- **Account activation**: fixed the "Welcome to the Centre" keycard animation on the activation success screen pushing the "Proceed to Sign In" button off-screen on mobile with no indication that scrolling would reveal it (#141).
 
 ### 2026-09-21
 - Dashboard Home: stat cards (Active Events, Assigned Tasks, Member Roster, Performance Rollup) are now clickable deep links into their module; Assigned Tasks card shows completed vs. pending separately; Performance Rollup gets a breakdown tooltip; added a "Last updated" timestamp.
@@ -228,6 +234,7 @@ Configuration lives in `leads-dashboard/.env`:
 - **Status Tracking**: Visual progress pipeline: *To Do* → *In Progress* → *Under Review* → *Completed*.
 - **Auto-Generated Design Tasks**: Finalized Design Portal submissions automatically create or complete tasks.
 - **Extension Requests**: Assignees can request deadline extensions subject to Advisor or Centre Head approval.
+- **Auto-Emails**: Assignees are emailed on assignment (debounced into a digest), on any substantive edit to their task (due date, title, description, assignee — a plain status toggle stays silent), and once via a daily reminder the day before the deadline.
 
 #### 5. Ratings & Student Performance (`/dashboard/ratings`)
 - **Multi-Reviewer Independent Rubric**: 4-way independent leadership evaluation rubric (**Super User**, **Centre Head**, **Advisor**, and **GG Campus Events Head**).
@@ -248,6 +255,7 @@ Configuration lives in `leads-dashboard/.env`:
   - *Style Approval Gate*: Final Design Head / Centre Head sign-off.
 - **Asset Management**: File uploads with image previews, OCR text scanning, and automated completed task synchronization.
 - **Design Task Requests Queue**: Design-brief Tasks (Tasks module, `taskCategory: 'design'`) awaiting a submission surface here for whoever they're assigned to — correctly resolving committee assignment (not just individual/group) via the linked event's committee membership.
+- **Tabbed Review Inspector**: The proofread/style/social-workflow review modal is split into focused tabs (Overview, Proofreading, Style Approval, Social Workflow) instead of one long scroll.
 
 #### 8. Event Passes & Gate QR Scanner (`/dashboard/event-passes`)
 - **Digital Event Passes**: High-resolution event pass cards with unique serial numbers, security QR codes, and automated email dispatch with pass attachments.
@@ -269,6 +277,7 @@ Configuration lives in `leads-dashboard/.env`:
 - **Two-Stage Approval Pipeline**:
   - **Stage 1 (Sector Head)**: Initial operational verification.
   - **Stage 2 (Finance Head)**: Final financial audit and reimbursement sign-off.
+- **Auto-Emails**: The Centre Head(s) are emailed when a claim is submitted; the claimant and Finance Head(s) are emailed at every decision (verified, approved, denied), with delivery status recorded on the claim.
 
 #### 11. Budget & Funds (`/dashboard/budget`)
 - **Financial Governance**: Ledger for university fund allocations, department budgets, and operational expenditures.
@@ -277,6 +286,7 @@ Configuration lives in `leads-dashboard/.env`:
   - *Sponsor Surplus Return Rule*: Unused event sponsorship returns to the Centre's main account.
   - *Total Available Capital*: Real-time formula: `Annual Approved Budget + General Income/Grants + Returned Sponsor Surplus`.
 - **Multi-Year Budgeting Engine**: Extended 9-year Financial Year selector (`-5` years back to `+3` years forward).
+- **Auto-Emails**: Same submit/decision email flow as Reimbursements — Centre Head(s) on submission, submitter and Finance Head(s) at every decision stage.
 
 #### 12. Public Forms Builder (`/dashboard/forms` & `/forms/[slug]`)
 - **Interactive Form Builder**: Custom form engine for student signups, feedback collection, and event registrations.
@@ -317,7 +327,7 @@ Configuration lives in `leads-dashboard/.env`:
 #### 20. Email Management & Client (`/dashboard/email`)
 - **SMTP Engine**: Diagnostic testing, live queue monitoring, test email delivery, and dispatch logs.
 - **File Attachments**: The Broadcast Composer can attach files to a single-recipient or division-scope send (same 15MB cap and attachment-note helper as Mail Merge).
-- **Debounced Task-Assignment Digest**: Task assignment emails batch into one digest per recipient over a 10-minute quiet window — now correctly fires for tasks the in-process schedulers create automatically (holiday social-media approval tasks, event-lapse social-media tasks), not just tasks created through the Tasks page.
+- **Debounced Task-Assignment Digest**: Task assignment emails batch into one digest per recipient over a 10-minute quiet window — now correctly fires for tasks the in-process schedulers create automatically (holiday social-media approval tasks, event-lapse social-media tasks), not just tasks created through the Tasks page, and now survives a mid-debounce server restart (flushed on shutdown instead of dropped).
 
 #### 21. System & Account Settings (`/dashboard/settings`)
 - **Profile & Security**: Avatar upload, OTP-verified email updates, password change, and Super User Emergency System Lockdown.

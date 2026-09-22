@@ -52,6 +52,7 @@ pm2 restart leads-dashboard
 - **Status Tracking**: Visual pipeline: *To Do* → *In Progress* → *Under Review* → *Completed*.
 - **Auto-Generated Design Tasks**: Finalized Design Portal submissions automatically create or complete tasks.
 - **Extension Requests**: Assignees can request deadline extensions subject to Advisor or Centre Head approval.
+- **Auto-Emails**: Assignees are emailed on assignment (debounced into a digest), on any substantive edit (due date, title, description, assignee — a plain status toggle stays silent), and via a daily reminder the day before the deadline.
 
 #### 5. Ratings & Student Performance (`/dashboard/ratings`)
 - **Multi-Reviewer Independent Rubric**: 4-way independent leadership evaluation rubric (**Super User**, **Centre Head**, **Advisor**, and **GG Campus Events Head**).
@@ -72,6 +73,7 @@ pm2 restart leads-dashboard
   - *Style Approval Gate*: Final Design Head / Centre Head sign-off.
 - **Asset Management**: File uploads with image previews, OCR text scanning, and automated completed task synchronization.
 - **Design Task Requests Queue**: Design-brief Tasks awaiting a submission surface here for whoever they're assigned to, including committee assignments.
+- **Tabbed Review Inspector**: The proofread/style/social-workflow review modal is split into focused tabs (Overview, Proofreading, Style Approval, Social Workflow) instead of one long scroll.
 
 #### 8. Event Passes & Gate QR Scanner (`/dashboard/event-passes`)
 - **Digital Event Passes**: High-resolution event pass cards with unique serial numbers, security QR codes, and automated email dispatch with pass attachments.
@@ -90,6 +92,7 @@ pm2 restart leads-dashboard
 #### 10. Reimbursements System (`/dashboard/reimbursements`)
 - **Expense Claims**: Expense submission desk with receipt proof attachments and amount validation.
 - **Two-Stage Approval Pipeline**: Stage 1 (Sector Head) verification followed by Stage 2 (Finance Head) sign-off.
+- **Auto-Emails**: Centre Head(s) emailed on submission; claimant and Finance Head(s) emailed at every decision (verified, approved, denied), with delivery status recorded on the claim.
 
 #### 11. Budget & Funds (`/dashboard/budget`)
 - **Financial Governance**: Ledger for university fund allocations, department budgets, and operational expenditures.
@@ -98,6 +101,7 @@ pm2 restart leads-dashboard
   - *Sponsor Surplus Return Rule*: Unused event sponsorship returns to the Centre's main account.
   - *Total Available Capital*: Real-time formula: `Annual Approved Budget + General Income/Grants + Returned Sponsor Surplus`.
 - **Multi-Year Budgeting Engine**: Extended 9-year Financial Year selector (`-5` years back to `+3` years forward).
+- **Auto-Emails**: Same submit/decision email flow as Reimbursements.
 
 #### 12. Public Forms Builder (`/dashboard/forms` & `/forms/[slug]`)
 - **Interactive Form Builder**: Custom form engine for student signups, feedback collection, and event registrations.
@@ -137,7 +141,7 @@ pm2 restart leads-dashboard
 #### 20. Email Management & Client (`/dashboard/email`)
 - **SMTP Engine**: Diagnostic testing, live queue monitoring, test email delivery, and dispatch logs.
 - **File Attachments** on the Broadcast Composer, same as Mail Merge.
-- **Debounced Task-Assignment Digest**: batches task-assignment emails per recipient over a 10-minute window — now fires correctly for tasks created automatically by the in-process schedulers, not just ones created via the Tasks page.
+- **Debounced Task-Assignment Digest**: batches task-assignment emails per recipient over a 10-minute window — now fires correctly for tasks created automatically by the in-process schedulers, not just ones created via the Tasks page, and survives a mid-debounce server restart (flushed on shutdown instead of dropped).
 
 #### 21. System & Account Settings (`/dashboard/settings`)
 - **Profile & Security**: Avatar upload, OTP-verified email updates, password change, and Super User Emergency System Lockdown.
