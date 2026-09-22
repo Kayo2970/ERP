@@ -6,7 +6,16 @@ const API_BASE = 'https://api.walletwallet.dev';
 // Host header. If the domain ever changes, update this constant and see
 // "If the production domain ever changes" in docs/wallet-setup.md for the
 // rest of what needs updating (DNS, env vars, etc.).
-const SITE_ORIGIN = 'https://leadsnextgencentre.online';
+//
+// Was 'https://leadsnextgencentre.online' — that domain now points at a
+// stale, separate deployment (different IPs entirely, confirmed via dig:
+// Cloudflare vs. this app's real AWS ELB), left over from before the app
+// moved to portal-leads.msruas.ac.in. Every wallet pass generation was
+// asking that old, unrelated server for the member's current photo — which
+// it never had — so WalletWallet's fetch of iconURL/thumbnailURL failed
+// with "iconURL could not be fetched" on every single pass. Pointing this
+// at the actual live domain fixes it.
+const SITE_ORIGIN = 'https://portal-leads.msruas.ac.in';
 
 // Fixed org-wide details shown on the back of every pass — same for every
 // member, so they live here rather than on the Member record. Sourced

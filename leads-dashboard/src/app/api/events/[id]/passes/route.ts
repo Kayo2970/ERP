@@ -120,7 +120,7 @@ export async function PATCH(
     try {
       const apiKey = await getWalletWalletApiKey();
       if (apiKey && updatedPass) {
-        const origin = request.headers.get('origin') || 'https://leadsnextgencentre.online';
+        const origin = request.headers.get('origin') || 'https://portal-leads.msruas.ac.in';
         const passUrl = `${origin}/pass/${(updatedPass as EventPassItem).serialNumber}`;
 
         await updateEventWalletPass(
