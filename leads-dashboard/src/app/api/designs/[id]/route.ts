@@ -6,6 +6,19 @@ import { requireSession, ForbiddenError } from '@/lib/session';
 import { getAccessLevelSettingsServer, canReviewDesignProofread, canViewAllDesigns } from '@/lib/permissions-server';
 import { apiError } from '@/lib/api-error';
 
+/**
+ * Builds a human-readable attachment filename ("<Design Title> - <Category>.<ext>")
+ * for the design asset emailed to the Centre Head, instead of whatever raw
+ * filename the designer's browser happened to upload it with (e.g. "IMG_20260921.jpg").
+ * The original file extension is preserved so the attachment still opens correctly.
+ */
+function buildDesignAttachmentFileName(title: string, category: string, originalFileName?: string): string {
+  const ext = originalFileName?.includes('.') ? originalFileName.slice(originalFileName.lastIndexOf('.')) : '';
+  const safe = (s?: string) => (s || '').replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim();
+  const base = [safe(title) || 'Design', safe(category)].filter(Boolean).join(' - ');
+  return `${base}${ext}` || (originalFileName || 'design-asset');
+}
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -192,7 +205,10 @@ export async function PATCH(
             bodyText: template.bodyText,
             bodyHtml: template.bodyHtml,
             category: 'DESIGN_APPROVAL',
-            attachments: [{ filename: mergedRecord.fileName || 'design-asset', content: fileBuffer }],
+            attachments: [{
+              filename: buildDesignAttachmentFileName(mergedRecord.title, mergedRecord.category, mergedRecord.fileName),
+              content: fileBuffer,
+            }],
           });
 
           await mutateCollection('designs', (current) => (current || []).map((d: any) =>
