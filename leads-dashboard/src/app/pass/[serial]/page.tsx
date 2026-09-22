@@ -67,7 +67,7 @@ export default function PublicEventPassPage({
     };
   }, [serial]);
 
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://leadsnextgencentre.online';
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://portal-leads.msruas.ac.in';
   const passUrl = pass ? `${origin}/pass/${pass.serialNumber}` : '';
 
   // Generate & Download Apple Wallet Pass (.pkpass)

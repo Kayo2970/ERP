@@ -40,7 +40,7 @@ export function getAppBaseUrl(req?: Request | NextRequest | null, customOrigin?:
   // If no request header or env var exists (e.g. background task/cron queue worker),
   // default to the primary live production domain instead of localhost!
   if (process.env.NODE_ENV === 'production') {
-    return 'https://leadsnextgencentre.online';
+    return 'https://portal-leads.msruas.ac.in';
   }
 
   // 5. If customOrigin was provided (even if localhost in dev), use it
@@ -49,5 +49,5 @@ export function getAppBaseUrl(req?: Request | NextRequest | null, customOrigin?:
   }
 
   // Fallback to primary production domain
-  return 'https://leadsnextgencentre.online';
+  return 'https://portal-leads.msruas.ac.in';
 }

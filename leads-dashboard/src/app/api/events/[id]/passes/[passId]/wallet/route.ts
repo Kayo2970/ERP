@@ -37,7 +37,7 @@ export async function GET(
       );
     }
 
-    const origin = request.headers.get('origin') || 'https://leadsnextgencentre.online';
+    const origin = request.headers.get('origin') || 'https://portal-leads.msruas.ac.in';
     const passUrl = `${origin}/pass/${pass.serialNumber}`;
 
     // 2. Generate via WalletWallet API

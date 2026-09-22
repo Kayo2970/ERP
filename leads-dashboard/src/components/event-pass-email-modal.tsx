@@ -99,7 +99,7 @@ export function EventPassEmailModal({
 
   const renderMailMerge = (template: string, pass?: EventPassItem) => {
     if (!pass) return template;
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://leadsnextgencentre.online';
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://portal-leads.msruas.ac.in';
     const passUrl = `${origin}/pass/${pass.serialNumber}`;
 
     return template

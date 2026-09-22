@@ -2657,7 +2657,7 @@ export async function dispatchPassEmail(
     return { success: false, error: 'No recipient email address provided.' };
   }
 
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://leadsnextgencentre.online';
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://portal-leads.msruas.ac.in';
   const passUrl = `${origin}/pass/${pass.serialNumber}`;
 
   const subject = `Your Official Pass for ${pass.eventName} — ${pass.passType}`;
