@@ -510,7 +510,7 @@ export default function VisitingCardPage() {
                 cardUrl={cardPublicUrl}
                 qrUrl="/card/leads-qr-code.png"
                 showActions={true}
-                autoOpen={true}
+                autoOpen={false}
               />
             </div>
 
