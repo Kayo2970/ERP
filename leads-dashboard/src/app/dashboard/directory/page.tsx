@@ -973,6 +973,9 @@ export default function DirectoryPage() {
     .filter(m => {
       if (selectedDivision === 'TERMINATED') {
         if (m.status !== 'Terminated') return false;
+      } else if (selectedDivision === 'PENDING_CREDENTIALS') {
+        if (m.status === 'Terminated' || m.approvalStatus === 'pending_create' || m.approvalStatus === 'rejected') return false;
+        if (!(!m.hasPassword || m.mustSetupPassword)) return false;
       } else if (selectedDivision !== 'ALL' && m.division !== selectedDivision) {
         return false;
       }
@@ -1000,6 +1003,15 @@ export default function DirectoryPage() {
   const alumniCount = visibleMembers.filter(m => m.division === 'Alumni').length;
   const facultyCount = visibleMembers.filter(m => m.division === 'Faculty').length;
   const terminatedCount = visibleMembers.filter(m => m.status === 'Terminated').length;
+  // Activation still pending (never logged in / set a password) OR flagged
+  // by an admin to set up a new one — the two "this account isn't fully
+  // credentialed yet" states, surfaced together as one filter tab.
+  const pendingCredentialsCount = visibleMembers.filter(m =>
+    m.status !== 'Terminated' &&
+    m.approvalStatus !== 'pending_create' &&
+    m.approvalStatus !== 'rejected' &&
+    (!m.hasPassword || m.mustSetupPassword)
+  ).length;
 
   const totalPages = Math.ceil(filteredMembers.length / pageSize) || 1;
   const paginatedMembers = filteredMembers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -1324,6 +1336,20 @@ export default function DirectoryPage() {
           <GraduationCap className="h-3.5 w-3.5 text-purple-400" />
           Alumni Mentors ({alumniCount})
         </button>
+
+        {pendingCredentialsCount > 0 && (
+          <button
+            onClick={() => { setSelectedDivision('PENDING_CREDENTIALS'); setCurrentPage(1); }}
+            className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
+              selectedDivision === 'PENDING_CREDENTIALS'
+                ? 'bg-accent text-white shadow-sm'
+                : 'bg-theme-border/20 text-theme-text-secondary hover:text-theme-text-primary'
+            }`}
+          >
+            <KeyRound className="h-3.5 w-3.5 text-warning" />
+            Pending Activation / Reset ({pendingCredentialsCount})
+          </button>
+        )}
 
         {terminatedCount > 0 && (
           <button
