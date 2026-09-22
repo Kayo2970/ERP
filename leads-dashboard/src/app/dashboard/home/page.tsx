@@ -144,6 +144,23 @@ export default function DashboardHome() {
   // Filter tasks based on shared permission helper
   const displayedTasks = tasks.filter(task => canViewTaskExtended(task, user));
 
+  // The "Assigned Tasks" dashboard tile is meant to show what's actually
+  // outstanding — tasks still needing action (acknowledgment, progress, or
+  // completion) — not the full historical list including everything already
+  // wrapped up. TaskItem has no createdAt, so due-date year is the only
+  // available signal for "this year's" tasks; scoping the active count to
+  // the current calendar year keeps the tile from accumulating stale,
+  // long-overdue tasks from prior years forever — it naturally resets each
+  // January as new tasks get due dates in the new year.
+  const currentYear = new Date().getFullYear();
+  const isCurrentYearTask = (t: TaskItem) => {
+    const due = new Date(t.dueDate);
+    return !isNaN(due.getTime()) && due.getFullYear() === currentYear;
+  };
+
+  const activeDisplayedTasks = displayedTasks.filter(t => t.status !== 'Completed' && isCurrentYearTask(t));
+  const activeTasksCount = activeDisplayedTasks.length;
+
   // Count tasks awaiting THIS member's own acknowledgment — must check
   // isTaskAssignee (am I literally the assignee?), not canViewTaskExtended
   // (can I see this task at all?). The latter is deliberately broad —
@@ -152,10 +169,9 @@ export default function DashboardHome() {
   // this "awaiting YOUR acknowledgment" banner with tasks assigned to
   // other people entirely, showing every leadership/Executive viewer the
   // same non-personal number regardless of what's actually theirs to act on.
-  const pendingAckCount = tasks.filter(t => t.status === 'Assigned' && isTaskAssignee(t, user)).length;
+  const pendingAckCount = tasks.filter(t => t.status === 'Assigned' && isTaskAssignee(t, user) && isCurrentYearTask(t)).length;
 
-  const completedTasksCount = displayedTasks.filter(t => t.status === 'Completed').length;
-  const pendingTasksCount = displayedTasks.length - completedTasksCount;
+  const completedTasksCount = displayedTasks.filter(t => t.status === 'Completed' && isCurrentYearTask(t)).length;
 
   const scorePercentage = Math.min(100, Math.max(0, (overallAvgScore / 5.0) * 100));
 
@@ -232,11 +248,11 @@ export default function DashboardHome() {
         >
           <div className="space-y-1.5">
             <span className="text-xs font-semibold text-theme-text-secondary uppercase tracking-wider">Assigned Tasks</span>
-            <h3 className="text-2xl font-bold text-theme-text-primary">{displayedTasks.length}</h3>
+            <h3 className="text-2xl font-bold text-theme-text-primary">{activeTasksCount}</h3>
             <span className="text-[11px] font-semibold flex items-center gap-1.5">
-              <span className="text-success">{completedTasksCount} completed</span>
+              <span className="text-warning">{activeTasksCount} pending</span>
               <span className="text-theme-text-secondary font-normal">&middot;</span>
-              <span className="text-warning">{pendingTasksCount} pending</span>
+              <span className="text-success">{completedTasksCount} completed this year</span>
             </span>
           </div>
           <div className="h-11 w-11 bg-success/15 rounded-xl flex items-center justify-center border border-success/15">
