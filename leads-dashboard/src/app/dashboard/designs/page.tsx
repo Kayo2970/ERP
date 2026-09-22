@@ -43,6 +43,7 @@ import {
   isApprovedEvent,
   addEvent,
   getTasks,
+  isTaskAssignee,
   submitDesignCaptions,
   reviewDesignCaptions,
   completeDesignPosting,
@@ -827,7 +828,13 @@ export default function DesignPortalPage() {
   const designTaskRequests = tasks.filter(t => {
     if (t.taskCategory !== 'design' || t.status === 'Completed') return false;
     if (canViewAllDesigns(user)) return true;
-    return t.assigneeId === user?.id || t.assigneeEmail === user?.email || (t.assigneeType === 'group' && t.assigneeIds?.includes(user?.id));
+    // isTaskAssignee is the canonical "is this assigned to me" check used
+    // across the app (Tasks page, notifications, etc.) — it correctly
+    // resolves committee assignment (assigneeType === 'committee') via the
+    // event's committee member list, which the old inline check here didn't
+    // handle at all, so a design task assigned to a committee never showed
+    // up in this queue for any of that committee's members.
+    return isTaskAssignee(t, user);
   });
 
   return (
