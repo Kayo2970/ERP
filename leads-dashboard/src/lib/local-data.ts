@@ -746,6 +746,12 @@ export interface DesignSubmissionItem {
   // approved but nobody was actually emailed the asset yet.
   styleApprovalEmailSent?: boolean;
   styleApprovalEmailError?: string;
+  // Whether the designer-facing decision-notification email (sent on every
+  // proofread or style approve/reject) went out — set by /api/designs/[id]'s
+  // PATCH handler. Separate from styleApprovalEmailSent, which notifies the
+  // approvers, not the submitter.
+  designerDecisionEmailSent?: boolean;
+  designerDecisionEmailError?: string;
   eventId?: string;
   eventName?: string;
   // Set once a Style Approved design linked to an event auto-creates a

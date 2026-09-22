@@ -1021,3 +1021,54 @@ export function generateDesignApprovedEmailTemplate(designTitle: string, designe
 
   return { subject, bodyText, bodyHtml };
 }
+
+
+/**
+ * Template Generator: Design Decision Notification (sent to the designer who
+ * submitted the file, every time a proofread or style decision is recorded
+ * against their submission — approved or rejected/changes requested). This
+ * is the designer-facing counterpart to generateDesignApprovedEmailTemplate
+ * (which notifies the Centre Head/Advisor/GG Campus Head of Events instead).
+ */
+export function generateDesignDecisionEmailTemplate(
+  designTitle: string,
+  designerName: string,
+  stage: 'Proofreading' | 'Style Approval',
+  approved: boolean,
+  decidedByName: string,
+  comments?: string
+): { subject: string; bodyText: string; bodyHtml: string } {
+  const outcome = approved ? 'Approved' : (stage === 'Proofreading' ? 'Changes Requested' : 'Rejected');
+  const subject = `${stage} ${outcome}: ${designTitle}`;
+  const bodyText = `Hello ${designerName},\n\n` +
+    `Your design submission "${designTitle}" has been reviewed at the ${stage} stage by ${decidedByName}.\n\n` +
+    `Decision: ${outcome}\n` +
+    (comments ? `Comments:\n${comments}\n\n` : '\n') +
+    (approved
+      ? `No further action is needed from you at this stage.\n\n`
+      : `Please review the feedback above and resubmit or update your design accordingly.\n\n`) +
+    `Regards,\nLEADS Next Gen Centre, MSRUAS`;
+
+  const badgeColor = approved ? '#15803d' : '#be123c';
+
+  const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
+    headerTitle: `${stage} ${outcome}`,
+    headerSubtitle: designTitle,
+    badgeText: outcome,
+    badgeColor,
+    bodyContentHtml: `
+      <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello <strong>${designerName}</strong>,</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">Your design submission <strong>${designTitle}</strong> has been reviewed at the <strong>${stage}</strong> stage by <strong>${decidedByName}</strong>.</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">Decision: <strong style="color: ${badgeColor};">${outcome}</strong></p>
+      ${comments ? `
+      <div style="background: #f8fafc; border-left: 3px solid ${badgeColor}; padding: 10px 14px; border-radius: 4px; margin: 10px 0;">
+        <p style="margin: 0 0 4px; color: #0f172a; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;">Comments</p>
+        <p style="margin: 0; color: #334155; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${comments}</p>
+      </div>` : ''}
+      <p style="color: #64748b; font-size: 13px; line-height: 1.6;">${approved ? 'No further action is needed from you at this stage.' : 'Please review the feedback above and resubmit or update your design accordingly.'}</p>
+    `
+  });
+
+  return { subject, bodyText, bodyHtml };
+}

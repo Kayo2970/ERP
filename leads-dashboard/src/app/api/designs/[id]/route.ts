@@ -116,6 +116,52 @@ export async function PATCH(
       }
     }
 
+    // Notify the designer who submitted the file directly, every time a
+    // proofread or style decision is recorded against their own submission —
+    // approve or reject alike — so they always know what happened to their
+    // work without having to check the dashboard. This fires independently
+    // of (and in addition to) the approver-facing emails below.
+    if ((justProofreadApproved || justProofreadRejected || justStyleApproved || justStyleRejected) && mergedRecord?.designerEmail) {
+      try {
+        const { dispatchEmail, generateDesignDecisionEmailTemplate } = await import('@/lib/email-service');
+        const stage: 'Proofreading' | 'Style Approval' = (justProofreadApproved || justProofreadRejected) ? 'Proofreading' : 'Style Approval';
+        const approved = justProofreadApproved || justStyleApproved;
+        const decidedByName = stage === 'Proofreading'
+          ? (mergedRecord?.review?.proofreaderName || 'the Proofreading Desk')
+          : (mergedRecord?.styleDecidedBy || 'the Design Head');
+        const comments = stage === 'Proofreading' ? mergedRecord?.review?.comments : mergedRecord?.styleFeedback;
+
+        const template = generateDesignDecisionEmailTemplate(
+          mergedRecord.title || 'Design',
+          mergedRecord.designerName || 'Designer',
+          stage,
+          approved,
+          decidedByName,
+          comments
+        );
+
+        const log = await dispatchEmail({
+          to: mergedRecord.designerEmail,
+          subject: template.subject,
+          bodyText: template.bodyText,
+          bodyHtml: template.bodyHtml,
+          category: 'DESIGN_APPROVAL',
+        });
+
+        await mutateCollection('designs', (current) => (current || []).map((d: any) =>
+          d.id === id ? { ...d, designerDecisionEmailSent: log.status === 'SENT', designerDecisionEmailError: log.errorMessage } : d
+        ));
+        mergedRecord = { ...mergedRecord, designerDecisionEmailSent: log.status === 'SENT', designerDecisionEmailError: log.errorMessage };
+      } catch (emailErr: any) {
+        console.error('[designs-api] Designer decision email dispatch failed:', emailErr);
+        const message = emailErr?.message || 'Failed to notify the designer of the review decision.';
+        await mutateCollection('designs', (current) => (current || []).map((d: any) =>
+          d.id === id ? { ...d, designerDecisionEmailSent: false, designerDecisionEmailError: message } : d
+        ));
+        mergedRecord = { ...mergedRecord, designerDecisionEmailSent: false, designerDecisionEmailError: message };
+      }
+    }
+
     // Once Style Approved — by the Centre Head, Advisor, or GG Campus Head of
     // Events (see the isCentreHead(user)/isDesignHead(user) gate in
     // dashboard/designs/page.tsx, which already treats Advisor as Centre

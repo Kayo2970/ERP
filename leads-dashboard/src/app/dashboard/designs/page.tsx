@@ -343,6 +343,12 @@ export default function DesignPortalPage() {
   const [highlightDesignId, setHighlightDesignId] = useState<string | null>(null);
   const [hasOpenedHighlight, setHasOpenedHighlight] = useState(false);
 
+  // Inspector modal tabs — replaces the old single long-scrolling panel so
+  // Overview / Proofreading / Style Approval / Social Workflow are each a
+  // focused, short screen instead of one continuous scroll.
+  type InspectorTab = 'overview' | 'proofreading' | 'style' | 'workflow';
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>('overview');
+
   const openInspector = (design: DesignSubmissionItem) => {
     setSelectedDesign(design);
     setReviewComments(design.review?.comments || '');
@@ -356,6 +362,7 @@ export default function DesignPortalPage() {
     setShowExtractedText(false);
     setReplaceOcrScanResult(null);
     setReplaceScanError('');
+    setInspectorTab('overview');
     setShowInspectorModal(true);
   };
 
@@ -1807,6 +1814,44 @@ export default function DesignPortalPage() {
               </div>
             </div>
 
+            {/* Inspector Tab Bar — splits the review into focused screens instead of one long scroll */}
+            <div className="flex items-center gap-1.5 overflow-x-auto -mx-1 px-1 pb-1 border-b border-border">
+              {([
+                { id: 'overview', label: 'Overview', icon: FileText },
+                { id: 'proofreading', label: 'Proofreading', icon: UserCheck },
+                { id: 'style', label: 'Style Approval', icon: Sparkles },
+                ...(selectedDesign.styleStatus === 'Style Approved' || selectedDesign.workflowStage
+                  ? [{ id: 'workflow' as InspectorTab, label: 'Social Workflow', icon: Send }]
+                  : []),
+              ] as { id: InspectorTab; label: string; icon: typeof FileText }[]).map(tab => {
+                const Icon = tab.icon;
+                const isActive = inspectorTab === tab.id;
+                const needsAttention =
+                  (tab.id === 'proofreading' && (!selectedDesign.review || selectedDesign.review.status === 'Pending Proofread')) ||
+                  (tab.id === 'style' && (!selectedDesign.styleStatus || selectedDesign.styleStatus === 'Pending'));
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setInspectorTab(tab.id)}
+                    className={`shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg text-xs font-semibold transition-all cursor-pointer border-b-2 ${
+                      isActive
+                        ? 'border-accent text-accent bg-accent/5'
+                        : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40'
+                    }`}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    {tab.label}
+                    {needsAttention && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500" title="Awaiting decision" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {inspectorTab === 'overview' && (
+            <>
             {/* Asset Preview Frame */}
             <div className="bg-muted/40 border border-border rounded-xl p-4 text-center space-y-3">
               {(selectedDesign.fileUrl || selectedDesign.fileData) && selectedDesign.fileType.startsWith('image/') ? (
@@ -1949,8 +1994,36 @@ export default function DesignPortalPage() {
               </div>
             )}
 
+            {/* Description & Event */}
+            {selectedDesign.description && (
+              <div className="space-y-1 text-xs">
+                <span className="font-semibold text-foreground">Designer Notes:</span>
+                <p className="text-muted-foreground bg-muted/20 p-3 rounded-lg border border-border">
+                  {selectedDesign.description}
+                </p>
+              </div>
+            )}
+
+            {/* Automated OCR + Spell-Check pass (run by the designer at upload time) */}
+            {selectedDesign.ocrScan && (
+              <div className="border-t border-border pt-4 space-y-2">
+                <h3 className="text-sm font-bold flex items-center gap-2">
+                  <Search className="h-4 w-4 text-accent" />
+                  Automated Spelling Scan
+                </h3>
+                <OcrScanPanel
+                  result={selectedDesign.ocrScan}
+                  error=""
+                  showExtractedText={showExtractedText}
+                  onToggleExtractedText={() => setShowExtractedText(v => !v)}
+                />
+              </div>
+            )}
+            </>
+            )}
+
             {/* Automated 3-Stage Social Media Workflow Tracker Card */}
-            {(selectedDesign.styleStatus === 'Style Approved' || selectedDesign.workflowStage) && (
+            {inspectorTab === 'workflow' && (selectedDesign.styleStatus === 'Style Approved' || selectedDesign.workflowStage) && (
               <div className="bg-slate-900/60 dark:bg-slate-900/80 bg-slate-50 border border-accent/30 p-5 rounded-2xl space-y-4 text-xs">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-foreground flex items-center gap-2 text-sm">
@@ -2189,34 +2262,9 @@ export default function DesignPortalPage() {
               </div>
             )}
 
-            {/* Description & Event */}
-            {selectedDesign.description && (
-              <div className="space-y-1 text-xs">
-                <span className="font-semibold text-foreground">Designer Notes:</span>
-                <p className="text-muted-foreground bg-muted/20 p-3 rounded-lg border border-border">
-                  {selectedDesign.description}
-                </p>
-              </div>
-            )}
-
-            {/* Automated OCR + Spell-Check pass (run by the designer at upload time) */}
-            {selectedDesign.ocrScan && (
-              <div className="border-t border-border pt-4 space-y-2">
-                <h3 className="text-sm font-bold flex items-center gap-2">
-                  <Search className="h-4 w-4 text-accent" />
-                  Automated Spelling Scan
-                </h3>
-                <OcrScanPanel
-                  result={selectedDesign.ocrScan}
-                  error=""
-                  showExtractedText={showExtractedText}
-                  onToggleExtractedText={() => setShowExtractedText(v => !v)}
-                />
-              </div>
-            )}
-
             {/* Proofreading Action Form (for Assigned Proofreader / Admins) */}
-            <div className="border-t border-border pt-4 space-y-4">
+            {inspectorTab === 'proofreading' && (
+            <div className="pt-1 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold flex items-center gap-2">
                   <UserCheck className="h-4 w-4 text-accent" />
@@ -2307,9 +2355,11 @@ export default function DesignPortalPage() {
                 </div>
               )}
             </div>
+            )}
 
             {/* Design Head Style Evaluation Section */}
-            <div className="border-t border-border pt-4 space-y-4">
+            {inspectorTab === 'style' && (
+            <div className="pt-1 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold flex items-center gap-2 text-foreground">
                   <Sparkles className="h-4 w-4 text-accent" />
@@ -2399,6 +2449,7 @@ export default function DesignPortalPage() {
                 </div>
               )}
             </div>
+            )}
 
             {/* Sticky Bottom Close Inspector Bar */}
             <div className="sticky -bottom-6 -mx-6 -mb-6 p-4 bg-slate-900/95 dark:bg-[#0B1B2E]/95 bg-white/95 backdrop-blur-xl border-t border-border z-30 flex items-center justify-between rounded-b-2xl mt-6">
