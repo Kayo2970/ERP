@@ -113,7 +113,7 @@ export default function DirectoryPage() {
   ];
 
   type FacultyPosition = 'Events Head' | 'Industrial Connects' | 'Finance Head' | 'Centre Head' | 'Advisor';
-  type CorePosition = 'President' | 'Vice President' | 'General Secretary' | 'Chief Coordinator' | 'Department Head';
+  type CorePosition = 'President' | 'Vice President' | 'General Secretary' | 'Chief Coordinator' | 'Faculty Ambassador' | 'Department Head';
   type AssociatePosition = 'Associate' | 'Department Associate';
 
   const deriveMemberRoleAndDepartment = (
@@ -174,6 +174,12 @@ export default function DirectoryPage() {
       } else if (pos === 'Chief Coordinator') {
         role = 'Chief Coordinator';
         department = 'Coordination';
+      } else if (pos === 'Faculty Ambassador') {
+        // Same standing/privileges as Chief Coordinator — see isExecutiveRole
+        // in permissions.ts/permissions-server.ts, which matches this role
+        // text directly rather than deriving it from division/tier.
+        role = 'Faculty Ambassador';
+        department = 'Faculty Ambassador Program';
       } else if (pos === 'Department Head') {
         const dept = opts.departmentSelect || STANDARDIZED_DEPARTMENTS[0];
         role = `Head of ${dept}`;
@@ -196,6 +202,12 @@ export default function DirectoryPage() {
       } else if (pos === 'Chief Coordinator') {
         role = 'Senior Chief Coordinator';
         department = 'Coordination';
+      } else if (pos === 'Faculty Ambassador') {
+        // Deliberately not prefixed "Senior" — Faculty Ambassador is the same
+        // named role/privilege level in both Core Committee and Advisory
+        // Board (see isExecutiveRole), not a senior variant of another title.
+        role = 'Faculty Ambassador';
+        department = 'Faculty Ambassador Program';
       } else if (pos === 'Department Head') {
         const dept = opts.departmentSelect || STANDARDIZED_DEPARTMENTS[0];
         role = `Senior Head of ${dept}`;
@@ -548,6 +560,8 @@ export default function DirectoryPage() {
       setEditCorePosition('General Secretary');
     } else if (r.includes('Chief Coordinator')) {
       setEditCorePosition('Chief Coordinator');
+    } else if (r.includes('Faculty Ambassador')) {
+      setEditCorePosition('Faculty Ambassador');
     } else {
       setEditCorePosition('Department Head');
     }
@@ -1794,6 +1808,7 @@ export default function DirectoryPage() {
                         <option value="Vice President">Vice President</option>
                         <option value="General Secretary">General Secretary</option>
                         <option value="Chief Coordinator">Chief Coordinator</option>
+                        <option value="Faculty Ambassador">Faculty Ambassador</option>
                       </select>
                     </div>
                   )}
@@ -2034,6 +2049,7 @@ export default function DirectoryPage() {
                         <option value="Vice President">Vice President</option>
                         <option value="General Secretary">General Secretary</option>
                         <option value="Chief Coordinator">Chief Coordinator</option>
+                        <option value="Faculty Ambassador">Faculty Ambassador</option>
                       </select>
                     </div>
                   )}

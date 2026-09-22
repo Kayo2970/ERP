@@ -73,10 +73,12 @@ export async function getAccessLevelSettingsServer(): Promise<AccessLevelSetting
 
 export type ServerUser = { id?: string; tier?: number; role?: string; division?: string; department?: string; email?: string; name?: string } | null | undefined;
 
+// Mirrors permissions.ts's isExecutiveRole — Faculty Ambassador is deliberately
+// given identical standing to Chief Coordinator by matching here too.
 export function isExecutiveRole(user: ServerUser): boolean {
   if (!user) return false;
   const role = (user.role || '').toLowerCase();
-  return role.includes('president') || role.includes('vice president') || role.includes('chief coordinator');
+  return role.includes('president') || role.includes('vice president') || role.includes('chief coordinator') || role.includes('faculty ambassador');
 }
 
 export function isAlumniRole(user: ServerUser): boolean {
