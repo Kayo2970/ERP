@@ -204,10 +204,12 @@ export default function VisitingCardPage() {
               statusMsg += ` Wallet pass update limit reached — ${data.error || 'try again later'}.`;
             } else if (walletRes.status !== 501) {
               console.warn('[visiting-card] wallet pass generation failed:', data.error);
+              statusMsg += ` Wallet pass generation failed — ${data.error || `HTTP ${walletRes.status}`}.`;
             }
           }
-        } catch (e) {
+        } catch (e: any) {
           console.warn('[visiting-card] wallet pass generation request failed:', e);
+          statusMsg += ` Wallet pass generation failed — ${e?.message || 'network error'}.`;
         }
       }
       triggerSuccess(statusMsg);
