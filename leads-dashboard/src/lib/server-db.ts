@@ -36,6 +36,7 @@ import {
   initialGuests,
   initialBudgets,
   initialIncomeSources,
+  initialProcurementRequests,
   FEEDBACK_FORM_TEMPLATE_ID,
 } from './local-data';
 
@@ -70,6 +71,7 @@ export interface DbSchema {
   eventReports: any[];
   event_passes: any[];
   approvalRequests: any[];
+  procurementRequests: any[];
   // One row per (memberId, date) a birthday email was actually sent for —
   // see src/lib/birthday-scheduler.ts. Purely an idempotency guard so a
   // PM2 restart near midnight (or two scheduler ticks landing on the same
@@ -116,6 +118,7 @@ const EMPTY_DB: DbSchema = {
   eventReports: [],
   event_passes: [],
   approvalRequests: [],
+  procurementRequests: [],
   birthdayEmailLog: [],
   sessions: [],
   walletSettings: [],
@@ -167,6 +170,7 @@ const SEED_DB: DbSchema = {
   eventReports: [],
   event_passes: [],
   approvalRequests: [],
+  procurementRequests: initialProcurementRequests,
   birthdayEmailLog: [],
   sessions: [],
   walletSettings: [],

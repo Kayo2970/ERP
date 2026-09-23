@@ -14,7 +14,7 @@ import { readCollection, mutateCollection } from './server-db';
 import { dispatchEmail, wrapInMasterEmailTemplate, findApprovalRecipients } from './email-service';
 import type { ApprovalRequest } from './local-data';
 
-type AutoApprovalEntityType = 'event' | 'task' | 'design' | 'event-report' | 'announcement';
+type AutoApprovalEntityType = 'event' | 'task' | 'design' | 'event-report' | 'announcement' | 'procurement';
 
 const ENTITY_LABELS: Record<AutoApprovalEntityType, string> = {
   event: 'Event',
@@ -22,6 +22,7 @@ const ENTITY_LABELS: Record<AutoApprovalEntityType, string> = {
   design: 'Design',
   'event-report': 'Event Report',
   announcement: 'Announcement',
+  procurement: 'Procurement Request',
 };
 
 export interface ApprovalPanelMember {
@@ -54,6 +55,33 @@ export async function resolveApprovalPanel(): Promise<ApprovalPanelMember[]> {
   push(recipients.centreHead, 'Centre Head');
   push(recipients.advisor, 'Advisor');
   push(recipients.eventsHeadGg, 'GG Campus Events Head');
+
+  return panel;
+}
+
+/**
+ * Same idea as resolveApprovalPanel, but Centre Head + Advisor only — used
+ * by Procurement Requests, whose approve/reject gate (permissions.ts's
+ * canDecideProcurementRequest) deliberately excludes the GG Campus Events
+ * Head that the default three-member panel includes.
+ */
+export async function resolveCentreHeadAdvisorPanel(): Promise<ApprovalPanelMember[]> {
+  const members = await readCollection('members');
+  const recipients = findApprovalRecipients(members as any[]);
+  const panel: ApprovalPanelMember[] = [];
+  const seen = new Set<string>();
+  const active = (members as any[]).filter(m => m.status !== 'Terminated');
+
+  const push = (match: { name: string; email: string } | undefined, label: string) => {
+    if (!match) return;
+    const member = active.find(m => m.email === match.email) || { id: match.email, name: match.name, email: match.email };
+    if (seen.has(member.id)) return;
+    seen.add(member.id);
+    panel.push({ id: member.id, name: member.name, email: member.email, label });
+  };
+
+  push(recipients.centreHead, 'Centre Head');
+  push(recipients.advisor, 'Advisor');
 
   return panel;
 }
@@ -125,6 +153,7 @@ export async function fanOutAutoApproval(opts: FanOutOptions): Promise<ApprovalR
       else if (opts.entityType === 'task') targetLink = `${baseUrl}/dashboard/tasks?highlight=${opts.entityId}`;
       else if (opts.entityType === 'design') targetLink = `${baseUrl}/dashboard/designs?highlight=${opts.entityId}`;
       else if (opts.entityType === 'event-report') targetLink = `${baseUrl}/dashboard/event-reports?highlight=${opts.entityId}`;
+      else if (opts.entityType === 'procurement') targetLink = `${baseUrl}/dashboard/procurement?highlight=${opts.entityId}`;
 
       const bodyHtml = `
         <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello <strong>${row.targetMemberName || 'there'}</strong>,</p>

@@ -12,7 +12,7 @@
  * There is no session-scoped "current user" object here; every function takes the
  * user explicitly so it works the same in pages, modals, and background sync code.
  */
-import { Member, Guest, TaskItem, RatingItem, ReimbursementItem, BudgetItem, GroupPolicy, EventItem, PublicFormItem, ModuleAccessKey, getMembers, getGroupPolicies, getAccessLevelSettings, canViewTask, isTaskAssignee } from './local-data';
+import { Member, Guest, TaskItem, RatingItem, ReimbursementItem, BudgetItem, ProcurementRequestItem, GroupPolicy, EventItem, PublicFormItem, ModuleAccessKey, getMembers, getGroupPolicies, getAccessLevelSettings, canViewTask, isTaskAssignee } from './local-data';
 
 export type SessionUser = {
   id?: string;
@@ -451,6 +451,7 @@ export const MODULE_CATALOG: { key: ModuleAccessKey; label: string; description:
   { key: 'BACKUP', label: 'Backup & Restore', description: 'System backups and disaster recovery restorations.' },
   { key: 'EMAIL', label: 'Email Management', description: 'Dispatch logs and email settings.' },
   { key: 'POLICIES', label: 'Group Policies', description: 'Dynamic access control and permissions management.' },
+  { key: 'PROCUREMENT', label: 'Procurement Requests', description: 'Material requests for events and tasks.', ownershipNote: 'Ownership = the request’s submitter. Approving/rejecting is always restricted to the Centre Head and Advisor, regardless of any policy grant here.' },
 ];
 
 /** Active, targeting-matched policies that set a moduleAccess entry for `moduleKey` (or, for EVENTS only, the legacy eventVisibilityScope flag). */
@@ -736,6 +737,34 @@ export function canDecideBudget(user: SessionUser, budget?: BudgetItem): boolean
   return budget.centreHeadVerified === true;
 }
 
+/**
+ * Procurement Requests approve/reject gate — deliberately just these two
+ * roles per the module's own design, unlike almost every other approval
+ * gate in this file: no GG Campus Events Head, no capability-grant escape
+ * hatch, no Group Policy override. isCentreHead() already folds in Super
+ * User (tier 1) and anyone whose role literally contains "advisor"; isAdvisor()
+ * additionally covers the Advisory Board division for members whose role text
+ * doesn't happen to say "advisor".
+ */
+export function canDecideProcurementRequest(user: SessionUser): boolean {
+  return isCentreHead(user) || isAdvisor(user);
+}
+
+/**
+ * Visibility rule for procurement requests:
+ * - Approved requests are visible to everybody (per the module's design).
+ * - Pending/Rejected requests are visible only to the requester and to
+ *   whoever can decide them (Centre Head/Advisor), so a rejected or
+ *   still-pending materials ask isn't broadcast centre-wide.
+ */
+export function canViewProcurementRequest(user: SessionUser, request: ProcurementRequestItem): boolean {
+  if (!user) return false;
+  if (request.status === 'Approved' || request.status === 'Completed') return true;
+  if (canDecideProcurementRequest(user)) return true;
+  if (request.requesterId && request.requesterId === user.id) return true;
+  return !!request.requesterEmail && !!user.email && request.requesterEmail.toLowerCase() === user.email.toLowerCase();
+}
+
 /** Announcement approval gatekeeper — Centre Head or GG Campus Events Head (Tier 2.5). */
 export function canApproveAnnouncement(user: SessionUser): boolean {
   if (!user) return false;
@@ -882,7 +911,7 @@ export function getEventApprovalRequirement(user: SessionUser, action: 'CREATE' 
     return {
       requiresApproval: true,
       approverType: 'CENTER_HEAD',
-      approverName: 'the Center Head',
+      approverName: 'the Centre Head or Advisor',
       policyName: 'Executive Event Sign-off Requirement'
     };
   }
@@ -936,7 +965,7 @@ export function getTaskApprovalRequirement(user: SessionUser, action: 'CREATE' |
     return {
       requiresApproval: true,
       approverType: 'CENTER_HEAD',
-      approverName: 'the Centre Head or GG Campus Events Head',
+      approverName: 'the Centre Head, Advisor, or GG Campus Events Head',
       policyName: 'Executive Task Sign-off Requirement'
     };
   }
@@ -954,7 +983,7 @@ export function getTaskApprovalRequirement(user: SessionUser, action: 'CREATE' |
   return {
     requiresApproval: true,
     approverType: 'CENTER_HEAD',
-    approverName: 'the Centre Head or GG Campus Events Head',
+    approverName: 'the Centre Head, Advisor, or GG Campus Events Head',
     policyName: 'Task Sign-off Requirement',
   };
 }
