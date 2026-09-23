@@ -27,7 +27,8 @@ import {
   Edit2,
   RefreshCw,
   GraduationCap,
-  Check
+  Check,
+  ExternalLink
 } from 'lucide-react';
 import { FileDropzone, FilePreviewRow, createProgressTracker } from '@/components/ui/file-dropzone';
 import { RequestApprovalModal } from '@/components/request-approval-modal';
@@ -947,6 +948,18 @@ export default function DesignPortalPage() {
                   </div>
                   {task.briefDescription && (
                     <p className="text-[11px] text-muted-foreground whitespace-pre-wrap line-clamp-2">{task.briefDescription}</p>
+                  )}
+                  {task.canvaLink && (
+                    <a
+                      href={task.canvaLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={e => e.stopPropagation()}
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-accent/10 hover:bg-accent/20 border border-accent/25 text-accent text-[10px] font-medium rounded-lg transition-all"
+                    >
+                      <ExternalLink className="h-3 w-3 shrink-0" />
+                      Canva Reference
+                    </a>
                   )}
                   {task.attachments && task.attachments.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">

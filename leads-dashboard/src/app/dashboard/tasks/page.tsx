@@ -30,6 +30,7 @@ import {
   Paperclip,
   Palette,
   Download,
+  ExternalLink,
 } from 'lucide-react';
 import {
   getTasks,
@@ -164,6 +165,10 @@ export default function TasksPage() {
   // instead of a title alone.
   const [taskCategory, setTaskCategory] = useState<'general' | 'design'>('general');
   const [briefDescription, setBriefDescription] = useState('');
+  // Optional reference link to an editable Canva file/template — shown to
+  // the designer picking this brief up from the Design Portal's "Design
+  // Task Requests" queue, alongside the brief description and attachments.
+  const [canvaLink, setCanvaLink] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [existingAttachments, setExistingAttachments] = useState<ReceiptFile[]>([]);
   const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
@@ -341,6 +346,7 @@ export default function TasksPage() {
     setFormError('');
     setTaskCategory('general');
     setBriefDescription('');
+    setCanvaLink('');
     setAttachedFiles([]);
     setExistingAttachments([]);
     setIsCreateModalOpen(true);
@@ -371,6 +377,7 @@ export default function TasksPage() {
     setFormError('');
     setTaskCategory(task.taskCategory || 'general');
     setBriefDescription(task.briefDescription || '');
+    setCanvaLink(task.canvaLink || '');
     setAttachedFiles([]);
     setExistingAttachments(task.attachments || []);
   };
@@ -526,6 +533,7 @@ export default function TasksPage() {
         status,
         taskCategory,
         briefDescription: taskCategory === 'design' ? briefDescription.trim() : undefined,
+        canvaLink: taskCategory === 'design' ? (canvaLink.trim() || undefined) : undefined,
         attachments: taskCategory === 'design' ? finalAttachments : undefined,
       };
       const approval = getTaskApprovalRequirement(user, 'EDIT');
@@ -559,6 +567,7 @@ export default function TasksPage() {
         creatorName: user?.name || 'User',
         taskCategory,
         briefDescription: taskCategory === 'design' ? briefDescription.trim() : undefined,
+        canvaLink: taskCategory === 'design' ? (canvaLink.trim() || undefined) : undefined,
         attachments: taskCategory === 'design' ? finalAttachments : undefined,
       };
       const approval = getTaskApprovalRequirement(user, 'CREATE');
@@ -1146,13 +1155,24 @@ export default function TasksPage() {
                   )}
                 </div>
 
-                {task.taskCategory === 'design' && (task.briefDescription || (task.attachments && task.attachments.length > 0)) && (
+                {task.taskCategory === 'design' && (task.briefDescription || task.canvaLink || (task.attachments && task.attachments.length > 0)) && (
                   <div className="p-2.5 bg-theme-background/30 border border-theme-border/30 rounded-xl space-y-2">
                     {task.briefDescription && (
                       <p className="text-[11px] text-theme-text-secondary whitespace-pre-wrap">
                         <span className="font-semibold text-theme-text-primary">Brief: </span>
                         {task.briefDescription}
                       </p>
+                    )}
+                    {task.canvaLink && (
+                      <a
+                        href={task.canvaLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-accent/10 hover:bg-accent/20 border border-accent/25 text-accent text-[10px] font-medium rounded-lg transition-all"
+                      >
+                        <ExternalLink className="h-3 w-3 shrink-0" />
+                        Canva Reference
+                      </a>
                     )}
                     {task.attachments && task.attachments.length > 0 && (
                       <div className="flex flex-wrap gap-1.5">
@@ -1679,6 +1699,19 @@ export default function TasksPage() {
                         ))}
                       </div>
                     )}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block font-medium text-theme-text-secondary">
+                      Canva Link (optional)
+                    </label>
+                    <input
+                      type="url"
+                      value={canvaLink}
+                      onChange={(e) => setCanvaLink(e.target.value)}
+                      placeholder="https://www.canva.com/design/..."
+                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                    />
                   </div>
                 </div>
               )}

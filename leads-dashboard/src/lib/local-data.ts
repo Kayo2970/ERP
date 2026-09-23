@@ -418,6 +418,11 @@ export interface TaskItem {
   // collected/shown when taskCategory === 'design', but stored generically
   // in case a future task type wants the same field.
   briefDescription?: string;
+  // Optional reference link to an editable Canva file/template — same
+  // taskCategory === 'design' scope as briefDescription above, surfaced to
+  // the designer who picks this brief up from the Design Portal's "Design
+  // Task Requests" queue (src/app/dashboard/designs/page.tsx).
+  canvaLink?: string;
   // Reference files (mockup examples, logos, style guides, past posters...)
   // the requester attaches for the designer to work from. Stored server-side
   // as real files under data/uploads/tasks/<taskId>/ (see saveBase64File) —
