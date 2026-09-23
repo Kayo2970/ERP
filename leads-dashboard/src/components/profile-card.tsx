@@ -13,7 +13,16 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { Linkedin } from '@/components/ui/linkedin-icon';
+import { resolveCustomLinkIcon } from '@/lib/custom-link-icons';
 import styles from './profile-card.module.css';
+
+export interface ProfileCardCustomLink {
+  label: string;
+  url: string;
+  icon: string;
+  customIconUrl?: string;
+  customIconData?: string;
+}
 
 export interface ProfileCardProps {
   name: string;
@@ -31,6 +40,7 @@ export interface ProfileCardProps {
   phone?: string;
   email?: string;
   linkedin?: string;
+  customLinks?: ProfileCardCustomLink[];
   slug?: string;
   appleWalletAvailable?: boolean;
   googleWalletAvailable?: boolean;
@@ -59,6 +69,7 @@ export function ProfileCard({
   phone,
   email,
   linkedin,
+  customLinks,
   slug,
   appleWalletAvailable = false,
   googleWalletAvailable = false,
@@ -308,6 +319,33 @@ export function ProfileCard({
             </div>
           )}
 
+          {/* Custom Links — icon + name shown together, unlike the icon-only LinkedIn button above */}
+          {customLinks && customLinks.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
+              {customLinks.map((link, idx) => {
+                const iconSrc = link.customIconData || link.customIconUrl;
+                const PresetIcon = resolveCustomLinkIcon(link.icon);
+                return (
+                  <a
+                    key={idx}
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={link.label}
+                    className="flex items-center gap-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 px-2.5 py-1.5 text-[11px] font-medium text-white/90 transition-colors"
+                  >
+                    {iconSrc ? (
+                      <img src={iconSrc} alt="" className="h-3.5 w-3.5 rounded object-cover" />
+                    ) : (
+                      <PresetIcon className="h-3.5 w-3.5 text-sky-400" />
+                    )}
+                    <span>{link.label}</span>
+                  </a>
+                );
+              })}
+            </div>
+          )}
+
           {/* Action Buttons */}
           {showActions && (
             <div className={styles.actionsContainer}>
@@ -328,6 +366,7 @@ export function ProfileCard({
                       phone ? `TEL;TYPE=CELL:${phone}` : '',
                       email ? `EMAIL:${email}` : '',
                       linkedin ? `URL;TYPE=LinkedIn:${linkedin}` : '',
+                      ...(customLinks || []).map(link => `URL;TYPE=${link.label}:${link.url}`),
                       'ORG:LEADS Next Gen Centre',
                       'END:VCARD',
                     ].filter(Boolean).join('\r\n') + '\r\n';

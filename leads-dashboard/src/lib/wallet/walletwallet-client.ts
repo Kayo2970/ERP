@@ -38,6 +38,9 @@ export interface WalletCardMember {
   phone?: string;
   email?: string;
   linkedin?: string;
+  // Icon isn't included — Apple/Google Wallet back fields are plain
+  // label/value text with no icon slot, so only label+url matter here.
+  customLinks?: { label: string; url: string }[];
   photoUrl?: string;
 }
 
@@ -78,6 +81,9 @@ export async function createWalletPass(apiKey: string, member: WalletCardMember,
     { label: 'Address', value: ORG_ADDRESS },
   ] as { label: string; value: string; changeMessage?: string }[];
   if (member.linkedin) backFields.push({ label: 'LinkedIn', value: member.linkedin });
+  for (const link of member.customLinks || []) {
+    backFields.push({ label: link.label, value: link.url });
+  }
   backFields.push({ label: 'Full Card', value: cardUrl });
   // Placeholder field WalletWallet uses to push a notification to already-
   // installed passes when this pass is updated — %@ is filled in by them.

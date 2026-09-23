@@ -68,6 +68,9 @@ export async function GET(
     lines.push(`EMAIL:${escapeVCardText(member.email)}`);
   }
   if (socials.linkedin) lines.push(`URL;TYPE=LinkedIn:${escapeVCardText(socials.linkedin)}`);
+  for (const link of socials.customLinks || []) {
+    lines.push(`URL;TYPE=${escapeVCardText(link.label)}:${escapeVCardText(link.url)}`);
+  }
 
   // The photo the member set on their own card (falling back to their
   // profile photo if they never set a card-specific one) — embedded inline

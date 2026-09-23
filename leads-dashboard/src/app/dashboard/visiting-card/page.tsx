@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Save, QrCode, Copy, ExternalLink, RotateCw, AlertCircle, Sparkles, Maximize2, X, ShieldCheck, Crop } from 'lucide-react';
+import { Save, QrCode, Copy, ExternalLink, RotateCw, AlertCircle, Sparkles, Maximize2, X, ShieldCheck, Crop, Plus, Trash2, Upload } from 'lucide-react';
 import { getMembers, saveMembers, updateMemberCard, updateMemberCardPhoto, authHeaders } from '@/lib/local-data';
 import { isCentreHead } from '@/lib/permissions';
 import { FileDropzone, useUploadTask } from '@/components/ui/file-dropzone';
@@ -10,8 +10,21 @@ import { InteractiveKeycardHolder } from '@/components/interactive-keycard-holde
 import { CardQrModal } from '@/components/card-qr-modal';
 import { ImageCropModal } from '@/components/image-crop-modal';
 import { Linkedin } from '@/components/ui/linkedin-icon';
+import { CUSTOM_LINK_ICONS, resolveCustomLinkIcon } from '@/lib/custom-link-icons';
 
 const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
+const MAX_CUSTOM_LINKS = 5;
+const MAX_CUSTOM_ICON_SIZE_BYTES = 1 * 1024 * 1024; // 1 MB
+
+interface CardCustomLinkRow {
+  label: string;
+  url: string;
+  icon: string;
+  customIconUrl?: string;
+  customIconStorageKey?: string;
+  customIconData?: string;
+  customIconFileName?: string;
+}
 
 export default function VisitingCardPage() {
   const [user, setUser] = useState<any>(null);
@@ -22,6 +35,8 @@ export default function VisitingCardPage() {
   const [cardDesignationOverride, setCardDesignationOverride] = useState('');
   const [cardPhone, setCardPhone] = useState('');
   const [cardLinkedin, setCardLinkedin] = useState('');
+  const [cardCustomLinks, setCardCustomLinks] = useState<CardCustomLinkRow[]>([]);
+  const [customIconSizeError, setCustomIconSizeError] = useState('');
   const [cardPhotoUrl, setCardPhotoUrl] = useState('');
   const [cardPhotoFile, setCardPhotoFile] = useState<File | null>(null);
   const [cardPhotoPreviewUrl, setCardPhotoPreviewUrl] = useState<string | null>(null);
@@ -78,6 +93,7 @@ export default function VisitingCardPage() {
       setCardDesignationOverride(me?.cardDesignationOverride || '');
       setCardPhone(me?.cardPhone || '');
       setCardLinkedin(me?.cardSocials?.linkedin || '');
+      setCardCustomLinks(me?.cardSocials?.customLinks || []);
       setCardPhotoUrl(me?.cardPhotoUrl || '');
     } catch {
       // non-fatal
@@ -164,6 +180,50 @@ export default function VisitingCardPage() {
     return () => URL.revokeObjectURL(url);
   }, [cardPhotoFile]);
 
+  const handleAddCustomLink = () => {
+    if (cardCustomLinks.length >= MAX_CUSTOM_LINKS) return;
+    setCardCustomLinks(prev => [...prev, { label: '', url: '', icon: 'globe' }]);
+  };
+
+  const handleRemoveCustomLink = (idx: number) => {
+    setCardCustomLinks(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleCustomLinkFieldChange = (idx: number, field: 'label' | 'url', value: string) => {
+    setCardCustomLinks(prev => prev.map((link, i) => i === idx ? { ...link, [field]: value } : link));
+  };
+
+  // Picking a preset icon and uploading a custom one are mutually exclusive
+  // per row — selecting a preset clears whatever was uploaded, since the
+  // card renderer always prefers customIconUrl/customIconData over `icon`
+  // when present.
+  const handleCustomLinkIconSelect = (idx: number, iconKey: string) => {
+    setCardCustomLinks(prev => prev.map((link, i) => i === idx
+      ? { ...link, icon: iconKey, customIconUrl: undefined, customIconStorageKey: undefined, customIconData: undefined, customIconFileName: undefined }
+      : link
+    ));
+  };
+
+  const handleCustomLinkIconUpload = (idx: number, files: File[]) => {
+    const file = files[0];
+    if (!file) return;
+    if (file.size > MAX_CUSTOM_ICON_SIZE_BYTES) {
+      setCustomIconSizeError(`Icon size (${(file.size / (1024 * 1024)).toFixed(2)} MB) exceeds the 1 MB maximum limit.`);
+      return;
+    }
+    setCustomIconSizeError('');
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setCardCustomLinks(prev => prev.map((link, i) => i === idx
+          ? { ...link, customIconData: reader.result as string, customIconFileName: file.name, customIconUrl: undefined, customIconStorageKey: undefined }
+          : link
+        ));
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleUpdateCard = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -174,6 +234,15 @@ export default function VisitingCardPage() {
         cardPhone: cardPhone.trim(),
         cardSocials: {
           linkedin: cardLinkedin.trim(),
+          customLinks: cardCustomLinks
+            .filter(l => l.label.trim() && l.url.trim())
+            .map(l => ({
+              label: l.label.trim(),
+              url: l.url.trim(),
+              icon: l.icon,
+              ...(l.customIconUrl ? { customIconUrl: l.customIconUrl, customIconStorageKey: l.customIconStorageKey } : {}),
+              ...(l.customIconData ? { customIconData: l.customIconData, customIconFileName: l.customIconFileName } : {}),
+            })),
         },
         // Only a Super User can set this — the server strips it from anyone
         // else's request anyway, but there's no reason to send it otherwise.
@@ -185,6 +254,10 @@ export default function VisitingCardPage() {
         return;
       }
       if (updated.cardSlug) setCardSlug(updated.cardSlug);
+      // Pick up the real customIconUrl/customIconStorageKey the server just
+      // assigned to any freshly-uploaded icon, and drop the now-redundant
+      // transient customIconData so it isn't re-sent on the next save.
+      if (updated.cardSocials?.customLinks) setCardCustomLinks(updated.cardSocials.customLinks);
 
       // Pre-generate the Apple/Google Wallet pass now, right after saving,
       // instead of waiting for the first "Add to Wallet" tap — by the time
@@ -387,6 +460,91 @@ export default function VisitingCardPage() {
               <input type="url" value={cardLinkedin} onChange={(e) => setCardLinkedin(e.target.value)} placeholder="https://linkedin.com/in/..." className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent" />
             </div>
 
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="font-medium text-theme-text-secondary">Custom Links</label>
+                {cardCustomLinks.length < MAX_CUSTOM_LINKS && (
+                  <button
+                    type="button"
+                    onClick={handleAddCustomLink}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-accent hover:underline cursor-pointer"
+                  >
+                    <Plus className="h-3 w-3" /> Add Link
+                  </button>
+                )}
+              </div>
+              {customIconSizeError && <p className="text-[11px] text-danger">{customIconSizeError}</p>}
+              {cardCustomLinks.length === 0 ? (
+                <p className="text-[11px] text-theme-text-secondary/70">Add a portfolio, GitHub, personal site, or any other link — pick a preset icon or upload your own.</p>
+              ) : (
+                cardCustomLinks.map((link, idx) => {
+                  const iconSrc = link.customIconData || link.customIconUrl;
+                  const PresetIcon = resolveCustomLinkIcon(link.icon);
+                  return (
+                    <div key={idx} className="p-3 bg-theme-background/30 border border-theme-border/30 rounded-xl space-y-2">
+                      <div className="flex items-center gap-2">
+                        <div className="h-8 w-8 rounded-lg bg-theme-background/50 border border-theme-border/30 flex items-center justify-center overflow-hidden shrink-0">
+                          {iconSrc ? <img src={iconSrc} alt="" className="h-full w-full object-cover" /> : <PresetIcon className="h-4 w-4 text-accent" />}
+                        </div>
+                        <input
+                          type="text"
+                          value={link.label}
+                          onChange={(e) => handleCustomLinkFieldChange(idx, 'label', e.target.value)}
+                          placeholder="Label (e.g. Portfolio)"
+                          className="flex-1 px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent text-[11px]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCustomLink(idx)}
+                          className="p-1.5 rounded-lg hover:bg-danger/10 text-danger transition-all cursor-pointer shrink-0"
+                          title="Remove link"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <input
+                        type="url"
+                        value={link.url}
+                        onChange={(e) => handleCustomLinkFieldChange(idx, 'url', e.target.value)}
+                        placeholder="https://..."
+                        className="w-full px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent text-[11px]"
+                      />
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {CUSTOM_LINK_ICONS.map(({ key, label: iconLabel, Icon }) => (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => handleCustomLinkIconSelect(idx, key)}
+                            title={iconLabel}
+                            className={`h-7 w-7 rounded-lg flex items-center justify-center border transition-all cursor-pointer ${
+                              !iconSrc && link.icon === key
+                                ? 'bg-accent/20 border-accent text-accent'
+                                : 'bg-theme-background/30 border-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary'
+                            }`}
+                          >
+                            <Icon className="h-3.5 w-3.5" />
+                          </button>
+                        ))}
+                        <label className="h-7 px-2 rounded-lg flex items-center gap-1 border border-dashed border-theme-border/50 text-[10px] font-medium text-theme-text-secondary hover:text-accent hover:border-accent cursor-pointer transition-all">
+                          <Upload className="h-3 w-3" />
+                          {iconSrc ? 'Replace icon' : 'Upload icon'}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              if (e.target.files) handleCustomLinkIconUpload(idx, Array.from(e.target.files));
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
             {cardPublicUrl && (
               <div className="flex items-center gap-2 p-3 bg-theme-background/30 border border-theme-border/30 rounded-xl">
                 <span className="flex-1 text-[11px] font-mono text-accent truncate">{cardPublicUrl}</span>
@@ -452,7 +610,7 @@ export default function VisitingCardPage() {
                 phone: cardPhone,
                 email: user?.email,
                 photoUrl: cardPhotoPreviewUrl || cardPhotoUrl || user?.avatarUrl,
-                socials: { linkedin: cardLinkedin },
+                socials: { linkedin: cardLinkedin, customLinks: cardCustomLinks },
               }}
               slug={cardSlug || 'preview'}
               showActions={Boolean(cardSlug)}

@@ -117,6 +117,21 @@ export interface Member {
   cardPhone?: string;
   cardSocials?: {
     linkedin?: string;
+    // Arbitrary extra links a member wants on their card beyond LinkedIn —
+    // each with its own label and either a preset icon key (see
+    // src/lib/custom-link-icons.ts) or an uploaded icon image. The upload
+    // sub-fields mirror cardPhotoData/cardPhotoFileName/cardPhotoUrl/
+    // cardPhotoStorageKey below exactly (transient data URL in, servable
+    // URL out). Capped at 5 entries — enforced in validation.ts.
+    customLinks?: {
+      label: string;
+      url: string;
+      icon: string;
+      customIconUrl?: string;
+      customIconStorageKey?: string;
+      customIconData?: string;
+      customIconFileName?: string;
+    }[];
   };
   cardPhotoData?: string;       // transient: base64 data URL sent on upload
   cardPhotoFileName?: string;   // transient: original filename, paired with cardPhotoData
