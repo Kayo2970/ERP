@@ -51,6 +51,9 @@ import {
   submitDesignCaptions,
   reviewDesignCaptions,
   completeDesignPosting,
+  isTaskAssignee,
+  hasAcknowledgedTask,
+  acknowledgeTask,
   TaskItem,
   EventItem,
   Member,
@@ -600,6 +603,20 @@ export default function TasksPage() {
     updateTaskStatus(id, newStatus);
     setTasks(getTasks());
     triggerSuccess(`Task status changed to ${newStatus}.`);
+  };
+
+  // Acknowledgment is a personal attestation, not a status change anyone
+  // else can make — routed through the dedicated /api/tasks/ack endpoint
+  // (see acknowledgeTask in local-data.ts) instead of the generic
+  // handleStatusChange above, so it's always recorded under the acting
+  // member's own id and rejected server-side if they aren't actually one
+  // of the task's assignees.
+  const handleAcknowledgeTask = async (id: string) => {
+    const updated = await acknowledgeTask(id, user);
+    if (updated) {
+      setTasks(getTasks());
+      triggerSuccess('Acknowledged.');
+    }
   };
 
   const handleConfirmComplete = () => {
@@ -1417,9 +1434,16 @@ export default function TasksPage() {
                       <span className="text-[11px] text-theme-text-secondary italic">Awaiting Centre Head / Events Head decision</span>
                     )
                   ) : task.status === 'Assigned' && (
-                    canChangeTaskStatus(task, user) ? (
+                    // Acknowledgment is deliberately gated on isTaskAssignee
+                    // alone, not canChangeTaskStatus — only the specific
+                    // member this task was allotted to may acknowledge it,
+                    // never a groupmate and never leadership standing in for
+                    // them (leadership's canChangeTaskStatus override still
+                    // applies to marking a task Completed below, just not to
+                    // this personal attestation).
+                    isTaskAssignee(task, user) && !hasAcknowledgedTask(task, user) ? (
                       <button
-                        onClick={() => handleStatusChange(task.id, 'In Progress')}
+                        onClick={() => handleAcknowledgeTask(task.id)}
                         className="px-2.5 py-1 bg-accent hover:bg-primary-light text-white font-semibold rounded-lg transition-all text-[11px] cursor-pointer"
                       >
                         Acknowledge
@@ -1458,6 +1482,23 @@ export default function TasksPage() {
                       <CheckCircle2 className="h-3.5 w-3.5" /> Done
                     </span>
                   )}
+                  {/* On a group/committee task, the shared status above can already
+                      read In Progress/Completed purely because a DIFFERENT assignee
+                      acknowledged first — that never counts as this viewer's own
+                      acknowledgment, so anyone still allotted the task who hasn't
+                      personally acknowledged yet still gets their own prompt here,
+                      regardless of where the task as a whole has gotten to. */}
+                  {(task.assigneeType === 'group' || task.assigneeType === 'committee') &&
+                    task.status !== 'Assigned' &&
+                    isTaskAssignee(task, user) &&
+                    !hasAcknowledgedTask(task, user) && (
+                      <button
+                        onClick={() => handleAcknowledgeTask(task.id)}
+                        className="px-2.5 py-1 bg-accent hover:bg-primary-light text-white font-semibold rounded-lg transition-all text-[11px] cursor-pointer"
+                      >
+                        Acknowledge (your part)
+                      </button>
+                    )}
                 </div>
 
                 {(canEditTask(user) || canDeleteTask(user, task) || user) && (

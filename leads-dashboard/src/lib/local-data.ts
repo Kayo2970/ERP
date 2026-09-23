@@ -408,6 +408,19 @@ export interface TaskItem {
   // as real files under data/uploads/tasks/<taskId>/ (see saveBase64File) —
   // this array only ever holds name/url/storageKey/type, never raw bytes.
   attachments?: ReceiptFile[];
+  // Individual acknowledgment trail — which specific member id(s) have
+  // personally acknowledged this task (see acknowledgeTask/hasAcknowledgedTask
+  // below). For a 'group'/'committee' task with several assignees, each one
+  // must acknowledge for themselves: one member acknowledging never marks it
+  // acknowledged for the others, and only ever the acting member's own id is
+  // ever appended here — never a groupmate's, and never by leadership acting
+  // on someone else's behalf. The legacy acknowledged/acknowledgedAt/
+  // acknowledgedByEmail fields below still record the very first
+  // acknowledgment on the task for backward-compatible audit display.
+  acknowledgedByIds?: string[];
+  acknowledged?: boolean;
+  acknowledgedAt?: string;
+  acknowledgedByEmail?: string;
 }
 
 export interface TaskDelegationEvent {
@@ -3456,6 +3469,59 @@ export function isTaskAssignee(
     (task.assigneeId && task.assigneeId === memberId) ||
     (memberId && task.assigneeIds && task.assigneeIds.includes(memberId))
   );
+}
+
+/**
+ * Whether `user` has personally acknowledged this task already — distinct
+ * from isTaskAssignee (are they allotted to it at all). For a group or
+ * committee task, each assignee's acknowledgment is tracked independently
+ * in acknowledgedByIds, so one member acknowledging never makes this true
+ * for the others.
+ */
+export function hasAcknowledgedTask(
+  task: TaskItem,
+  user: { id?: string; name: string; email: string } | null
+): boolean {
+  if (!user) return false;
+  const memberId = user.id || getMembers().find(m => m.email.toLowerCase() === user.email.toLowerCase())?.id;
+  return Boolean(memberId && task.acknowledgedByIds?.includes(memberId));
+}
+
+/**
+ * Records the current user's own, personal acknowledgment of a task — never
+ * a groupmate's, and never on a student's behalf by anyone else, leadership
+ * included. The isTaskAssignee check here is just a UX shortcut to skip a
+ * doomed request; /api/tasks/ack independently re-verifies server-side that
+ * the caller is genuinely one of the task's assignees and only ever records
+ * their own id, so this can't be spoofed by calling the API directly either.
+ */
+export async function acknowledgeTask(
+  taskId: string,
+  user: { id?: string; name: string; email: string } | null
+): Promise<TaskItem | null> {
+  const tasks = getTasks();
+  const task = tasks.find(t => t.id === taskId);
+  if (!task || !user || !isTaskAssignee(task, user)) return null;
+
+  const res = await fetch('/api/tasks/ack', {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ taskIds: [taskId] }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !Array.isArray(data.tasks)) return null;
+
+  const updatedTask = data.tasks.find((t: TaskItem) => t.id === taskId);
+  if (!updatedTask) return null;
+
+  const current = getTasks();
+  const idx = current.findIndex(t => t.id === taskId);
+  if (idx !== -1) {
+    current[idx] = { ...current[idx], ...updatedTask };
+    saveTasks(current);
+  }
+  logAuditEvent('TASK_ACKNOWLEDGED', user.name, `Acknowledged task: ${task.title}`);
+  return updatedTask;
 }
 
 // -------------------------------------------------------------
