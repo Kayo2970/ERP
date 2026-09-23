@@ -32,6 +32,7 @@ import {
 import { canSubmitEventReport, canReviewEventReports, canViewEventReports, isCentreHead, isEventsHeadGgCampus, isChiefCoordinator, isGeneralSecretary, hasCapability, hasModuleViewAllGrant } from '@/lib/permissions';
 import { FileDropzone, FilePreviewRow, createProgressTracker } from '@/components/ui/file-dropzone';
 import { EmptyState } from '@/components/ui/empty-state';
+import { SearchableSelect } from '@/components/searchable-select';
 
 export default function EventReportsPage() {
   const [user, setUser] = useState<any>(null);
@@ -324,16 +325,13 @@ export default function EventReportsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <div className="space-y-1.5">
               <label className="block font-medium text-theme-text-secondary">Event *</label>
-              <select
+              <SearchableSelect
                 value={eventId}
-                onChange={e => setEventId(e.target.value)}
-                className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-              >
-                <option value="">-- Select an event --</option>
-                {eligibleEvents.map(ev => (
-                  <option key={ev.id} value={ev.id}>{ev.title}</option>
-                ))}
-              </select>
+                onChange={setEventId}
+                allLabel="-- Select an event --"
+                allValue=""
+                options={eligibleEvents.map(ev => ({ value: ev.id, label: ev.title }))}
+              />
             </div>
           </div>
 

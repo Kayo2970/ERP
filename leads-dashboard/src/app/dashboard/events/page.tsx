@@ -40,6 +40,7 @@ import {
   getEventSponsors,
   getEventSponsorTotal,
   getMembers,
+  isFestivalEvent,
   EventItem,
   EventSponsor,
   Member,
@@ -466,7 +467,7 @@ export default function EventsPage() {
     user?.tier === 1 || event.submittedByEmail === user?.email || canApprovePendingEvent(event, user);
 
   const visibleEvents = events
-    .filter(event => !event.isHoliday)
+    .filter(event => !isFestivalEvent(event))
     .filter(event => {
       if (event.approvalStatus === 'pending_create' || event.approvalStatus === 'rejected') {
         return canSeeApprovalMeta(event);

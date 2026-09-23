@@ -22,6 +22,7 @@ import {
   Paperclip
 } from 'lucide-react';
 import { FileDropzone, FilePreviewRow, createProgressTracker } from '@/components/ui/file-dropzone';
+import { SearchableSelect } from '@/components/searchable-select';
 import {
   getReimbursements,
   addReimbursement,
@@ -417,17 +418,16 @@ export default function ReimbursementsPage() {
           {/* Event Filter Selector */}
           <div className="flex items-center gap-2 bg-theme-background/30 border border-theme-card-border px-3 py-1.5 rounded-xl">
             <Filter className="h-4 w-4 text-theme-text-secondary" />
-            <select
+            <SearchableSelect
               value={selectedEventFilter}
-              onChange={(e) => setSelectedEventFilter(e.target.value)}
-              className="bg-transparent text-xs text-theme-text-primary focus:outline-none cursor-pointer"
-            >
-              <option value="ALL">All Events & Operations</option>
-              <option value="GENERAL">General Operations (No Event)</option>
-              {events.filter(ev => isApprovedEvent(ev, tasks)).map(ev => (
-                <option key={ev.id} value={ev.id}>Event: {ev.title}</option>
-              ))}
-            </select>
+              onChange={setSelectedEventFilter}
+              allLabel="All Events & Operations"
+              allValue="ALL"
+              options={[
+                { value: 'GENERAL', label: 'General Operations (No Event)' },
+                ...events.filter(ev => isApprovedEvent(ev, tasks)).map(ev => ({ value: ev.id, label: `Event: ${ev.title}` })),
+              ]}
+            />
           </div>
 
           {/* Event Reimbursement Chart Modal Trigger */}
@@ -477,16 +477,13 @@ export default function ReimbursementsPage() {
                 <Calendar className="h-3.5 w-3.5 text-accent" />
                 Associated Event (Optional)
               </label>
-              <select
+              <SearchableSelect
                 value={selectedEventId}
-                onChange={(e) => setSelectedEventId(e.target.value)}
-                className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-              >
-                <option value="">General Operations / Non-Event Expense</option>
-                {events.filter(ev => isApprovedEvent(ev, tasks)).map(ev => (
-                  <option key={ev.id} value={ev.id}>{ev.title}</option>
-                ))}
-              </select>
+                onChange={setSelectedEventId}
+                allLabel="General Operations / Non-Event Expense"
+                allValue=""
+                options={events.filter(ev => isApprovedEvent(ev, tasks)).map(ev => ({ value: ev.id, label: ev.title }))}
+              />
             </div>
 
             <div className="space-y-1.5">
@@ -999,17 +996,17 @@ export default function ReimbursementsPage() {
                 <Calendar className="h-4 w-4 text-accent" />
                 Select Event Scope:
               </span>
-              <select
+              <SearchableSelect
                 value={chartEventId}
-                onChange={(e) => setChartEventId(e.target.value)}
-                className="px-3 py-2 bg-theme-background/50 border border-theme-card-border rounded-xl text-xs text-theme-text-primary focus:outline-none focus:border-accent cursor-pointer"
-              >
-                <option value="ALL">All Events & Operations Combined</option>
-                <option value="GENERAL">General Operations (No Event)</option>
-                {events.filter(ev => isApprovedEvent(ev, tasks)).map(ev => (
-                  <option key={ev.id} value={ev.id}>Event: {ev.title}</option>
-                ))}
-              </select>
+                onChange={setChartEventId}
+                allLabel="All Events & Operations Combined"
+                allValue="ALL"
+                className="w-56"
+                options={[
+                  { value: 'GENERAL', label: 'General Operations (No Event)' },
+                  ...events.filter(ev => isApprovedEvent(ev, tasks)).map(ev => ({ value: ev.id, label: `Event: ${ev.title}` })),
+                ]}
+              />
             </div>
 
             {/* Financial Metrics Summary Grid */}

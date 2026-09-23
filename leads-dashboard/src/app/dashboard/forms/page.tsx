@@ -69,6 +69,7 @@ import {
 import { canBuildForms, getFormApprovalRequirement, canApprovePendingForm } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
+import { SearchableSelect } from '@/components/searchable-select';
 
 const CHART_COLORS = ['#3b82f6', '#6366f1', '#8b5cf6', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4'];
 
@@ -1075,16 +1076,14 @@ export default function FormsBuilderPage() {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  <select
+                  <SearchableSelect
                     value={selectedTemplateId}
-                    onChange={(e) => handleApplyTemplate(e.target.value)}
-                    className="flex-1 px-4 py-2.5 bg-theme-background/50 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                  >
-                    <option value="">-- Blank Form (Custom Schema) --</option>
-                    {templates.map(t => (
-                      <option key={t.id} value={t.id}>{t.name} ({t.fields.length} fields)</option>
-                    ))}
-                  </select>
+                    onChange={handleApplyTemplate}
+                    allLabel="-- Blank Form (Custom Schema) --"
+                    allValue=""
+                    className="flex-1"
+                    options={templates.map(t => ({ value: t.id, label: `${t.name} (${t.fields.length} fields)` }))}
+                  />
                   {selectedTemplateId && !initialFormTemplates.some(it => it.id === selectedTemplateId) && (
                     <button
                       type="button"
@@ -1145,16 +1144,13 @@ export default function FormsBuilderPage() {
                   <CalendarDays className="h-3.5 w-3.5" />
                   Link to Event (optional)
                 </label>
-                <select
+                <SearchableSelect
                   value={eventId}
-                  onChange={(e) => handleEventLink(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                >
-                  <option value="">-- No Event Linked --</option>
-                  {events.filter(ev => isApprovedEvent(ev, tasks)).map(ev => (
-                    <option key={ev.id} value={ev.id}>{ev.title}</option>
-                  ))}
-                </select>
+                  onChange={handleEventLink}
+                  allLabel="-- No Event Linked --"
+                  allValue=""
+                  options={events.filter(ev => isApprovedEvent(ev, tasks)).map(ev => ({ value: ev.id, label: ev.title }))}
+                />
               </div>
 
               {/* Dynamic Field Builder */}

@@ -1719,22 +1719,19 @@ export default function TasksPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="block font-medium text-theme-text-secondary">Linked Event</label>
-                  <select
+                  <SearchableSelect
                     value={selectedEventId}
-                    onChange={(e) => {
-                      setSelectedEventId(e.target.value);
+                    onChange={(evId) => {
+                      setSelectedEventId(evId);
                       // Committees are scoped to one event — a committee picked for a
                       // different event no longer applies once the event changes.
                       setSelectedCommitteeId('');
                       setIsCreatingCommittee(false);
                     }}
-                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                  >
-                    <option value="standalone">Standalone (No Event)</option>
-                    {events.filter(ev => isApprovedEvent(ev, tasks)).map(ev => (
-                      <option key={ev.id} value={ev.id}>{ev.title}</option>
-                    ))}
-                  </select>
+                    allLabel="Standalone (No Event)"
+                    allValue="standalone"
+                    options={events.filter(ev => isApprovedEvent(ev, tasks)).map(ev => ({ value: ev.id, label: ev.title }))}
+                  />
                 </div>
 
                 <div className="space-y-1.5">
@@ -1927,16 +1924,13 @@ export default function TasksPage() {
                             </div>
                           </div>
                         ) : (
-                          <select
+                          <SearchableSelect
                             value={selectedCommitteeId}
-                            onChange={(e) => setSelectedCommitteeId(e.target.value)}
-                            className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                          >
-                            <option value="">-- Select Committee --</option>
-                            {(events.find(ev => ev.id === selectedEventId)?.committees || []).map(c => (
-                              <option key={c.id} value={c.id}>{c.name} ({c.memberIds.length} members)</option>
-                            ))}
-                          </select>
+                            onChange={setSelectedCommitteeId}
+                            allLabel="-- Select Committee --"
+                            allValue=""
+                            options={(events.find(ev => ev.id === selectedEventId)?.committees || []).map(c => ({ value: c.id, label: `${c.name} (${c.memberIds.length} members)` }))}
+                          />
                         )}
                       </>
                     )}

@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { FileDropzone, FilePreviewRow, createProgressTracker } from '@/components/ui/file-dropzone';
 import { RequestApprovalModal } from '@/components/request-approval-modal';
+import { SearchableSelect } from '@/components/searchable-select';
 import {
   getDesigns,
   addDesign,
@@ -1387,16 +1388,13 @@ export default function DesignPortalPage() {
                       Create Event on Spot
                     </button>
                   </div>
-                  <select
+                  <SearchableSelect
                     value={eventId}
-                    onChange={e => setEventId(e.target.value)}
-                    className="w-full bg-background border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent"
-                  >
-                    <option value="">-- No Specific Event --</option>
-                    {events.filter(ev => isApprovedEvent(ev, tasks)).map(ev => (
-                      <option key={ev.id} value={ev.id}>{ev.title}</option>
-                    ))}
-                  </select>
+                    onChange={setEventId}
+                    allLabel="-- No Specific Event --"
+                    allValue=""
+                    options={events.filter(ev => isApprovedEvent(ev, tasks)).map(ev => ({ value: ev.id, label: ev.title }))}
+                  />
                 </div>
               </div>
 

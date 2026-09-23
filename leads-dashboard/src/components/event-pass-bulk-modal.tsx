@@ -20,6 +20,7 @@ import {
   addEventPass,
 } from '@/lib/local-data';
 import { useDropTarget } from '@/components/ui/file-dropzone';
+import { SearchableSelect } from '@/components/searchable-select';
 
 interface EventPassBulkModalProps {
   isOpen: boolean;
@@ -308,17 +309,11 @@ export function EventPassBulkModal({
             <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px]">
               Select Event for Bulk Pass Issuance *
             </label>
-            <select
+            <SearchableSelect
               value={activeEventId}
-              onChange={(e) => setActiveEventId(e.target.value)}
-              className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-300 dark:border-white/15 rounded-xl text-slate-900 dark:text-white font-medium focus:outline-none focus:border-accent text-xs"
-            >
-              {events.map((evt) => (
-                <option key={evt.id} value={evt.id} className="bg-slate-900 text-white">
-                  {evt.title} ({evt.status})
-                </option>
-              ))}
-            </select>
+              onChange={setActiveEventId}
+              options={events.map((evt) => ({ value: evt.id, label: evt.title, sublabel: evt.status }))}
+            />
           </div>
 
           {/* 2. Download Template Action */}

@@ -52,6 +52,7 @@ import {
 } from '@/lib/local-data';
 import { isCentreHead, isFinanceHead, canVerifyBudgetCentreHead, canDecideBudget, getEventApprovalRequirement } from '@/lib/permissions';
 import { EmptyState } from '@/components/ui/empty-state';
+import { SearchableSelect } from '@/components/searchable-select';
 import {
   BarChart,
   Bar,
@@ -1639,10 +1640,9 @@ export default function BudgetPage() {
                 {monthlyLineItems.map((item, idx) => (
                   <div key={idx} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-theme-background/40 p-3 rounded-xl border border-theme-card-border">
                     <div className="flex-1 space-y-1">
-                      <select
+                      <SearchableSelect
                         value={item.eventId}
-                        onChange={(e) => {
-                          const val = e.target.value;
+                        onChange={(val) => {
                           if (val === 'CREATE_NEW') {
                             openCreateEventModal(idx);
                           } else if (val) {
@@ -1655,16 +1655,13 @@ export default function BudgetPage() {
                             updateLineItemRow(idx, { eventId: '' });
                           }
                         }}
-                        className="w-full px-3 py-1.5 bg-theme-card border border-theme-card-border rounded-lg text-theme-text-primary text-xs"
-                      >
-                        <option value="">-- Select Existing Event --</option>
-                        <option value="CREATE_NEW">✨ + Create New Event On The Spot...</option>
-                        {events.filter(ev => isApprovedEvent(ev, tasks)).map((ev) => (
-                          <option key={ev.id} value={ev.id}>
-                            {ev.title} ({ev.campus})
-                          </option>
-                        ))}
-                      </select>
+                        allLabel="-- Select Existing Event --"
+                        allValue=""
+                        options={[
+                          { value: 'CREATE_NEW', label: '✨ + Create New Event On The Spot...' },
+                          ...events.filter(ev => isApprovedEvent(ev, tasks)).map((ev) => ({ value: ev.id, label: ev.title, sublabel: ev.campus })),
+                        ]}
+                      />
 
                       <input
                         type="text"
@@ -1986,18 +1983,13 @@ export default function BudgetPage() {
                 <label className="block font-medium text-theme-text-secondary">
                   Target Scope (Link to Event or General)
                 </label>
-                <select
+                <SearchableSelect
                   value={incomeEventId}
-                  onChange={(e) => setIncomeEventId(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                >
-                  <option value="">🏛️ General Centre Income (Unlinked)</option>
-                  {events.filter(ev => isApprovedEvent(ev, tasks)).map((ev) => (
-                    <option key={ev.id} value={ev.id}>
-                      🎯 Event: {ev.title} ({ev.campus})
-                    </option>
-                  ))}
-                </select>
+                  onChange={setIncomeEventId}
+                  allLabel="🏛️ General Centre Income (Unlinked)"
+                  allValue=""
+                  options={events.filter(ev => isApprovedEvent(ev, tasks)).map((ev) => ({ value: ev.id, label: `🎯 Event: ${ev.title}`, sublabel: ev.campus }))}
+                />
                 <p className="text-[10px] text-theme-text-secondary italic">
                   Note: Event sponsors deplete first when event expenses occur. Leftover sponsor money returns to Centre main account.
                 </p>

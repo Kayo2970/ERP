@@ -39,6 +39,7 @@ import {
 import { CAPABILITY_CATALOG, MODULE_CATALOG, isCentreHead, isEventsHeadGgCampus, hasCapability, resolveModuleEditOverride, canAccessGroupPolicies } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
+import { SearchableSelect } from '@/components/searchable-select';
 
 const ALL_DIVISIONS: MemberDivision[] = ['Advisory Board', 'Core Committee', 'Training Associate', 'Alumni', 'Faculty'];
 const ALL_TIERS = [1, 2, 3, 4, 5, 6, 7];
@@ -1199,16 +1200,13 @@ export default function GroupPoliciesPage() {
                     )}
 
                     {approverType === 'POLICY_TAG' && (
-                      <select
+                      <SearchableSelect
                         value={approverPolicyTagId}
-                        onChange={(e) => setApproverPolicyTagId(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                      >
-                        <option value="">-- Select a tag --</option>
-                        {otherPolicies.map(p => (
-                          <option key={p.id} value={p.id}>{p.name}</option>
-                        ))}
-                      </select>
+                        onChange={setApproverPolicyTagId}
+                        allLabel="-- Select a tag --"
+                        allValue=""
+                        options={otherPolicies.map(p => ({ value: p.id, label: p.name }))}
+                      />
                     )}
                   </div>
                 )}

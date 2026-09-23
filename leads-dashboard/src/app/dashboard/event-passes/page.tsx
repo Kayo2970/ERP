@@ -42,6 +42,7 @@ import { EventPassScanner } from '@/components/event-pass-scanner';
 import { EventPassPushModal } from '@/components/event-pass-push-modal';
 import { EventPassEditModal } from '@/components/event-pass-edit-modal';
 import { EmptyState } from '@/components/ui/empty-state';
+import { SearchableSelect } from '@/components/searchable-select';
 
 export default function EventPassesPage() {
   const router = useRouter();
@@ -335,18 +336,13 @@ export default function EventPassesPage() {
                   />
                 </div>
 
-                <select
+                <SearchableSelect
                   value={passFilterEventId}
-                  onChange={(e) => setPassFilterEventId(e.target.value)}
-                  className="px-3 py-1.5 bg-theme-background/50 border border-theme-card-border rounded-xl text-theme-text-primary text-xs focus:outline-none focus:border-accent"
-                >
-                  <option value="ALL" className="bg-slate-900 text-white">All Events</option>
-                  {events.map((evt) => (
-                    <option key={evt.id} value={evt.id} className="bg-slate-900 text-white">
-                      {evt.title}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setPassFilterEventId}
+                  allLabel="All Events"
+                  allValue="ALL"
+                  options={events.map((evt) => ({ value: evt.id, label: evt.title }))}
+                />
               </div>
             </div>
 

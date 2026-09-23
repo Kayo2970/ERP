@@ -13,7 +13,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import Link from 'next/link';
-import { getEvents, getTasks, addTask, EventItem, TaskItem, Member } from '@/lib/local-data';
+import { getEvents, getTasks, addTask, isFestivalEvent, EventItem, TaskItem, Member } from '@/lib/local-data';
 import { Button } from '@/components/ui/button';
 import { Chip } from '@/components/ui/chip';
 
@@ -30,7 +30,7 @@ export default function FestivalsPage() {
 
   const refreshData = () => {
     const allEvents = getEvents();
-    const holidayList = allEvents.filter(e => e.isHoliday || e.description?.includes('holiday') || e.description?.includes('festival'));
+    const holidayList = allEvents.filter(isFestivalEvent);
     setFestivals(holidayList);
     setTasks(getTasks());
   };

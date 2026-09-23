@@ -41,6 +41,7 @@ import styles from './event-pass-card.module.css';
 import { AppleWalletPassPreview } from './apple-wallet-pass-preview';
 import { EventPassBulkModal } from './event-pass-bulk-modal';
 import { EventPassEmailModal } from './event-pass-email-modal';
+import { SearchableSelect } from './searchable-select';
 
 interface EventPassStudioProps {
   events: EventItem[];
@@ -421,21 +422,17 @@ export function EventPassStudio({
               </div>
 
               {eventMode === 'existing' && (
-                <select
-                  value={selectedEventId}
-                  onChange={(e) => setSelectedEventId(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-300 dark:border-white/15 rounded-xl text-slate-900 dark:text-white font-medium focus:outline-none focus:border-accent text-xs"
-                >
-                  {events.length === 0 ? (
-                    <option value="">No events found (Click &quot;Type Custom&quot; above)</option>
-                  ) : (
-                    events.map((evt) => (
-                      <option key={evt.id} value={evt.id} className="bg-slate-900 text-white">
-                        {evt.title} ({evt.status})
-                      </option>
-                    ))
-                  )}
-                </select>
+                events.length === 0 ? (
+                  <p className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-300 dark:border-white/15 rounded-xl text-slate-500 dark:text-slate-400 text-xs">
+                    No events found (Click &quot;Type Custom&quot; above)
+                  </p>
+                ) : (
+                  <SearchableSelect
+                    value={selectedEventId}
+                    onChange={setSelectedEventId}
+                    options={events.map((evt) => ({ value: evt.id, label: evt.title, sublabel: evt.status }))}
+                  />
+                )
               )}
 
               {eventMode === 'custom' && (
