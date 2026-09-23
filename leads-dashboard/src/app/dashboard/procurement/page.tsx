@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Package,
+  PackageCheck,
   Plus,
   X,
   Trash2,
@@ -15,6 +16,7 @@ import {
   getProcurementRequests,
   addProcurementRequest,
   decideProcurementRequest,
+  completeProcurementRequest,
   updateProcurementRequest,
   deleteProcurementRequest,
   getEvents,
@@ -51,6 +53,7 @@ export default function ProcurementPage() {
   const [decidingId, setDecidingId] = useState<string | null>(null);
   const [decisionNotes, setDecisionNotes] = useState('');
   const [decisionAction, setDecisionAction] = useState<'Approved' | 'Rejected' | null>(null);
+  const [completingId, setCompletingId] = useState<string | null>(null);
 
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [hasScrolledToHighlight, setHasScrolledToHighlight] = useState(false);
@@ -194,6 +197,14 @@ export default function ProcurementPage() {
     triggerSuccess('Procurement request deleted.');
   };
 
+  const handleConfirmComplete = () => {
+    if (!completingId || !user) return;
+    completeProcurementRequest(completingId, user.name);
+    setRequests(getProcurementRequests());
+    setCompletingId(null);
+    triggerSuccess('Procurement request marked as completed.');
+  };
+
   const canDecide = canDecideProcurementRequest(user);
   const visibleRequests = requests.filter(r => canViewProcurementRequest(user, r));
 
@@ -265,6 +276,12 @@ export default function ProcurementPage() {
                         Rejected
                       </span>
                     )}
+                    {req.status === 'Completed' && (
+                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-sky-500/15 text-sky-400 border border-sky-500/30 flex items-center gap-1">
+                        <PackageCheck className="h-3 w-3" />
+                        Completed
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-3 text-theme-text-secondary text-[11px]">
                     <span className="flex items-center gap-1">
@@ -310,6 +327,16 @@ export default function ProcurementPage() {
                   </div>
                 )}
 
+                {req.status === 'Completed' && (
+                  <div className="flex items-center gap-2 p-2.5 bg-sky-500/10 border border-sky-500/25 rounded-xl text-[11px] text-sky-400">
+                    <PackageCheck className="h-4 w-4 shrink-0 text-sky-400" />
+                    <span>
+                      <strong>Completed</strong> — items issued, marked by <strong className="text-sky-300">{req.completedBy}</strong>
+                      {req.completedAt && ` on ${new Date(req.completedAt).toLocaleDateString()}`}
+                    </span>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between gap-2 pt-2 border-t border-theme-border/20">
                   <div className="flex items-center gap-2">
                     {canDecide && req.status === 'Pending' && (
@@ -327,6 +354,14 @@ export default function ProcurementPage() {
                           <X className="h-3.5 w-3.5" /> Reject
                         </button>
                       </>
+                    )}
+                    {canDecide && req.status === 'Approved' && (
+                      <button
+                        onClick={() => setCompletingId(req.id)}
+                        className="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white font-semibold rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                      >
+                        <PackageCheck className="h-3.5 w-3.5" /> Mark Completed
+                      </button>
                     )}
                   </div>
                   {(isOwner || canDecide) && (
@@ -532,6 +567,16 @@ export default function ProcurementPage() {
         variant="danger"
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeletingId(null)}
+      />
+
+      <ConfirmModal
+        isOpen={Boolean(completingId)}
+        title="Mark as Completed"
+        message="Confirm that the items have been procured and issued to the requester. This marks the request Completed for everyone to see."
+        confirmLabel="Mark Completed"
+        variant="primary"
+        onConfirm={handleConfirmComplete}
+        onCancel={() => setCompletingId(null)}
       />
 
     </div>

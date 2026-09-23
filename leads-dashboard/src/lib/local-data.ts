@@ -647,9 +647,12 @@ export interface ProcurementItemLine {
 // A materials request any member can raise for an event or a task — approved
 // or rejected only by the Centre Head or the Advisor (see
 // permissions.ts's canDecideProcurementRequest), never the wider leadership
-// panel other modules use. Once Approved it's visible to everybody; while
-// Pending or Rejected it's visible only to the requester and to whoever can
-// decide it (see permissions.ts's canViewProcurementRequest).
+// panel other modules use. Once Approved or Completed it's visible to
+// everybody; while Pending or Rejected it's visible only to the requester
+// and to whoever can decide it (see permissions.ts's canViewProcurementRequest).
+// 'Completed' is a distinct stage after 'Approved' — set once the items have
+// actually been procured/issued to the requester, by the same Centre
+// Head/Advisor gate (see permissions.ts's canDecideProcurementRequest).
 export interface ProcurementRequestItem {
   id: string;
   requesterId?: string;
@@ -661,10 +664,12 @@ export interface ProcurementRequestItem {
   taskTitle?: string;
   items: ProcurementItemLine[];
   justification?: string;
-  status: 'Pending' | 'Approved' | 'Rejected';
+  status: 'Pending' | 'Approved' | 'Rejected' | 'Completed';
   decidedBy?: string;
   decidedAt?: string;
   decisionNotes?: string;
+  completedBy?: string;
+  completedAt?: string;
   submittedAt: string;
   // Set server-side by /api/procurement-requests's POST handler once the
   // Centre Head + Advisor approval email actually goes out.
@@ -4220,6 +4225,28 @@ export function decideProcurementRequest(
   saveProcurementRequests(current);
   serverPatch('/api/procurement-requests', id, current[idx]);
   logAuditEvent('PROCUREMENT_REQUEST_DECIDED', decidedBy, `${status} the procurement request from ${current[idx].requesterName}`);
+  return current[idx];
+}
+
+/**
+ * Marks an already-Approved request Completed — the items have actually
+ * been procured and issued to the requester. Same Centre Head/Advisor gate
+ * as decideProcurementRequest (see permissions.ts's canDecideProcurementRequest).
+ */
+export function completeProcurementRequest(id: string, completedBy: string): ProcurementRequestItem | null {
+  const current = getProcurementRequests();
+  const idx = current.findIndex(r => r.id === id);
+  if (idx === -1) return null;
+
+  current[idx] = {
+    ...current[idx],
+    status: 'Completed',
+    completedBy,
+    completedAt: new Date().toISOString(),
+  };
+  saveProcurementRequests(current);
+  serverPatch('/api/procurement-requests', id, current[idx]);
+  logAuditEvent('PROCUREMENT_REQUEST_COMPLETED', completedBy, `Marked the procurement request from ${current[idx].requesterName} as completed`);
   return current[idx];
 }
 

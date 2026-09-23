@@ -24,11 +24,11 @@ export async function PATCH(
     const existingRequests = await readCollection<any>('procurementRequests');
     const existing = existingRequests.find((r: any) => r.id === id);
     const isOwner = !!existing && (actor.id === existing.requesterId || (existing.requesterEmail && actor.email === existing.requesterEmail));
-    const isDecision = body.status === 'Approved' || body.status === 'Rejected';
+    const isDecision = body.status === 'Approved' || body.status === 'Rejected' || body.status === 'Completed';
     const canDecide = canDecideProcurementRequest(actor, settings);
 
     if (isDecision) {
-      requirePermission(canDecide, 'Only the Centre Head or Advisor can approve or reject a procurement request.');
+      requirePermission(canDecide, 'Only the Centre Head or Advisor can decide or complete a procurement request.');
     } else if (!isOwner && !canDecide) {
       throw new ForbiddenError("You don't have permission to edit this procurement request.");
     }

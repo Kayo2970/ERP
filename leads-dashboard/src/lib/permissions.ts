@@ -759,7 +759,7 @@ export function canDecideProcurementRequest(user: SessionUser): boolean {
  */
 export function canViewProcurementRequest(user: SessionUser, request: ProcurementRequestItem): boolean {
   if (!user) return false;
-  if (request.status === 'Approved') return true;
+  if (request.status === 'Approved' || request.status === 'Completed') return true;
   if (canDecideProcurementRequest(user)) return true;
   if (request.requesterId && request.requesterId === user.id) return true;
   return !!request.requesterEmail && !!user.email && request.requesterEmail.toLowerCase() === user.email.toLowerCase();

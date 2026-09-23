@@ -224,7 +224,7 @@ export function canDecideProcurementRequest(user: ServerUser, settings: AccessLe
 // Mirrors permissions.ts's canViewProcurementRequest.
 export function canViewProcurementRequest(user: ServerUser, settings: AccessLevelSettings, request: any): boolean {
   if (!user) return false;
-  if (request.status === 'Approved') return true;
+  if (request.status === 'Approved' || request.status === 'Completed') return true;
   if (canDecideProcurementRequest(user, settings)) return true;
   if (request.requesterId && request.requesterId === user.id) return true;
   return !!request.requesterEmail && !!user.email && request.requesterEmail.toLowerCase() === user.email.toLowerCase();
