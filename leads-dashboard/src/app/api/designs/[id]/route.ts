@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection, readCollection } from '@/lib/server-db';
 import { deleteStoredFile, deleteStoredFilesForRecord, saveBase64File, readStoredFile } from '@/lib/file-storage';
-import { cascadeCloseAutoApprovals, deleteLinkedApprovalRequests } from '@/lib/approval-sync';
+import { cascadeCloseAutoApprovals, deleteLinkedApprovalRequests, fanOutAutoApproval } from '@/lib/approval-sync';
 import { requireSession, ForbiddenError } from '@/lib/session';
 import { getAccessLevelSettingsServer, canReviewDesignProofread, canViewAllDesigns } from '@/lib/permissions-server';
 import { apiError } from '@/lib/api-error';
@@ -29,19 +29,26 @@ export async function PATCH(
     const body = await request.json();
 
     // Two branches share this one merge-patch handler: a style-approve/reject
-    // or proofread-review decision (identified by the presence of these
-    // fields), vs a plain edit by the design's own submitter. Gate each
-    // separately rather than one blanket check.
+    // or proofread-review decision, vs a plain edit by the design's own
+    // submitter. Gate each separately rather than one blanket check. Only an
+    // actual decision value (Approved/Rejected/Changes Requested) counts as
+    // a review action — a resubmission (replacing the file after "Changes
+    // Requested"/"Style Rejected") resets styleStatus/review back to
+    // pending as a side effect of updateDesignFile(), and that reset is the
+    // owner editing their own submission, not a review decision, so it must
+    // stay owner-editable rather than requiring reviewer permissions.
     const settings = await getAccessLevelSettingsServer();
-    const isReviewAction = Object.prototype.hasOwnProperty.call(body, 'styleStatus')
-      || Object.prototype.hasOwnProperty.call(body, 'review');
+    const existingDesigns = await readCollection<any>('designs');
+    const existing = existingDesigns.find((d: any) => d.id === id);
+    const isOwner = !!existing && actor.id === existing.designerId;
+    const incomingStyleStatus = body.styleStatus;
+    const incomingReviewStatus = body.review?.status;
+    const isReviewAction = incomingStyleStatus === 'Style Approved' || incomingStyleStatus === 'Style Rejected'
+      || incomingReviewStatus === 'Proofread Approved' || incomingReviewStatus === 'Changes Requested';
     if (isReviewAction) {
-      if (!canReviewDesignProofread(actor, settings)) throw new ForbiddenError();
-    } else {
-      const existingDesigns = await readCollection<any>('designs');
-      const existing = existingDesigns.find((d: any) => d.id === id);
-      const isOwner = !!existing && actor.id === existing.designerId;
-      if (!isOwner && !canViewAllDesigns(actor, settings)) throw new ForbiddenError();
+      if (!canReviewDesignProofread(actor, settings, existing)) throw new ForbiddenError();
+    } else if (!isOwner && !canViewAllDesigns(actor, settings)) {
+      throw new ForbiddenError();
     }
 
     // A replaced file arrives the same way a brand-new submission's does —
@@ -61,6 +68,8 @@ export async function PATCH(
     let justProofreadApproved = false;
     let justProofreadRejected = false;
     let justCaptionApproved = false;
+    let justResubmittedAfterStyleRejection = false;
+    let justResubmittedAfterProofreadRejection = false;
     let mergedRecord: any = null;
 
     // Upsert: if this id isn't in the server's collection yet (e.g. client-bundled
@@ -95,6 +104,16 @@ export async function PATCH(
       }
       if (!wasCaptionApproved && merged.captionStatus === 'approved') {
         justCaptionApproved = true;
+      }
+      // The designer resubmitting (updateDesignFile() resets styleStatus/
+      // review back to pending when replacing the file) after an earlier
+      // rejection — this is what should notify the same reviewers who
+      // rejected it, same as a brand-new submission notifies them.
+      if (wasStyleRejected && merged.styleStatus === 'Pending') {
+        justResubmittedAfterStyleRejection = true;
+      }
+      if (wasProofreadRejected && merged.review?.status === 'Pending Proofread') {
+        justResubmittedAfterProofreadRejection = true;
       }
       next[idx] = merged;
       mergedRecord = merged;
@@ -283,6 +302,96 @@ export async function PATCH(
           d.id === id ? { ...d, captionApprovalEmailSent: false, captionApprovalEmailError: message } : d
         ));
         mergedRecord = { ...mergedRecord, captionApprovalEmailSent: false, captionApprovalEmailError: message };
+      }
+    }
+
+    // A resubmission after "Changes Requested" or "Style Rejected" — the
+    // designer replacing the file per updateDesignFile()'s pending-reset
+    // above — re-notifies the same reviewers who rejected it the first
+    // time, the same way POST notifies them on a brand-new submission:
+    // faculty proofreaders for a proofread resubmission, and the Centre
+    // Head/Advisor/GG Campus Head of Events panel for a style resubmission.
+    // Re-fanning the approval out is idempotent and safe even though
+    // cascadeCloseAutoApprovals already closed the earlier rejected rows.
+    if (justResubmittedAfterProofreadRejection || justResubmittedAfterStyleRejection) {
+      try {
+        const [{ dispatchEmail, generateDesignResubmittedEmailTemplate, findApprovalRecipients }, { getAppBaseUrl }] = await Promise.all([
+          import('@/lib/email-service'),
+          import('@/lib/app-url'),
+        ]);
+        const baseUrl = getAppBaseUrl(request);
+        const designLink = `${baseUrl}/dashboard/designs?highlight=${id}`;
+        const designTitle = mergedRecord?.title || 'Design';
+        const designerName = mergedRecord?.designerName || 'A designer';
+
+        if (justResubmittedAfterProofreadRejection) {
+          let proofreaders: { id: string; name: string; email: string; role?: string }[] = [];
+          if (Array.isArray(mergedRecord?.assignedProofreaders) && mergedRecord.assignedProofreaders.length > 0) {
+            proofreaders = mergedRecord.assignedProofreaders;
+          } else if (Array.isArray(mergedRecord?.assignedProofreaderIds) && mergedRecord.assignedProofreaderIds.length > 0) {
+            const allMembers = await readCollection<any>('members');
+            proofreaders = mergedRecord.assignedProofreaderIds
+              .map((pid: string) => allMembers.find((m: any) => m.id === pid))
+              .filter((m: any): m is any => Boolean(m && m.email))
+              .map((m: any) => ({ id: m.id, name: m.name, email: m.email, role: m.role }));
+          } else if (mergedRecord?.assignedProofreaderEmail) {
+            proofreaders = [{
+              id: mergedRecord.assignedProofreaderId || mergedRecord.assignedProofreaderEmail,
+              name: mergedRecord.assignedProofreaderName || 'Faculty Proofreader',
+              email: mergedRecord.assignedProofreaderEmail,
+            }];
+          }
+
+          if (proofreaders.length > 0) {
+            await fanOutAutoApproval({
+              entityType: 'design',
+              entityId: id,
+              entityTitle: designTitle,
+              eventId: mergedRecord?.eventId,
+              requesterId: mergedRecord?.designerId || '',
+              requesterName: designerName,
+              requesterEmail: mergedRecord?.designerEmail,
+              message: 'This design was revised and resubmitted after your proofread feedback — please take another look.',
+              customPanel: proofreaders.map((f) => ({ id: f.id, name: f.name, email: f.email, label: f.role || 'Faculty Proofreader' })),
+            });
+
+            const template = generateDesignResubmittedEmailTemplate(designTitle, designerName, 'Proofreading', designLink);
+            for (const f of proofreaders) {
+              if (!f.email) continue;
+              await dispatchEmail({ to: f.email, subject: template.subject, bodyText: template.bodyText, bodyHtml: template.bodyHtml, category: 'SYSTEM' });
+            }
+          }
+        }
+
+        if (justResubmittedAfterStyleRejection) {
+          const members = await readCollection('members');
+          const recipients = findApprovalRecipients(members as any[]);
+          const panel = [recipients.centreHead, recipients.advisor, recipients.eventsHeadGg].filter((m): m is { name: string; email: string } => Boolean(m?.email));
+
+          if (panel.length > 0) {
+            await fanOutAutoApproval({
+              entityType: 'design',
+              entityId: id,
+              entityTitle: designTitle,
+              eventId: mergedRecord?.eventId,
+              requesterId: mergedRecord?.designerId || '',
+              requesterName: designerName,
+              requesterEmail: mergedRecord?.designerEmail,
+              message: 'This design was revised and resubmitted after style feedback — please take another look.',
+            });
+
+            const template = generateDesignResubmittedEmailTemplate(designTitle, designerName, 'Style Approval', designLink);
+            await dispatchEmail({
+              to: panel.map((m) => m.email).join(','),
+              subject: template.subject,
+              bodyText: template.bodyText,
+              bodyHtml: template.bodyHtml,
+              category: 'SYSTEM',
+            });
+          }
+        }
+      } catch (emailErr) {
+        console.error('[designs-api] Resubmission notification failed:', emailErr);
       }
     }
 

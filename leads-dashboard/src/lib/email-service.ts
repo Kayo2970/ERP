@@ -1086,3 +1086,43 @@ export function generateDesignDecisionEmailTemplate(
 
   return { subject, bodyText, bodyHtml };
 }
+
+/**
+ * Template Generator: Design Resubmitted Notification (sent to the same
+ * reviewers who rejected a design — faculty proofreaders, or the Centre
+ * Head/Advisor/GG Campus Head of Events panel — once the designer replaces
+ * the file to address the feedback). Counterpart to the request/approved
+ * templates above, but for the "revised and resubmitted" step in between.
+ */
+export function generateDesignResubmittedEmailTemplate(
+  designTitle: string,
+  designerName: string,
+  stage: 'Proofreading' | 'Style Approval',
+  designLink: string
+): { subject: string; bodyText: string; bodyHtml: string } {
+  const subject = `Design Resubmitted: ${designTitle}`;
+  const feedbackLabel = stage === 'Proofreading' ? 'proofread feedback' : 'style feedback';
+  const bodyText = `Hello,\n\n` +
+    `${designerName} has revised and resubmitted the design "${designTitle}" following your earlier ${feedbackLabel}.\n\n` +
+    `Please review the updated asset here:\n${designLink}\n\n` +
+    `Regards,\nLEADS Design Portal`;
+
+  const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
+    headerTitle: 'Design Resubmitted',
+    headerSubtitle: designTitle,
+    badgeText: 'Revised & Resubmitted',
+    badgeColor: '#6366f1',
+    bodyContentHtml: `
+      <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello,</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;"><strong>${designerName}</strong> has revised and resubmitted the design <strong>${designTitle}</strong> following your earlier ${feedbackLabel}.</p>
+      <div style="text-align: center; margin: 24px 0 12px;">
+        <a href="${designLink}" target="_blank" style="display: inline-block; background: #6366f1; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 12px; font-weight: 600; font-size: 14px;">
+          Review Updated Design
+        </a>
+      </div>
+    `
+  });
+
+  return { subject, bodyText, bodyHtml };
+}
