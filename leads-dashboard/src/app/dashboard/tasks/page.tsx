@@ -66,6 +66,44 @@ import { DelegateTaskModal } from '@/components/delegate-task-modal';
 import { FileDropzone, FilePreviewRow } from '@/components/ui/file-dropzone';
 import { SearchableSelect } from '@/components/searchable-select';
 
+interface DesignTimelineStep {
+  key: string;
+  label: string;
+  status: TaskItem['status'] | 'Not Started';
+  assignee?: string;
+  dueDate?: string;
+}
+
+/**
+ * Builds the full, fixed chain of events for a design's social-media
+ * journey — approval, caption drafting/review, then the two separate
+ * platform posts — from the task ids the design record already tracks
+ * (linkedTaskId/captionTaskId/captionApprovalTaskId/postingInstagramTaskId/
+ * postingLinkedinTaskId). Stages the workflow hasn't reached yet still show
+ * up as "Not Started" so the whole series is visible up front, not just
+ * whatever has happened so far.
+ */
+function getDesignTimelineSteps(design: DesignSubmissionItem, tasks: TaskItem[]): DesignTimelineStep[] {
+  const stageDefs: { key: string; label: string; taskId?: string }[] = [
+    { key: 'approved', label: 'Design Approved', taskId: design.linkedTaskId },
+    { key: 'caption_draft', label: 'Draft Captions', taskId: design.captionTaskId },
+    { key: 'caption_review', label: 'Review Captions', taskId: design.captionApprovalTaskId },
+    { key: 'posting_instagram', label: 'Post on Instagram', taskId: design.postingInstagramTaskId },
+    { key: 'posting_linkedin', label: 'Post on LinkedIn', taskId: design.postingLinkedinTaskId },
+  ];
+
+  return stageDefs.map(stage => {
+    const stageTask = stage.taskId ? tasks.find(t => t.id === stage.taskId) : undefined;
+    return {
+      key: stage.key,
+      label: stage.label,
+      status: stageTask?.status || 'Not Started',
+      assignee: stageTask?.assignee,
+      dueDate: stageTask?.dueDate,
+    };
+  });
+}
+
 export default function TasksPage() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -94,6 +132,7 @@ export default function TasksPage() {
   const [approvalRequestTask, setApprovalRequestTask] = useState<TaskItem | null>(null);
   const [delegatingTask, setDelegatingTask] = useState<TaskItem | null>(null);
   const [expandedTrailTaskId, setExpandedTrailTaskId] = useState<string | null>(null);
+  const [expandedDesignTimelineTaskId, setExpandedDesignTimelineTaskId] = useState<string | null>(null);
 
   // Form State
   const [title, setTitle] = useState('');
@@ -138,6 +177,10 @@ export default function TasksPage() {
   // Filters & sorting — the board groups every visible task under its event
   // (Standalone last), and these narrow/reorder within that grouping instead
   // of flattening it back out.
+  // Active vs Completed tab — keeps the board from turning into one
+  // undifferentiated wall of cards as finished work piles up alongside
+  // still-open assignments.
+  const [taskViewTab, setTaskViewTab] = useState<'active' | 'completed'>('active');
   const [filterStudentId, setFilterStudentId] = useState('ALL');
   const [filterEventKey, setFilterEventKey] = useState('ALL');
   const [filterDueFrom, setFilterDueFrom] = useState('');
@@ -652,7 +695,16 @@ export default function TasksPage() {
   const taskMatchesStudent = (task: TaskItem, studentId: string) =>
     task.assigneeId === studentId || (task.assigneeIds || []).includes(studentId);
 
-  const filteredTasks = displayedTasks.filter(task => {
+  // Split into Active / Completed tabs before the rest of the filter
+  // pipeline runs, so the Student/Event/Due Date filters and sort only ever
+  // operate within the tab currently being viewed.
+  const activeTasksCount = displayedTasks.filter(t => t.status !== 'Completed').length;
+  const completedTasksCount = displayedTasks.filter(t => t.status === 'Completed').length;
+  const tabTasks = displayedTasks.filter(task =>
+    taskViewTab === 'completed' ? task.status === 'Completed' : task.status !== 'Completed'
+  );
+
+  const filteredTasks = tabTasks.filter(task => {
     if (filterStudentId !== 'ALL' && !taskMatchesStudent(task, filterStudentId)) return false;
     if (filterEventKey !== 'ALL' && (task.eventId || 'standalone') !== filterEventKey) return false;
     if (filterDueFrom && task.dueDate < filterDueFrom) return false;
@@ -771,6 +823,32 @@ export default function TasksPage() {
             Assign Task
           </button>
         )}
+      </div>
+
+      {/* Active / Completed Tabs */}
+      <div className="flex items-center gap-1 border-b border-theme-border/30">
+        <button
+          type="button"
+          onClick={() => setTaskViewTab('active')}
+          className={`px-4 py-2 text-xs font-semibold border-b-2 -mb-px transition-all cursor-pointer ${
+            taskViewTab === 'active'
+              ? 'border-accent text-accent'
+              : 'border-transparent text-theme-text-secondary hover:text-theme-text-primary'
+          }`}
+        >
+          Active ({activeTasksCount})
+        </button>
+        <button
+          type="button"
+          onClick={() => setTaskViewTab('completed')}
+          className={`px-4 py-2 text-xs font-semibold border-b-2 -mb-px transition-all cursor-pointer ${
+            taskViewTab === 'completed'
+              ? 'border-accent text-accent'
+              : 'border-transparent text-theme-text-secondary hover:text-theme-text-primary'
+          }`}
+        >
+          Completed ({completedTasksCount})
+        </button>
       </div>
 
       {/* Advisory Board Alert */}
@@ -906,6 +984,12 @@ export default function TasksPage() {
           description={user?.tier === 4 ? "Advisory Board members do not receive task assignments." : "No tasks assigned to your current filter."}
           actionLabel={canManage ? "Assign Task" : undefined}
           onAction={canManage ? handleOpenCreate : undefined}
+        />
+      ) : tabTasks.length === 0 ? (
+        <EmptyState
+          icon={CheckCircle2}
+          title={taskViewTab === 'completed' ? "No completed tasks yet" : "No active tasks"}
+          description={taskViewTab === 'completed' ? "Tasks move here automatically once they're marked Completed." : "Everything's either done or hasn't been assigned yet — check the Completed tab."}
         />
       ) : sortedTasks.length === 0 ? (
         <EmptyState
@@ -1225,6 +1309,52 @@ export default function TasksPage() {
                   }
 
                   return null;
+                })()}
+
+                {/* Social Media Timeline — the full chain of events for a design's
+                    journey to being posted (approval, captions, then each platform
+                    post), so the series is visible in one place on any task that's
+                    part of it, not scattered across separate task cards. */}
+                {(() => {
+                  const timelineDesign = task.designId
+                    ? designs.find(d => d.id === task.designId)
+                    : (task.isDesignDeliverable ? designs.find(d => d.linkedTaskId === task.id) : undefined);
+                  if (!timelineDesign) return null;
+                  const steps = getDesignTimelineSteps(timelineDesign, tasks);
+
+                  return (
+                    <div className="pt-1">
+                      <button
+                        onClick={() => setExpandedDesignTimelineTaskId(expandedDesignTimelineTaskId === task.id ? null : task.id)}
+                        className="flex items-center gap-1 text-[10px] font-semibold text-accent hover:text-primary-light transition-all cursor-pointer"
+                      >
+                        <Megaphone className="h-3 w-3" />
+                        Social Media Timeline
+                        {expandedDesignTimelineTaskId === task.id ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                      </button>
+                      {expandedDesignTimelineTaskId === task.id && (
+                        <ol className="mt-2 space-y-1.5 border-l-2 border-accent/25 pl-3">
+                          {steps.map(step => (
+                            <li key={step.key} className="text-[10px] text-theme-text-secondary">
+                              <span className={`font-semibold ${
+                                step.status === 'Completed' ? 'text-success' :
+                                step.status === 'Not Started' ? 'text-theme-text-secondary' :
+                                'text-accent'
+                              }`}>
+                                {step.status === 'Completed' ? '✓ ' : step.status === 'Not Started' ? '— ' : '• '}
+                                {step.label}
+                              </span>
+                              {step.status !== 'Not Started' && (
+                                <>
+                                  {' '}<span className="italic">({step.status}{step.assignee ? ` — ${step.assignee}` : ''})</span>
+                                </>
+                              )}
+                            </li>
+                          ))}
+                        </ol>
+                      )}
+                    </div>
+                  );
                 })()}
 
                 {canViewTaskDelegationTrail(user) && task.delegationTrail && task.delegationTrail.length > 0 && (
