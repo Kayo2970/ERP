@@ -28,6 +28,8 @@ import {
   formatEventPlanningNote,
   getEventSortTime,
   isTaskAssignee,
+  hasAcknowledgedTask,
+  acknowledgeTask,
   TaskItem,
   EventItem,
   AnnouncementItem
@@ -97,9 +99,14 @@ export default function DashboardHome() {
     };
   }, []);
 
-  const handleAcknowledge = (id: string) => {
-    updateTaskStatus(id, 'In Progress');
-    setTasks(getTasks());
+  // Acknowledgment is a personal attestation, not a status change anyone
+  // else can make on a student's behalf — routed through the dedicated
+  // /api/tasks/ack endpoint (see acknowledgeTask in local-data.ts), which
+  // independently re-verifies server-side that the caller is genuinely the
+  // task's own assignee before recording anything under their id.
+  const handleAcknowledge = async (id: string) => {
+    const updated = await acknowledgeTask(id, user);
+    if (updated) setTasks(getTasks());
   };
 
   const handleComplete = (id: string) => {
@@ -169,7 +176,15 @@ export default function DashboardHome() {
   // this "awaiting YOUR acknowledgment" banner with tasks assigned to
   // other people entirely, showing every leadership/Executive viewer the
   // same non-personal number regardless of what's actually theirs to act on.
-  const pendingAckCount = tasks.filter(t => t.status === 'Assigned' && isTaskAssignee(t, user) && isCurrentYearTask(t)).length;
+  // Checking hasAcknowledgedTask instead of status === 'Assigned' matters
+  // for a group/committee task specifically: the shared status can already
+  // read 'In Progress' purely because a DIFFERENT assignee acknowledged
+  // first, but that never counts as THIS member's own acknowledgment, so
+  // they'd otherwise silently drop off this banner despite never having
+  // personally acknowledged anything themselves.
+  const pendingAckCount = tasks.filter(t =>
+    t.status !== 'Completed' && isTaskAssignee(t, user) && !hasAcknowledgedTask(t, user) && isCurrentYearTask(t)
+  ).length;
 
   const completedTasksCount = displayedTasks.filter(t => t.status === 'Completed' && isCurrentYearTask(t)).length;
 
@@ -460,7 +475,15 @@ export default function DashboardHome() {
                         </span>
                       </td>
                       <td className="py-3 text-right">
-                        {task.status === 'Assigned' ? (
+                        {/* Acknowledgment is personal — gated on isTaskAssignee
+                            (am I literally the one this was allotted to?), not
+                            just this row being visible to a broad viewer like
+                            leadership, and checked against hasAcknowledgedTask
+                            rather than status alone so a group/committee task
+                            already In Progress from a DIFFERENT member's
+                            acknowledgment still prompts this viewer for their
+                            own if they haven't given it yet. */}
+                        {task.status !== 'Completed' && isTaskAssignee(task, user) && !hasAcknowledgedTask(task, user) ? (
                           <button
                             onClick={() => handleAcknowledge(task.id)}
                             className="px-2.5 py-1 bg-accent hover:bg-primary-light text-white text-[10px] font-semibold rounded-lg transition-all cursor-pointer"
@@ -483,6 +506,8 @@ export default function DashboardHome() {
                               Extend
                             </button>
                           </div>
+                        ) : task.status === 'Assigned' ? (
+                          <span className="text-[10px] text-theme-text-secondary">Awaiting acknowledgment</span>
                         ) : (
                           <span className="text-[10px] text-theme-text-secondary">Closed</span>
                         )}
