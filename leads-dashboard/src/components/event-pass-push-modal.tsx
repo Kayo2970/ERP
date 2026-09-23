@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Bell, X, Send, Users, User, Layers, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react';
 import { EventPassItem } from '@/lib/local-data';
+import { SearchableSelect } from '@/components/searchable-select';
 
 const PUSH_GUEST_CATEGORIES = [
   'VIP Dignitary',
@@ -212,17 +213,15 @@ export function EventPassPushModal({
               <label className="block text-xs font-semibold text-theme-text-secondary mb-1.5">
                 Select Pass Holder
               </label>
-              <select
+              <SearchableSelect
                 value={selectedPassId}
-                onChange={(e) => setSelectedPassId(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-white/15 bg-white/5 text-sm text-theme-text-primary focus:outline-none focus:border-accent"
-              >
-                {activePasses.map((p) => (
-                  <option key={p.id} value={p.id} className="bg-neutral-900 text-white">
-                    {p.attendeeName} • {p.guestCategory || 'Attendee'} ({p.serialNumber})
-                  </option>
-                ))}
-              </select>
+                onChange={setSelectedPassId}
+                options={activePasses.map((p) => ({
+                  value: p.id,
+                  label: `${p.attendeeName} • ${p.guestCategory || 'Attendee'}`,
+                  sublabel: p.serialNumber,
+                }))}
+              />
             </div>
           )}
 

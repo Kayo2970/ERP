@@ -23,6 +23,7 @@ import { generatePerformanceReportPdf, ReportType, CapturedChartImage } from '@/
 import { BarChart3, Download, FileText, Star, Loader2 } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 import { PeriodFilter } from '@/components/period-filter';
+import { SearchableSelect } from '@/components/searchable-select';
 import { PeriodFilterValue, extractAvailableMonths, isWithinPeriod, periodLabel } from '@/lib/period-filter';
 
 export default function ReportsPage() {
@@ -291,16 +292,13 @@ export default function ReportsPage() {
           <label className="block text-xs font-semibold text-theme-text-secondary uppercase">
             Filter by Member
           </label>
-          <select
+          <SearchableSelect
             value={selectedTarget}
-            onChange={(e) => setSelectedTarget(e.target.value)}
-            className="w-full px-3 py-2 bg-theme-background/30 border border-theme-border/40 rounded-xl text-xs text-theme-text-primary focus:outline-none focus:border-accent"
-          >
-            <option value="All">All Evaluated Members</option>
-            {targets.map(t => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
+            onChange={setSelectedTarget}
+            allLabel="All Evaluated Members"
+            allValue="All"
+            options={targets.map(t => ({ value: t, label: t }))}
+          />
         </div>
 
         {/* Time Period Selector: month or custom date range */}

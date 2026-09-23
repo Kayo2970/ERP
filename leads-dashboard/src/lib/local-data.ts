@@ -2039,9 +2039,24 @@ export function getEventById(id: string): EventItem | null {
 }
 
 /**
+ * Whether `event` is a Festival/Holiday rather than a regular event — there's no
+ * separate Festival entity, so this is the single source of truth for the
+ * heuristic: either the automated weekly holiday sync flagged it directly
+ * (see holiday-scheduler.ts), or its description mentions "festival"/"holiday".
+ * Used to keep festivals off the main Events page while still letting them
+ * appear in dropdowns (Tasks, Announcements, etc.) that intentionally list them.
+ */
+export function isFestivalEvent(event: EventItem): boolean {
+  return !!event.isHoliday || !!(event.description && (
+    event.description.toLowerCase().includes('festival') ||
+    event.description.toLowerCase().includes('holiday')
+  ));
+}
+
+/**
  * Check if an event is approved and ready to appear in dropdowns across the application:
  * 1. For regular events: approvalStatus is 'approved' or undefined (not 'pending_create', 'pending_delete', or 'rejected').
- * 2. For festival/holiday events: the post for the festival must be explicitly approved 
+ * 2. For festival/holiday events: the post for the festival must be explicitly approved
  *    (e.g. a holiday_design_social task exists or holiday_social_approval task was completed with approval).
  */
 export function isApprovedEvent(event: EventItem, tasks?: TaskItem[]): boolean {
@@ -2053,10 +2068,7 @@ export function isApprovedEvent(event: EventItem, tasks?: TaskItem[]): boolean {
   }
 
   // 2. Festival / Holiday event post approval check
-  const isFestival = event.isHoliday || (event.description && (
-    event.description.toLowerCase().includes('festival') ||
-    event.description.toLowerCase().includes('holiday')
-  ));
+  const isFestival = isFestivalEvent(event);
 
   if (isFestival) {
     const allTasks = tasks || getTasks();

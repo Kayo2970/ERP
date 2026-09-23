@@ -11,6 +11,7 @@ import {
   Clock,
   Calendar,
   ClipboardList,
+  ShieldAlert,
 } from 'lucide-react';
 import {
   getProcurementRequests,
@@ -29,6 +30,7 @@ import {
 import { canDecideProcurementRequest, canViewProcurementRequest } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
+import { SearchableSelect } from '@/components/searchable-select';
 
 function emptyLine(): ProcurementItemLine {
   return { name: '', quantity: 1, unit: '', notes: '' };
@@ -49,6 +51,7 @@ export default function ProcurementPage() {
   const [selectedTaskId, setSelectedTaskId] = useState('');
   const [lines, setLines] = useState<ProcurementItemLine[]>([emptyLine()]);
   const [justification, setJustification] = useState('');
+  const [formError, setFormError] = useState('');
 
   const [decidingId, setDecidingId] = useState<string | null>(null);
   const [decisionNotes, setDecisionNotes] = useState('');
@@ -107,6 +110,7 @@ export default function ProcurementPage() {
     setSelectedTaskId('');
     setLines([emptyLine()]);
     setJustification('');
+    setFormError('');
   };
 
   const handleOpenCreate = () => {
@@ -122,6 +126,7 @@ export default function ProcurementPage() {
     setSelectedTaskId(req.taskId || '');
     setLines(req.items.length > 0 ? req.items.map(i => ({ ...i })) : [emptyLine()]);
     setJustification(req.justification || '');
+    setFormError('');
     setIsModalOpen(true);
   };
 
@@ -135,6 +140,16 @@ export default function ProcurementPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+
+    if (linkType === 'event' && !selectedEventId) {
+      setFormError('Select an event to link this request to.');
+      return;
+    }
+    if (linkType === 'task' && !selectedTaskId) {
+      setFormError('Select a task to link this request to.');
+      return;
+    }
+    setFormError('');
 
     const cleanLines = lines
       .map(l => ({ ...l, name: l.name.trim(), unit: l.unit?.trim() || undefined, notes: l.notes?.trim() || undefined }))
@@ -406,6 +421,13 @@ export default function ProcurementPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+              {formError && (
+                <div className="p-3 bg-danger/10 border border-danger/25 rounded-xl text-danger text-xs flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 shrink-0" />
+                  <span>{formError}</span>
+                </div>
+              )}
+
               <div className="space-y-1.5">
                 <label className="block font-medium text-theme-text-secondary">Link To (optional)</label>
                 <select
@@ -422,30 +444,24 @@ export default function ProcurementPage() {
               {linkType === 'event' && (
                 <div className="space-y-1.5">
                   <label className="block font-medium text-theme-text-secondary">Select Event *</label>
-                  <select
-                    required
+                  <SearchableSelect
                     value={selectedEventId}
-                    onChange={(e) => setSelectedEventId(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                  >
-                    <option value="">Select an event...</option>
-                    {events.map(ev => <option key={ev.id} value={ev.id}>{ev.title}</option>)}
-                  </select>
+                    onChange={setSelectedEventId}
+                    placeholder="Select an event..."
+                    options={events.map(ev => ({ value: ev.id, label: ev.title }))}
+                  />
                 </div>
               )}
 
               {linkType === 'task' && (
                 <div className="space-y-1.5">
                   <label className="block font-medium text-theme-text-secondary">Select Task *</label>
-                  <select
-                    required
+                  <SearchableSelect
                     value={selectedTaskId}
-                    onChange={(e) => setSelectedTaskId(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                  >
-                    <option value="">Select a task...</option>
-                    {tasks.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
-                  </select>
+                    onChange={setSelectedTaskId}
+                    placeholder="Select a task..."
+                    options={tasks.map(t => ({ value: t.id, label: t.title }))}
+                  />
                 </div>
               )}
 

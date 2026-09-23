@@ -30,6 +30,7 @@ import {
   isTaskAssignee,
   hasAcknowledgedTask,
   acknowledgeTask,
+  isFestivalEvent,
   TaskItem,
   EventItem,
   AnnouncementItem
@@ -125,7 +126,7 @@ export default function DashboardHome() {
   // own-vs-all Group Policy scope; pending/rejected submissions are only shown to
   // their submitter, their resolved approver, or the Super User.
   const visibleEvents = events
-    .filter(event => !event.isHoliday)
+    .filter(event => !isFestivalEvent(event))
     .filter(event => {
       if (event.approvalStatus === 'pending_create' || event.approvalStatus === 'rejected') {
         return user?.tier === 1 || event.submittedByEmail === user?.email || canApprovePendingEvent(event, user);
@@ -134,7 +135,7 @@ export default function DashboardHome() {
     });
 
   const visibleFestivals = events
-    .filter(event => event.isHoliday || event.description?.includes('holiday') || event.description?.includes('festival'))
+    .filter(isFestivalEvent)
     .filter(event => event.startDate >= todayStr)
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
 
