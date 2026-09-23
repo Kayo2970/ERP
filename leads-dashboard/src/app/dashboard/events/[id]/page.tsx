@@ -129,7 +129,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
       triggerSuccess(`Created event committee "${committeeName}"`);
     } else {
       submitEventCommitteeCreate(event.id, committeeName, user?.name || 'User', user?.email || '');
-      triggerSuccess(`Committee "${committeeName}" submitted for approval from the Centre Head or GG Campus Head of Events.`);
+      triggerSuccess(`Committee "${committeeName}" submitted for approval from the Centre Head, Advisor, or GG Campus Head of Events.`);
     }
     setNewCommitteeName('');
     setIsAddCommitteeModalOpen(false);
@@ -156,7 +156,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
       triggerSuccess(`Updated student roster for "${managingCommittee.name}"`);
     } else {
       submitEventCommitteeMembers(event.id, managingCommittee.id, selectedMemberIds, user?.name || 'User', user?.email || '');
-      triggerSuccess(`Roster update for "${managingCommittee.name}" submitted for approval from the Centre Head or GG Campus Head of Events.`);
+      triggerSuccess(`Roster update for "${managingCommittee.name}" submitted for approval from the Centre Head, Advisor, or GG Campus Head of Events.`);
     }
     setManagingCommittee(null);
     setEvent(getEventById(eventId));
@@ -524,7 +524,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                     {isPendingCreate ? (
                       <div className="flex items-center gap-1.5 text-[11px] font-semibold text-warning">
                         <Clock className="h-3 w-3" />
-                        Awaiting approval from Centre Head / GG Campus Head of Events
+                        Awaiting approval from Centre Head / Advisor / GG Campus Head of Events
                       </div>
                     ) : (
                       <>

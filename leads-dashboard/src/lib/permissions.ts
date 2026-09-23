@@ -911,7 +911,7 @@ export function getEventApprovalRequirement(user: SessionUser, action: 'CREATE' 
     return {
       requiresApproval: true,
       approverType: 'CENTER_HEAD',
-      approverName: 'the Center Head',
+      approverName: 'the Centre Head or Advisor',
       policyName: 'Executive Event Sign-off Requirement'
     };
   }
@@ -965,7 +965,7 @@ export function getTaskApprovalRequirement(user: SessionUser, action: 'CREATE' |
     return {
       requiresApproval: true,
       approverType: 'CENTER_HEAD',
-      approverName: 'the Centre Head or GG Campus Events Head',
+      approverName: 'the Centre Head, Advisor, or GG Campus Events Head',
       policyName: 'Executive Task Sign-off Requirement'
     };
   }
@@ -983,7 +983,7 @@ export function getTaskApprovalRequirement(user: SessionUser, action: 'CREATE' |
   return {
     requiresApproval: true,
     approverType: 'CENTER_HEAD',
-    approverName: 'the Centre Head or GG Campus Events Head',
+    approverName: 'the Centre Head, Advisor, or GG Campus Events Head',
     policyName: 'Task Sign-off Requirement',
   };
 }
