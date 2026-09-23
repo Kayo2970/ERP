@@ -512,7 +512,7 @@ export interface EventReportItem {
  */
 export interface ApprovalRequest {
   id: string;
-  entityType: 'task' | 'committee' | 'event' | 'member' | 'design' | 'event-report' | 'announcement';
+  entityType: 'task' | 'committee' | 'event' | 'member' | 'design' | 'event-report' | 'announcement' | 'procurement';
   entityId: string;
   entityTitle: string;
   // Set for 'task' (its parent event, if any) and 'committee' (its owning
@@ -635,6 +635,45 @@ export interface BudgetItem {
   decidedBy?: string;
   decidedAt?: string;
   decisionNotes?: string;
+}
+
+export interface ProcurementItemLine {
+  name: string;
+  quantity: number;
+  unit?: string;
+  notes?: string;
+}
+
+// A materials request any member can raise for an event or a task — approved
+// or rejected only by the Centre Head or the Advisor (see
+// permissions.ts's canDecideProcurementRequest), never the wider leadership
+// panel other modules use. Once Approved it's visible to everybody; while
+// Pending or Rejected it's visible only to the requester and to whoever can
+// decide it (see permissions.ts's canViewProcurementRequest).
+export interface ProcurementRequestItem {
+  id: string;
+  requesterId?: string;
+  requesterName: string;
+  requesterEmail: string;
+  eventId?: string;
+  eventName?: string;
+  taskId?: string;
+  taskTitle?: string;
+  items: ProcurementItemLine[];
+  justification?: string;
+  status: 'Pending' | 'Approved' | 'Rejected';
+  decidedBy?: string;
+  decidedAt?: string;
+  decisionNotes?: string;
+  submittedAt: string;
+  // Set server-side by /api/procurement-requests's POST handler once the
+  // Centre Head + Advisor approval email actually goes out.
+  approvalEmailSent?: boolean;
+  approvalEmailError?: string;
+  // Set server-side by /api/procurement-requests/[id]'s PATCH handler once
+  // the requester is emailed the decision.
+  decisionEmailSent?: boolean;
+  decisionEmailError?: string;
 }
 
 export interface IncomeSourceItem {
@@ -950,7 +989,8 @@ export type ModuleAccessKey =
   | 'BACKUP'
   | 'EMAIL'
   | 'EVENT_PASSES'
-  | 'POLICIES';
+  | 'POLICIES'
+  | 'PROCUREMENT';
 
 export interface GroupPolicy {
   id: string;
@@ -4117,6 +4157,105 @@ export function updateBudget(id: string, updates: Partial<BudgetItem>, actorName
     `Edited a ₹${current[idx].amount.toLocaleString()} budget request${wasApproved ? ' that was previously Approved — now pending re-approval' : ''}`
   );
   return current[idx];
+}
+
+// -------------------------------------------------------------
+// Procurement Requests — any member submits, Centre Head/Advisor decide
+// -------------------------------------------------------------
+
+export const initialProcurementRequests: ProcurementRequestItem[] = [];
+
+export function getProcurementRequests(): ProcurementRequestItem[] {
+  if (typeof window === 'undefined') return initialProcurementRequests;
+  const saved = localStorage.getItem('leads_procurement_requests');
+  if (saved) {
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  return initialProcurementRequests;
+}
+
+export function saveProcurementRequests(items: ProcurementRequestItem[]): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem('leads_procurement_requests', JSON.stringify(items));
+  markLocalWrite('leads_procurement_requests');
+}
+
+export function addProcurementRequest(item: Omit<ProcurementRequestItem, 'id' | 'status' | 'submittedAt'>): ProcurementRequestItem {
+  const current = getProcurementRequests();
+  const newRequest: ProcurementRequestItem = {
+    ...item,
+    id: 'proc_' + Date.now(),
+    status: 'Pending',
+    submittedAt: new Date().toISOString(),
+  };
+  current.unshift(newRequest);
+  saveProcurementRequests(current);
+  serverPost('/api/procurement-requests', newRequest);
+  const scopeLabel = item.eventName || item.taskTitle || 'no linked event/task';
+  logAuditEvent('PROCUREMENT_REQUEST_SUBMITTED', item.requesterName, `Requested procurement of ${item.items.length} item(s) for ${scopeLabel}`, item.requesterEmail);
+  return newRequest;
+}
+
+export function decideProcurementRequest(
+  id: string,
+  status: 'Approved' | 'Rejected',
+  decidedBy: string,
+  decisionNotes?: string
+): ProcurementRequestItem | null {
+  const current = getProcurementRequests();
+  const idx = current.findIndex(r => r.id === id);
+  if (idx === -1) return null;
+
+  current[idx] = {
+    ...current[idx],
+    status,
+    decidedBy,
+    decidedAt: new Date().toISOString(),
+    decisionNotes,
+  };
+  saveProcurementRequests(current);
+  serverPatch('/api/procurement-requests', id, current[idx]);
+  logAuditEvent('PROCUREMENT_REQUEST_DECIDED', decidedBy, `${status} the procurement request from ${current[idx].requesterName}`);
+  return current[idx];
+}
+
+/**
+ * Lets the requester revise and resubmit their own request — before a
+ * decision, or even after Rejected. Either way the edit always resets it
+ * to Pending, mirroring updateBudget's "any edit resets to Pending" rule,
+ * and re-fans-out the Centre Head/Advisor approval email.
+ */
+export function updateProcurementRequest(id: string, updates: Partial<ProcurementRequestItem>, actorName: string): ProcurementRequestItem | null {
+  const current = getProcurementRequests();
+  const idx = current.findIndex(r => r.id === id);
+  if (idx === -1) return null;
+
+  current[idx] = {
+    ...current[idx],
+    ...updates,
+    status: 'Pending',
+    decidedBy: undefined,
+    decidedAt: undefined,
+    decisionNotes: undefined,
+    approvalEmailSent: undefined,
+    approvalEmailError: undefined,
+  };
+  saveProcurementRequests(current);
+  serverPatch('/api/procurement-requests', id, current[idx]);
+  logAuditEvent('PROCUREMENT_REQUEST_RESUBMITTED', actorName, `Resubmitted a procurement request for ${current[idx].eventName || current[idx].taskTitle || 'no linked event/task'}`);
+  return current[idx];
+}
+
+export function deleteProcurementRequest(id: string, actorName: string): void {
+  const current = getProcurementRequests();
+  const filtered = current.filter(r => r.id !== id);
+  saveProcurementRequests(filtered);
+  serverDelete('/api/procurement-requests', id);
+  logAuditEvent('PROCUREMENT_REQUEST_DELETED', actorName, 'Deleted a procurement request');
 }
 
 // Indian financial year runs Apr 1 - Mar 31. Month index 0 (Jan) - 11 (Dec).

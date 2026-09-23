@@ -20,7 +20,7 @@ export interface EmailLog {
   subject: string;
   bodyText: string;
   bodyHtml: string;
-  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION' | 'BIRTHDAY' | 'EVENT_REPORT_APPROVAL' | 'DESIGN_APPROVAL' | 'APPROVAL_REQUEST' | 'EVENT_PASS' | 'EVENT_INVITATION';
+  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION' | 'BIRTHDAY' | 'EVENT_REPORT_APPROVAL' | 'DESIGN_APPROVAL' | 'APPROVAL_REQUEST' | 'EVENT_PASS' | 'EVENT_INVITATION' | 'PROCUREMENT_DECISION';
   status: 'SENT' | 'FAILED';
   sentAt: string;
   // Diagnostics for "shows SENT but never arrives" — a resolved sendMail()
@@ -39,7 +39,7 @@ export interface SendEmailPayload {
   bodyHtml?: string;
   badgeText?: string;
   badgeColor?: string;
-  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION' | 'BIRTHDAY' | 'EVENT_REPORT_APPROVAL' | 'DESIGN_APPROVAL' | 'APPROVAL_REQUEST' | 'EVENT_PASS' | 'EVENT_INVITATION';
+  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION' | 'BIRTHDAY' | 'EVENT_REPORT_APPROVAL' | 'DESIGN_APPROVAL' | 'APPROVAL_REQUEST' | 'EVENT_PASS' | 'EVENT_INVITATION' | 'PROCUREMENT_DECISION';
   // Files attached to the outgoing message, e.g. an approved event report
   // or design asset read straight off disk via file-storage.ts's
   // readStoredFile(). Not persisted on the EmailLog entry (only the fact
@@ -1081,6 +1081,51 @@ export function generateDesignDecisionEmailTemplate(
         <p style="margin: 0; color: #334155; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${comments}</p>
       </div>` : ''}
       <p style="color: #64748b; font-size: 13px; line-height: 1.6;">${approved ? 'No further action is needed from you at this stage.' : 'Please review the feedback above and resubmit or update your design accordingly.'}</p>
+    `
+  });
+
+  return { subject, bodyText, bodyHtml };
+}
+
+/**
+ * Template Generator: Procurement Request Decision (sent to the requester
+ * once the Centre Head or Advisor approves/rejects their materials request).
+ */
+export function generateProcurementDecisionEmailTemplate(
+  requesterName: string,
+  itemsSummary: string,
+  approved: boolean,
+  decidedByName: string,
+  decisionNotes?: string
+): { subject: string; bodyText: string; bodyHtml: string } {
+  const outcome = approved ? 'Approved' : 'Rejected';
+  const subject = `Procurement Request ${outcome}: ${itemsSummary}`;
+  const bodyText = `Hello ${requesterName},\n\n` +
+    `Your procurement request for ${itemsSummary} has been ${outcome.toLowerCase()} by ${decidedByName}.\n\n` +
+    (decisionNotes ? `Notes:\n${decisionNotes}\n\n` : '\n') +
+    (approved
+      ? `The items are cleared for procurement.\n\n`
+      : `You may revise and resubmit the request if needed.\n\n`) +
+    `Regards,\nLEADS Next Gen Centre, MSRUAS`;
+
+  const badgeColor = approved ? '#15803d' : '#be123c';
+
+  const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
+    headerTitle: `Procurement Request ${outcome}`,
+    headerSubtitle: itemsSummary,
+    badgeText: outcome,
+    badgeColor,
+    bodyContentHtml: `
+      <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello <strong>${requesterName}</strong>,</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">Your procurement request for <strong>${itemsSummary}</strong> has been reviewed by <strong>${decidedByName}</strong>.</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">Decision: <strong style="color: ${badgeColor};">${outcome}</strong></p>
+      ${decisionNotes ? `
+      <div style="background: #f8fafc; border-left: 3px solid ${badgeColor}; padding: 10px 14px; border-radius: 4px; margin: 10px 0;">
+        <p style="margin: 0 0 4px; color: #0f172a; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;">Notes</p>
+        <p style="margin: 0; color: #334155; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${decisionNotes}</p>
+      </div>` : ''}
+      <p style="color: #64748b; font-size: 13px; line-height: 1.6;">${approved ? 'The items are cleared for procurement.' : 'You may revise and resubmit the request if needed.'}</p>
     `
   });
 

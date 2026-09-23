@@ -42,6 +42,7 @@ import {
   FileCheck2,
   IdCard,
   Ticket,
+  Package,
 } from 'lucide-react';
 import { getAnnouncements, getTasks, getDesigns, getMembers, getBudgets, getReimbursements, getEvents, getApprovalRequests, logAuditEvent, Member, syncWithServer, getSystemSettings, signOutClient, getSessionToken, setSessionToken, authHeaders } from '@/lib/local-data';
 import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isFinanceHead, canAccessGuestDirectory, canVerifyBudgetCentreHead, canDecideBudget, canVerifyReimbursementCentreHead, canApproveAsSectorHead, canApproveAsFinanceHead, canSubmitEventReport, canReviewEventReports, canViewEventReports, canAccessEventPassesModule, canAccessGroupPolicies } from '@/lib/permissions';
@@ -95,6 +96,7 @@ const navSections: NavSection[] = [
     title: 'Administration',
     items: [
       { name: 'Reimbursements', href: '/dashboard/reimbursements', icon: Receipt },
+      { name: 'Procurement', href: '/dashboard/procurement', icon: Package },
       { name: 'Budget & Funds', href: '/dashboard/budget', icon: Wallet, budgetAccessOnly: true },
       { name: 'Public Forms', href: '/dashboard/forms', icon: FileText },
       { name: 'Reports', href: '/dashboard/reports', icon: BarChart3 },

@@ -215,6 +215,21 @@ export function canSubmitBudget(user: ServerUser, settings: AccessLevelSettings)
   return isCentreHead(user, settings);
 }
 
+// Mirrors permissions.ts's canDecideProcurementRequest — deliberately just
+// Centre Head/Advisor, no capability-grant or Group Policy escape hatch.
+export function canDecideProcurementRequest(user: ServerUser, settings: AccessLevelSettings): boolean {
+  return isCentreHead(user, settings) || isAdvisor(user);
+}
+
+// Mirrors permissions.ts's canViewProcurementRequest.
+export function canViewProcurementRequest(user: ServerUser, settings: AccessLevelSettings, request: any): boolean {
+  if (!user) return false;
+  if (request.status === 'Approved') return true;
+  if (canDecideProcurementRequest(user, settings)) return true;
+  if (request.requesterId && request.requesterId === user.id) return true;
+  return !!request.requesterEmail && !!user.email && request.requesterEmail.toLowerCase() === user.email.toLowerCase();
+}
+
 export function canApproveAnnouncement(user: ServerUser, settings: AccessLevelSettings): boolean {
   if (!user) return false;
   return isCentreHead(user, settings) || isEventsHeadGgCampus(user) || user.tier === 1 || user.tier === 2.5;
