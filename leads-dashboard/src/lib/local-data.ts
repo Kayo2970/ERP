@@ -4747,6 +4747,30 @@ export function resolveDesignReviewer(): { id: string; name: string; email: stri
   return undefined;
 }
 
+/**
+ * The fixed leadership group that Instagram/LinkedIn posting tasks are
+ * always assigned to once captions are approved (see reviewDesignCaptions
+ * below) — Design Head, Social Media Head, and Senior Head roles, same
+ * "role string contains X" matching respondToHolidayApproval already uses
+ * for its own design/social-media fan-out. This is a fixed routing rule,
+ * not tied to who submitted or designed the asset — posting is always the
+ * group's job, never the designer's. Falls back to tier <= 2 leadership if
+ * the roster currently holds none of those titles, so the task is never
+ * left orphaned with no one able to see it.
+ */
+export function resolveSocialPostingAssignees(members?: Member[]): Member[] {
+  const all = (members || getMembers()).filter(m => m.status !== 'Terminated');
+  const matches = all.filter(m => {
+    const role = (m.role || '').toLowerCase();
+    const isDesignOrSocialMediaHead = role.includes('design head')
+      || role.includes('social media head')
+      || (role.includes('design') && role.includes('social media') && role.includes('head'));
+    const isSeniorHead = role.includes('senior') && role.includes('head');
+    return isDesignOrSocialMediaHead || isSeniorHead;
+  });
+  return matches.length > 0 ? matches : all.filter(m => m.tier <= 2);
+}
+
 export async function addDesign(design: Omit<DesignSubmissionItem, 'id' | 'submittedAt' | 'expiresAt' | 'isExpired'>, onProgress?: UploadProgressCallback): Promise<DesignSubmissionItem> {
   if (design.fileSize > 25 * 1024 * 1024) {
     throw new Error('File size exceeds the 25 MB limit.');
@@ -4984,16 +5008,23 @@ export function reviewDesignCaptions(designId: string, approved: boolean, commen
   if (approved) {
     const dueDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
+    // Posting is always routed to the Design Head/Social Media Head/Senior
+    // Head group by default, never to whoever happened to submit or design
+    // the asset — see resolveSocialPostingAssignees's doc comment.
+    const postingPool = resolveSocialPostingAssignees();
+    const postingAssignee = {
+      assignee: postingPool.map(m => m.name).join(', ') || 'Design Head',
+      assigneeType: 'group' as const,
+      assigneeIds: postingPool.map(m => m.id),
+    };
+
     // Two separate tasks, one per platform, each independently assignable
     // and markable complete — not one combined task for both.
     const instaTask = addTask({
       title: `[Social Media Posting] Post on Instagram: ${design.title}`,
       event: design.eventName || undefined,
       eventId: design.eventId || undefined,
-      assignee: design.designerName,
-      assigneeId: design.designerId,
-      assigneeEmail: design.designerEmail,
-      assigneeType: 'individual',
+      ...postingAssignee,
       dueDate,
       status: 'In Progress',
       creatorName: actorName,
@@ -5008,10 +5039,7 @@ export function reviewDesignCaptions(designId: string, approved: boolean, commen
       title: `[Social Media Posting] Post on LinkedIn: ${design.title}`,
       event: design.eventName || undefined,
       eventId: design.eventId || undefined,
-      assignee: design.designerName,
-      assigneeId: design.designerId,
-      assigneeEmail: design.designerEmail,
-      assigneeType: 'individual',
+      ...postingAssignee,
       dueDate,
       status: 'In Progress',
       creatorName: actorName,
