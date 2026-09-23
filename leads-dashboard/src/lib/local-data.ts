@@ -117,6 +117,21 @@ export interface Member {
   cardPhone?: string;
   cardSocials?: {
     linkedin?: string;
+    // Arbitrary extra links a member wants on their card beyond LinkedIn —
+    // each with its own label and either a preset icon key (see
+    // src/lib/custom-link-icons.ts) or an uploaded icon image. The upload
+    // sub-fields mirror cardPhotoData/cardPhotoFileName/cardPhotoUrl/
+    // cardPhotoStorageKey below exactly (transient data URL in, servable
+    // URL out). Capped at 5 entries — enforced in validation.ts.
+    customLinks?: {
+      label: string;
+      url: string;
+      icon: string;
+      customIconUrl?: string;
+      customIconStorageKey?: string;
+      customIconData?: string;
+      customIconFileName?: string;
+    }[];
   };
   cardPhotoData?: string;       // transient: base64 data URL sent on upload
   cardPhotoFileName?: string;   // transient: original filename, paired with cardPhotoData
@@ -403,6 +418,11 @@ export interface TaskItem {
   // collected/shown when taskCategory === 'design', but stored generically
   // in case a future task type wants the same field.
   briefDescription?: string;
+  // Optional reference link to an editable Canva file/template — same
+  // taskCategory === 'design' scope as briefDescription above, surfaced to
+  // the designer who picks this brief up from the Design Portal's "Design
+  // Task Requests" queue (src/app/dashboard/designs/page.tsx).
+  canvaLink?: string;
   // Reference files (mockup examples, logos, style guides, past posters...)
   // the requester attaches for the designer to work from. Stored server-side
   // as real files under data/uploads/tasks/<taskId>/ (see saveBase64File) —

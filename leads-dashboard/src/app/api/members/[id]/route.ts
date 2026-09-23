@@ -9,6 +9,7 @@ import { parseJsonBody, MemberWriteSchema } from '@/lib/validation';
 import { apiError } from '@/lib/api-error';
 
 const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
+const MAX_CUSTOM_ICON_SIZE_BYTES = 1 * 1024 * 1024; // 1 MB
 
 function slugifyName(name: string): string {
   const slug = name
@@ -92,8 +93,35 @@ export async function PATCH(
     delete updates.cardPhotoData;
     delete updates.cardPhotoFileName;
 
+    // Persist any freshly-uploaded custom-link icon (see visiting-card
+    // page's "Upload custom icon" control) as a real file on disk, same
+    // treatment as the avatar/card photo above — one saveBase64File call
+    // per row that carries a new customIconData payload, indexed by its
+    // position in the array under its own storage category so it never
+    // collides with the avatar (index 0) or card photo (index 1) above.
+    if (updates.cardSocials && Array.isArray(updates.cardSocials.customLinks)) {
+      for (let i = 0; i < updates.cardSocials.customLinks.length; i++) {
+        const link = updates.cardSocials.customLinks[i];
+        if (typeof link.customIconData === 'string' && link.customIconData.startsWith('data:')) {
+          const approxSize = Math.ceil((link.customIconData.length * 3) / 4);
+          if (approxSize > MAX_CUSTOM_ICON_SIZE_BYTES) {
+            return NextResponse.json({ error: `Custom link icon "${link.label || `#${i + 1}`}" exceeds the 1 MB maximum limit.` }, { status: 400 });
+          }
+          const stored = await saveBase64File('card-link-icons', id, i, link.customIconFileName || `icon-${i}.png`, link.customIconData);
+          link.customIconUrl = stored.url;
+          link.customIconStorageKey = stored.storageKey;
+        }
+        delete link.customIconData;
+        delete link.customIconFileName;
+      }
+    }
+
     let previousStorageKey: string | undefined;
     let previousCardPhotoStorageKey: string | undefined;
+    // Set-based (not positional) since custom-link rows can be reordered or
+    // removed between saves — computed inside the mutator below, from
+    // whatever the record's customLinks looked like just before this merge.
+    let previousCustomIconStorageKeys: Set<string> = new Set();
     // Upsert: if this id isn't in the server's collection yet (e.g. client-bundled
     // sample/seed data never POSTed), create it instead of 404ing and silently
     // dropping the edit.
@@ -108,6 +136,11 @@ export async function PATCH(
       }
       if (updates.cardPhotoStorageKey && next[idx].cardPhotoStorageKey && next[idx].cardPhotoStorageKey !== updates.cardPhotoStorageKey) {
         previousCardPhotoStorageKey = next[idx].cardPhotoStorageKey;
+      }
+      if (updates.cardSocials && Array.isArray(updates.cardSocials.customLinks)) {
+        previousCustomIconStorageKeys = new Set(
+          (next[idx].cardSocials?.customLinks || []).map((l: any) => l.customIconStorageKey).filter(Boolean)
+        );
       }
       const merged = { ...next[idx], ...updates };
 
@@ -147,6 +180,16 @@ export async function PATCH(
     }
     if (previousCardPhotoStorageKey) {
       await deleteStoredFile(previousCardPhotoStorageKey);
+    }
+    if (previousCustomIconStorageKeys.size > 0) {
+      const newCustomIconStorageKeys = new Set(
+        (updates.cardSocials?.customLinks || []).map((l: any) => l.customIconStorageKey).filter(Boolean)
+      );
+      for (const key of previousCustomIconStorageKeys) {
+        if (!newCustomIconStorageKeys.has(key)) {
+          await deleteStoredFile(key);
+        }
+      }
     }
 
     if (updates.status === 'Terminated') {

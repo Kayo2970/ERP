@@ -36,6 +36,10 @@ function contentHashFor(member: any, cardUrl: string): string {
     phone: member.cardPhone || '',
     email: member.email || '',
     linkedin: member.cardSocials?.linkedin || '',
+    // Icon isn't hashed — it never reaches the wallet pass, only the
+    // label/url pair does, so an icon-only edit shouldn't burn a
+    // regeneration.
+    customLinks: (member.cardSocials?.customLinks || []).map((l: any) => ({ label: l.label, url: l.url })),
     photoUrl: member.cardPhotoUrl || member.avatarUrl || '',
     cardUrl,
   });
@@ -105,6 +109,7 @@ export async function getOrCreateWalletPass(apiKey: string, member: any, cardUrl
       phone: member.cardPhone,
       email: member.email,
       linkedin: member.cardSocials?.linkedin,
+      customLinks: (member.cardSocials?.customLinks || []).map((l: any) => ({ label: l.label, url: l.url })),
       photoUrl: member.cardPhotoUrl || member.avatarUrl,
     },
     cardUrl

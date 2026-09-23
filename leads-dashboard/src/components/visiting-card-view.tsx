@@ -12,6 +12,13 @@ export interface VisitingCardData {
   photoUrl?: string;
   socials?: {
     linkedin?: string;
+    customLinks?: {
+      label: string;
+      url: string;
+      icon: string;
+      customIconUrl?: string;
+      customIconData?: string;
+    }[];
   };
 }
 
@@ -111,6 +118,7 @@ export function VisitingCardView({
       phone={card.phone}
       email={card.email}
       linkedin={socials.linkedin}
+      customLinks={socials.customLinks}
       slug={slug}
       appleWalletAvailable={appleWalletAvailable}
       googleWalletAvailable={googleWalletAvailable}
