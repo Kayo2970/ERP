@@ -177,6 +177,10 @@ export default function TasksPage() {
   // Filters & sorting — the board groups every visible task under its event
   // (Standalone last), and these narrow/reorder within that grouping instead
   // of flattening it back out.
+  // Active vs Completed tab — keeps the board from turning into one
+  // undifferentiated wall of cards as finished work piles up alongside
+  // still-open assignments.
+  const [taskViewTab, setTaskViewTab] = useState<'active' | 'completed'>('active');
   const [filterStudentId, setFilterStudentId] = useState('ALL');
   const [filterEventKey, setFilterEventKey] = useState('ALL');
   const [filterDueFrom, setFilterDueFrom] = useState('');
@@ -691,7 +695,16 @@ export default function TasksPage() {
   const taskMatchesStudent = (task: TaskItem, studentId: string) =>
     task.assigneeId === studentId || (task.assigneeIds || []).includes(studentId);
 
-  const filteredTasks = displayedTasks.filter(task => {
+  // Split into Active / Completed tabs before the rest of the filter
+  // pipeline runs, so the Student/Event/Due Date filters and sort only ever
+  // operate within the tab currently being viewed.
+  const activeTasksCount = displayedTasks.filter(t => t.status !== 'Completed').length;
+  const completedTasksCount = displayedTasks.filter(t => t.status === 'Completed').length;
+  const tabTasks = displayedTasks.filter(task =>
+    taskViewTab === 'completed' ? task.status === 'Completed' : task.status !== 'Completed'
+  );
+
+  const filteredTasks = tabTasks.filter(task => {
     if (filterStudentId !== 'ALL' && !taskMatchesStudent(task, filterStudentId)) return false;
     if (filterEventKey !== 'ALL' && (task.eventId || 'standalone') !== filterEventKey) return false;
     if (filterDueFrom && task.dueDate < filterDueFrom) return false;
@@ -810,6 +823,32 @@ export default function TasksPage() {
             Assign Task
           </button>
         )}
+      </div>
+
+      {/* Active / Completed Tabs */}
+      <div className="flex items-center gap-1 border-b border-theme-border/30">
+        <button
+          type="button"
+          onClick={() => setTaskViewTab('active')}
+          className={`px-4 py-2 text-xs font-semibold border-b-2 -mb-px transition-all cursor-pointer ${
+            taskViewTab === 'active'
+              ? 'border-accent text-accent'
+              : 'border-transparent text-theme-text-secondary hover:text-theme-text-primary'
+          }`}
+        >
+          Active ({activeTasksCount})
+        </button>
+        <button
+          type="button"
+          onClick={() => setTaskViewTab('completed')}
+          className={`px-4 py-2 text-xs font-semibold border-b-2 -mb-px transition-all cursor-pointer ${
+            taskViewTab === 'completed'
+              ? 'border-accent text-accent'
+              : 'border-transparent text-theme-text-secondary hover:text-theme-text-primary'
+          }`}
+        >
+          Completed ({completedTasksCount})
+        </button>
       </div>
 
       {/* Advisory Board Alert */}
@@ -945,6 +984,12 @@ export default function TasksPage() {
           description={user?.tier === 4 ? "Advisory Board members do not receive task assignments." : "No tasks assigned to your current filter."}
           actionLabel={canManage ? "Assign Task" : undefined}
           onAction={canManage ? handleOpenCreate : undefined}
+        />
+      ) : tabTasks.length === 0 ? (
+        <EmptyState
+          icon={CheckCircle2}
+          title={taskViewTab === 'completed' ? "No completed tasks yet" : "No active tasks"}
+          description={taskViewTab === 'completed' ? "Tasks move here automatically once they're marked Completed." : "Everything's either done or hasn't been assigned yet — check the Completed tab."}
         />
       ) : sortedTasks.length === 0 ? (
         <EmptyState

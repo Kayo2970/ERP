@@ -64,7 +64,10 @@ export default function EventsPage() {
   const router = useRouter();
   const [events, setEvents] = useState<EventItem[]>([]);
   const [user, setUser] = useState<any>(null);
-  const [statusFilter, setStatusFilter] = useState<EventStatusFilter>('ALL');
+  // Defaults to Ongoing (not All) so the board opens decluttered — completed
+  // and archived events live in their own tabs instead of mixing into the
+  // active view, mirroring the Active/Completed split on the Tasks page.
+  const [statusFilter, setStatusFilter] = useState<EventStatusFilter>('ONGOING');
 
   // Handle any direct/legacy pass param navigations
   useEffect(() => {
