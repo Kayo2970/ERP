@@ -3,7 +3,7 @@
 import React, { useState, useEffect, use } from 'react';
 import { CheckCircle2, ChevronLeft, Send, Sparkles, AlertTriangle, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
-import { getForms, addSubmission, syncWithServer, PublicFormItem } from '@/lib/local-data';
+import { getForms, addSubmission, PublicFormItem } from '@/lib/local-data';
 import { TermsModal } from '@/components/terms-modal';
 import { PrivacyPolicyModal } from '@/components/privacy-policy-modal';
 import { GhostFibers } from '@/components/ui/ghost-fibers';
@@ -60,15 +60,23 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
       return;
     }
 
-    // A real respondent filling this out from a shared link has never logged
-    // into the dashboard in this browser, so localStorage starts completely
-    // empty — reading it alone would always report "Form Not Found" for a
-    // real, live form. Sync with the server first so the actual form list is
-    // available before deciding the slug doesn't exist.
-    syncWithServer().then(() => {
-      if (cancelled) return;
-      applyForm(getForms().find(f => f.slug.toLowerCase() === slug.toLowerCase()));
-    });
+    // A real respondent filling this out from a shared/QR link has never
+    // logged into the dashboard in this browser, so localStorage starts
+    // completely empty and there's no session to call the member-only
+    // /api/data poll with (syncWithServer() 401s for them). Resolve the slug
+    // through the dedicated public, unauthenticated endpoint instead — same
+    // approach POST /api/submissions already uses for the write side of this
+    // exact flow.
+    fetch(`/api/public-forms/${encodeURIComponent(slug)}`, { cache: 'no-store' })
+      .then(res => (res.ok ? res.json() : null))
+      .then(publicForm => {
+        if (cancelled) return;
+        applyForm(publicForm || undefined);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        applyForm(undefined);
+      });
 
     return () => { cancelled = true; };
   }, [slug]);
