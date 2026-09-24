@@ -1573,7 +1573,7 @@ export default function TasksPage() {
       {/* Create / Edit Task Modal */}
       {(isCreateModalOpen || editingTask) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="glass-panel w-full max-w-lg rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl">
+          <div className="glass-panel w-full max-w-lg max-h-[90vh] rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl overflow-y-auto">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-theme-text-primary">
                 {editingTask ? 'Edit Task Details' : 'Assign New Deliverable'}
