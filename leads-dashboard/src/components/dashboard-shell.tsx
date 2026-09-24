@@ -422,7 +422,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       const storedLastRole = localStorage.getItem(`leads_seen_role_${userKey}`);
 
       if (storedLastTier !== null && storedLastRole !== null) {
-        const lastTierNum = parseInt(storedLastTier, 10);
+        const lastTierNum = parseFloat(storedLastTier);
         // In LEADS ERP, lower tier number indicates higher rank (Tier 1 = Super User, Tier 2 = Leadership, Tier 3 = Core)
         const isTierElevated = !isNaN(lastTierNum) && parsedUser.tier < lastTierNum;
         const isTierDemoted = !isNaN(lastTierNum) && parsedUser.tier > lastTierNum;
@@ -504,7 +504,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           const storedLastRole = localStorage.getItem(`leads_seen_role_${userKey}`);
 
           if (storedLastTier !== null && storedLastRole !== null) {
-            const lastTierNum = parseInt(storedLastTier, 10);
+            const lastTierNum = parseFloat(storedLastTier);
             const isTierElevated = !isNaN(lastTierNum) && liveRecord.tier < lastTierNum;
             const isTierDemoted = !isNaN(lastTierNum) && liveRecord.tier > lastTierNum;
             const isRolePromoted = isTierElevated || (storedLastRole !== (liveRecord.role || '') && liveRecord.tier <= lastTierNum);
