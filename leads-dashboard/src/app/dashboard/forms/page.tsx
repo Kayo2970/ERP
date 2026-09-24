@@ -399,13 +399,21 @@ export default function FormsBuilderPage() {
 
     const updated = getForms();
     setForms(updated);
-    
-    // Auto-open QR preview for newly created form if it wasn't an edit
+
+    // Auto-open QR preview for newly created form if it wasn't an edit — but
+    // only once it's actually live. A form awaiting Centre Head sign-off
+    // (approvalStatus === 'pending_create') has no working /forms/{slug}
+    // page yet (see PublicFormPage — pending/rejected forms render "Form Not
+    // Found"), so surfacing a scannable QR for it here would just hand out a
+    // broken link. The list view already hides the QR button for pending
+    // forms (see the row's QrCode button below); this mirrors that guard.
     if (!editingForm) {
       const newlyCreated = updated.find(f => f.slug.toLowerCase() === formattedSlug.toLowerCase());
       if (newlyCreated) {
         setSelectedFormId(newlyCreated.id);
-        setQrModalForm(newlyCreated);
+        if (newlyCreated.approvalStatus !== 'pending_create') {
+          setQrModalForm(newlyCreated);
+        }
       }
     }
   };
