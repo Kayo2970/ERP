@@ -155,6 +155,16 @@ function escapeCsvValue(value: unknown): string {
   return `"${str}"`;
 }
 
+/** Turns a title/template name into a URL-safe slug fragment — used to
+ *  auto-suggest the Public Link Slug from the form's (auto-generated)
+ *  title, e.g. "Feedback Form – AI Hackathon 2026" -> "feedback-form-ai-hackathon-2026". */
+function slugify(str: string): string {
+  return str
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
 export default function FormsBuilderPage() {
   const [forms, setForms] = useState<PublicFormItem[]>([]);
   const [submissions, setSubmissions] = useState<FormSubmissionItem[]>([]);
@@ -272,30 +282,43 @@ export default function FormsBuilderPage() {
     if (template) {
       setFields(template.fields.map((f, i) => ({ ...f, id: `field_${Date.now()}_${i}` })));
       if (templateId === FEEDBACK_FORM_TEMPLATE_ID) {
+        // An event may already be linked (e.g. picked before the template),
+        // so the very first auto-title/slug already reflects it rather than
+        // only picking up the event on a later handleEventLink call.
         const linkedEvent = events.find(ev => ev.id === eventId);
         setTitle(linkedEvent ? `Feedback Form – ${linkedEvent.title}` : 'Feedback Form');
       } else if (!title || title.trim() === '') {
         setTitle(template.name.replace(' Template', ''));
       }
       if (!slug || slug.trim() === '') {
-        const generatedSlug = template.name
-          .toLowerCase()
-          .replace(/template/g, '')
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-+|-+$/g, '');
-        setSlug(generatedSlug);
+        const linkedEvent = events.find(ev => ev.id === eventId);
+        const slugSource = templateId === FEEDBACK_FORM_TEMPLATE_ID
+          ? (linkedEvent ? `Feedback Form – ${linkedEvent.title}` : 'Feedback Form')
+          : template.name.replace(/template/gi, '');
+        setSlug(slugify(slugSource));
       }
     }
   };
 
   const handleEventLink = (newEventId: string) => {
+    // Whether slug is still tracking the (pre-update) title automatically,
+    // i.e. the user hasn't typed a custom slug over it — checked BEFORE
+    // title changes below, since this is what decides whether it's still
+    // safe to overwrite.
+    const looksAutoSlug = slug === '' || slug === slugify(title);
     setEventId(newEventId);
-    // Keep an auto-generated Feedback Form title in sync with whichever
-    // event is currently linked, as long as the title still looks
-    // auto-generated (i.e. the user hasn't typed a custom one over it).
+    // Keep an auto-generated Feedback Form title (and, as long as it hasn't
+    // been hand-edited, its slug) in sync with whichever event is currently
+    // linked — every event's feedback form otherwise ends up sharing the
+    // same generic "feedback-form" slug instead of one that actually
+    // identifies which event it belongs to.
     if (selectedTemplateId === FEEDBACK_FORM_TEMPLATE_ID && (title === '' || title === 'Feedback Form' || title.startsWith('Feedback Form – '))) {
       const linkedEvent = events.find(ev => ev.id === newEventId);
-      setTitle(linkedEvent ? `Feedback Form – ${linkedEvent.title}` : 'Feedback Form');
+      const newTitle = linkedEvent ? `Feedback Form – ${linkedEvent.title}` : 'Feedback Form';
+      setTitle(newTitle);
+      if (looksAutoSlug) {
+        setSlug(slugify(newTitle));
+      }
     }
   };
 
