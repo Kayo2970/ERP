@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { dispatchEmail, generateEventRosterEmailTemplate } from '@/lib/email-service';
-import { fanOutAutoApproval } from '@/lib/approval-sync';
+import { fanOutAutoApproval, resolveCustomApprovalPanel } from '@/lib/approval-sync';
 import { requireSession } from '@/lib/session';
 import { apiError } from '@/lib/api-error';
 
@@ -43,15 +43,17 @@ export async function POST(request: Request) {
     // Route the built-in Group Policy approval gate (approvalStatus/
     // approverType — see EventItem's doc comment in local-data.ts) into the
     // Approvals module too, so festivals and every other event this fires
-    // for actually shows up there. Only the default CENTER_HEAD panel is
-    // fanned out here — a SPECIFIC_MEMBER/POLICY_TAG approver was already
-    // deliberately narrowed by whoever set that up, so it's left alone.
+    // for actually shows up there. A SPECIFIC_MEMBER/POLICY_TAG approver is
+    // resolved to its own custom panel instead of the default trio, so a
+    // named approver actually gets notified and tracked.
     if (
       created &&
-      (created.approverType === 'CENTER_HEAD' || !created.approverType) &&
       (created.approvalStatus === 'pending_create' || created.approvalStatus === 'pending_edit' || created.approvalStatus === 'pending_delete')
     ) {
       try {
+        const customPanel = created.approverType && created.approverType !== 'CENTER_HEAD'
+          ? await resolveCustomApprovalPanel(created.approverType, created.approverMemberId, created.approverPolicyTagId)
+          : undefined;
         await fanOutAutoApproval({
           entityType: 'event',
           entityId: created.id,
@@ -60,6 +62,7 @@ export async function POST(request: Request) {
           requesterName: created.submittedBy || 'A member',
           requesterEmail: created.submittedByEmail,
           message: PENDING_APPROVAL_MESSAGE[created.approvalStatus],
+          customPanel,
         });
       } catch (approvalErr) {
         console.error('[events-api] Approval fan-out failed:', approvalErr);

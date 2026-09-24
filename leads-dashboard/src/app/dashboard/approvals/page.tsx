@@ -22,7 +22,8 @@ import {
   Paperclip,
   Info,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  LayoutTemplate
 } from 'lucide-react';
 import {
   getApprovalRequests,
@@ -35,11 +36,14 @@ import {
   rejectEvent,
   approveAnnouncement,
   rejectAnnouncement,
+  approveForm,
+  rejectForm,
   getTasks,
   getDesigns,
   getEvents,
   getAnnouncements,
   getEventReports,
+  getForms,
   getMembers,
   ApprovalRequest,
   TaskItem,
@@ -47,6 +51,7 @@ import {
   EventItem,
   AnnouncementItem,
   EventReportItem,
+  PublicFormItem,
   Member,
 } from '@/lib/local-data';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -59,6 +64,7 @@ const entityIcon = (type: ApprovalRequest['entityType']) => {
   if (type === 'design') return Palette;
   if (type === 'event-report') return FileText;
   if (type === 'announcement') return Megaphone;
+  if (type === 'form') return LayoutTemplate;
   return Users;
 };
 
@@ -69,6 +75,7 @@ const entityLink = (req: ApprovalRequest) => {
   if (req.entityType === 'design') return '/dashboard/designs';
   if (req.entityType === 'event-report') return '/dashboard/event-reports';
   if (req.entityType === 'announcement') return '/dashboard/announcements';
+  if (req.entityType === 'form') return '/dashboard/forms';
   return req.eventId ? `/dashboard/events/${req.eventId}` : '/dashboard/events';
 };
 
@@ -113,6 +120,7 @@ export default function ApprovalsPage() {
     announcements: AnnouncementItem[];
     eventReports: EventReportItem[];
     members: Member[];
+    forms: PublicFormItem[];
   }>({
     tasks: [],
     designs: [],
@@ -120,6 +128,7 @@ export default function ApprovalsPage() {
     announcements: [],
     eventReports: [],
     members: [],
+    forms: [],
   });
 
   useEffect(() => {
@@ -131,6 +140,7 @@ export default function ApprovalsPage() {
       const announcements = getAnnouncements();
       const eventReports = getEventReports();
       const members = getMembers();
+      const forms = getForms();
 
       setEntitiesData({
         tasks,
@@ -139,6 +149,7 @@ export default function ApprovalsPage() {
         announcements,
         eventReports,
         members,
+        forms,
       });
 
       // Filter out any orphaned requests referencing entities that were deleted
@@ -148,6 +159,7 @@ export default function ApprovalsPage() {
         if (r.entityType === 'event') return events.some(e => e.id === r.entityId);
         if (r.entityType === 'announcement') return announcements.some(a => a.id === r.entityId);
         if (r.entityType === 'event-report') return eventReports.some(er => er.id === r.entityId);
+        if (r.entityType === 'form') return forms.some(f => f.id === r.entityId);
         if (r.entityType === 'member') return members.some(m => m.id === r.entityId);
         if (r.entityType === 'committee') {
           return events.some(e => e.committees?.some(c => c.id === r.entityId));
@@ -200,7 +212,7 @@ export default function ApprovalsPage() {
   const list = tab === 'inbox' ? inboxRequests : sentRequests;
   const pendingInboxCount = inboxRequests.filter(r => r.status === 'pending').length;
 
-  const directlyResolvable = (type: ApprovalRequest['entityType']) => type === 'task' || type === 'event' || type === 'announcement';
+  const directlyResolvable = (type: ApprovalRequest['entityType']) => type === 'task' || type === 'event' || type === 'announcement' || type === 'form';
 
   const handleDecide = (id: string, decision: 'approved' | 'rejected', note?: string) => {
     const req = requests.find(r => r.id === id);
@@ -213,6 +225,8 @@ export default function ApprovalsPage() {
         decision === 'approved' ? approveEvent(req.entityId, actorName) : rejectEvent(req.entityId, actorName, note);
       } else if (req.entityType === 'announcement') {
         decision === 'approved' ? approveAnnouncement(req.entityId, actorName) : rejectAnnouncement(req.entityId, actorName);
+      } else if (req.entityType === 'form') {
+        decision === 'approved' ? approveForm(req.entityId, actorName) : rejectForm(req.entityId, actorName, note);
       }
     } else {
       decideApprovalRequest(id, decision, actorName, note);
@@ -246,6 +260,9 @@ export default function ApprovalsPage() {
     }
     if (req.entityType === 'event-report') {
       return { type: 'event-report' as const, item: entitiesData.eventReports.find(er => er.id === req.entityId) };
+    }
+    if (req.entityType === 'form') {
+      return { type: 'form' as const, item: entitiesData.forms.find(f => f.id === req.entityId) };
     }
     if (req.entityType === 'member') {
       return { type: 'member' as const, item: entitiesData.members.find(m => m.id === req.entityId) };

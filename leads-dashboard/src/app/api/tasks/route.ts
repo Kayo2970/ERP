@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { enqueueTaskEmailNotification, resolveTaskEmailRecipients } from '@/lib/task-email-queue';
-import { fanOutAutoApproval } from '@/lib/approval-sync';
+import { fanOutAutoApproval, resolveCustomApprovalPanel } from '@/lib/approval-sync';
 import { requireSession } from '@/lib/session';
 import { apiError } from '@/lib/api-error';
 
@@ -41,13 +41,18 @@ export async function POST(request: Request) {
 
     // Route the built-in Group Policy approval gate on this task (see
     // getTaskApprovalRequirement in permissions.ts) into the Approvals
-    // module, mirroring the same treatment given to Events.
+    // module, mirroring the same treatment given to Events. A
+    // SPECIFIC_MEMBER/POLICY_TAG approver is resolved to its own custom
+    // panel instead of the default trio, so a named faculty/advisor
+    // approver actually gets notified.
     if (
       created &&
-      (created.approverType === 'CENTER_HEAD' || !created.approverType) &&
       (created.approvalStatus === 'pending_create' || created.approvalStatus === 'pending_edit')
     ) {
       try {
+        const customPanel = created.approverType && created.approverType !== 'CENTER_HEAD'
+          ? await resolveCustomApprovalPanel(created.approverType, created.approverMemberId, created.approverPolicyTagId)
+          : undefined;
         await fanOutAutoApproval({
           entityType: 'task',
           entityId: created.id,
@@ -57,6 +62,7 @@ export async function POST(request: Request) {
           requesterName: created.submittedBy || 'A member',
           requesterEmail: created.submittedByEmail,
           message: PENDING_APPROVAL_MESSAGE[created.approvalStatus],
+          customPanel,
         });
       } catch (approvalErr) {
         console.error('[tasks-api] Approval fan-out failed:', approvalErr);
