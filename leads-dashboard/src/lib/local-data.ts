@@ -525,7 +525,7 @@ export interface EventReportItem {
  */
 export interface ApprovalRequest {
   id: string;
-  entityType: 'task' | 'committee' | 'event' | 'member' | 'design' | 'event-report' | 'announcement' | 'procurement';
+  entityType: 'task' | 'committee' | 'event' | 'member' | 'design' | 'event-report' | 'announcement' | 'procurement' | 'form';
   entityId: string;
   entityTitle: string;
   // Set for 'task' (its parent event, if any) and 'committee' (its owning
@@ -4722,6 +4722,8 @@ export function deleteForm(id: string, actorName: string): boolean {
     s => s.formId !== id && s.slug !== target.slug
   );
   saveSubmissions(remainingSubmissions);
+
+  removeApprovalRequestsForEntity('form', id);
 
   logAuditEvent('FORM_DELETED', actorName, `Deleted public form "${target.title}"`);
   return true;

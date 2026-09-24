@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { mutateCollection, readCollection } from '@/lib/server-db';
 import { enqueueTaskEmailNotification } from '@/lib/task-email-queue';
 import { deleteStoredFilesForRecord } from '@/lib/file-storage';
-import { fanOutAutoApproval, cascadeCloseAutoApprovals, deleteLinkedApprovalRequests } from '@/lib/approval-sync';
+import { fanOutAutoApproval, cascadeCloseAutoApprovals, deleteLinkedApprovalRequests, resolveCustomApprovalPanel } from '@/lib/approval-sync';
 import { requireSession, requirePermission, ForbiddenError } from '@/lib/session';
 import { canDeleteTask, canApprovePendingTask, getAccessLevelSettingsServer } from '@/lib/permissions-server';
 import { apiError } from '@/lib/api-error';
@@ -51,12 +51,15 @@ export async function PATCH(
     });
     const result = updated.find((t: any) => t.id === id);
 
-    if (result && (result.approverType === 'CENTER_HEAD' || !result.approverType)) {
+    if (result) {
       const wasPending = previous && PENDING_STATES.has(previous.approvalStatus);
       const isPending = PENDING_STATES.has(result.approvalStatus);
 
       if (isPending && (!wasPending || previous.approvalStatus !== result.approvalStatus)) {
         try {
+          const customPanel = result.approverType && result.approverType !== 'CENTER_HEAD'
+            ? await resolveCustomApprovalPanel(result.approverType, result.approverMemberId, result.approverPolicyTagId)
+            : undefined;
           await fanOutAutoApproval({
             entityType: 'task',
             entityId: result.id,
@@ -66,6 +69,7 @@ export async function PATCH(
             requesterName: result.submittedBy || 'A member',
             requesterEmail: result.submittedByEmail,
             message: PENDING_APPROVAL_MESSAGE[result.approvalStatus],
+            customPanel,
           });
         } catch (approvalErr) {
           console.error('[tasks-api] Approval fan-out failed:', approvalErr);

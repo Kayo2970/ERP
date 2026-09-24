@@ -14,7 +14,7 @@ import { readCollection, mutateCollection } from './server-db';
 import { dispatchEmail, wrapInMasterEmailTemplate, findApprovalRecipients } from './email-service';
 import type { ApprovalRequest } from './local-data';
 
-type AutoApprovalEntityType = 'event' | 'task' | 'design' | 'event-report' | 'announcement' | 'procurement';
+type AutoApprovalEntityType = 'event' | 'task' | 'design' | 'event-report' | 'announcement' | 'procurement' | 'form';
 
 const ENTITY_LABELS: Record<AutoApprovalEntityType, string> = {
   event: 'Event',
@@ -23,6 +23,7 @@ const ENTITY_LABELS: Record<AutoApprovalEntityType, string> = {
   'event-report': 'Event Report',
   announcement: 'Announcement',
   procurement: 'Procurement Request',
+  form: 'Form',
 };
 
 export interface ApprovalPanelMember {
@@ -84,6 +85,51 @@ export async function resolveCentreHeadAdvisorPanel(): Promise<ApprovalPanelMemb
   push(recipients.advisor, 'Advisor');
 
   return panel;
+}
+
+/**
+ * Resolves the panel for an entity whose Group Policy approval gate names a
+ * specific person or a policy-tag audience rather than the default Centre
+ * Head/Advisor/GG Campus Events Head trio — e.g. a Faculty member configured
+ * as a named advisor for a given capability. Mirrors the matching logic in
+ * permissions.ts's memberMatchesPolicy/resolveApproverName, but reads from
+ * the server collections directly since this runs server-side.
+ */
+export async function resolveCustomApprovalPanel(
+  approverType: 'SPECIFIC_MEMBER' | 'POLICY_TAG' | undefined,
+  approverMemberId: string | undefined,
+  approverPolicyTagId: string | undefined
+): Promise<ApprovalPanelMember[]> {
+  if (!approverType) return [];
+  const members = await readCollection<any>('members');
+  const active = members.filter((m: any) => m.status !== 'Terminated');
+
+  if (approverType === 'SPECIFIC_MEMBER') {
+    const member = active.find((m: any) => m.id === approverMemberId);
+    if (!member || !member.email) return [];
+    return [{ id: member.id, name: member.name, email: member.email, label: 'Designated Approver' }];
+  }
+
+  if (approverType === 'POLICY_TAG' && approverPolicyTagId) {
+    const policies = await readCollection<any>('groupPolicies');
+    const tagPolicy = policies.find((p: any) => p.id === approverPolicyTagId);
+    if (!tagPolicy) return [];
+    const matches = (member: any) => {
+      if (tagPolicy.targetMemberIds?.includes(member.id)) return true;
+      if (tagPolicy.targetDivisions?.length && tagPolicy.targetDivisions.includes(member.division)) return true;
+      if (tagPolicy.targetTiers?.length && tagPolicy.targetTiers.includes(member.tier)) return true;
+      if (tagPolicy.targetDesignationKeyword?.trim()) {
+        const kw = tagPolicy.targetDesignationKeyword.trim().toLowerCase();
+        if ((member.role || '').toLowerCase().includes(kw)) return true;
+      }
+      return false;
+    };
+    return active
+      .filter((m: any) => m.email && matches(m))
+      .map((m: any) => ({ id: m.id, name: m.name, email: m.email, label: 'Designated Approver' }));
+  }
+
+  return [];
 }
 
 export interface FanOutOptions {
@@ -154,6 +200,7 @@ export async function fanOutAutoApproval(opts: FanOutOptions): Promise<ApprovalR
       else if (opts.entityType === 'design') targetLink = `${baseUrl}/dashboard/designs?highlight=${opts.entityId}`;
       else if (opts.entityType === 'event-report') targetLink = `${baseUrl}/dashboard/event-reports?highlight=${opts.entityId}`;
       else if (opts.entityType === 'procurement') targetLink = `${baseUrl}/dashboard/procurement?highlight=${opts.entityId}`;
+      else if (opts.entityType === 'form') targetLink = `${baseUrl}/dashboard/forms?highlight=${opts.entityId}`;
 
       const bodyHtml = `
         <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello <strong>${row.targetMemberName || 'there'}</strong>,</p>
