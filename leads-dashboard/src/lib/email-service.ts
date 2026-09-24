@@ -3,6 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { mutateCollection, readCollection } from './server-db';
 import { DirectSendTransport } from './direct-smtp-transport';
+import { getAppBaseUrl } from './app-url';
 
 // Referenced as cid:leads-logo in wrapInMasterEmailTemplate — attach this
 // to every sendMail() call so the header logo is embedded, not fetched
@@ -19,7 +20,7 @@ export interface EmailLog {
   subject: string;
   bodyText: string;
   bodyHtml: string;
-  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'TASK_DEADLINE_REMINDER' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION' | 'BIRTHDAY' | 'EVENT_REPORT_APPROVAL' | 'DESIGN_APPROVAL' | 'APPROVAL_REQUEST';
+  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'TASK_DEADLINE_REMINDER' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION' | 'BIRTHDAY' | 'EVENT_REPORT_APPROVAL' | 'DESIGN_APPROVAL' | 'APPROVAL_REQUEST' | 'EVENT_PASS' | 'EVENT_INVITATION' | 'PROCUREMENT_DECISION';
   status: 'SENT' | 'FAILED';
   sentAt: string;
   // Diagnostics for "shows SENT but never arrives" — a resolved sendMail()
@@ -38,7 +39,7 @@ export interface SendEmailPayload {
   bodyHtml?: string;
   badgeText?: string;
   badgeColor?: string;
-  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'TASK_DEADLINE_REMINDER' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION' | 'BIRTHDAY' | 'EVENT_REPORT_APPROVAL' | 'DESIGN_APPROVAL' | 'APPROVAL_REQUEST';
+  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'TASK_DEADLINE_REMINDER' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION' | 'BIRTHDAY' | 'EVENT_REPORT_APPROVAL' | 'DESIGN_APPROVAL' | 'APPROVAL_REQUEST' | 'EVENT_PASS' | 'EVENT_INVITATION' | 'PROCUREMENT_DECISION';
   // Files attached to the outgoing message, e.g. an approved event report
   // or design asset read straight off disk via file-storage.ts's
   // readStoredFile(). Not persisted on the EmailLog entry (only the fact
@@ -420,6 +421,7 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
     else if (payload.category === 'EVENT_ROSTER') badgeTextToUse = 'Event Roster';
     else if (payload.category === 'ACCOUNT_ACTIVATION') badgeTextToUse = 'Account Notice';
     else if (payload.category === 'BIRTHDAY') badgeTextToUse = 'Greetings';
+    else if (payload.category === 'EVENT_PASS' || payload.category === 'EVENT_INVITATION') badgeTextToUse = 'Official Event Pass';
     else badgeTextToUse = undefined;
   }
 
@@ -615,6 +617,7 @@ export function generateNewMemberWelcomeTemplate(member: {
   const roleStr = member.role || 'Member';
   const divisionStr = member.division || 'Core Committee';
   const departmentStr = member.department ? ` (${member.department})` : '';
+  const baseUrl = getAppBaseUrl();
 
   const subject = `LEADS Portal Account Created: ${member.name}`;
   const bodyText = `Hello ${member.name},\n\n` +
@@ -624,7 +627,7 @@ export function generateNewMemberWelcomeTemplate(member: {
     `• Division: ${divisionStr}${departmentStr}\n` +
     `• Registered Email: ${member.email}\n\n` +
     `Password Setup:\n` +
-    `When you log in for the first time at https://leadsnextgencentre.online using your email (${member.email}), you will be prompted directly to set your password.\n\n` +
+    `When you log in for the first time at ${baseUrl} using your email (${member.email}), you will be prompted directly to set your password.\n\n` +
     `Regards,\nLEADS Next Gen Centre, MSRUAS`;
 
   const bodyHtml = wrapInMasterEmailTemplate({
@@ -649,7 +652,7 @@ export function generateNewMemberWelcomeTemplate(member: {
       </div>
 
       <div style="text-align: center; margin: 28px 0;">
-        <a href="https://leadsnextgencentre.online" style="display: inline-block; background: #0284c7; color: #ffffff; font-weight: 700; font-size: 14px; padding: 12px 28px; border-radius: 10px; text-decoration: none;">
+        <a href="${baseUrl}" style="display: inline-block; background: #0284c7; color: #ffffff; font-weight: 700; font-size: 14px; padding: 12px 28px; border-radius: 10px; text-decoration: none;">
           Log In & Set Up Password &rarr;
         </a>
       </div>
@@ -740,6 +743,7 @@ export function generateNewEmailConfirmationOtpTemplate(name: string, otp: strin
  */
 export function generateAnnouncementEmailTemplate(memberName: string, title: string, content: string, author: string): { subject: string; bodyText: string; bodyHtml: string } {
   const subject = `LEADS Notice: ${title}`;
+  const baseUrl = getAppBaseUrl();
   const bodyText = `Hello ${memberName},\n\nA new announcement has been published on the LEADS Dashboard by ${author}:\n\n` +
     `Title: ${title}\n\n` +
     `Details: ${content}\n\n` +
@@ -755,7 +759,7 @@ export function generateAnnouncementEmailTemplate(memberName: string, title: str
       <p style="margin-top: 0; color: #334155;">Hello <strong>${memberName}</strong>,</p>
       <p style="color: #0f172a; white-space: pre-wrap; font-size: 14px; line-height: 1.7;">${content}</p>
       <div style="margin-top: 24px; padding-top: 18px; border-top: 1px solid #e2e8f0; text-align: center;">
-        <a href="https://leadsnextgencentre.online/dashboard/announcements" style="background: #0284c7; color: #ffffff; padding: 10px 20px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 12px; display: inline-block;">View in Dashboard &rarr;</a>
+        <a href="${baseUrl}/dashboard/announcements" style="background: #0284c7; color: #ffffff; padding: 10px 20px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 12px; display: inline-block;">View in Dashboard &rarr;</a>
       </div>
     `
   });
@@ -768,6 +772,7 @@ export function generateAnnouncementEmailTemplate(memberName: string, title: str
  */
 export function generateTaskEmailTemplate(memberName: string, taskTitle: string, eventName: string, dueDate: string, creatorName: string): { subject: string; bodyText: string; bodyHtml: string } {
   const subject = `LEADS Task Assignment: ${taskTitle}`;
+  const baseUrl = getAppBaseUrl();
   const bodyText = `Hello ${memberName},\n\nYou have been assigned a new task on LEADS Dashboard.\n\n` +
     `Task: ${taskTitle}\n` +
     `Context: ${eventName || 'LEADS Operations'}\n` +
@@ -797,7 +802,7 @@ export function generateTaskEmailTemplate(memberName: string, taskTitle: string,
       </table>
 
       <div style="margin-top: 20px; text-align: center;">
-        <a href="https://leadsnextgencentre.online/dashboard/tasks" style="background: #0284c7; color: #ffffff; padding: 10px 20px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 12px; display: inline-block;">Open Tasks Desk &rarr;</a>
+        <a href="${baseUrl}/dashboard/tasks" style="background: #0284c7; color: #ffffff; padding: 10px 20px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 12px; display: inline-block;">Open Tasks Desk &rarr;</a>
       </div>
     `
   });
@@ -851,6 +856,7 @@ export function generateTaskDeadlineReminderEmailTemplate(memberName: string, ta
  */
 export function generateEventRosterEmailTemplate(memberName: string, eventTitle: string, committeeName: string, startDate: string): { subject: string; bodyText: string; bodyHtml: string } {
   const subject = `LEADS Event Assignment: ${eventTitle}`;
+  const baseUrl = getAppBaseUrl();
   const bodyText = `Hello ${memberName},\n\nYou have been added to the "${committeeName}" committee for the upcoming event "${eventTitle}".\n\n` +
     `Event Start Date: ${startDate}\n\n` +
     `Check the LEADS Dashboard for details.`;
@@ -870,7 +876,7 @@ export function generateEventRosterEmailTemplate(memberName: string, eventTitle:
       </div>
 
       <div style="margin-top: 20px; text-align: center;">
-        <a href="https://leadsnextgencentre.online/dashboard/events" style="background: #0284c7; color: #ffffff; padding: 10px 20px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 12px; display: inline-block;">View Event Details &rarr;</a>
+        <a href="${baseUrl}/dashboard/events" style="background: #0284c7; color: #ffffff; padding: 10px 20px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 12px; display: inline-block;">View Event Details &rarr;</a>
       </div>
     `
   });
@@ -1033,12 +1039,25 @@ export function generateCaptionsApprovedEmailTemplate(
 
 /**
  * Template Generator: Design Style Approved (sent with the design asset
- * attached once the Design Head marks it Style Approved).
+ * attached once the Design Head marks it Style Approved). Doubles as the
+ * Centre Head's approval-of-record notice, so it names who submitted the
+ * design, when, and who approved it, alongside the attached final asset.
  */
-export function generateDesignApprovedEmailTemplate(designTitle: string, designerName: string): { subject: string; bodyText: string; bodyHtml: string } {
+export function generateDesignApprovedEmailTemplate(
+  designTitle: string,
+  designerName: string,
+  submittedAt?: string,
+  approvedByName?: string
+): { subject: string; bodyText: string; bodyHtml: string } {
   const subject = `Design Approved: ${designTitle}`;
+  const submittedAtFormatted = submittedAt ? new Date(submittedAt).toLocaleString() : undefined;
+
   const bodyText = `Hello,\n\n` +
-    `The design "${designTitle}", submitted by ${designerName}, has been Style Approved.\n\n` +
+    `The design "${designTitle}", submitted by ${designerName}` +
+    (submittedAtFormatted ? ` on ${submittedAtFormatted}` : '') +
+    `, has been Style Approved` +
+    (approvedByName ? ` by ${approvedByName}` : '') +
+    `.\n\n` +
     `The final asset is attached to this email.\n\n` +
     `Regards,\nLEADS Next Gen Centre, MSRUAS`;
 
@@ -1050,8 +1069,145 @@ export function generateDesignApprovedEmailTemplate(designTitle: string, designe
     badgeColor: `#15803d`,
     bodyContentHtml: `
       <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello,</p>
-      <p style="color: #334155; font-size: 14px; line-height: 1.6;">The design <strong>${designTitle}</strong>, submitted by <strong>${designerName}</strong>, has been Style Approved.</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">The design <strong>${designTitle}</strong> has been Style Approved${approvedByName ? ` by <strong>${approvedByName}</strong>` : ''}.</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">Submitted by <strong>${designerName}</strong>${submittedAtFormatted ? ` on <strong>${submittedAtFormatted}</strong>` : ''}.</p>
       <p style="color: #334155; font-size: 14px; line-height: 1.6;">The final asset is attached to this email.</p>
+    `
+  });
+
+  return { subject, bodyText, bodyHtml };
+}
+
+
+/**
+ * Template Generator: Design Decision Notification (sent to the designer who
+ * submitted the file, every time a proofread or style decision is recorded
+ * against their submission — approved or rejected/changes requested). This
+ * is the designer-facing counterpart to generateDesignApprovedEmailTemplate
+ * (which notifies the Centre Head/Advisor/GG Campus Head of Events instead).
+ */
+export function generateDesignDecisionEmailTemplate(
+  designTitle: string,
+  designerName: string,
+  stage: 'Proofreading' | 'Style Approval',
+  approved: boolean,
+  decidedByName: string,
+  comments?: string
+): { subject: string; bodyText: string; bodyHtml: string } {
+  const outcome = approved ? 'Approved' : (stage === 'Proofreading' ? 'Changes Requested' : 'Rejected');
+  const subject = `${stage} ${outcome}: ${designTitle}`;
+  const bodyText = `Hello ${designerName},\n\n` +
+    `Your design submission "${designTitle}" has been reviewed at the ${stage} stage by ${decidedByName}.\n\n` +
+    `Decision: ${outcome}\n` +
+    (comments ? `Comments:\n${comments}\n\n` : '\n') +
+    (approved
+      ? `No further action is needed from you at this stage.\n\n`
+      : `Please review the feedback above and resubmit or update your design accordingly.\n\n`) +
+    `Regards,\nLEADS Next Gen Centre, MSRUAS`;
+
+  const badgeColor = approved ? '#15803d' : '#be123c';
+
+  const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
+    headerTitle: `${stage} ${outcome}`,
+    headerSubtitle: designTitle,
+    badgeText: outcome,
+    badgeColor,
+    bodyContentHtml: `
+      <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello <strong>${designerName}</strong>,</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">Your design submission <strong>${designTitle}</strong> has been reviewed at the <strong>${stage}</strong> stage by <strong>${decidedByName}</strong>.</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">Decision: <strong style="color: ${badgeColor};">${outcome}</strong></p>
+      ${comments ? `
+      <div style="background: #f8fafc; border-left: 3px solid ${badgeColor}; padding: 10px 14px; border-radius: 4px; margin: 10px 0;">
+        <p style="margin: 0 0 4px; color: #0f172a; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;">Comments</p>
+        <p style="margin: 0; color: #334155; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${comments}</p>
+      </div>` : ''}
+      <p style="color: #64748b; font-size: 13px; line-height: 1.6;">${approved ? 'No further action is needed from you at this stage.' : 'Please review the feedback above and resubmit or update your design accordingly.'}</p>
+    `
+  });
+
+  return { subject, bodyText, bodyHtml };
+}
+
+/**
+ * Template Generator: Procurement Request Decision (sent to the requester
+ * once the Centre Head or Advisor approves/rejects their materials request).
+ */
+export function generateProcurementDecisionEmailTemplate(
+  requesterName: string,
+  itemsSummary: string,
+  approved: boolean,
+  decidedByName: string,
+  decisionNotes?: string
+): { subject: string; bodyText: string; bodyHtml: string } {
+  const outcome = approved ? 'Approved' : 'Rejected';
+  const subject = `Procurement Request ${outcome}: ${itemsSummary}`;
+  const bodyText = `Hello ${requesterName},\n\n` +
+    `Your procurement request for ${itemsSummary} has been ${outcome.toLowerCase()} by ${decidedByName}.\n\n` +
+    (decisionNotes ? `Notes:\n${decisionNotes}\n\n` : '\n') +
+    (approved
+      ? `The items are cleared for procurement.\n\n`
+      : `You may revise and resubmit the request if needed.\n\n`) +
+    `Regards,\nLEADS Next Gen Centre, MSRUAS`;
+
+  const badgeColor = approved ? '#15803d' : '#be123c';
+
+  const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
+    headerTitle: `Procurement Request ${outcome}`,
+    headerSubtitle: itemsSummary,
+    badgeText: outcome,
+    badgeColor,
+    bodyContentHtml: `
+      <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello <strong>${requesterName}</strong>,</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">Your procurement request for <strong>${itemsSummary}</strong> has been reviewed by <strong>${decidedByName}</strong>.</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">Decision: <strong style="color: ${badgeColor};">${outcome}</strong></p>
+      ${decisionNotes ? `
+      <div style="background: #f8fafc; border-left: 3px solid ${badgeColor}; padding: 10px 14px; border-radius: 4px; margin: 10px 0;">
+        <p style="margin: 0 0 4px; color: #0f172a; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;">Notes</p>
+        <p style="margin: 0; color: #334155; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${decisionNotes}</p>
+      </div>` : ''}
+      <p style="color: #64748b; font-size: 13px; line-height: 1.6;">${approved ? 'The items are cleared for procurement.' : 'You may revise and resubmit the request if needed.'}</p>
+    `
+  });
+
+  return { subject, bodyText, bodyHtml };
+}
+
+/**
+ * Template Generator: Design Resubmitted Notification (sent to the same
+ * reviewers who rejected a design — faculty proofreaders, or the Centre
+ * Head/Advisor/GG Campus Head of Events panel — once the designer replaces
+ * the file to address the feedback). Counterpart to the request/approved
+ * templates above, but for the "revised and resubmitted" step in between.
+ */
+export function generateDesignResubmittedEmailTemplate(
+  designTitle: string,
+  designerName: string,
+  stage: 'Proofreading' | 'Style Approval',
+  designLink: string
+): { subject: string; bodyText: string; bodyHtml: string } {
+  const subject = `Design Resubmitted: ${designTitle}`;
+  const feedbackLabel = stage === 'Proofreading' ? 'proofread feedback' : 'style feedback';
+  const bodyText = `Hello,\n\n` +
+    `${designerName} has revised and resubmitted the design "${designTitle}" following your earlier ${feedbackLabel}.\n\n` +
+    `Please review the updated asset here:\n${designLink}\n\n` +
+    `Regards,\nLEADS Design Portal`;
+
+  const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
+    headerTitle: 'Design Resubmitted',
+    headerSubtitle: designTitle,
+    badgeText: 'Revised & Resubmitted',
+    badgeColor: '#6366f1',
+    bodyContentHtml: `
+      <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello,</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;"><strong>${designerName}</strong> has revised and resubmitted the design <strong>${designTitle}</strong> following your earlier ${feedbackLabel}.</p>
+      <div style="text-align: center; margin: 24px 0 12px;">
+        <a href="${designLink}" target="_blank" style="display: inline-block; background: #6366f1; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 12px; font-weight: 600; font-size: 14px;">
+          Review Updated Design
+        </a>
+      </div>
     `
   });
 

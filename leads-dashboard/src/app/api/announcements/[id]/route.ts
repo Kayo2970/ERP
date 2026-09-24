@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection, readCollection } from '@/lib/server-db';
 import { dispatchAnnouncementEmails } from '@/lib/announcement-email';
-import { cascadeCloseAutoApprovals } from '@/lib/approval-sync';
+import { cascadeCloseAutoApprovals, deleteLinkedApprovalRequests } from '@/lib/approval-sync';
 import { requireSession, ForbiddenError } from '@/lib/session';
 import { getAccessLevelSettingsServer, canCreateAnnouncement, canApproveAnnouncement, isCentreHead } from '@/lib/permissions-server';
 import { apiError } from '@/lib/api-error';
@@ -85,6 +85,7 @@ export async function DELETE(
       return filtered;
     });
     if (!found) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    await deleteLinkedApprovalRequests('announcement', id);
     return NextResponse.json({ success: true });
   } catch (err: any) {
     return apiError(err, 'announcements-id-api-delete', 500);

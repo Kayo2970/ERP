@@ -36,9 +36,10 @@ import {
   AccessLevelSettings,
   ModuleAccessKey,
 } from '@/lib/local-data';
-import { CAPABILITY_CATALOG, MODULE_CATALOG, isCentreHead } from '@/lib/permissions';
+import { CAPABILITY_CATALOG, MODULE_CATALOG, isCentreHead, isEventsHeadGgCampus, hasCapability, resolveModuleEditOverride, canAccessGroupPolicies } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
+import { SearchableSelect } from '@/components/searchable-select';
 
 const ALL_DIVISIONS: MemberDivision[] = ['Advisory Board', 'Core Committee', 'Training Associate', 'Alumni', 'Faculty'];
 const ALL_TIERS = [1, 2, 3, 4, 5, 6, 7];
@@ -198,10 +199,9 @@ export default function GroupPoliciesPage() {
   };
 
   const isSuperUser = user?.tier === 1;
-  // Centre Head — which already folds in the Advisor role, see isCentreHead's
-  // doc comment — gets the same full access to Group Policy management as
-  // the Super User, not just a read-only view.
-  const canAccessPolicies = isSuperUser || isCentreHead(user);
+  // Super User, Centre Head, and GG Campus Events Head get full access to Group Policy
+  // management, as do members holding the MANAGE_GROUP_POLICIES capability or POLICIES edit override.
+  const canAccessPolicies = canAccessGroupPolicies(user);
 
   const resetForm = () => {
     setName('');
@@ -441,7 +441,7 @@ export default function GroupPoliciesPage() {
         <EmptyState
           icon={ShieldAlert}
           title="Access Required"
-          description="Group Policy Management controls who can access what across the entire dashboard. Only the Super User, Centre Head, and Advisor can view or change these settings."
+          description="Group Policy Management controls who can access what across the entire dashboard. Only the Super User, Centre Head, Events Head (GG Campus), and Faculty Advisor can view or change these settings."
         />
       </div>
     );
@@ -1200,16 +1200,13 @@ export default function GroupPoliciesPage() {
                     )}
 
                     {approverType === 'POLICY_TAG' && (
-                      <select
+                      <SearchableSelect
                         value={approverPolicyTagId}
-                        onChange={(e) => setApproverPolicyTagId(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                      >
-                        <option value="">-- Select a tag --</option>
-                        {otherPolicies.map(p => (
-                          <option key={p.id} value={p.id}>{p.name}</option>
-                        ))}
-                      </select>
+                        onChange={setApproverPolicyTagId}
+                        allLabel="-- Select a tag --"
+                        allValue=""
+                        options={otherPolicies.map(p => ({ value: p.id, label: p.name }))}
+                      />
                     )}
                   </div>
                 )}

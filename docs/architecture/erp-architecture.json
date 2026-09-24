@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "ERP Leads Dashboard Runtime Architecture",
+    "output": "erp-architecture-rendered.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/Kayo2970/ERP.git",
+      "provider": "github",
+      "revision": "bc186caa022e96c28d7ab0deef6478f73606757f"
+    },
+    "views": [
+      { "id": "primary-request", "label": "Primary request path", "focus": ["browser", "api", "permissions", "serverdb", "encryption", "jsonstore"], "note": "Every API call re-validates the caller against the members collection before any read or write." },
+      { "id": "background-email", "label": "Background email", "focus": ["schedulers", "serverdb", "emailservice", "smtp"], "note": "Scheduled jobs read due records and dispatch email independently of any client request." },
+      { "id": "uploads", "label": "File uploads", "focus": ["api", "filestorage"], "note": "Avatars, receipts, and design assets are written to disk, not into the JSON collections." }
+    ]
+  },
+  "components": [
+    { "id": "browser", "type": "external", "label": "Dashboard Client", "sublabel": "Next.js App Router SPA", "tag": "auth in localStorage", "pos": [40, 240], "size": [140, 64], "sources": [{ "path": "leads-dashboard/src/components/dashboard-shell.tsx", "line": 1, "label": "dashboard-shell.tsx" }] },
+    { "id": "api", "type": "backend", "label": "API Routes", "sublabel": "src/app/api/*", "pos": [340, 240], "size": [140, 64], "sources": [{ "path": "leads-dashboard/src/app/api/members/route.ts", "line": 1, "label": "api/members/route.ts" }] },
+    { "id": "permissions", "type": "security", "label": "Permissions", "sublabel": "tier / division / role", "tag": "re-validated per call", "pos": [340, 90], "size": [140, 64], "sources": [{ "path": "leads-dashboard/src/lib/permissions.ts", "line": 33, "label": "permissions.ts" }] },
+    { "id": "serverdb", "type": "backend", "label": "server-db", "sublabel": "read / mutate collection", "pos": [640, 240], "size": [140, 64], "sources": [{ "path": "leads-dashboard/src/lib/server-db.ts", "line": 684, "end_line": 684, "label": "mutateCollection" }] },
+    { "id": "encryption", "type": "security", "label": "Encryption", "sublabel": "AES-GCM", "pos": [640, 90], "size": [140, 64], "sources": [{ "path": "leads-dashboard/src/lib/encryption.ts", "line": 57, "label": "encryptData" }] },
+    { "id": "jsonstore", "type": "database", "label": "JSON Collections", "sublabel": "data/*.json", "tag": "gitignored", "pos": [940, 240], "size": [140, 64] },
+    { "id": "filestorage", "type": "backend", "label": "File Storage", "sublabel": "data/uploads/", "pos": [40, 400], "size": [140, 64], "sources": [{ "path": "leads-dashboard/src/lib/file-storage.ts", "line": 65, "label": "saveBase64File" }] },
+    { "id": "emailservice", "type": "backend", "label": "Email Service", "sublabel": "nodemailer", "pos": [640, 400], "size": [140, 64], "sources": [{ "path": "leads-dashboard/src/lib/email-service.ts", "line": 414, "label": "dispatchEmail" }] },
+    { "id": "smtp", "type": "external", "label": "SMTP Provider", "sublabel": "Gmail / Outlook / custom", "pos": [940, 400], "size": [140, 64] },
+    { "id": "schedulers", "type": "backend", "label": "Schedulers", "sublabel": "birthday + task reminders", "pos": [340, 400], "size": [140, 64], "sources": [{ "path": "leads-dashboard/src/instrumentation.ts", "line": 1, "label": "instrumentation.ts" }] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Node.js server process (Next.js, PM2)", "wraps": ["api", "permissions", "serverdb", "encryption", "filestorage", "emailservice", "schedulers"] },
+    { "kind": "security-group", "label": "no session middleware — every call re-checks auth", "wraps": ["api", "permissions"] }
+  ],
+  "connections": [
+    { "id": "browser-to-api", "from": "browser", "to": "api", "label": "fetch + /api/data poll", "variant": "emphasis", "labelDy": -26 },
+    { "id": "api-to-permissions", "from": "api", "to": "permissions", "label": "check tier/division/role", "variant": "security", "fromSide": "top", "toSide": "bottom" },
+    { "id": "api-to-serverdb", "from": "api", "to": "serverdb", "label": "read / mutate" },
+    { "id": "serverdb-to-encryption", "from": "serverdb", "to": "encryption", "label": "encrypt / decrypt", "variant": "security", "fromSide": "top", "toSide": "bottom" },
+    { "id": "encryption-to-jsonstore", "from": "encryption", "to": "jsonstore", "fromSide": "right", "toSide": "top" },
+    { "id": "serverdb-to-jsonstore", "from": "serverdb", "to": "jsonstore", "label": "flat-file read/write", "labelDy": -26 },
+    { "id": "api-to-filestorage", "from": "api", "to": "filestorage", "label": "upload / read file", "variant": "dashed", "fromSide": "left", "toSide": "top" },
+    { "id": "api-to-emailservice", "from": "api", "to": "emailservice", "label": "dispatch email", "variant": "dashed", "fromSide": "bottom", "toSide": "top" },
+    { "id": "emailservice-to-smtp", "from": "emailservice", "to": "smtp", "label": "SMTP send" },
+    { "id": "schedulers-to-emailservice", "from": "schedulers", "to": "emailservice", "label": "queued send", "fromSide": "right", "toSide": "left" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Data layer", "items": ["Flat JSON files under data/, one per collection", "AES-GCM encryption at rest via encryption.ts", "mutateCollection() serializes writes with a per-collection mutex"] },
+    { "dot": "emerald", "title": "Auth model", "items": ["No session middleware — client holds user in localStorage", "Every API route re-validates the caller against the members collection", "tier (1-7), division, role, and Group Policies combine to grant access"] },
+    { "dot": "rose", "title": "Background work", "items": ["birthday-scheduler.ts and task-email-queue.ts run via instrumentation.ts", "Independent of any client request", "All sent/failed email is logged to the emails collection"] }
+  ]
+}

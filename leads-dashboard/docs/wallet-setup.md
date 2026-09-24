@@ -51,7 +51,7 @@ WALLETWALLET_API_KEY=ww_live_...
   correct before relying on them; both were carried over verbatim from the
   original pass design.**
 - `logoURL`/`iconURL`/`wideLogoURL`/`thumbnailURL` are built from a
-  hardcoded `SITE_ORIGIN` constant (`https://leadsnextgencentre.online`) at
+  hardcoded `SITE_ORIGIN` constant (`https://portal-leads.msruas.ac.in`) at
   the top of `walletwallet-client.ts` + `/images/leads-short-logo.png` —
   see **Logo assets** and **If the production domain ever changes** below.
   These four fields are WalletWallet Pro-plan-only; harmless to send on a
@@ -142,7 +142,11 @@ safely. Once you have them:
 `SITE_ORIGIN` in `walletwallet-client.ts` is a hardcoded constant rather
 than derived from the request, so the wallet pass's logo URLs are always
 stable. If the site's domain ever changes from
-`https://leadsnextgencentre.online`:
+`https://portal-leads.msruas.ac.in` (it previously pointed at
+`https://leadsnextgencentre.online`, a domain that had quietly moved to a
+different, stale deployment — every wallet pass generation failed with
+"iconURL could not be fetched" as a result, since that old server never had
+any current member's uploaded photo):
 
 1. Update `SITE_ORIGIN` in `src/lib/wallet/walletwallet-client.ts` to the
    new domain.

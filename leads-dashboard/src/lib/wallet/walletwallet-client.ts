@@ -6,7 +6,16 @@ const API_BASE = 'https://api.walletwallet.dev';
 // Host header. If the domain ever changes, update this constant and see
 // "If the production domain ever changes" in docs/wallet-setup.md for the
 // rest of what needs updating (DNS, env vars, etc.).
-const SITE_ORIGIN = 'https://leadsnextgencentre.online';
+//
+// Was 'https://leadsnextgencentre.online' — that domain now points at a
+// stale, separate deployment (different IPs entirely, confirmed via dig:
+// Cloudflare vs. this app's real AWS ELB), left over from before the app
+// moved to portal-leads.msruas.ac.in. Every wallet pass generation was
+// asking that old, unrelated server for the member's current photo — which
+// it never had — so WalletWallet's fetch of iconURL/thumbnailURL failed
+// with "iconURL could not be fetched" on every single pass. Pointing this
+// at the actual live domain fixes it.
+const SITE_ORIGIN = 'https://portal-leads.msruas.ac.in';
 
 // Fixed org-wide details shown on the back of every pass — same for every
 // member, so they live here rather than on the Member record. Sourced
@@ -29,6 +38,10 @@ export interface WalletCardMember {
   phone?: string;
   email?: string;
   linkedin?: string;
+  // Icon isn't included — Apple/Google Wallet back fields are plain
+  // label/value text with no icon slot, so only label+url matter here.
+  customLinks?: { label: string; url: string }[];
+  photoUrl?: string;
 }
 
 export interface WalletWalletPass {
@@ -50,14 +63,13 @@ export interface WalletWalletPass {
  * caption above it), phone/email up front as secondary fields, and the back
  * carries the org's own contact details plus the member's LinkedIn.
  *
- * logoURL/iconURL/wideLogoURL/thumbnailURL are WalletWallet Pro-plan-only
- * fields — harmless to send on a free-tier key, just ignored.
+ * Uses the member's VPS-hosted photo for the pass thumbnail & icon when available.
  */
 export async function createWalletPass(apiKey: string, member: WalletCardMember, cardUrl: string): Promise<WalletWalletPass> {
-  // TODO: swap in the real wide-banner/thumbnail art once those files are
-  // hosted under public/images/ — see "Logo assets" in docs/wallet-setup.md.
-  // All four currently point at the same square logo as a placeholder.
   const logoUrl = `${SITE_ORIGIN}/images/leads-short-logo.png`;
+  const memberPhoto = member.photoUrl
+    ? (member.photoUrl.startsWith('http') ? member.photoUrl : `${SITE_ORIGIN}${member.photoUrl}`)
+    : logoUrl;
 
   const secondaryFields = [] as { label: string; value: string }[];
   if (member.phone) secondaryFields.push({ label: 'Phone Number', value: member.phone });
@@ -69,6 +81,9 @@ export async function createWalletPass(apiKey: string, member: WalletCardMember,
     { label: 'Address', value: ORG_ADDRESS },
   ] as { label: string; value: string; changeMessage?: string }[];
   if (member.linkedin) backFields.push({ label: 'LinkedIn', value: member.linkedin });
+  for (const link of member.customLinks || []) {
+    backFields.push({ label: link.label, value: link.url });
+  }
   backFields.push({ label: 'Full Card', value: cardUrl });
   // Placeholder field WalletWallet uses to push a notification to already-
   // installed passes when this pass is updated — %@ is filled in by them.
@@ -85,9 +100,9 @@ export async function createWalletPass(apiKey: string, member: WalletCardMember,
       colorPreset: COLOR_PRESET,
       color: CUSTOM_COLOR,
       logoURL: logoUrl,
-      iconURL: logoUrl,
+      iconURL: memberPhoto,
       wideLogoURL: logoUrl,
-      thumbnailURL: logoUrl,
+      thumbnailURL: memberPhoto,
       barcodeValue: cardUrl,
       barcodeFormat: 'QR',
       primaryFields: [{ label: member.designation || ORG_NAME, value: member.name }],
@@ -103,3 +118,203 @@ export async function createWalletPass(apiKey: string, member: WalletCardMember,
 
   return res.json();
 }
+
+export interface WalletEventPassData {
+  serialNumber: string;
+  eventName: string;
+  eventDate?: string;
+  eventVenue?: string;
+  attendeeName: string;
+  guestCategory?: string;
+  roomOrVenue?: string;
+  passType: string;
+  validityDate?: string;
+  passColor?: string;
+}
+
+/**
+ * Creates an event access pass (Apple Wallet .pkpass + Google Wallet save link)
+ * via WalletWallet API matching the 98% pixel-accurate native layout.
+ */
+export async function createEventWalletPass(
+  apiKey: string,
+  eventPass: WalletEventPassData,
+  passUrl: string
+): Promise<WalletWalletPass> {
+  const logoUrl = `${SITE_ORIGIN}/card/leads-logo.png`;
+
+  const headerFields = [
+    { label: 'ACCESS', value: (eventPass.passType || 'VIP PASS').toUpperCase() },
+  ];
+
+  const primaryFields = [
+    {
+      label: (eventPass.guestCategory || 'GUEST ATTENDEE').toUpperCase(),
+      value: eventPass.attendeeName,
+    },
+  ];
+
+  const secondaryFields = [
+    {
+      label: 'ROOM / VENUE',
+      value: eventPass.roomOrVenue || eventPass.eventVenue || 'Main Auditorium',
+    },
+    {
+      label: 'VALIDITY',
+      value: eventPass.validityDate || eventPass.eventDate || '2026',
+    },
+  ];
+
+  const backFields = [
+    { label: 'Event Name', value: eventPass.eventName },
+    { label: 'Pass Serial ID', value: eventPass.serialNumber },
+    { label: 'Issuing Authority', value: 'LEADS Next Gen Centre • RUAS' },
+    { label: 'Access Policy', value: 'Strictly non-transferable. Present at event check-in turnstiles.' },
+    { label: 'Digital Pass Link', value: passUrl },
+    { label: 'Notifications', value: ' ', changeMessage: '%@' },
+  ];
+
+  const res = await fetch(`${API_BASE}/api/passes`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      organizationName: ORG_NAME,
+      logoText: 'LEADS Next Gen Centre',
+      // Solid hex color only — WalletWallet's colorPreset field only accepts
+      // its fixed preset names (dark/blue/green/red/purple/orange), not "custom".
+      // Sending an unrecognized preset value made the API reject every event
+      // pass creation call, so we send just the hex `color` field instead.
+      color: eventPass.passColor || '#0b1526',
+      logoURL: logoUrl,
+      iconURL: logoUrl,
+      barcodeValue: passUrl,
+      barcodeFormat: 'QR',
+      barcodeAltText: eventPass.serialNumber,
+      headerFields,
+      primaryFields,
+      secondaryFields,
+      backFields,
+    }),
+  });
+
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+    throw new Error(`WalletWallet event pass creation failed: ${detail.error || res.statusText}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Updates an issued event access pass (Apple Wallet + Google Wallet) via WalletWallet API
+ * (PUT /api/passes/:serialNumber). Updates fields and pushes live update to attendee's wallet.
+ */
+export async function updateEventWalletPass(
+  apiKey: string,
+  eventPass: WalletEventPassData,
+  passUrl: string,
+  notificationMsg?: string
+): Promise<{ success: boolean; detail?: any }> {
+  const headerFields = [
+    { label: 'ACCESS', value: (eventPass.passType || 'VIP PASS').toUpperCase(), changeMessage: '%@' },
+  ];
+
+  const primaryFields = [
+    {
+      label: (eventPass.guestCategory || 'GUEST ATTENDEE').toUpperCase(),
+      value: eventPass.attendeeName,
+      changeMessage: '%@',
+    },
+  ];
+
+  const secondaryFields = [
+    {
+      label: 'ROOM / VENUE',
+      value: eventPass.roomOrVenue || eventPass.eventVenue || 'Main Auditorium',
+      changeMessage: '%@',
+    },
+    {
+      label: 'VALIDITY',
+      value: eventPass.validityDate || eventPass.eventDate || '2026',
+      changeMessage: '%@',
+    },
+  ];
+
+  const backFields = [
+    { label: 'Event Name', value: eventPass.eventName },
+    { label: 'Pass Serial ID', value: eventPass.serialNumber },
+    { label: 'Issuing Authority', value: 'LEADS Next Gen Centre • RUAS' },
+    { label: 'Access Policy', value: 'Strictly non-transferable. Present at event check-in turnstiles.' },
+    { label: 'Digital Pass Link', value: passUrl },
+    { label: 'Notifications', value: notificationMsg || 'Pass details updated.', changeMessage: '%@' },
+  ];
+
+  const res = await fetch(`${API_BASE}/api/passes/${encodeURIComponent(eventPass.serialNumber)}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      color: eventPass.passColor || '#0b1526',
+      headerFields,
+      primaryFields,
+      secondaryFields,
+      backFields,
+    }),
+  });
+
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+    throw new Error(`Wallet pass update failed: ${detail.error || res.statusText}`);
+  }
+
+  const data = await res.json().catch(() => ({}));
+  return { success: true, detail: data };
+}
+
+/**
+ * Pushes a live lock-screen update / notification to an issued Apple & Google Wallet pass
+ * via WalletWallet PUT /api/passes/:serialNumber.
+ */
+export async function updateEventPassPushNotification(
+  apiKey: string,
+  serialNumber: string,
+  message: string,
+  additionalFields?: { [key: string]: string }
+): Promise<{ success: boolean; detail?: any }> {
+  const updatePayload: any = {
+    backFields: [
+      { label: 'Notifications', value: message, changeMessage: '%@' },
+    ],
+  };
+
+  if (additionalFields?.roomOrVenue) {
+    updatePayload.secondaryFields = [
+      { label: 'ROOM / VENUE', value: additionalFields.roomOrVenue, changeMessage: '%@' },
+    ];
+  }
+
+  const res = await fetch(`${API_BASE}/api/passes/${encodeURIComponent(serialNumber)}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(updatePayload),
+  });
+
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+    throw new Error(`Push notification update failed: ${detail.error || res.statusText}`);
+  }
+
+  const data = await res.json().catch(() => ({}));
+  return { success: true, detail: data };
+}
+
+
+

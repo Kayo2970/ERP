@@ -10,6 +10,7 @@ import {
   Crown,
   ChevronRight,
   TrendingUp,
+  TrendingDown,
   Unlock,
   Check,
 } from 'lucide-react';
@@ -23,6 +24,8 @@ export interface PromotionData {
   newTier: number;
   newRole: string;
   newDivision?: string;
+  /** Defaults to 'promotion' for any existing caller that doesn't pass this — never breaks the celebratory copy for a genuine promotion. */
+  changeType?: 'promotion' | 'demotion';
 }
 
 export interface PromotionModalProps {
@@ -33,6 +36,8 @@ export interface PromotionModalProps {
 
 export function PromotionModal({ data, isOpen, onClose }: PromotionModalProps) {
   if (!isOpen || !data) return null;
+
+  const isDemotion = data.changeType === 'demotion';
 
   // Derive upgraded capabilities granted by the new role/tier
   const getUpgradedCapabilities = (tier: number, role: string): string[] => {
@@ -75,35 +80,37 @@ export function PromotionModal({ data, isOpen, onClose }: PromotionModalProps) {
     return list;
   };
 
-  const capabilities = getUpgradedCapabilities(data.newTier, data.newRole);
+  const capabilities = isDemotion ? [] : getUpgradedCapabilities(data.newTier, data.newRole);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 bg-black/75 backdrop-blur-md animate-in fade-in duration-200 select-none">
-      
+
       {/* Outer Celebration Card */}
       <div className="relative w-full max-w-lg glass-panel bg-white/95 dark:bg-[#0B1B2E]/95 text-slate-900 dark:text-white rounded-3xl border-2 border-accent/40 shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
-        
-        {/* Glowing Ambient Top Accent */}
-        <div className="w-full h-2 bg-gradient-to-r from-amber-400 via-accent to-emerald-400" />
 
-        {/* Celebration Header */}
+        {/* Glowing Ambient Top Accent */}
+        <div className={`w-full h-2 bg-gradient-to-r ${isDemotion ? 'from-slate-400 via-accent to-rose-400' : 'from-amber-400 via-accent to-emerald-400'}`} />
+
+        {/* Header */}
         <div className="p-6 md:p-8 text-center space-y-4 relative bg-gradient-to-b from-accent/15 via-transparent to-transparent">
-          
-          {/* Animated Trophy / Crown Badge */}
-          <div className="mx-auto h-16 w-16 rounded-3xl bg-gradient-to-tr from-amber-500 to-accent flex items-center justify-center text-white shadow-xl shadow-accent/30 ring-4 ring-white/20">
-            <Crown className="h-8 w-8 animate-bounce" />
+
+          {/* Animated Badge */}
+          <div className={`mx-auto h-16 w-16 rounded-3xl bg-gradient-to-tr ${isDemotion ? 'from-slate-500 to-rose-500' : 'from-amber-500 to-accent'} flex items-center justify-center text-white shadow-xl shadow-accent/30 ring-4 ring-white/20`}>
+            {isDemotion ? <TrendingDown className="h-8 w-8" /> : <Crown className="h-8 w-8 animate-bounce" />}
           </div>
 
           <div className="space-y-1.5">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-900 dark:text-amber-300 text-xs font-black uppercase tracking-wider">
+            <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider ${isDemotion ? 'bg-rose-500/15 border border-rose-500/30 text-rose-900 dark:text-rose-300' : 'bg-amber-500/15 border border-amber-500/30 text-amber-900 dark:text-amber-300'}`}>
               <Sparkles className="h-3.5 w-3.5" />
-              Role Promotion & Elevation
+              {isDemotion ? 'Role Change — Designation Update' : 'Role Promotion & Elevation'}
             </div>
             <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-              Congratulations on Your Promotion!
+              {isDemotion ? 'Congratulations on Your New Designation' : 'Congratulations on Your Promotion!'}
             </h2>
             <p className="text-xs text-slate-600 dark:text-slate-300 max-w-sm mx-auto font-medium leading-relaxed">
-              Your designation and operational privileges have been upgraded at LEADS Next Gen Centre.
+              {isDemotion
+                ? 'You have been demoted — your designation and operational privileges have changed at LEADS Next Gen Centre.'
+                : 'Your designation and operational privileges have been upgraded at LEADS Next Gen Centre.'}
             </p>
           </div>
 
@@ -130,24 +137,36 @@ export function PromotionModal({ data, isOpen, onClose }: PromotionModalProps) {
 
         </div>
 
-        {/* Upgraded Capabilities Section */}
-        <div className="px-6 md:px-8 py-4 space-y-3 bg-slate-50/50 dark:bg-black/20 border-t border-b border-slate-200 dark:border-white/10">
-          <h4 className="text-xs font-black uppercase tracking-wider text-accent flex items-center gap-1.5">
-            <Unlock className="h-4 w-4 text-accent" />
-            New Privileges & Upgraded Access:
-          </h4>
-          
-          <ul className="space-y-2">
-            {capabilities.map((item, idx) => (
-              <li key={idx} className="flex items-start gap-2.5 text-xs text-slate-800 dark:text-slate-200 font-medium">
-                <span className="h-4 w-4 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 mt-0.5 border border-emerald-500/30">
-                  <Check className="h-2.5 w-2.5 stroke-[3]" />
-                </span>
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        {/* Upgraded Capabilities Section (promotion only) or Access Change Notice (demotion) */}
+        {isDemotion ? (
+          <div className="px-6 md:px-8 py-4 space-y-2 bg-slate-50/50 dark:bg-black/20 border-t border-b border-slate-200 dark:border-white/10">
+            <h4 className="text-xs font-black uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+              <TrendingDown className="h-4 w-4" />
+              Access Change Notice:
+            </h4>
+            <p className="text-xs text-slate-700 dark:text-slate-300 font-medium leading-relaxed">
+              Some privileges tied to your previous designation may no longer be available. Contact your Centre Head if you believe this was made in error.
+            </p>
+          </div>
+        ) : (
+          <div className="px-6 md:px-8 py-4 space-y-3 bg-slate-50/50 dark:bg-black/20 border-t border-b border-slate-200 dark:border-white/10">
+            <h4 className="text-xs font-black uppercase tracking-wider text-accent flex items-center gap-1.5">
+              <Unlock className="h-4 w-4 text-accent" />
+              New Privileges & Upgraded Access:
+            </h4>
+
+            <ul className="space-y-2">
+              {capabilities.map((item, idx) => (
+                <li key={idx} className="flex items-start gap-2.5 text-xs text-slate-800 dark:text-slate-200 font-medium">
+                  <span className="h-4 w-4 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 mt-0.5 border border-emerald-500/30">
+                    <Check className="h-2.5 w-2.5 stroke-[3]" />
+                  </span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Modal Footer Actions */}
         <div className="p-6 flex items-center justify-end gap-3 bg-white/50 dark:bg-slate-900/50">

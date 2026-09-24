@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection } from '@/lib/server-db';
-import { fanOutAutoApproval, cascadeCloseAutoApprovals } from '@/lib/approval-sync';
+import { fanOutAutoApproval, cascadeCloseAutoApprovals, deleteLinkedApprovalRequests } from '@/lib/approval-sync';
 import { requireSession, requirePermission, ForbiddenError } from '@/lib/session';
 import { canDeleteEvent, canApprovePendingEvent, getAccessLevelSettingsServer } from '@/lib/permissions-server';
 import { apiError } from '@/lib/api-error';
@@ -99,6 +99,7 @@ export async function DELETE(
       return filtered;
     });
     if (!found) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    await deleteLinkedApprovalRequests('event', id);
     return NextResponse.json({ success: true });
   } catch (err: any) {
     return apiError(err, 'events-id-api-delete', 500);

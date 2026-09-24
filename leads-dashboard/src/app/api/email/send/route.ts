@@ -1,9 +1,28 @@
 import { NextResponse } from 'next/server';
-import { dispatchEmail } from '@/lib/email-service';
+import { dispatchEmail, SendEmailPayload } from '@/lib/email-service';
 import { readCollection } from '@/lib/server-db';
 import { Member } from '@/lib/local-data';
 import { requireSession } from '@/lib/session';
 import { apiError } from '@/lib/api-error';
+
+/**
+ * Client-supplied attachments arrive as base64 (JSON has no Buffer type) —
+ * decode here into the Buffer shape dispatchEmail/nodemailer expect. Used
+ * e.g. to attach a generated .pkpass wallet file to an event pass email.
+ */
+function decodeAttachments(
+  raw: unknown
+): SendEmailPayload['attachments'] {
+  if (!Array.isArray(raw)) return undefined;
+  const decoded = raw
+    .filter((a) => a && typeof a === 'object' && typeof a.filename === 'string' && typeof a.contentBase64 === 'string')
+    .map((a) => ({
+      filename: a.filename,
+      content: Buffer.from(a.contentBase64, 'base64'),
+      contentType: typeof a.contentType === 'string' ? a.contentType : undefined,
+    }));
+  return decoded.length > 0 ? decoded : undefined;
+}
 
 // This route is used by real app features beyond the admin Email Management
 // panel (e.g. member-termination notices from Directory, guest-invite
@@ -16,25 +35,44 @@ export async function POST(request: Request) {
   try {
     await requireSession(request);
     const body = await request.json();
-    const { scope, recipientEmail, subject, bodyText, bodyHtml, category, badgeText, badgeColor } = body;
+    const {
+      scope,
+      recipientEmail,
+      to,
+      subject,
+      bodyText,
+      bodyHtml,
+      body: rawBody,
+      content,
+      category,
+      badgeText,
+      badgeColor,
+      attachments: rawAttachments,
+    } = body;
 
-    if (!subject || !bodyText) {
+    const attachments = decodeAttachments(rawAttachments);
+    const emailTo = recipientEmail || to;
+    const finalSubject = subject;
+    const textContent = bodyText || rawBody || content;
+
+    if (!finalSubject || !textContent) {
       return NextResponse.json({ error: 'Subject and email content are required' }, { status: 400 });
     }
 
-    // 1. Single recipient dispatch
-    if (scope === 'SINGLE') {
-      if (!recipientEmail) {
+    // 1. Single recipient dispatch (explicit SINGLE, or to/recipientEmail passed directly)
+    if (scope === 'SINGLE' || (!scope && emailTo) || (scope !== 'ALL' && scope !== 'All Members' && emailTo)) {
+      if (!emailTo) {
         return NextResponse.json({ error: 'Recipient email address is required' }, { status: 400 });
       }
       const log = await dispatchEmail({
-        to: recipientEmail,
-        subject,
-        bodyText,
+        to: emailTo,
+        subject: finalSubject,
+        bodyText: textContent,
         bodyHtml,
-        badgeText,
+        badgeText: badgeText || (category === 'EVENT_INVITATION' || category === 'EVENT_PASS' ? 'Official Event Pass' : undefined),
         badgeColor,
-        category: category || 'DIRECT_MESSAGE',
+        category: category || (category === 'EVENT_INVITATION' || category === 'EVENT_PASS' ? category : 'DIRECT_MESSAGE'),
+        attachments,
       });
       return NextResponse.json({ count: 1, dispatched: [log] });
     }
@@ -62,6 +100,7 @@ export async function POST(request: Request) {
         badgeText,
         badgeColor,
         category: category || 'ANNOUNCEMENT',
+        attachments,
       });
       dispatchedLogs.push(log);
     }

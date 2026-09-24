@@ -39,6 +39,7 @@ import {
 import { isCentreHead, canCreateAnnouncement, canApproveAnnouncement } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
+import { SearchableSelect } from '@/components/searchable-select';
 
 export default function AnnouncementsPage() {
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
@@ -601,10 +602,9 @@ export default function AnnouncementsPage() {
                       <Calendar className="h-3.5 w-3.5" />
                       1. Select Event *
                     </label>
-                    <select
+                    <SearchableSelect
                       value={selectedEventId}
-                      onChange={(e) => {
-                        const evId = e.target.value;
+                      onChange={(evId) => {
                         setSelectedEventId(evId);
                         const match = events.find(ev => ev.id === evId);
                         if (match && match.committees && match.committees.length > 0) {
@@ -613,12 +613,8 @@ export default function AnnouncementsPage() {
                           setSelectedCommitteeId('');
                         }
                       }}
-                      className="w-full px-3.5 py-2 bg-theme-background/50 border border-accent/30 rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-medium"
-                    >
-                      {events.filter(ev => isApprovedEvent(ev, tasks)).map(ev => (
-                        <option key={ev.id} value={ev.id}>{ev.title}</option>
-                      ))}
-                    </select>
+                      options={events.filter(ev => isApprovedEvent(ev, tasks)).map(ev => ({ value: ev.id, label: ev.title }))}
+                    />
                   </div>
 
                   <div className="space-y-1">
@@ -626,19 +622,13 @@ export default function AnnouncementsPage() {
                       <Users className="h-3.5 w-3.5" />
                       2. Select Sub-Committee *
                     </label>
-                    <select
+                    <SearchableSelect
                       value={selectedCommitteeId}
-                      onChange={(e) => setSelectedCommitteeId(e.target.value)}
-                      className="w-full px-3.5 py-2 bg-theme-background/50 border border-accent/30 rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-medium"
-                    >
-                      {selectedEvent && selectedEvent.committees && selectedEvent.committees.length > 0 ? (
-                        selectedEvent.committees.map(c => (
-                          <option key={c.id} value={c.id}>{c.name} ({c.memberIds?.length || 0} members)</option>
-                        ))
-                      ) : (
-                        <option value="">No committees setup for this event</option>
-                      )}
-                    </select>
+                      onChange={setSelectedCommitteeId}
+                      allLabel={selectedEvent?.committees?.length ? undefined : 'No committees setup for this event'}
+                      allValue=""
+                      options={(selectedEvent?.committees || []).map(c => ({ value: c.id, label: `${c.name} (${c.memberIds?.length || 0} members)` }))}
+                    />
                   </div>
                 </div>
               )}

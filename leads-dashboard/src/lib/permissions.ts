@@ -12,7 +12,7 @@
  * There is no session-scoped "current user" object here; every function takes the
  * user explicitly so it works the same in pages, modals, and background sync code.
  */
-import { Member, Guest, TaskItem, RatingItem, ReimbursementItem, BudgetItem, GroupPolicy, EventItem, PublicFormItem, ModuleAccessKey, getMembers, getGroupPolicies, getAccessLevelSettings, canViewTask, isTaskAssignee } from './local-data';
+import { Member, Guest, TaskItem, RatingItem, ReimbursementItem, BudgetItem, ProcurementRequestItem, GroupPolicy, EventItem, PublicFormItem, ModuleAccessKey, getMembers, getGroupPolicies, getAccessLevelSettings, canViewTask, isTaskAssignee } from './local-data';
 
 export type SessionUser = {
   id?: string;
@@ -29,11 +29,14 @@ function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** Check if user holds an executive role: President, Vice President, or Chief Coordinator. */
+/** Check if user holds an executive role: President, Vice President, Chief
+ *  Coordinator, or Faculty Ambassador (Core Committee/Advisory Board — see
+ *  directory/page.tsx's CorePosition options — deliberately given identical
+ *  standing to Chief Coordinator by matching here). */
 export function isExecutiveRole(user: SessionUser): boolean {
   if (!user) return false;
   const role = ((user as any)?.role || '').toLowerCase();
-  return role.includes('president') || role.includes('vice president') || role.includes('chief coordinator');
+  return role.includes('president') || role.includes('vice president') || role.includes('chief coordinator') || role.includes('faculty ambassador');
 }
 
 /** President specifically (not Vice President) — used to resolve who gets
@@ -57,40 +60,64 @@ export function isGeneralSecretary(user: SessionUser): boolean {
   return user.tier === 5 && role.includes('general secretary') && !role.includes('senior');
 }
 
-/** Who may submit an event report — the General Secretary, or a Super User covering for them. */
+/** Check if user is a Chief Coordinator. */
+export function isChiefCoordinator(user: SessionUser): boolean {
+  if (!user) return false;
+  const role = ((user as any)?.role || '').toLowerCase();
+  return role.includes('chief coordinator');
+}
+
+/** Who may submit an event report — the General Secretary, Chief Coordinator, Super User, or someone granted EVENT_REPORTS submit/edit permission. */
 export function canSubmitEventReport(user: SessionUser): boolean {
   if (!user) return false;
-  return isGeneralSecretary(user) || user.tier === 1;
+  if (user.tier === 1) return true;
+  if (resolveModuleEditOverride(user, 'EVENT_REPORTS') === 'NONE') return false;
+  if (resolveModuleEditOverride(user, 'EVENT_REPORTS') === 'ALL' || resolveModuleEditOverride(user, 'EVENT_REPORTS') === 'OWN') return true;
+  if (hasCapability(user, 'EVENT_REPORTS_SUBMIT')) return true;
+  return isGeneralSecretary(user) || isChiefCoordinator(user);
 }
 
 /** Who reviews/approves a pending event report — Centre Head (which already
- *  folds in Advisor, see isCentreHead) or the GG Campus Events Head; any one
- *  of the three is sufficient, not all of them. */
+ *  folds in Advisor, see isCentreHead), GG Campus Events Head, or someone holding
+ *  EVENT_REPORTS_REVIEW capability. */
 export function canReviewEventReports(user: SessionUser): boolean {
+  if (!user) return false;
+  if (user.tier === 1) return true;
+  if (hasCapability(user, 'EVENT_REPORTS_REVIEW')) return true;
+  if (resolveModuleEditOverride(user, 'EVENT_REPORTS') === 'ALL') return true;
   return isCentreHead(user) || isEventsHeadGgCampus(user);
 }
 
-/** Who may act on a design's pending proofread request — Centre Head (which
- *  already folds in Advisor, see isCentreHead) or the GG Campus Events Head;
- *  any one of the three acting is sufficient, not all of them. Mirrors
- *  canReviewEventReports and the design's own Style Approval gate, which
- *  already treats this trio as interchangeable reviewers. */
-export function canReviewDesignProofread(user: SessionUser): boolean {
-  return isCentreHead(user) || isEventsHeadGgCampus(user);
+/** Who may act on a design's pending proofread request — an explicitly assigned
+ *  faculty proofreader, Centre Head, Advisor, GG Campus Events Head, Faculty, or Super User. */
+export function canReviewDesignProofread(user: SessionUser, design?: { assignedProofreaderIds?: string[]; assignedProofreaderEmail?: string; assignedProofreaderId?: string }): boolean {
+  if (!user) return false;
+  if (isChiefAdvisor(user)) return false; // view-only — never an editing/approval action
+  if (design?.assignedProofreaderIds && user.id && design.assignedProofreaderIds.includes(user.id)) return true;
+  if (design?.assignedProofreaderEmail && design.assignedProofreaderEmail === user.email) return true;
+  if (design?.assignedProofreaderId && user.id && design.assignedProofreaderId === user.id) return true;
+  return isCentreHead(user) || isEventsHeadGgCampus(user) || isFaculty(user) || user.tier === 1;
 }
 
 /**
- * Full standing access to the Event Report module (submit for anyone, review
- * every submission, see every past report) — Centre Head/Advisor, GG Campus
- * Events Head, General Secretary, Chief Coordinator/President/VP, or Super
- * User. A member outside this set who was individually delegated the
- * report-writing task (see event_report_request in local-data.ts) gets
- * narrower, task-scoped access instead — resolved on the Event Reports page
- * itself, not here, since it depends on live task assignment, not role.
+ * Full standing access to the Event Report module — Centre Head/Advisor, GG Campus
+ * Events Head, General Secretary, Chief Coordinator/President/VP, Super
+ * User, or someone holding Group Policy capability or moduleAccess grants.
  */
 export function canViewEventReports(user: SessionUser): boolean {
   if (!user) return false;
-  return canReviewEventReports(user) || isGeneralSecretary(user) || isExecutiveRole(user) || user.tier === 1;
+  return (
+    canReviewEventReports(user) ||
+    canSubmitEventReport(user) ||
+    isGeneralSecretary(user) ||
+    isChiefCoordinator(user) ||
+    isExecutiveRole(user) ||
+    user.tier === 1 ||
+    hasCapability(user, 'EVENT_REPORTS_SUBMIT') ||
+    hasCapability(user, 'EVENT_REPORTS_VIEW_ALL') ||
+    hasCapability(user, 'EVENT_REPORTS_REVIEW') ||
+    hasModuleViewAllGrant(user, 'EVENT_REPORTS')
+  );
 }
 
 /** Check if user holds Alumni role/tier. */
@@ -164,10 +191,43 @@ export function isCoreCommitteeTier(user: SessionUser): boolean {
   return !!user && user.tier === getAccessLevelSettings().coreCommitteeTier;
 }
 
+/** Check if user is Super User (tier 1 or role contains Super User). */
+export function isSuperUser(user: SessionUser): boolean {
+  if (!user) return false;
+  const role = ((user as any)?.role || '').toLowerCase();
+  return user.tier === 1 || role.includes('super user') || role.includes('superuser');
+}
+
+/** Check if user is an Advisor (role contains advisor or division is Advisory Board). */
+/**
+ * The "Chief Advisor" Faculty position (directory/page.tsx's FacultyPosition
+ * options) — a deliberately view-only designation, never to be confused
+ * with the real, edit-capable "Advisor" position despite the role text
+ * containing the word "Advisor". isAdvisor() and isCentreHead() below both
+ * explicitly exclude this check's match before doing their own "advisor"
+ * keyword matching, so a Chief Advisor never inherits either position's
+ * privileges.
+ */
+export function isChiefAdvisor(user: SessionUser): boolean {
+  if (!user) return false;
+  const role = ((user as any)?.role || '').toLowerCase();
+  return role.includes('chief advisor');
+}
+
+export function isAdvisor(user: SessionUser): boolean {
+  if (!user) return false;
+  if (isSuperUser(user)) return false;
+  if (isChiefAdvisor(user)) return false;
+  const role = ((user as any)?.role || '').toLowerCase();
+  const division = ((user as any)?.division || '').toLowerCase();
+  return keywordMatches(role, 'advisor') || role.includes('advisor') || division.includes('advisory');
+}
+
 /** Check if user is Centre Head (Super User tier 1, or tier <= 2 / Centre Head / Advisor designation). */
 export function isCentreHead(user: SessionUser): boolean {
   if (!user) return false;
   if (user.tier === 1) return true;
+  if (isChiefAdvisor(user)) return false;
   const role = (user as any)?.role || '';
   const settings = getAccessLevelSettings();
   // Whole-word match on "advisor" so "Faculty Advisor" qualifies but "Advisory
@@ -221,38 +281,29 @@ export function isEventsHeadRtcCampus(user: SessionUser): boolean {
 }
 
 /**
- * Fixed dual-reviewer evaluation rule: every task evaluation gets exactly two
- * reviewers — the Centre Head and the GG Campus Events Head (Tier 2.5) — and
- * the score shown is the average of whichever of those two have reviewed so
- * far (see resolveRatingReviewerRole/getEffectiveRatingScore). This applies
- * to every campus, including RTC: the RTC Events Head no longer independently
- * evaluates. A Design Portal deliverable task (`isDesignDeliverable`) stays a
- * separate lane, unaffected by the above — the Design Head who actually
- * approved/finalized the design can also rate it (their review does not
- * participate in the Centre Head/GG Head average; see
- * resolveRatingReviewerRole's DESIGN_HEAD case).
+ * Multi-reviewer evaluation rule: Super User, Centre Head, Advisor, and GG Campus Events Head
+ * can each submit independent evaluations for a task deliverable, and the score shown is the
+ * live average of all submitted reviews. A Design Portal deliverable task (`isDesignDeliverable`)
+ * also allows the Design Head to rate.
  */
 export function canEvaluateEventStudent(user: SessionUser, eventCampus?: string, isDesignDeliverable?: boolean): boolean {
   if (!user || isAlumniRole(user)) return false;
   if (isDesignDeliverable && isDesignHead(user)) return true;
-  return isCentreHead(user) || isEventsHeadGgCampus(user) || user.tier === 2.5;
+  return isSuperUser(user) || isAdvisor(user) || isCentreHead(user) || isEventsHeadGgCampus(user) || user.tier === 2.5;
 }
 
-/** The two (or three, for a design deliverable) fixed "slots" a rating submission fills. */
-export type RatingReviewerRole = 'CENTRE_HEAD' | 'GG_HEAD' | 'DESIGN_HEAD';
+/** The fixed reviewer slots a rating submission fills. */
+export type RatingReviewerRole = 'SUPER_USER' | 'CENTRE_HEAD' | 'ADVISOR' | 'GG_HEAD' | 'DESIGN_HEAD';
 
 /**
- * Resolves which fixed reviewer slot `user` fills when submitting a rating —
- * CENTRE_HEAD and GG_HEAD are the two required reviewers averaged together
- * for every task (see canEvaluateEventStudent); DESIGN_HEAD is the separate,
- * unaveraged design-deliverable lane. Checked in this order so a Centre Head
- * (including the Super User, who always satisfies isCentreHead) always fills
- * the CENTRE_HEAD slot even if they'd otherwise also qualify as Design Head.
- * Returns null if `user` doesn't hold access at all (mirrors
- * canEvaluateEventStudent — callers should gate on that first).
+ * Resolves which reviewer slot `user` fills when submitting a rating —
+ * SUPER_USER, CENTRE_HEAD, ADVISOR, and GG_HEAD are the evaluators averaged together
+ * for student deliverables. DESIGN_HEAD is the design-deliverable lane.
  */
 export function resolveRatingReviewerRole(user: SessionUser, isDesignDeliverable?: boolean): RatingReviewerRole | null {
   if (!user) return null;
+  if (isSuperUser(user)) return 'SUPER_USER';
+  if (isAdvisor(user)) return 'ADVISOR';
   if (isCentreHead(user)) return 'CENTRE_HEAD';
   if (isEventsHeadGgCampus(user) || user.tier === 2.5) return 'GG_HEAD';
   if (isDesignDeliverable && isDesignHead(user)) return 'DESIGN_HEAD';
@@ -295,31 +346,46 @@ export const CAPABILITY_CATALOG: { key: string; label: string; description: stri
   { key: 'EVENTS_EDIT', label: 'Edit Events', description: "Edit any existing event's details.", module: 'Events' },
   { key: 'EVENTS_DELETE', label: 'Delete Events', description: 'Delete any event.', module: 'Events' },
   { key: 'EVENTS_VIEW_ALL', label: 'View All Events', description: 'See every event, not just ones created by or listing this person.', module: 'Events' },
+  { key: 'MANAGE_EVENT_PASSES', label: 'Manage Event Passes & Tickets', description: 'Issue, view, and manage on-the-spot event passes and tickets.', module: 'Events' },
+  { key: 'SCAN_EVENT_PASSES', label: 'Scan & Verify Event Passes', description: 'Scan QR codes on event passes at turnstiles/entrances to verify genuineness and check in guests.', module: 'Events' },
+  { key: 'FESTIVALS_MANAGE', label: 'Manage Festivals', description: 'Create, edit, and organize festival schedules and events.', module: 'Festivals' },
   { key: 'TASKS_CREATE', label: 'Create Tasks', description: 'Assign new tasks to individuals or committees.', module: 'Tasks' },
   { key: 'TASKS_EDIT', label: 'Edit Tasks', description: 'Edit any existing task.', module: 'Tasks' },
   { key: 'TASKS_DELETE', label: 'Delete Tasks', description: 'Delete any task.', module: 'Tasks' },
   { key: 'TASKS_VIEW_ALL', label: 'View All Tasks', description: "See every task, not just this person's own or their department's.", module: 'Tasks' },
   { key: 'DECIDE_TASK_EXTENSION', label: 'Decide Task Extensions', description: 'Approve or reject a Pending Extension request on a task.', module: 'Tasks' },
-  { key: 'EDIT_DIRECTORY', label: 'Edit Member Directory', description: 'Add, edit, remove, and bulk-manage member records.', module: 'Members Directory' },
+  { key: 'EDIT_DIRECTORY', label: 'Edit Own Directory Records', description: 'One-time edit of a member record this person personally added — never adding, removing, or bulk-managing the roster. That stays locked to Centre Head, Advisor, and Super User and cannot be delegated here.', module: 'Members Directory' },
   { key: 'VIEW_FULL_DIRECTORY', label: 'View Full Directory', description: 'See the entire member roster, not just their own profile.', module: 'Members Directory' },
   { key: 'TERMINATE_MEMBER', label: 'Terminate/Reactivate Members', description: 'Terminate or reactivate any member account.', module: 'Members Directory' },
   { key: 'GUEST_DIRECTORY_ACCESS', label: 'Access Guest Directory', description: 'Open the Guest Directory module at all (visiting-card contacts) — same baseline as Centre Head/Faculty/Executive get by default.', module: 'Guest Directory' },
   { key: 'GUEST_DIRECTORY_DELETE', label: 'Delete Guest Records', description: 'Remove any guest from the Guest Directory, not just ones they added.', module: 'Guest Directory' },
+  { key: 'VISITING_CARD_ACCESS', label: 'Access Visiting Cards', description: 'Access and manage digital keycards and scanned visiting cards.', module: 'Visiting Card' },
   { key: 'VIEW_ALL_DESIGNS', label: 'View All Design Submissions', description: 'See every submission in the Design Portal, not just their own.', module: 'Design Portal' },
   { key: 'DESIGN_STYLE_APPROVE', label: 'Style Approve/Reject Designs', description: 'Approve or reject a design submission on the Style Review step.', module: 'Design Portal' },
   { key: 'DESIGN_DELETE', label: 'Delete Design Submissions', description: 'Delete any design submission, not just their own.', module: 'Design Portal' },
   { key: 'APPROVE_REIMBURSEMENTS_SECTOR', label: 'Approve Reimbursements (Sector Head stage)', description: 'First-pass reimbursement review and approval.', module: 'Reimbursements' },
   { key: 'APPROVE_REIMBURSEMENTS_FINANCE', label: 'Approve Reimbursements (Finance Head stage)', description: 'Final-stage reimbursement approval.', module: 'Reimbursements' },
+  { key: 'REIMBURSEMENTS_VIEW_ALL', label: 'View All Reimbursements', description: 'See all reimbursement claims across the organization.', module: 'Reimbursements' },
   { key: 'PROPOSE_BUDGET', label: 'Propose Budgets', description: 'Propose an annual or monthly budget request.', module: 'Budget & Funds' },
   { key: 'MANAGE_BUDGET', label: 'Manage Budget & Funds', description: 'Propose and manage budget requests beyond the built-in Centre Head/Finance Head roles.', module: 'Budget & Funds' },
   { key: 'BUILD_FORMS', label: 'Build Public Forms', description: 'Create and edit public-facing forms.', module: 'Public Forms' },
+  { key: 'FORMS_VIEW_RESPONSES', label: 'View Form Responses', description: 'View and export submissions for public forms.', module: 'Public Forms' },
+  { key: 'FORMS_DELETE', label: 'Delete Public Forms', description: 'Delete public forms and their configurations.', module: 'Public Forms' },
   { key: 'CREATE_ANNOUNCEMENT', label: 'Publish Announcements', description: 'Author and publish announcements to a chosen scope.', module: 'Announcements' },
   { key: 'APPROVE_ANNOUNCEMENT', label: 'Approve Announcements', description: 'Approve or reject a Pending announcement before it circulates.', module: 'Announcements' },
+  { key: 'DELETE_ANNOUNCEMENT', label: 'Delete Announcements', description: 'Delete published announcements.', module: 'Announcements' },
+  { key: 'CREATE_RATING', label: 'Create Member Ratings', description: 'Rate and evaluate performance on completed tasks.', module: 'Ratings & Reports' },
   { key: 'RATING_EDIT_ANY', label: 'Edit/Delete Any Rating', description: 'Edit or delete a rating authored by someone else.', module: 'Ratings & Reports' },
-  { key: 'VIEW_ALL_REPORTS', label: 'View All Reports', description: 'See every report/rating record, not just their own or their department’s.', module: 'Ratings & Reports' },
-  { key: 'MANAGE_GUEST_INVITES', label: 'Manage Guest Invites', description: 'Access the Guest Invites mail-merge tool.', module: 'Guest Invites' },
+  { key: 'VIEW_ALL_REPORTS', label: 'View All Performance Reports', description: 'See every report/rating record, not just their own or their department’s.', module: 'Ratings & Reports' },
+  { key: 'EVENT_REPORTS_SUBMIT', label: 'Submit Event Reports', description: 'Submit formal post-event reports for approval.', module: 'Event Reports' },
+  { key: 'EVENT_REPORTS_REVIEW', label: 'Review Event Reports', description: 'Approve or reject submitted event reports.', module: 'Event Reports' },
+  { key: 'EVENT_REPORTS_DELETE', label: 'Delete Event Reports', description: 'Delete submitted event reports.', module: 'Event Reports' },
+  { key: 'MANAGE_GUEST_INVITES', label: 'Manage Mail Merge', description: 'Access the Mail Merge tool (personalized bulk email — formerly "Guest Invites").', module: 'Mail Merge' },
+  { key: 'MANAGE_EVENT_PASSES', label: 'Manage Event Passes & Tickets', description: 'Issue digital and on-the-spot verified luxury passes, manage rosters, and broadcast push alerts.', module: 'Event Passes' },
+  { key: 'SCAN_EVENT_PASSES', label: 'Scan & Admit Turnstile Passes', description: 'Operate turnstile camera QR scanner and check in attendees at venue gates.', module: 'Event Passes' },
   { key: 'MANAGE_BACKUP', label: 'Access Backup & Restore', description: 'Download system backups and restore from an archive.', module: 'Administration' },
   { key: 'MANAGE_EMAIL_SETTINGS', label: 'Access Email Management', description: 'View dispatch logs and manage email settings.', module: 'Administration' },
+  { key: 'MANAGE_GROUP_POLICIES', label: 'Manage Group Policies', description: 'Create, edit, and configure group policies and dynamic RBAC tags.', module: 'Administration' },
 ];
 
 /** True if a policy is enabled and, when it has an expiry date, hasn't passed it yet. */
@@ -366,17 +432,26 @@ export function hasCapability(user: SessionUser, capability: string): boolean {
  */
 export const MODULE_CATALOG: { key: ModuleAccessKey; label: string; description: string; ownershipNote?: string }[] = [
   { key: 'EVENTS', label: 'Events', description: 'Event records and their committees.', ownershipNote: 'Ownership = the event’s creator or a listed committee member.' },
+  { key: 'EVENT_PASSES', label: 'Event Passes & Tickets', description: 'On-the-spot pass studio, attendee rosters, wallet credentials, and turnstile gate scanner.', ownershipNote: 'Ownership = passes issued by the member or for events they manage.' },
   { key: 'TASKS', label: 'Tasks', description: 'Assigned task deliverables.', ownershipNote: 'Ownership = the task’s creator or assignee.' },
-  { key: 'DIRECTORY', label: 'Members Directory', description: 'The member roster.', ownershipNote: 'Ownership = whoever added the member record. Edit ‘Own’ is one-time, within 24 hours of adding.' },
+  { key: 'DIRECTORY', label: 'Members Directory', description: 'The member roster.', ownershipNote: 'Ownership = whoever added the member record. Edit ‘Own’ is one-time, within 24 hours of adding. Edit here only ever affects editing an existing record’s fields — adding a new member or removing one is locked to Centre Head, Advisor, and Super User and cannot be granted through this Edit column.' },
   { key: 'GUEST_DIRECTORY', label: 'Guest Directory', description: 'Visiting-card guest contacts.', ownershipNote: 'Ownership = whoever added the guest record. Edit ‘Own’ is one-time, within 24 hours of adding.' },
   { key: 'DESIGNS', label: 'Design Portal', description: 'Design submissions and proofreading.' },
   { key: 'REIMBURSEMENTS', label: 'Reimbursements', description: 'Reimbursement claims.', ownershipNote: 'Ownership = the claimant.' },
   { key: 'BUDGET', label: 'Budget & Funds', description: 'Budget proposals and verification.' },
   { key: 'FORMS', label: 'Public Forms', description: 'Public-facing forms and their submissions.' },
   { key: 'ANNOUNCEMENTS', label: 'Announcements', description: 'Published announcements.' },
-  { key: 'RATINGS', label: 'Ratings & Reports', description: 'Student performance ratings.', ownershipNote: 'Ownership = the rating’s author.' },
-  { key: 'GUEST_INVITES', label: 'Guest Invites', description: 'The guest-invite mail-merge tool.' },
+  { key: 'RATINGS', label: 'Ratings & Performance', description: 'Student performance evaluations and ratings.', ownershipNote: 'Ownership = the rating’s author.' },
+  { key: 'REPORTS', label: 'Performance Reports', description: 'Performance and task deliverable analytical reports.', ownershipNote: 'Ownership = the rating’s author.' },
+  { key: 'EVENT_REPORTS', label: 'Event Reports', description: 'Post-event formal report submissions, review, and dual approvals.', ownershipNote: 'Ownership = the report’s submitter.' },
+  { key: 'FESTIVALS', label: 'Festivals', description: 'Festival schedules, committees, and events.' },
+  { key: 'VISITING_CARD', label: 'Visiting Cards', description: 'Digital keycards and visiting contacts.' },
+  { key: 'GUEST_INVITES', label: 'Mail Merge', description: 'Personalized bulk email tool (formerly "Guest Invites").' },
+  { key: 'APPROVALS', label: 'Approvals Queue', description: 'Cross-module multi-department approval requests.' },
+  { key: 'BACKUP', label: 'Backup & Restore', description: 'System backups and disaster recovery restorations.' },
   { key: 'EMAIL', label: 'Email Management', description: 'Dispatch logs and email settings.' },
+  { key: 'POLICIES', label: 'Group Policies', description: 'Dynamic access control and permissions management.' },
+  { key: 'PROCUREMENT', label: 'Procurement Requests', description: 'Material requests for events and tasks.', ownershipNote: 'Ownership = the request’s submitter. Approving/rejecting is always restricted to the Centre Head and Advisor, regardless of any policy grant here.' },
 ];
 
 /** Active, targeting-matched policies that set a moduleAccess entry for `moduleKey` (or, for EVENTS only, the legacy eventVisibilityScope flag). */
@@ -662,6 +737,34 @@ export function canDecideBudget(user: SessionUser, budget?: BudgetItem): boolean
   return budget.centreHeadVerified === true;
 }
 
+/**
+ * Procurement Requests approve/reject gate — deliberately just these two
+ * roles per the module's own design, unlike almost every other approval
+ * gate in this file: no GG Campus Events Head, no capability-grant escape
+ * hatch, no Group Policy override. isCentreHead() already folds in Super
+ * User (tier 1) and anyone whose role literally contains "advisor"; isAdvisor()
+ * additionally covers the Advisory Board division for members whose role text
+ * doesn't happen to say "advisor".
+ */
+export function canDecideProcurementRequest(user: SessionUser): boolean {
+  return isCentreHead(user) || isAdvisor(user);
+}
+
+/**
+ * Visibility rule for procurement requests:
+ * - Approved requests are visible to everybody (per the module's design).
+ * - Pending/Rejected requests are visible only to the requester and to
+ *   whoever can decide them (Centre Head/Advisor), so a rejected or
+ *   still-pending materials ask isn't broadcast centre-wide.
+ */
+export function canViewProcurementRequest(user: SessionUser, request: ProcurementRequestItem): boolean {
+  if (!user) return false;
+  if (request.status === 'Approved' || request.status === 'Completed') return true;
+  if (canDecideProcurementRequest(user)) return true;
+  if (request.requesterId && request.requesterId === user.id) return true;
+  return !!request.requesterEmail && !!user.email && request.requesterEmail.toLowerCase() === user.email.toLowerCase();
+}
+
 /** Announcement approval gatekeeper — Centre Head or GG Campus Events Head (Tier 2.5). */
 export function canApproveAnnouncement(user: SessionUser): boolean {
   if (!user) return false;
@@ -737,6 +840,38 @@ export function canManageEvents(user: SessionUser): boolean {
   return canCreateEvent(user) || canEditEvent(user) || canDeleteEvent(user);
 }
 
+/** Check if user is authorized to issue and manage on-the-spot event passes and tickets. */
+export function canManageEventPasses(user: SessionUser): boolean {
+  if (!user) return false;
+  if (user.tier === 1) return true;
+  const override = resolveModuleEditOverride(user, 'EVENT_PASSES');
+  if (override === 'NONE') return false;
+  if (override === 'ALL') return true;
+  return isBaseLeadership(user) || isHeadRole(user) || user.tier === 2.5 || hasCapability(user, 'MANAGE_EVENT_PASSES') || hasCapability(user, 'EVENTS_EDIT');
+}
+
+/** Check if user is authorized to scan QR passes at turnstiles/entrances to verify and check in attendees. */
+export function canScanEventPasses(user: SessionUser): boolean {
+  if (!user) return false;
+  if (user.tier === 1) return true;
+  const editOverride = resolveModuleEditOverride(user, 'EVENT_PASSES');
+  const viewOverride = resolveModuleViewOverride(user, 'EVENT_PASSES');
+  if (editOverride === 'NONE' && viewOverride === 'OWN') return false;
+  return canManageEventPasses(user) || hasCapability(user, 'SCAN_EVENT_PASSES') || viewOverride === 'ALL';
+}
+
+/** Check if user is authorized to see and open the Event Passes navigation module. */
+export function canAccessEventPassesModule(user: SessionUser): boolean {
+  if (!user) return false;
+  return canManageEventPasses(user) || canScanEventPasses(user) || hasCapability(user, 'MANAGE_EVENT_PASSES') || hasCapability(user, 'SCAN_EVENT_PASSES') || resolveModuleViewOverride(user, 'EVENT_PASSES') === 'ALL';
+}
+
+/** Check if user is authorized to view and manage Group Policies (Super User, Centre Head, Events Head GG Campus, or capability). */
+export function canAccessGroupPolicies(user: SessionUser): boolean {
+  if (!user) return false;
+  return user.tier === 1 || isCentreHead(user) || isEventsHeadGgCampus(user) || hasCapability(user, 'MANAGE_GROUP_POLICIES') || resolveModuleEditOverride(user, 'POLICIES') === 'ALL';
+}
+
 /**
  * Per-event visibility. The DEFAULT is unchanged from before this feature existed —
  * every member sees every event — UNLESS the Super User has explicitly created a
@@ -776,7 +911,7 @@ export function getEventApprovalRequirement(user: SessionUser, action: 'CREATE' 
     return {
       requiresApproval: true,
       approverType: 'CENTER_HEAD',
-      approverName: 'the Center Head',
+      approverName: 'the Centre Head or Advisor',
       policyName: 'Executive Event Sign-off Requirement'
     };
   }
@@ -830,7 +965,7 @@ export function getTaskApprovalRequirement(user: SessionUser, action: 'CREATE' |
     return {
       requiresApproval: true,
       approverType: 'CENTER_HEAD',
-      approverName: 'the Centre Head or GG Campus Events Head',
+      approverName: 'the Centre Head, Advisor, or GG Campus Events Head',
       policyName: 'Executive Task Sign-off Requirement'
     };
   }
@@ -848,7 +983,7 @@ export function getTaskApprovalRequirement(user: SessionUser, action: 'CREATE' |
   return {
     requiresApproval: true,
     approverType: 'CENTER_HEAD',
-    approverName: 'the Centre Head or GG Campus Events Head',
+    approverName: 'the Centre Head, Advisor, or GG Campus Events Head',
     policyName: 'Task Sign-off Requirement',
   };
 }
@@ -1031,7 +1166,7 @@ export function canViewHiddenAccounts(user: SessionUser): boolean {
  */
 export function canViewRating(rating: RatingItem, user: SessionUser): boolean {
   if (!user) return false;
-  if (isBaseLeadership(user) || isCentreHead(user) || isDrSubhadeep(user) || hasCapability(user, 'VIEW_ALL_REPORTS') || hasModuleViewAllGrant(user, 'RATINGS')) return true;
+  if (isBaseLeadership(user) || isCentreHead(user) || isAdvisor(user) || isDrSubhadeep(user) || hasCapability(user, 'VIEW_ALL_REPORTS') || hasModuleViewAllGrant(user, 'RATINGS')) return true;
 
   const isOwn =
     rating.targetId === user.id ||
@@ -1051,7 +1186,7 @@ export function canViewRating(rating: RatingItem, user: SessionUser): boolean {
 }
 
 /**
- * Rating edit/delete permission: the rating's own author, Centre Head, a
+ * Rating edit/delete permission: the rating's own author, Centre Head, Advisor, a
  * RATING_EDIT_ANY grant, or a moduleAccess.RATINGS.edit override ('ALL'
  * grants edit-any, 'NONE' revokes even the author's own edit rights).
  */
@@ -1061,7 +1196,7 @@ export function canEditRating(rating: RatingItem, user: SessionUser): boolean {
   const isAuthor = user.name === rating.raterName;
   if (override === 'NONE') return false;
   if (override === 'ALL') return true;
-  if (user.tier === 1 || isAuthor || isCentreHead(user) || hasCapability(user, 'RATING_EDIT_ANY')) return true;
+  if (user.tier === 1 || isAuthor || isCentreHead(user) || isAdvisor(user) || hasCapability(user, 'RATING_EDIT_ANY')) return true;
   if (override === 'OWN') return isAuthor;
 
   return false;
@@ -1080,30 +1215,33 @@ export function canViewFullDirectory(user: SessionUser): boolean {
 
 /**
  * Roster CRUD access at all (shows the Add Member button, CSV import, and
- * bulk tools) — base leadership, or an explicit Group Policy grant. This is
- * the umbrella "can manage the directory" gate; PER-ROW edit permission for
- * a specific member is narrower and handled separately by
- * canEditMemberRecordRow, which restricts a non-leadership grantee to only
- * the records they personally added.
+ * the Remove Member action) — a hard lock to Centre Head, Advisor, and
+ * Super User (all covered by isCentreHead — see its own doc comment).
+ * Deliberately NOT overridable by a Group Policy grant (no EDIT_DIRECTORY
+ * capability, no moduleAccess 'ALL' override consulted here) — granting
+ * someone Members Directory access through Group Policies can only ever
+ * give them view access (canViewFullDirectory / moduleAccess.DIRECTORY.view),
+ * never the ability to add or remove a member; see the Policies page, whose
+ * Module Access row for Members Directory omits the Edit column for this
+ * exact reason. PER-ROW edit permission for a specific member (fixing a
+ * typo in a record you personally added) is a separate, narrower mechanism
+ * — see canEditMemberRecordRow — and is unaffected by this restriction.
  */
 export function canEditDirectory(user: SessionUser): boolean {
   if (isExecutiveRole(user) || isAlumniRole(user)) return false;
-  return isBaseLeadership(user) || hasCapability(user, 'EDIT_DIRECTORY') || resolveModuleEditOverride(user, 'DIRECTORY') === 'ALL';
+  return isCentreHead(user);
 }
 
 /**
- * Whether `user` may open the Add Member flow at all — everything
- * canEditDirectory already allows, PLUS an Executive role (President, Vice
- * President, Chief Coordinator). Unlike canEditDirectory (which stays a hard
- * "no" for Executives — they don't get CSV import/bulk tools/edit-any-row),
- * this is deliberately wider: Executives ARE trusted, by their own
- * designation, to add a name to the roster and allot people to events/
- * committees/tasks immediately — see getMemberApprovalRequirement below,
- * which does not gate this addition behind sign-off.
+ * Whether `user` may open the Add Member flow — Centre Head, Advisor, and
+ * Super User only (same restriction as canEditDirectory; an Executive role
+ * like President/Vice President/Chief Coordinator no longer gets an
+ * exception here — adding and removing roster members is limited to
+ * leadership that already manages the directory).
  */
 export function canAddMember(user: SessionUser): boolean {
   if (isAlumniRole(user)) return false;
-  return isExecutiveRole(user) || canEditDirectory(user);
+  return canEditDirectory(user);
 }
 
 /**
@@ -1243,6 +1381,7 @@ export function canCreateAnnouncement(user: SessionUser): boolean {
   const override = resolveModuleEditOverride(user, 'ANNOUNCEMENTS');
   if (override === 'NONE') return false;
   if (override === 'ALL') return true;
+  if (isChiefAdvisor(user)) return false; // view-only
   return isBaseLeadership(user) || isCoreCommitteeTier(user) || user.tier === 4 || user.tier === 5 || isFaculty(user) || isHeadRole(user) || hasCapability(user, 'CREATE_ANNOUNCEMENT');
 }
 
@@ -1277,6 +1416,7 @@ export function canRequestTaskExtension(task: TaskItem, user: SessionUser): bool
 
 /** Task extension approval/rejection: base leadership, or Faculty. */
 export function canDecideTaskExtension(user: SessionUser): boolean {
+  if (isChiefAdvisor(user)) return false; // view-only
   return isBaseLeadership(user) || isFaculty(user) || hasCapability(user, 'DECIDE_TASK_EXTENSION');
 }
 
@@ -1297,7 +1437,7 @@ export function canChangeTaskStatus(task: TaskItem, user: SessionUser): boolean 
   return isTaskAssignee(task, user);
 }
 
-/** Guest Invites mail-merge tool — Centre Head/Super User by default, or a MANAGE_GUEST_INVITES/moduleAccess grant. */
+/** Mail Merge tool (displayed name — internally still "Guest Invites"/GUEST_INVITES/MANAGE_GUEST_INVITES to avoid touching routes, permission keys, or stored data) — Centre Head/Super User by default, or a MANAGE_GUEST_INVITES/moduleAccess grant. */
 export function canManageGuestInvites(user: SessionUser): boolean {
   const override = resolveModuleEditOverride(user, 'GUEST_INVITES');
   if (override === 'NONE') return false;

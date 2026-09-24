@@ -28,12 +28,15 @@ import {
   Clock,
   Inbox,
   Play,
-  Filter
+  Filter,
+  Paperclip,
+  Loader2
 } from 'lucide-react';
 import { EmailSettings, EmailLog } from '@/lib/email-service';
 import { canManageEmailSettings } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ComposedAttachment, filesToAttachments, formatBytes, buildAttachmentNoticeLine, MAX_TOTAL_ATTACHMENT_BYTES } from '@/lib/email-attachments';
 
 interface PendingQueueItem {
   email: string;
@@ -84,6 +87,9 @@ export default function EmailManagementPage() {
   const [previewTab, setPreviewTab] = useState<'edit' | 'preview'>('edit');
   const [isSendingDispatch, setIsSendingDispatch] = useState(false);
   const [showDispatchConfirm, setShowDispatchConfirm] = useState(false);
+  const [attachments, setAttachments] = useState<ComposedAttachment[]>([]);
+  const [isProcessingAttachments, setIsProcessingAttachments] = useState(false);
+  const [attachmentError, setAttachmentError] = useState('');
 
   // Outbox & Audit Logs State
   const [outboxLogs, setOutboxLogs] = useState<EmailLog[]>([]);
@@ -312,6 +318,37 @@ export default function EmailManagementPage() {
   const [badgeOption, setBadgeOption] = useState<string>('NONE');
   const [customBadgeText, setCustomBadgeText] = useState<string>('');
 
+  const handleAttachFiles = async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    setAttachmentError('');
+    setIsProcessingAttachments(true);
+    try {
+      const files = Array.from(fileList);
+      const existingBytes = attachments.reduce((sum, a) => sum + a.size, 0);
+      const incomingBytes = files.reduce((sum, f) => sum + f.size, 0);
+      if (existingBytes + incomingBytes > MAX_TOTAL_ATTACHMENT_BYTES) {
+        setAttachmentError(`Total attachment size can't exceed ${formatBytes(MAX_TOTAL_ATTACHMENT_BYTES)} — most SMTP servers (including Outlook) reject larger messages.`);
+        return;
+      }
+      const newAttachments = await filesToAttachments(files);
+      setAttachments(prev => [...prev, ...newAttachments]);
+    } catch (err: any) {
+      setAttachmentError(err?.message || 'Failed to read one or more files.');
+    } finally {
+      setIsProcessingAttachments(false);
+    }
+  };
+
+  const handleRemoveAttachment = (filename: string) => {
+    setAttachments(prev => prev.filter(a => a.filename !== filename));
+  };
+
+  const handleInsertAttachmentNote = () => {
+    if (attachments.length === 0) return;
+    const line = buildAttachmentNoticeLine(attachments.map(a => a.filename));
+    setBodyText(prev => (prev.trim() ? `${prev}\n\n${line}` : line));
+  };
+
   const handleExecuteDispatch = async () => {
     setShowDispatchConfirm(false);
     setIsSendingDispatch(true);
@@ -331,6 +368,7 @@ export default function EmailManagementPage() {
         bodyText,
         category,
         badgeText: resolvedBadgeText,
+        attachments: attachments.map(({ filename, contentBase64, contentType }) => ({ filename, contentBase64, contentType })),
       };
       const res = await fetch('/api/email/send', {
         method: 'POST',
@@ -343,6 +381,7 @@ export default function EmailManagementPage() {
         setSubject('');
         setBodyText('');
         setCustomRecipient('');
+        setAttachments([]);
         fetchLogs();
       } else {
         triggerToast('error', data.error || 'Failed to dispatch emails.');
@@ -813,7 +852,19 @@ export default function EmailManagementPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="block font-medium text-theme-text-secondary">Email Message Body *</label>
+                <div className="flex items-center justify-between">
+                  <label className="block font-medium text-theme-text-secondary">Email Message Body *</label>
+                  {attachments.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleInsertAttachmentNote}
+                      className="px-2 py-0.5 bg-accent/15 text-accent border border-accent/30 rounded-md font-semibold hover:bg-accent/25 transition-all cursor-pointer text-[10px]"
+                      title="Insert a 'Please find attached...' line naming the current attachments"
+                    >
+                      + Insert Attachment Note
+                    </button>
+                  )}
+                </div>
                 <textarea
                   rows={8}
                   required
@@ -822,6 +873,52 @@ export default function EmailManagementPage() {
                   placeholder="Type message content here..."
                   className="w-full px-4 py-3 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-mono text-xs leading-relaxed"
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block font-medium text-theme-text-secondary flex items-center gap-1.5">
+                  <Paperclip className="h-3.5 w-3.5" />
+                  Attachments (optional)
+                </label>
+                <label className="flex items-center justify-center gap-2 px-4 py-3 bg-theme-background/40 border border-dashed border-theme-card-border rounded-xl text-theme-text-secondary cursor-pointer hover:border-accent hover:text-accent transition-all">
+                  {isProcessingAttachments ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Paperclip className="h-4 w-4" />
+                  )}
+                  <span className="font-medium">Click to attach one or more files (max {formatBytes(MAX_TOTAL_ATTACHMENT_BYTES)} total)</span>
+                  <input
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={e => { handleAttachFiles(e.target.files); e.target.value = ''; }}
+                    disabled={isProcessingAttachments}
+                  />
+                </label>
+                {attachmentError && (
+                  <p className="text-[11px] text-danger">{attachmentError}</p>
+                )}
+                {attachments.length > 0 && (
+                  <div className="space-y-1.5">
+                    {attachments.map(a => (
+                      <div key={a.filename} className="flex items-center justify-between gap-2 px-3 py-2 bg-theme-background/30 border border-theme-border/20 rounded-xl">
+                        <div className="min-w-0 flex items-center gap-2">
+                          <Paperclip className="h-3.5 w-3.5 text-theme-text-secondary shrink-0" />
+                          <span className="font-semibold text-theme-text-primary truncate">{a.filename}</span>
+                          <span className="text-theme-text-secondary shrink-0">({formatBytes(a.size)})</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAttachment(a.filename)}
+                          className="p-1 text-danger hover:bg-danger/10 rounded-lg transition-all cursor-pointer shrink-0"
+                          title="Remove attachment"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-end pt-3">

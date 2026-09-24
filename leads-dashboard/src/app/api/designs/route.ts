@@ -68,10 +68,26 @@ export async function POST(request: Request) {
 
     const created = updated.find((d: any) => d.id === newDesign.id);
 
-    // Every design submission needs a style-approval/proofreading decision
-    // from the Centre Head, Advisor, or GG Campus Events Head — fan that
-    // ask out to the Approvals module as soon as it lands.
-    if (created) {
+    // Resolve assigned faculty proofreaders from the submission
+    let selectedFaculty: { id: string; name: string; email: string; role?: string }[] = [];
+    if (Array.isArray(created.assignedProofreaders) && created.assignedProofreaders.length > 0) {
+      selectedFaculty = created.assignedProofreaders;
+    } else if (Array.isArray(created.assignedProofreaderIds) && created.assignedProofreaderIds.length > 0) {
+      const allMembers = await readCollection<any>('members');
+      selectedFaculty = created.assignedProofreaderIds
+        .map((id: string) => allMembers.find((m: any) => m.id === id))
+        .filter((m: any): m is any => Boolean(m && m.email))
+        .map((m: any) => ({ id: m.id, name: m.name, email: m.email, role: m.role }));
+    } else if (created.assignedProofreaderEmail) {
+      selectedFaculty = [{
+        id: created.assignedProofreaderId || created.assignedProofreaderEmail,
+        name: created.assignedProofreaderName || 'Faculty Proofreader',
+        email: created.assignedProofreaderEmail,
+      }];
+    }
+
+    // Fan-out approval request to the Approvals inbox of the selected faculty proofreaders
+    if (created && selectedFaculty.length > 0) {
       try {
         await fanOutAutoApproval({
           entityType: 'design',
@@ -81,75 +97,67 @@ export async function POST(request: Request) {
           requesterId: created.designerId || '',
           requesterName: created.designerName || 'A designer',
           requesterEmail: created.designerEmail,
-          message: created.proofreadRequested
-            ? 'This design submission needs style approval and proofreading sign-off.'
-            : 'This design submission needs style approval sign-off.',
+          message: 'This design submission needs your faculty proofreading sign-off.',
+          customPanel: selectedFaculty.map(f => ({
+            id: f.id,
+            name: f.name,
+            email: f.email,
+            label: f.role || 'Faculty Proofreader',
+          })),
         });
       } catch (approvalErr) {
         console.error('[designs-api] Approval fan-out failed:', approvalErr);
       }
     }
 
-    // Proofread Request Email Dispatch — goes to the full eligible reviewer panel
-    // (Centre Head, Advisor, GG Campus Events Head), not just whichever single
-    // person resolveDesignReviewer() happened to route the record to. Any one of
-    // the three can act on it (see canReviewDesignProofread in permissions.ts).
-    if (created && (created.requestProofread || created.assignedProofreaderId)) {
+    // Proofread Request Email Dispatch — sent EXCLUSIVELY to the selected faculty proofreaders
+    if (created && selectedFaculty.length > 0) {
       try {
-        const [members, { dispatchEmail, wrapInMasterEmailTemplate, findApprovalRecipients }] = await Promise.all([
-          readCollection('members'),
-          import('@/lib/email-service'),
-        ]);
-        const recipients = findApprovalRecipients(members as any[]);
-        const reviewers = [recipients.centreHead, recipients.advisor, recipients.eventsHeadGg].filter(
-          (r): r is { name: string; email: string } => Boolean(r?.email)
-        );
+        const { dispatchEmail, wrapInMasterEmailTemplate } = await import('@/lib/email-service');
+        const { getAppBaseUrl } = await import('@/lib/app-url');
+        const baseUrl = getAppBaseUrl(request);
+        const designLink = `${baseUrl}/dashboard/designs?highlight=${created.id}`;
+        const subject = `Proofread Request: ${created.title}`;
 
-        if (reviewers.length > 0) {
-          const { getAppBaseUrl } = await import('@/lib/app-url');
-          const baseUrl = getAppBaseUrl(request);
-          const designLink = `${baseUrl}/dashboard/designs?highlight=${created.id}`;
-          const subject = `Proofread Request: ${created.title}`;
+        for (const faculty of selectedFaculty) {
+          if (!faculty.email) continue;
+          const bodyText = `Dear ${faculty.name},\n\nA design asset has been submitted and assigned to you for faculty proofreading: "${created.title}".\n\nCategory: ${created.category || 'Design Asset'}\nEvent: ${created.eventTitle || 'LEADS Event'}\nSubmitted By: ${created.designerName || 'Designer'} (${created.designerEmail || 'N/A'})\n\nPlease inspect and complete your proofread review here:\n${designLink}\n\nRegards,\nLEADS Design Portal`;
 
-          for (const reviewer of reviewers) {
-            const bodyText = `Dear ${reviewer.name},\n\nA design asset needs your proofread sign-off (any one of the Centre Head, Advisor, or GG Campus Events Head can approve it): "${created.title}".\n\nCategory: ${created.category || 'Design Asset'}\nEvent: ${created.eventTitle || 'LEADS Event'}\nSubmitted By: ${created.designerName || 'Designer'} (${created.designerEmail || 'N/A'})\n\nPlease inspect and complete your proofread review here:\n${designLink}\n\nRegards,\nLEADS Design Portal`;
+          const bodyHtml = wrapInMasterEmailTemplate({
+            pageTitle: subject,
+            badgeText: 'PROOFREAD REQUEST',
+            badgeColor: '#6366f1',
+            headerTitle: 'Faculty Proofread Request',
+            bodyContentHtml: `
+            <p style="margin: 0 0 16px; font-size: 14px; color: #475569; line-height: 1.6;">
+              Dear <strong>${faculty.name}</strong>,<br/>
+              A new design asset has been submitted and assigned to you for faculty proofreading sign-off.
+            </p>
 
-            const bodyHtml = wrapInMasterEmailTemplate({
-              pageTitle: subject,
-              badgeText: 'PROOFREAD REQUEST',
-              badgeColor: '#6366f1',
-              headerTitle: 'Proofread Request Received',
-              bodyContentHtml: `
-              <p style="margin: 0 0 16px; font-size: 14px; color: #475569; line-height: 1.6;">
-                Dear <strong>${reviewer.name}</strong>,<br/>
-                A new design asset submission needs your proofread sign-off. Any one of the Centre Head, Advisor, or GG Campus Events Head can approve it — whoever gets to it first.
-              </p>
-
-              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 20px;">
-                <strong style="color: #6366f1; font-size: 15px;">🎨 ${created.title}</strong>
-                <div style="font-size: 12px; color: #64748b; margin-top: 8px; line-height: 1.5;">
-                  <span><strong>Category:</strong> ${created.category || 'Poster'}</span><br/>
-                  <span><strong>Event:</strong> ${created.eventTitle || 'LEADS Operations'}</span><br/>
-                  <span><strong>Designer:</strong> ${created.designerName} (${created.designerEmail})</span>
-                </div>
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+              <strong style="color: #6366f1; font-size: 15px;">🎨 ${created.title}</strong>
+              <div style="font-size: 12px; color: #64748b; margin-top: 8px; line-height: 1.5;">
+                <span><strong>Category:</strong> ${created.category || 'Poster'}</span><br/>
+                <span><strong>Event:</strong> ${created.eventTitle || 'LEADS Operations'}</span><br/>
+                <span><strong>Designer:</strong> ${created.designerName} (${created.designerEmail})</span>
               </div>
+            </div>
 
-              <div style="text-align: center; margin: 24px 0 12px;">
-                <a href="${designLink}" target="_blank" style="display: inline-block; background: #6366f1; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 12px; font-weight: 600; font-size: 14px;">
-                  🔍 Inspect & Proofread Design
-                </a>
-              </div>
-              `,
-            });
+            <div style="text-align: center; margin: 24px 0 12px;">
+              <a href="${designLink}" target="_blank" style="display: inline-block; background: #6366f1; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 12px; font-weight: 600; font-size: 14px;">
+                🔍 Inspect & Proofread Design
+              </a>
+            </div>
+            `,
+          });
 
-            await dispatchEmail({
-              to: reviewer.email,
-              subject,
-              bodyText,
-              bodyHtml,
-              category: 'SYSTEM',
-            });
-          }
+          await dispatchEmail({
+            to: faculty.email,
+            subject,
+            bodyText,
+            bodyHtml,
+            category: 'SYSTEM',
+          });
         }
       } catch (emailErr) {
         console.error('[designs-api] Proofread email dispatch failed:', emailErr);

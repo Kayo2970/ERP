@@ -73,10 +73,12 @@ export async function getAccessLevelSettingsServer(): Promise<AccessLevelSetting
 
 export type ServerUser = { id?: string; tier?: number; role?: string; division?: string; department?: string; email?: string; name?: string } | null | undefined;
 
+// Mirrors permissions.ts's isExecutiveRole — Faculty Ambassador is deliberately
+// given identical standing to Chief Coordinator by matching here too.
 export function isExecutiveRole(user: ServerUser): boolean {
   if (!user) return false;
   const role = (user.role || '').toLowerCase();
-  return role.includes('president') || role.includes('vice president') || role.includes('chief coordinator');
+  return role.includes('president') || role.includes('vice president') || role.includes('chief coordinator') || role.includes('faculty ambassador');
 }
 
 export function isAlumniRole(user: ServerUser): boolean {
@@ -116,9 +118,20 @@ export function isFinanceHead(user: ServerUser, settings: AccessLevelSettings): 
   return user.tier === 1 || isFinanceRole || isFinanceDept;
 }
 
+// Mirrors permissions.ts's isChiefAdvisor — the view-only Faculty position,
+// deliberately excluded from isCentreHead/isAdvisor below despite its role
+// text containing the word "Advisor", so it's never mistaken for the real,
+// edit-capable Advisor position.
+export function isChiefAdvisor(user: ServerUser): boolean {
+  if (!user) return false;
+  const role = (user.role || '').toLowerCase();
+  return role.includes('chief advisor');
+}
+
 export function isCentreHead(user: ServerUser, settings: AccessLevelSettings): boolean {
   if (!user) return false;
   if (user.tier === 1) return true;
+  if (isChiefAdvisor(user)) return false;
   const role = user.role || '';
   return (typeof user.tier === 'number' && user.tier <= settings.sectorHeadMaxTier) || anyKeywordMatches(role, settings.sectorHeadKeywords) || keywordMatches(role, 'advisor');
 }
@@ -156,14 +169,19 @@ export function canSetMemberPassword(user: ServerUser): boolean {
   return user?.tier === 1;
 }
 
+// Directory add/remove is restricted to Centre Head, Advisor, and Super
+// User (all covered by isCentreHead) — mirrors permissions.ts's
+// canEditDirectory/canAddMember. Everyone else keeps read-only directory
+// access; this file's disclosed limitation (no Group Policy capability
+// override check) still applies, same as every other check here.
 export function canEditDirectory(user: ServerUser, settings: AccessLevelSettings): boolean {
   if (isExecutiveRole(user) || isAlumniRole(user)) return false;
-  return isBaseLeadership(user, settings);
+  return isCentreHead(user, settings);
 }
 
 export function canAddMember(user: ServerUser, settings: AccessLevelSettings): boolean {
   if (isAlumniRole(user)) return false;
-  return isExecutiveRole(user) || canEditDirectory(user, settings);
+  return canEditDirectory(user, settings);
 }
 
 export function canApproveAsSectorHead(user: ServerUser, settings: AccessLevelSettings): boolean {
@@ -195,6 +213,21 @@ export function canDecideBudget(user: ServerUser, settings: AccessLevelSettings,
 
 export function canSubmitBudget(user: ServerUser, settings: AccessLevelSettings): boolean {
   return isCentreHead(user, settings);
+}
+
+// Mirrors permissions.ts's canDecideProcurementRequest — deliberately just
+// Centre Head/Advisor, no capability-grant or Group Policy escape hatch.
+export function canDecideProcurementRequest(user: ServerUser, settings: AccessLevelSettings): boolean {
+  return isCentreHead(user, settings) || isAdvisor(user);
+}
+
+// Mirrors permissions.ts's canViewProcurementRequest.
+export function canViewProcurementRequest(user: ServerUser, settings: AccessLevelSettings, request: any): boolean {
+  if (!user) return false;
+  if (request.status === 'Approved' || request.status === 'Completed') return true;
+  if (canDecideProcurementRequest(user, settings)) return true;
+  if (request.requesterId && request.requesterId === user.id) return true;
+  return !!request.requesterEmail && !!user.email && request.requesterEmail.toLowerCase() === user.email.toLowerCase();
 }
 
 export function canApproveAnnouncement(user: ServerUser, settings: AccessLevelSettings): boolean {
@@ -234,16 +267,57 @@ export function canManageGuestInvites(user: ServerUser, settings: AccessLevelSet
   return isCentreHead(user, settings);
 }
 
+export function isChiefCoordinator(user: ServerUser): boolean {
+  if (!user) return false;
+  const role = (user.role || '').toLowerCase();
+  return role.includes('chief coordinator');
+}
+
+export function isGeneralSecretary(user: ServerUser): boolean {
+  if (!user) return false;
+  const role = (user.role || '').toLowerCase();
+  return user.tier === 5 && role.includes('general secretary') && !role.includes('senior');
+}
+
+export function canSubmitEventReport(user: ServerUser): boolean {
+  if (!user) return false;
+  return isGeneralSecretary(user) || isChiefCoordinator(user) || user.tier === 1;
+}
+
 export function canReviewEventReports(user: ServerUser, settings: AccessLevelSettings): boolean {
   return isCentreHead(user, settings) || isEventsHeadGgCampus(user);
 }
 
-export function canReviewDesignProofread(user: ServerUser, settings: AccessLevelSettings): boolean {
-  return isCentreHead(user, settings) || isEventsHeadGgCampus(user);
+export function canViewEventReports(user: ServerUser, settings: AccessLevelSettings): boolean {
+  if (!user) return false;
+  return canReviewEventReports(user, settings) || canSubmitEventReport(user) || isGeneralSecretary(user) || isChiefCoordinator(user) || isExecutiveRole(user) || user.tier === 1;
+}
+
+export function canReviewDesignProofread(user: ServerUser, settings: AccessLevelSettings, design?: { assignedProofreaderIds?: string[]; assignedProofreaderEmail?: string; assignedProofreaderId?: string }): boolean {
+  if (!user) return false;
+  if (isChiefAdvisor(user)) return false; // view-only
+  if (design?.assignedProofreaderIds && user.id && design.assignedProofreaderIds.includes(user.id)) return true;
+  if (design?.assignedProofreaderEmail && design.assignedProofreaderEmail === user.email) return true;
+  if (design?.assignedProofreaderId && user.id && design.assignedProofreaderId === user.id) return true;
+  return isCentreHead(user, settings) || isEventsHeadGgCampus(user) || isFaculty(user) || user.tier === 1;
 }
 
 export function isSuperUser(user: ServerUser): boolean {
   return user?.tier === 1;
+}
+
+export function isAdvisor(user: ServerUser): boolean {
+  if (!user) return false;
+  if (isSuperUser(user)) return false;
+  if (isChiefAdvisor(user)) return false;
+  const role = (user.role || '').toLowerCase();
+  const division = ((user as any).division || '').toLowerCase();
+  return keywordMatches(role, 'advisor') || role.includes('advisor') || division.includes('advisory');
+}
+
+export function canAccessGroupPoliciesServer(user: ServerUser, settings: AccessLevelSettings): boolean {
+  if (!user) return false;
+  return isSuperUser(user) || isCentreHead(user, settings) || isEventsHeadGgCampus(user);
 }
 
 // --- Events / Tasks / Ratings composite checks (ported from permissions.ts) ---
@@ -417,18 +491,18 @@ export function canApprovePendingTask(task: ServerTask, user: ServerUser, settin
  */
 export function canEvaluateEventStudent(user: ServerUser, settings: AccessLevelSettings): boolean {
   if (!user) return false;
-  return isCentreHead(user, settings) || isEventsHeadGgCampus(user) || user.tier === 2.5;
+  return isSuperUser(user) || isCentreHead(user, settings) || isAdvisor(user) || isEventsHeadGgCampus(user) || user.tier === 2.5;
 }
 
 /**
- * Rating edit/delete permission: the rating's own author, Centre Head, or
+ * Rating edit/delete permission: the rating's own author, Centre Head, Advisor, or
  * the Super User. Ported from permissions.ts's canEditRating (Group Policy
  * RATING_EDIT_ANY grant / moduleAccess.RATINGS.edit override out of scope).
  */
 export function canEditRating(rating: ServerRating, user: ServerUser, settings: AccessLevelSettings): boolean {
   if (!user || !rating) return false;
   const isAuthor = user.name === rating.raterName;
-  return user.tier === 1 || isAuthor || isCentreHead(user, settings);
+  return user.tier === 1 || isAuthor || isCentreHead(user, settings) || isAdvisor(user);
 }
 
 // --- Designs / Forms / Announcements / Guests / Event Reports (ported from
@@ -467,6 +541,7 @@ export function canBuildForms(user: ServerUser, settings: AccessLevelSettings): 
  */
 export function canCreateAnnouncement(user: ServerUser, settings: AccessLevelSettings): boolean {
   if (!user || isAlumniRole(user)) return false;
+  if (isChiefAdvisor(user)) return false; // view-only
   return isBaseLeadership(user, settings) || isCoreCommitteeTier(user, settings) || user.tier === 4 || user.tier === 5 || isFaculty(user) || isHeadRole(user, settings);
 }
 

@@ -40,10 +40,12 @@ import {
   Trash2,
   Sparkles,
   FileCheck2,
-  IdCard
+  IdCard,
+  Ticket,
+  Package,
 } from 'lucide-react';
-import { getAnnouncements, getTasks, getDesigns, getMembers, getBudgets, getReimbursements, getEvents, getApprovalRequests, logAuditEvent, Member, syncWithServer, getSystemSettings, signOutClient } from '@/lib/local-data';
-import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isFinanceHead, canAccessGuestDirectory, canVerifyBudgetCentreHead, canDecideBudget, canVerifyReimbursementCentreHead, canApproveAsSectorHead, canApproveAsFinanceHead, canSubmitEventReport, canReviewEventReports } from '@/lib/permissions';
+import { getAnnouncements, getTasks, getDesigns, getMembers, getBudgets, getReimbursements, getEvents, getApprovalRequests, logAuditEvent, Member, syncWithServer, getSystemSettings, signOutClient, getSessionToken, setSessionToken, authHeaders } from '@/lib/local-data';
+import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isFinanceHead, canAccessGuestDirectory, canVerifyBudgetCentreHead, canDecideBudget, canVerifyReimbursementCentreHead, canApproveAsSectorHead, canApproveAsFinanceHead, canSubmitEventReport, canReviewEventReports, canViewEventReports, canAccessEventPassesModule, canAccessGroupPolicies } from '@/lib/permissions';
 import { TermsModal } from '@/components/terms-modal';
 import { PrivacyPolicyModal } from '@/components/privacy-policy-modal';
 import { IosInstallPrompt } from '@/components/ios-install-prompt';
@@ -64,6 +66,8 @@ interface SidebarItem {
   guestDirectoryOnly?: boolean;
   budgetAccessOnly?: boolean;
   eventReportsOnly?: boolean;
+  eventPassesOnly?: boolean;
+  groupPoliciesOnly?: boolean;
 }
 
 interface NavSection {
@@ -78,6 +82,7 @@ const navSections: NavSection[] = [
       { name: 'Dashboard', href: '/dashboard/home', icon: LayoutDashboard },
       { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
       { name: 'Events', href: '/dashboard/events', icon: Calendar },
+      { name: 'Event Passes', href: '/dashboard/event-passes', icon: Ticket, eventPassesOnly: true },
       { name: 'Festivals', href: '/dashboard/festivals', icon: Sparkles },
       { name: 'Tasks', href: '/dashboard/tasks', icon: CheckSquare },
       { name: 'Approvals', href: '/dashboard/approvals', icon: FileCheck2 },
@@ -91,14 +96,15 @@ const navSections: NavSection[] = [
     title: 'Administration',
     items: [
       { name: 'Reimbursements', href: '/dashboard/reimbursements', icon: Receipt },
+      { name: 'Procurement', href: '/dashboard/procurement', icon: Package },
       { name: 'Budget & Funds', href: '/dashboard/budget', icon: Wallet, budgetAccessOnly: true },
       { name: 'Public Forms', href: '/dashboard/forms', icon: FileText },
       { name: 'Reports', href: '/dashboard/reports', icon: BarChart3 },
       { name: 'Announcements', href: '/dashboard/announcements', icon: Megaphone },
       { name: 'Members Directory', href: '/dashboard/directory', icon: FolderGit2 },
       { name: 'Guest Directory', href: '/dashboard/guest-directory', icon: Contact, guestDirectoryOnly: true },
-      { name: 'Guest Invites', href: '/dashboard/guest-invites', icon: Send, centreHeadOnly: true },
-      { name: 'Group Policies', href: '/dashboard/policies', icon: ShieldCheck, centreHeadOnly: true },
+      { name: 'Mail Merge', href: '/dashboard/guest-invites', icon: Send, centreHeadOnly: true },
+      { name: 'Group Policies', href: '/dashboard/policies', icon: ShieldCheck, groupPoliciesOnly: true },
       { name: 'Backup & Restore', href: '/dashboard/backup', icon: DatabaseBackup, superUserOnly: true },
       { name: 'Email Management', href: '/dashboard/email', icon: Mail, centreHeadOnly: true },
       { name: 'Settings', href: '/dashboard/settings', icon: Settings },
@@ -198,7 +204,11 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
   const buildNotifications = (currentUser: any) => {
     const proofreadNotifs = getDesigns()
-      .filter(d => d.proofreadRequested && d.assignedProofreaderEmail === currentUser.email && d.review?.status === 'Pending Proofread')
+      .filter(d => d.proofreadRequested && (
+        d.assignedProofreaderEmail === currentUser.email ||
+        (Array.isArray(d.assignedProofreaderIds) && d.assignedProofreaderIds.includes(currentUser.id)) ||
+        (Array.isArray(d.assignedProofreaders) && d.assignedProofreaders.some((p: any) => p.email === currentUser.email || p.id === currentUser.id))
+      ) && d.review?.status === 'Pending Proofread')
       .map(d => ({
         id: 'pf_' + d.id,
         title: `Proofreading Request: ${d.title}`,
@@ -331,9 +341,28 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
     setIsSidebarCollapsed(localStorage.getItem('sidebarCollapsed') === 'true');
 
+    // Public Pass Redirection: If an attendee/guest visits a legacy link (e.g. /dashboard/events?pass=XYZ),
+    // redirect them directly to the public pass page (/pass/XYZ) without requiring login.
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const passSerial = searchParams.get('pass') || searchParams.get('passId') || searchParams.get('serial');
+      if (passSerial) {
+        router.replace(`/pass/${encodeURIComponent(passSerial)}`);
+        return;
+      }
+    }
+
     const savedUser = localStorage.getItem('user');
-    if (!savedUser) {
-      // Route guard: Redirect to login if unauthenticated
+    const token = getSessionToken();
+    if (!savedUser || !token) {
+      // Route guard: Save intended target URL so user returns to clicked link after login
+      if (typeof window !== 'undefined') {
+        const fullPath = window.location.pathname + window.location.search + window.location.hash;
+        if (fullPath && fullPath !== '/' && fullPath !== '/dashboard/home') {
+          sessionStorage.setItem('redirect_after_login', fullPath);
+        }
+      }
+      signOutClient();
       router.replace('/');
       return;
     }
@@ -396,15 +425,17 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         const lastTierNum = parseInt(storedLastTier, 10);
         // In LEADS ERP, lower tier number indicates higher rank (Tier 1 = Super User, Tier 2 = Leadership, Tier 3 = Core)
         const isTierElevated = !isNaN(lastTierNum) && parsedUser.tier < lastTierNum;
+        const isTierDemoted = !isNaN(lastTierNum) && parsedUser.tier > lastTierNum;
         const isRolePromoted = isTierElevated || (storedLastRole !== (parsedUser.role || '') && parsedUser.tier <= lastTierNum);
 
-        if (isRolePromoted && !isImpersonatingSession) {
+        if ((isRolePromoted || isTierDemoted) && !isImpersonatingSession) {
           setPromotionData({
             previousTier: lastTierNum,
             previousRole: storedLastRole,
             newTier: parsedUser.tier,
             newRole: parsedUser.role || 'Elevated Member',
             newDivision: parsedUser.division,
+            changeType: isTierDemoted ? 'demotion' : 'promotion',
           });
           setTimeout(() => setIsPromotionModalOpen(true), 600);
         }
@@ -475,15 +506,17 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           if (storedLastTier !== null && storedLastRole !== null) {
             const lastTierNum = parseInt(storedLastTier, 10);
             const isTierElevated = !isNaN(lastTierNum) && liveRecord.tier < lastTierNum;
+            const isTierDemoted = !isNaN(lastTierNum) && liveRecord.tier > lastTierNum;
             const isRolePromoted = isTierElevated || (storedLastRole !== (liveRecord.role || '') && liveRecord.tier <= lastTierNum);
 
-            if (isRolePromoted) {
+            if (isRolePromoted || isTierDemoted) {
               setPromotionData({
                 previousTier: lastTierNum,
                 previousRole: storedLastRole,
                 newTier: liveRecord.tier,
                 newRole: liveRecord.role || 'Elevated Member',
                 newDivision: liveRecord.division,
+                changeType: isTierDemoted ? 'demotion' : 'promotion',
               });
               setIsPromotionModalOpen(true);
             }
@@ -617,8 +650,27 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   // even across a chain of switches (only ever stashes the ORIGINAL identity once).
   const canQuickSwitch = isImpersonating ? originalUser?.tier === 1 : user.tier === 1;
 
-  const handleQuickSwitch = (target: Member) => {
+  const handleQuickSwitch = async (target: Member) => {
     const realIdentity = isImpersonating ? originalUser : user;
+    const realToken = localStorage.getItem('impersonatorOriginalToken') || getSessionToken();
+    try {
+      const res = await fetch('/api/auth/impersonate', {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ targetMemberId: target.id }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.token) {
+          if (!isImpersonating && realToken) {
+            localStorage.setItem('impersonatorOriginalToken', realToken);
+          }
+          setSessionToken(data.token);
+        }
+      }
+    } catch (e) {
+      console.warn('Impersonate token request failed:', e);
+    }
     localStorage.setItem('impersonatorOriginalUser', JSON.stringify(realIdentity));
     localStorage.setItem('user', JSON.stringify(target));
     logAuditEvent(
@@ -634,6 +686,11 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
   const handleReturnToSelf = () => {
     if (!originalUser) return;
+    const origToken = localStorage.getItem('impersonatorOriginalToken');
+    if (origToken) {
+      setSessionToken(origToken);
+      localStorage.removeItem('impersonatorOriginalToken');
+    }
     localStorage.setItem('user', JSON.stringify(originalUser));
     localStorage.removeItem('impersonatorOriginalUser');
     logAuditEvent(
@@ -1089,7 +1146,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           still paints above the canvas exactly as before. */}
       <div className="fixed inset-0 pointer-events-none -z-10 opacity-40 dark:opacity-90 transition-opacity duration-500 overflow-hidden">
         <GhostFibers
-          lineColor="#001f53"
+          lineColor="#361C6A"
           glowColor="#03d8fc"
           lightMode={!isDarkTheme}
           speed={0.2}
@@ -1175,7 +1232,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                   </h4>
                 )}
                 <div className="space-y-1">
-                  {section.items.filter(item => (!item.superUserOnly || user.tier === 1) && (!item.centreHeadOnly || isCentreHead(user)) && (!item.guestDirectoryOnly || canAccessGuestDirectory(user)) && (!item.budgetAccessOnly || isCentreHead(user) || isFinanceHead(user)) && (!item.eventReportsOnly || canSubmitEventReport(user) || canReviewEventReports(user))).map((item) => {
+                  {section.items.filter(item => (!item.superUserOnly || user.tier === 1) && (!item.centreHeadOnly || isCentreHead(user)) && (!item.guestDirectoryOnly || canAccessGuestDirectory(user)) && (!item.budgetAccessOnly || isCentreHead(user) || isFinanceHead(user)) && (!item.eventReportsOnly || canSubmitEventReport(user) || canReviewEventReports(user) || canViewEventReports(user)) && (!item.eventPassesOnly || canAccessEventPassesModule(user)) && (!item.groupPoliciesOnly || canAccessGroupPolicies(user))).map((item) => {
                     const Icon = item.icon;
                     const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
                     return (
@@ -1239,7 +1296,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       </aside>
 
       {/* Mobile Header / Nav */}
-      <header className="md:hidden flex items-center justify-between h-16 px-3 sm:px-4 glass-panel bg-theme-sidebar/95 border-b border-theme-sidebar-border sticky top-0 z-40 w-full gap-2">
+      <header className="md:hidden flex items-center justify-between h-16 px-3 sm:px-4 glass-panel bg-theme-sidebar/95 border-b border-theme-sidebar-border sticky top-0 z-[60] w-full gap-2">
         <Link 
           href="/dashboard/home" 
           className="flex items-center gap-2 hover:opacity-90 transition-all cursor-pointer select-none min-w-0 max-w-[65%]"
@@ -1277,15 +1334,21 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
       {/* Mobile Menu Overlay */}
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-30 md:hidden bg-background/40 backdrop-blur-md">
-          <div className="absolute top-16 left-0 right-0 glass-panel bg-theme-sidebar/95 border-b border-theme-sidebar-border max-h-[calc(100vh-4rem)] overflow-y-auto p-4 flex flex-col gap-4">
+        <div 
+          className="fixed inset-0 top-16 z-[55] md:hidden bg-black/60 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setIsMobileMenuOpen(false)}
+        >
+          <div 
+            className="absolute top-0 left-0 right-0 glass-panel bg-theme-sidebar/98 border-b border-theme-sidebar-border max-h-[calc(100vh-4rem)] overflow-y-auto p-4 flex flex-col gap-4 shadow-2xl animate-in slide-in-from-top-2 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
             <nav className="flex flex-col gap-4">
               {navSections.map((section) => (
                 <div key={section.title} className="space-y-1">
                   <h4 className="px-2 text-[10px] font-bold text-theme-text-secondary uppercase tracking-wider">
                     {section.title}
                   </h4>
-                  {section.items.filter(item => (!item.superUserOnly || user.tier === 1) && (!item.centreHeadOnly || isCentreHead(user)) && (!item.guestDirectoryOnly || canAccessGuestDirectory(user)) && (!item.budgetAccessOnly || isCentreHead(user) || isFinanceHead(user)) && (!item.eventReportsOnly || canSubmitEventReport(user) || canReviewEventReports(user))).map((item) => {
+                  {section.items.filter(item => (!item.superUserOnly || user.tier === 1) && (!item.centreHeadOnly || isCentreHead(user)) && (!item.guestDirectoryOnly || canAccessGuestDirectory(user)) && (!item.budgetAccessOnly || isCentreHead(user) || isFinanceHead(user)) && (!item.eventReportsOnly || canSubmitEventReport(user) || canReviewEventReports(user) || canViewEventReports(user)) && (!item.eventPassesOnly || canAccessEventPassesModule(user)) && (!item.groupPoliciesOnly || canAccessGroupPolicies(user))).map((item) => {
                     const Icon = item.icon;
                     const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
                     return (

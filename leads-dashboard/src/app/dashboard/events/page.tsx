@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Plus,
   X,
@@ -20,10 +21,39 @@ import {
   Ban,
   Handshake,
   Sparkles,
-  UserCheck
+  UserCheck,
+  Ticket,
 } from 'lucide-react';
-import { getEvents, addEvent, updateEvent, deleteEvent, approveEvent, rejectEvent, submitEventEdit, submitEventDelete, getEffectiveEventStatus, formatEventDateRange, formatEventPlanningNote, getEventSortTime, getEventSponsors, getEventSponsorTotal, getMembers, EventItem, EventSponsor, Member } from '@/lib/local-data';
-import { canCreateEvent, canEditEvent, canDeleteEvent, canManageEvents, canViewEvent, canApprovePendingEvent, getEventApprovalRequirement } from '@/lib/permissions';
+import {
+  getEvents,
+  addEvent,
+  updateEvent,
+  deleteEvent,
+  approveEvent,
+  rejectEvent,
+  submitEventEdit,
+  submitEventDelete,
+  getEffectiveEventStatus,
+  formatEventDateRange,
+  formatEventPlanningNote,
+  getEventSortTime,
+  getEventSponsors,
+  getEventSponsorTotal,
+  getMembers,
+  isFestivalEvent,
+  EventItem,
+  EventSponsor,
+  Member,
+} from '@/lib/local-data';
+import {
+  canCreateEvent,
+  canEditEvent,
+  canDeleteEvent,
+  canManageEvents,
+  canViewEvent,
+  canApprovePendingEvent,
+  getEventApprovalRequirement,
+} from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useDropTarget } from '@/components/ui/file-dropzone';
@@ -32,11 +62,25 @@ import { RequestApprovalModal } from '@/components/request-approval-modal';
 type EventStatusFilter = 'ALL' | 'ONGOING' | 'COMPLETED' | 'ARCHIVED';
 
 export default function EventsPage() {
+  const router = useRouter();
   const [events, setEvents] = useState<EventItem[]>([]);
   const [user, setUser] = useState<any>(null);
-  const [statusFilter, setStatusFilter] = useState<EventStatusFilter>('ALL');
+  // Defaults to Ongoing (not All) so the board opens decluttered — completed
+  // and archived events live in their own tabs instead of mixing into the
+  // active view, mirroring the Active/Completed split on the Tasks page.
+  const [statusFilter, setStatusFilter] = useState<EventStatusFilter>('ONGOING');
 
-  // Modals
+  // Handle any direct/legacy pass param navigations
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const passSerial = searchParams.get('pass') || searchParams.get('passId') || searchParams.get('serial');
+      if (passSerial) {
+        router.replace(`/pass/${encodeURIComponent(passSerial)}`);
+      }
+    }
+  }, [router]);
+
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
   const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
@@ -52,10 +96,6 @@ export default function EventsPage() {
   const [endDate, setEndDate] = useState('');
   const [datesTBD, setDatesTBD] = useState(false);
   const [planningStartDate, setPlanningStartDate] = useState('');
-  // Optional convenience: pick how many days the event runs and let End Date
-  // compute itself from Start Date, instead of picking both dates by hand.
-  // Purely a UI helper — startDate/endDate are still the values actually
-  // saved, and typing directly into End Date always overrides this.
   const [durationDays, setDurationDays] = useState('');
   const [location, setLocation] = useState('');
   const [campus, setCampus] = useState<'GG Campus' | 'RTC Campus' | 'Both Campuses'>('GG Campus');
@@ -190,11 +230,7 @@ export default function EventsPage() {
             location: locationIndex !== -1 ? values[locationIndex] : '',
             status: evStatus,
             createdBy: user?.name || 'User',
-            committees: [
-              { id: 'c_' + Date.now() + '_' + i + '_1', name: 'Logistics & Venue Committee', memberIds: [] },
-              { id: 'c_' + Date.now() + '_' + i + '_2', name: 'Technical & AV Committee', memberIds: [] },
-              { id: 'c_' + Date.now() + '_' + i + '_3', name: 'Design & Media Committee', memberIds: [] }
-            ]
+            committees: []
           });
           importCount++;
         }
@@ -346,11 +382,7 @@ export default function EventsPage() {
         status,
         sponsors: cleanedSponsors,
         createdBy: user?.name || 'User',
-        committees: [
-          { id: 'c_' + Date.now() + '_1', name: 'Logistics & Venue Committee', memberIds: [] },
-          { id: 'c_' + Date.now() + '_2', name: 'Technical & AV Committee', memberIds: [] },
-          { id: 'c_' + Date.now() + '_3', name: 'Design & Media Committee', memberIds: [] }
-        ]
+        committees: []
       };
       const approval = getEventApprovalRequirement(user, 'CREATE');
       if (approval.requiresApproval) {
@@ -367,7 +399,7 @@ export default function EventsPage() {
         triggerSuccess(`Event submitted for approval from ${approval.approverName}. It will go live once approved.`);
       } else {
         addEvent(newEventBase);
-        triggerSuccess('New event created with its own directory and sub-committees.');
+        triggerSuccess('New event created with its own directory.');
       }
       setIsCreateModalOpen(false);
     }
@@ -435,7 +467,7 @@ export default function EventsPage() {
     user?.tier === 1 || event.submittedByEmail === user?.email || canApprovePendingEvent(event, user);
 
   const visibleEvents = events
-    .filter(event => !event.isHoliday)
+    .filter(event => !isFestivalEvent(event))
     .filter(event => {
       if (event.approvalStatus === 'pending_create' || event.approvalStatus === 'rejected') {
         return canSeeApprovalMeta(event);
@@ -524,8 +556,16 @@ export default function EventsPage() {
             />
 
             <Link
-              href="/dashboard/festivals"
+              href="/dashboard/event-passes"
               className="flex items-center gap-1.5 px-3.5 py-2 bg-accent/15 border border-accent/35 text-accent hover:bg-accent/25 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm"
+            >
+              <Ticket className="h-4 w-4" />
+              Event Passes
+            </Link>
+
+            <Link
+              href="/dashboard/festivals"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/15 text-slate-800 dark:text-white border border-slate-300 dark:border-white/15 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm"
             >
               <Sparkles className="h-4 w-4" />
               Festivals & Observances
@@ -545,28 +585,28 @@ export default function EventsPage() {
       </div>
 
       {/* Status Filter Tabs */}
-      {visibleEvents.length > 0 && (
-        <div className="flex items-center gap-1.5 bg-slate-100/90 dark:bg-slate-900/80 rounded-2xl p-1.5 w-fit border border-slate-200/90 dark:border-white/15 shadow-sm">
-          {([
-            { key: 'ALL', label: 'All Events' },
-            { key: 'ONGOING', label: 'Ongoing' },
-            { key: 'COMPLETED', label: 'Completed' },
-            { key: 'ARCHIVED', label: 'Archived' },
-          ] as { key: EventStatusFilter; label: string }[]).map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setStatusFilter(tab.key)}
-              className={`px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                statusFilter === tab.key
-                  ? 'bg-accent text-white shadow-md shadow-accent/25 scale-105'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/80 dark:hover:bg-white/10'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      )}
+          {visibleEvents.length > 0 && (
+            <div className="flex items-center gap-1.5 bg-slate-100/90 dark:bg-slate-900/80 rounded-2xl p-1.5 w-fit border border-slate-200/90 dark:border-white/15 shadow-sm">
+              {([
+                { key: 'ALL', label: 'All Events' },
+                { key: 'ONGOING', label: 'Ongoing' },
+                { key: 'COMPLETED', label: 'Completed' },
+                { key: 'ARCHIVED', label: 'Archived' },
+              ] as { key: EventStatusFilter; label: string }[]).map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => setStatusFilter(tab.key)}
+                  className={`px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                    statusFilter === tab.key
+                      ? 'bg-accent text-white shadow-md shadow-accent/25 scale-105'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/80 dark:hover:bg-white/10'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          )}
 
       {/* Grid of Events Cards */}
       {visibleEvents.length === 0 ? (
@@ -1013,3 +1053,4 @@ export default function EventsPage() {
     </div>
   );
 }
+

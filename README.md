@@ -2,7 +2,7 @@
 
 **Private internal operations and management ERP for the LEADS Next Gen Centre at M.S. Ramaiah University of Applied Sciences (MSRUAS), Bengaluru.**
 
-This platform replaces a scattered mix of WhatsApp groups, spreadsheets, and email threads with a single, role-gated portal covering task traceability, event lifecycle management, dual-gate performance evaluation, two-stage reimbursement pipelines, dynamic public form building, financial governance, and full member/guest roster management for roughly 140 people across 7 access tiers.
+This platform replaces a scattered mix of WhatsApp groups, spreadsheets, and email threads with a single, role-gated portal covering task traceability, event lifecycle management, multi-reviewer performance evaluation, two-stage reimbursement pipelines, dynamic public form building, financial governance, digital visiting cards & Apple/Google wallet passes, event access passes with QR gate scanning, and full member/guest roster management for roughly 140 people across 7 access tiers.
 
 > This is a **private** repository and application. It is not a public product — access is restricted to LEADS Next Gen Centre members and MSRUAS staff.
 
@@ -10,20 +10,81 @@ This platform replaces a scattered mix of WhatsApp groups, spreadsheets, and ema
 
 ## Table of Contents
 
+- [Recent Updates](#-recent-updates)
 - [Project Structure](#-project-structure)
 - [Tech Stack](#-tech-stack)
 - [Getting Started](#-getting-started--first-time-setup)
 - [One-Time Initial Setup Wizard](#-one-time-initial-setup-wizard)
 - [Environment Variables](#-environment-variables)
 - [Module Breakdown](#-module-breakdown)
+  - [1. Dashboard Home](#1-dashboard-home-dashboardhome)
+  - [2. Calendar Module](#2-calendar-module-dashboardcalendar)
+  - [3. Events Desk](#3-events-desk-dashboardevents)
+  - [4. Tasks Desk](#4-tasks-desk-dashboardtasks)
+  - [5. Ratings & Student Performance](#5-ratings--student-performance-dashboardratings)
+  - [6. Approvals & Governance Desk](#6-approvals--governance-desk-dashboardapprovals)
+  - [7. Design Portal](#7-design-portal-dashboarddesigns)
+  - [8. Event Passes & Gate QR Scanner](#8-event-passes--gate-qr-scanner-dashboardevent-passes)
+  - [9. Digital Visiting Card & Wallet Passes](#9-digital-visiting-card--wallet-passes-dashboardvisiting-card--cardslug)
+  - [10. Reimbursements System](#10-reimbursements-system-dashboardreimbursements)
+  - [11. Budget & Funds](#11-budget--funds-dashboardbudget)
+  - [12. Public Forms Builder](#12-public-forms-builder-dashboardforms--formsslug)
+  - [13. Analytics & Reports](#13-analytics--reports-dashboardreports)
+  - [14. Announcements Engine](#14-announcements-engine-dashboardannouncements)
+  - [15. Member Directory & Roster](#15-member-directory--roster-dashboarddirectory)
+  - [16. Guest Directory](#16-guest-directory-dashboardguest-directory)
+  - [17. Guest Invites Dispatcher](#17-guest-invites-dispatcher-dashboardguest-invites)
+  - [18. Dynamic Group Policies](#18-dynamic-group-policies-dashboardpolicies)
+  - [19. Backup & Restore](#19-backup--restore-dashboardbackup)
+  - [20. Email Management & Client](#20-email-management--client-dashboardemail)
+  - [21. System & Account Settings](#21-system--account-settings-dashboardsettings)
 - [Access Level Tiers & Privileges Matrix](#-access-level-tiers--privileges-matrix)
 - [Super User Features](#-super-user-features)
-- [Self-Hosted Deployment (Hostinger KVM VPS)](#️-self-hosted-deployment-hostinger-kvm-vps)
+- [Production Deployment (AWS EC2)](#️-production-deployment-aws-ec2)
 - [Data Persistence & Encryption](#-data-persistence--encryption)
 - [System Architecture & Engineering Diagrams](#-system-architecture--engineering-diagrams)
-- [UI Aesthetics & Light Mode Styling](#-ui-aesthetics--light-mode-styling)
+- [UI Aesthetics & Mobile Design](#-ui-aesthetics--mobile-design)
 - [Comprehensive Operations Manual](#-comprehensive-operations-manual)
 - [Intellectual Property & Licensing Notice](#️-intellectual-property--licensing-notice)
+
+---
+
+## 🆕 Recent Updates
+
+Everything that's changed since this README was last updated (2026-09-15). Full detail is in the git history (`git log`); this is the summary.
+
+### Infrastructure — moved to AWS
+- **Migrated production hosting from a Hostinger KVM VPS to AWS EC2** (region `ap-south-1`), now served at **`portal-leads.msruas.ac.in`** through an AWS Application Load Balancer, administered via AWS Systems Manager Session Manager instead of direct SSH. See [Production Deployment (AWS EC2)](#️-production-deployment-aws-ec2) below.
+- Fixed a bug left over from that migration: several places (wallet pass logo/photo URLs, background-worker email links) were still hardcoded to the old `leadsnextgencentre.online` domain — a completely different, stale deployment — instead of the real live domain. This was the root cause of Apple/Google Wallet passes silently failing to generate.
+
+### 2026-09-22
+- **Members Directory**: add/remove access hard-locked to Centre Head, Advisor, and Super User — no longer delegable via Group Policy (#129, #134); new **Faculty Ambassador** (#132) and **Chief Advisor**, view-only (#133) designations; new **"Pending Activation / Reset"** filter tab (#139); member names auto-capitalize as typed (#128); "Present Credentials" 3D keycard now opens on the closed cover instead of skipping the animation (#127).
+- **Digital Visiting Card / Wallet Passes**: fixed the "Configured" status badge never showing (#126), fixed the stale-domain bug that broke wallet pass generation entirely (#131), and wallet pass failures now surface the real error instead of failing silently (#130).
+- **Promotion/demotion notice**: a tier change now pops up a notice either direction — promotion keeps its celebratory copy, a tier increase (demotion) now shows a matching notice instead of nothing (#134).
+- **Mail Merge** (renamed from "Guest Invites", internals unchanged) and **Email Management**: both composers can now attach files (15MB cap) with a one-click attachment-note helper (#135).
+- **Events**: new events start with zero pre-seeded committees instead of 3 auto-created defaults (#136).
+- **Design Portal**: fixed design-brief tasks assigned to a committee never showing up in the "Design Task Requests" queue for that committee's members (#137).
+- **Task assignment emails**: fixed automatically-created tasks (the weekly holiday social-media approval task, the daily event-lapse social-media task) never sending their assignee an email at all — they bypassed the normal task-creation email pipeline entirely (#138).
+- **Task auto-emails, round two**: assignment-digest emails could be silently dropped if the server restarted mid-debounce (`pm2 restart` fires on every deploy) — now flushed on shutdown instead of lost; a substantive task edit (due date, title, assignee, brief, etc.) never emailed anyone besides one narrow reassignment case — now sends the (new) assignee(s) an update notice, while a plain status toggle still stays silent; and there was no reminder before a deadline at all — added a new daily scheduler that emails everyone assigned to a task due tomorrow, once per task (#141).
+- **Reimbursements & Budget**: neither module had *any* email hooks before this — both now email the Centre Head(s) when a claim/request is submitted, and the claimant/submitter plus the Finance Head(s) at every decision stage (verified, approved, denied), with the send outcome recorded on the record so a failed email is visible instead of silent (#141).
+- **Event Reports**: a rejected report's submitter is now emailed why — previously only an approval sent any notice at all (#141).
+- **Events**: adding a member to a committee after the event already exists now sends them the same roster-assignment email a member gets when the event is first created — previously only creation-time committee members were ever notified (#141).
+- **Design Portal**: fixed the new tabbed review UI's tab bar rendering as an overlapping smear of text — a Flexbox sizing bug (`overflow-x-auto` collapsing the tab bar's height to a few pixels inside the modal's constrained layout) (#141).
+- **Account activation**: fixed the "Welcome to the Centre" keycard animation on the activation success screen pushing the "Proceed to Sign In" button off-screen on mobile with no indication that scrolling would reveal it (#141).
+- **Design Portal**: proofreader selection restricted to Faculty division members only, and the "Head" category narrowed from a broad Social Media Head match to specifically Head of Design.
+- **Home Dashboard**: the "Assigned Tasks" tile now counts only tasks still needing action (not Completed), scoped to the current calendar year so it resets each January instead of accumulating stale, long-overdue tasks.
+
+### 2026-09-21
+- Dashboard Home: stat cards (Active Events, Assigned Tasks, Member Roster, Performance Rollup) are now clickable deep links into their module; Assigned Tasks card shows completed vs. pending separately; Performance Rollup gets a breakdown tooltip; added a "Last updated" timestamp.
+- Project Timeline (Gantt): wider sticky label column, single-click row interaction instead of two-click inspect-then-open.
+- Members Directory: fixed the profile-view close button doing nothing for restricted-access members.
+
+### 2026-09-15
+- Ratings: Task Evaluation Queue now shows pending items and groups scorecards with aggregate scores; Advisor granted edit/delete permissions; averaged ratings per deliverable added to the Reports page.
+- Email: fixed deep-link navigation, post-login target URL preservation, and activity highlighting.
+- Members Directory: fixed modal close-button issues, added backdrop-click-to-close and an Escape key listener.
+- Design Portal: excluded a specific proofreader, restricted the proofreader pool to Centre Head / Advisor / Social Media Heads with Centre Head & Advisor auto-selected by default.
+- Digital Visiting Card: fixed mobile overflow/cut-off in the 3D luxury leather bookfold view.
 
 ---
 
@@ -33,22 +94,17 @@ This platform replaces a scattered mix of WhatsApp groups, spreadsheets, and ema
 ERP/
 ├── leads-dashboard/        # Next.js 16 (App Router) + TypeScript + Tailwind CSS v4 — the live application
 │   ├── src/app/             # App Router routes: dashboard pages, public form pages, and the api/ backend
-│   ├── src/components/      # Shared React components
+│   ├── src/components/      # Shared React components (ImageCropModal, EmptyState, Shell, etc.)
 │   ├── src/lib/              # Permissions engine, email service, encryption, data access layer
 │   ├── scripts/              # setup-superuser.js, decrypt-backup.js
 │   └── public/                # Static assets (logos, reference images)
-├── PROJECT DOCS/            # Product specifications: PRD, sitemap, design system, tech spec, data model (ERD), copy, reports/analytics
+├── PROJECT DOCS/            # Product specifications: PRD, sitemap, design system, tech spec, data model (ERD)
 ├── REFERENCE DATA/          # Official MSRUAS leadership directory, hierarchy structure, source images
-├── docs/                     # Engineering manuals, deployment guides, DB/module diagrams, the Operations & Privileges Manual (DOCX)
+├── docs/                     # Engineering manuals, deployment guides, DB/module diagrams, Operations Manual (DOCX)
 ├── demo/                     # Static demo page
-├── scripts/                  # Repo-level helper scripts (e.g. manual DOCX generator)
+├── scripts/                  # Repo-level helper scripts
 └── deploy.sh                 # Deployment helper script
 ```
-
-- **`leads-dashboard/`**: The Next.js 16 (App Router) + TypeScript + Tailwind CSS v4 project containing the active implementation of the dashboard.
-- **`PROJECT DOCS/`**: Curated product specifications, sitemaps, database models, technical specifications, and copywriting guidelines.
-- **`REFERENCE DATA/`**: Official Ramaiah University of Applied Sciences leadership directory, hierarchy structure, source images, and references.
-- **`docs/`**: Engineering manuals, deployment guides, database schemas, and the complete [Operations & Privileges Manual (DOCX)](docs/LEADS_ERP_Instruction_and_Privileges_Manual.docx).
 
 ---
 
@@ -58,15 +114,16 @@ ERP/
 | :--- | :--- |
 | **Framework** | [Next.js 16](https://nextjs.org) (Turbopack, App Router) & [React 19](https://react.dev) |
 | **Language** | [TypeScript 5](https://www.typescriptlang.org) (strict mode) |
-| **Styling** | [Tailwind CSS v4](https://tailwindcss.com) with a custom glassmorphism design system |
+| **Styling** | [Tailwind CSS v4](https://tailwindcss.com) with custom glassmorphism design system |
 | **Icons** | [Lucide React](https://lucide.dev) |
 | **Cryptography** | Node.js `crypto` — `scrypt` (password hashing), `AES-256-GCM` (data-at-rest encryption), `PBKDF2` |
 | **Charts & Visualization** | [Recharts](https://recharts.org) |
-| **PDF & QR Engines** | `jspdf`, `jspdf-autotable`, `qrcode`, `html2canvas` |
+| **PDF & QR Engines** | `jspdf`, `jspdf-autotable`, `qrcode`, `html2canvas`, `jsqr` |
+| **Wallet Passes** | Native Apple Wallet (`.pkpass`), Google Wallet Pass API integration |
+| **Image Processing & Cropping** | Canvas-based multi-ratio image crop engine with zoom and pan |
 | **Document Export** | `jszip`, `adm-zip`, `archiver` (Word DOCX / ZIP report generation) |
 | **OCR & Spellcheck** | `tesseract.js`, `nspell`, `dictionary-en` / `dictionary-en-gb` |
 | **Email Relay** | `nodemailer`, routed through a local Postfix relay |
-| **Animation** | `gsap`, `ogl` |
 | **Sanitization** | `isomorphic-dompurify` |
 
 ---
@@ -89,7 +146,7 @@ npm install
 
 ### 2. Configure Environment Variables
 
-Copy the example environment file and fill in your SMTP relay details (see [Environment Variables](#-environment-variables) below):
+Copy the example environment file and fill in your SMTP relay details:
 
 ```bash
 cp .env.example .env
@@ -101,7 +158,7 @@ cp .env.example .env
 npm run dev
 ```
 
-Open [http://localhost:3030](http://localhost:3030) in your browser (the dev server is configured to run on port `3030`).
+Open [http://localhost:3030](http://localhost:3030) in your browser (configured for port `3030`).
 
 ### Available Scripts
 
@@ -131,26 +188,19 @@ On a fresh installation (locally or on a production VPS), the application automa
 
 > **Permanent Lock:** Once the initial setup is completed, the wizard is permanently locked. Future visitors to `/` or `/setup` are taken straight to the normal Sign-In portal.
 
-Alternatively, CLI operators can run the bootstrap script directly in their terminal:
-```bash
-npm run setup
-# or: node scripts/setup-superuser.js
-```
-
 ---
 
 ## 🔑 Environment Variables
 
-Configuration lives in `leads-dashboard/.env` (copy from `leads-dashboard/.env.example` to start). Key variables:
+Configuration lives in `leads-dashboard/.env`:
 
 | Variable | Description |
 | :--- | :--- |
-| `DATA_ENCRYPTION_KEY` | 256-bit hex key used for AES-256-GCM encryption of all local database collections. Auto-generated by the setup wizard; back it up offline. |
-| `SMTP_HOST` / `SMTP_PORT` | Local Postfix submission target. Defaults (`localhost:25`) are correct for the standard "Postfix as a local relay" VPS setup and normally don't need changing. |
-| `ANNOUNCEMENT_FROM_EMAIL` | Sender address for outbound mail. Must match (or be a verified Workspace "Send As" alias of) the Gmail account Postfix authenticates as. |
+| `DATA_ENCRYPTION_KEY` | 256-bit hex key used for AES-256-GCM encryption of all local database collections. Auto-generated by setup wizard. |
+| `SMTP_HOST` / `SMTP_PORT` | Local Postfix submission target (defaults to `localhost:25`). |
+| `ANNOUNCEMENT_FROM_EMAIL` | Sender address for outbound mail. Must match authenticated relay user. |
 | `ANNOUNCEMENT_FROM_NAME` | Display name used on outbound institutional email. |
-
-> The actual Gmail App Password used for relaying is **never** stored in `.env` — it lives only in Postfix's own SASL configuration on the server.
+| `WALLETWALLET_API_KEY` | (Optional) API key for automated Apple & Google Wallet pass issuance. |
 
 ---
 
@@ -159,197 +209,189 @@ Configuration lives in `leads-dashboard/.env` (copy from `leads-dashboard/.env.e
 ### Workspace & Operational Modules
 
 #### 1. Dashboard Home (`/dashboard/home`)
-- **Executive Overview**: Centralized operations desk featuring friendly user greetings, official designation and committee breakdowns, active task counters, upcoming event schedules, and recent announcements.
-- **Cross-Module Project Timeline (Gantt)**: One bar per event spanning its start/end dates (colored by planned/active/completed/archived status), with diamond markers for that event's tasks plotted at their due date, plus an "Other Deliverables" row for tasks not tied to any event. Bars and markers deep-link straight into the Events and Tasks modules. A 2-Weeks / 30-Days / 90-Days window toggle keeps it legible, with a "Today" line and a frozen label column — and it auto-widens to 90 days on its own the moment the default window comes up empty, rather than showing a blank chart. Events with a separate **Planning Start Date** (see Events Desk below) render a lighter, dashed lead-in segment ahead of the event's own solid bar.
-- **Quick Action Hub**: Direct shortcuts for event creation, task assignment, design uploads, and announcement broadcasting.
-- **Personal Deliverables**: Tailored dashboard widget highlighting deliverables assigned specifically to the logged-in user.
+- **Executive Overview**: Centralized operations desk featuring friendly greetings, designation breakdowns, active task counters, upcoming event schedules, and recent announcements.
+- **Cross-Module Project Timeline (Gantt)**: One bar per event spanning its start/end dates (colored by status), with diamond markers for tasks plotted at their due date, plus an "Other Deliverables" row. Interactive window toggle (2-Weeks / 30-Days / 90-Days) with auto-widening fallback and lead-in planning phase indicators.
+- **Quick Action Hub**: Shortcuts for event creation, task assignment, design uploads, and announcement broadcasting.
+- **Personal Deliverables**: Dedicated widget showing items assigned to the current user.
 
 #### 2. Calendar Module (`/dashboard/calendar`)
 - **Inter-Campus Operational Timeline**: Interactive calendar displaying event schedules, sub-committee milestones, and university deadlines.
-- **Planning-Phase Markers**: Days that fall inside an event's pre-event planning window (its Planning Start Date up to its actual Start Date) are marked with a distinct amber indicator, separate from the event's own on-ground date highlight — so prep work in the lead-up to an event is visible on the calendar even before the event itself begins.
+- **Planning-Phase Markers**: Distinct amber indicator for pre-event planning windows (Planning Start Date up to actual Start Date).
 - **Campus Filtering**: Filter view by **GG Campus**, **RTC Campus**, or **All Campuses**.
-- **Event Highlights**: Clickable event cards showing start/end dates, venue details, committee leads, and status badges.
+- **Event Highlights**: Clickable event cards showing dates, venue details, committee leads, and status badges.
 
 #### 3. Events Desk (`/dashboard/events`)
 - **Lifecycle Management**: End-to-end event workflow: *Draft* → *Pending Approval* → *Published* → *Completed*.
-- **Planning Start Date vs. Event Date**: Every event can optionally carry a separate **Planning Start Date** — when prep work (bookings, committee formation, design briefs, sponsor outreach) actually begins — distinct from its real Start/End Date on the ground. An event can be created and shared early (e.g. planning starting in February) while its actual on-campus dates sit later (e.g. March), without misrepresenting when the event itself runs. Shown as a "Prep work from ..." note on event cards, the event detail page, and the dashboard's Upcoming Events list, and as a distinct lead-in segment on the dashboard Gantt timeline and a separate marker on the Calendar.
-- **Status Filter Tabs**: Filter the events grid by *All Events*, *Ongoing*, *Completed*, or *Archived* — computed from each event's actual end date, not just its stored status, so a past-dated event reads as completed even if nobody manually flipped it.
-- **Sub-Committee Formation**: Create specialized committees (Logistics, Technical, Media, Operations) and assign member rosters.
-- **Bulk Roster Import**: Download a CSV template and bulk-upload events, same pattern as the Member Directory and Guest Directory importers.
-- **Approval Engine**: Event creation by Executive Council members (President, VP, Chief Coordinator) automatically triggers a Centre Head sign-off requirement.
-- **Festivals & Observances Approval Gate**: Synced Indian national holidays and observances require explicit social media post sign-off (`holiday_social_approval`). Until a festival's post is approved and moved to content design (`holiday_design_social`), the festival event is hidden from event selection dropdowns across all dashboard modules.
-- **Student Performance Evaluation**: Integrated dual-gate rating system for Centre Head and campus-specific Events Heads.
+- **Planning Start Date vs. Event Date**: Supports a separate planning start date so prep work is tracked without misrepresenting live dates.
+- **Status Filter Tabs**: Filter by *All Events*, *Ongoing*, *Completed*, or *Archived*.
+- **Sub-Committee Formation**: Create specialized committees (Logistics, Technical, Media, Operations) with assigned members.
+- **Bulk Roster Import**: Download CSV template and bulk-upload events.
+- **Approval Engine**: Executive Council event creations trigger Centre Head sign-off requirements.
+- **Festivals & Observances**: Synced national holidays require explicit social media post sign-off (`holiday_social_approval`) before appearing in selection dropdowns.
+- **No Default Committees**: New events start with zero sub-committees — the 3 auto-seeded defaults (Logistics & Venue, Technical & AV, Design & Media) were removed; committees are still fully supported, just no longer pre-created.
 
 #### 4. Tasks Desk (`/dashboard/tasks`)
 - **Task Delegation**: Assign tasks to individual members or entire sub-committees with priority tagging (*Urgent*, *High*, *Normal*, *Low*).
-- **Searchable Student & Event Filters**: The Student and Event filter dropdowns are type-to-search comboboxes rather than plain scroll-to-find `<select>` lists — matches the "Select Assignee" search pattern already used when creating a task.
+- **Searchable Combobox Filters**: Type-to-search assignee and event filter dropdowns.
 - **Status Tracking**: Visual progress pipeline: *To Do* → *In Progress* → *Under Review* → *Completed*.
-- **Auto-Generated Design Tasks**: A finalized Design Portal submission (style-approved, and proofread-approved if proofreading was requested) automatically creates or completes a task here — linked to its event when tagged to one, or standalone otherwise — so it flows straight into the rating queue with no manual re-entry.
-- **Extension Requests**: Assignees can submit task deadline extension requests, which Faculty Advisors or the Centre Head can approve or reject.
-- **Executive Task Allotment & Universal Visibility**: Executive Council leadership (President & Vice President) hold complete platform-wide task visibility access to monitor all assigned tasks, while new executive task assignments route through Event Head approval.
-- **Live Gantt Sync**: A task's due date drives its marker position on the dashboard's Project Timeline — assign, reschedule, or complete a task and the Gantt chart reflects it on the next data sync, no separate step required.
+- **Auto-Generated Design Tasks**: Finalized Design Portal submissions automatically create or complete tasks.
+- **Extension Requests**: Assignees can request deadline extensions subject to Advisor or Centre Head approval.
+- **Auto-Emails**: Assignees are emailed on assignment (debounced into a digest), on any substantive edit to their task (due date, title, description, assignee — a plain status toggle stays silent), and once via a daily reminder the day before the deadline.
 
 #### 5. Ratings & Student Performance (`/dashboard/ratings`)
-- **Rubric Evaluation**: 5-point performance scoring system for student deliverables and leadership contributions.
-- **Searchable Student & Event Filters**: Same type-to-search combobox as the Tasks Desk, applied to the Task Evaluation Queue's Student and Event filters.
-- **Time Period Filter**: Filter the evaluation history by a specific month or a custom date range — no fixed quarters.
-- **Scoped Visibility**:
-  - *Super User / Centre Head*: Universal visibility across all members and campuses.
-  - *Department Heads*: Visibility over team members in their department.
-  - *Executive Council*: Visibility over own performance and committees they belong to.
-  - *Alumni*: Restricted strictly to viewing their own historical performance ratings.
+- **Multi-Reviewer Independent Rubric**: 4-way independent leadership evaluation rubric (**Super User**, **Centre Head**, **Advisor**, and **GG Campus Events Head**).
+- **Live Aggregate Averaging**: Reviews submitted by any panel member automatically compute into a live composite average score.
+- **Design Evaluation Lane**: Dedicated evaluation slot for the Design Head on creative deliverables.
+- **Searchable Combobox Filters**: Quick search filters for students and events with custom monthly or date-range filtering.
 
-#### 6. Design Portal (`/dashboard/designs`)
+#### 6. Approvals & Governance Desk (`/dashboard/approvals`)
+- **Centralized Approvals Inbox**: Dedicated management hub for pending sign-offs across **Announcements**, **Tasks**, **Events**, **Designs**, **Event Reports**, **Members**, and **Committees**.
+- **In-Card Rich Overview Previews**: Each card includes an immediate preview snippet (announcement scope & message body, task brief & due date, event dates & venue, design thumbnail & category, report file specs).
+- **Interactive Deep Overview Modal**: One-click modal inspection showing un-truncated content bodies, attachments, requester messages, and embedded **Approve / Reject** buttons with optional decision notes.
+- **Multi-Panel Auto-Sync**: Sibling requests for Centre Head, Advisor, and GG Events Head automatically resolve when any panel member decides, with standing Super User override authority.
+
+#### 7. Design Portal (`/dashboard/designs`)
 - **Asset Review Desk**: Dedicated portal for Design and Social Media department asset requests, proofreading, and approval workflows.
-- **Proofreading Pipeline**: Upload design files, assign proofreaders, and manage review decisions (*Approved*, *Revisions Requested*, *Pending Proofread*). Feedback/comments are only required when requesting changes or rejecting — a plain approval doesn't need typed justification.
-- **Design Style Approval**: A separate Design Head/Centre Head sign-off (*Style Approved* / *Style Rejected*) on top of proofreading — once both gates clear (or style alone, if proofreading wasn't requested), the design is finalized and its linked task completes automatically.
-- **Asset Replacements**: Support for uploading updated asset revisions while retaining review logs.
-- **Scoped Access**: Restricted to Design Head, Super User, and assigned proofreaders.
+- **Dual Review Pipeline**:
+  - *Proofreading Gate*: Assign proofreaders with change requests or plain approval.
+  - *Style Approval Gate*: Final Design Head / Centre Head sign-off.
+- **Asset Management**: File uploads with image previews, OCR text scanning, and automated completed task synchronization.
+- **Design Task Requests Queue**: Design-brief Tasks (Tasks module, `taskCategory: 'design'`) awaiting a submission surface here for whoever they're assigned to — correctly resolving committee assignment (not just individual/group) via the linked event's committee membership.
+- **Tabbed Review Inspector**: The proofread/style/social-workflow review modal is split into focused tabs (Overview, Proofreading, Style Approval, Social Workflow) instead of one long scroll.
+- **Faculty-Only Proofreaders**: Proofreader selection is restricted to Faculty division members; within that, only Centre Head, Advisor, or Head of Design.
+
+#### 8. Event Passes & Gate QR Scanner (`/dashboard/event-passes`)
+- **Digital Event Passes**: High-resolution event pass cards with unique serial numbers, security QR codes, and automated email dispatch with pass attachments.
+- **Gate QR Scanner**: Integrated in-app camera scanner for event security and coordinators with authenticated instant validation.
+- **Pass Governance**: Re-send pass emails, revoke invalid passes, or delete records.
+
+#### 9. Digital Visiting Card & Wallet Passes (`/dashboard/visiting-card` & `/card/[slug]`)
+- **Public Visiting Card**: Dynamic `/card/[slug]` landing page featuring member profile, designation, direct phone/LinkedIn links, and instant VCF vCard download.
+- **Interactive Image Cropper**: Multi-aspect ratio image cropping modal with zoom, pan, and centering controls for avatars and visiting cards.
+- **Apple & Google Wallet Passes**: Automated wallet pass generation via WalletWallet API with QR codes, caching, and rate-limited regeneration (2 per 15-day window). The image URLs sent to WalletWallet now point at the live production domain (`portal-leads.msruas.ac.in`) instead of a stale domain from before the AWS migration; generation failures also now surface the real error on the Save & Publish toast instead of failing silently.
+- **3D Leather Keycard ("Present Credentials")**: Mobile overflow/cut-off in the 3D bookfold view fixed; opens on the closed leather cover (tap-to-open animation) rather than jumping straight to the extracted card.
+
+---
 
 ### Administration & Governance Modules
 
-#### 7. Reimbursements System (`/dashboard/reimbursements`)
-- **Expense Claims**: Member expense submission desk with receipt proof attachments and amount validation.
+#### 10. Reimbursements System (`/dashboard/reimbursements`)
+- **Expense Claims**: Expense submission desk with receipt proof attachments and amount validation.
 - **Two-Stage Approval Pipeline**:
   - **Stage 1 (Sector Head)**: Initial operational verification.
   - **Stage 2 (Finance Head)**: Final financial audit and reimbursement sign-off.
-- **Visibility Isolation**: Claimants view own claims; Sector Heads view all pending Stage 1 claims; Finance Heads view claims only after Stage 1 verification.
+- **Auto-Emails**: The Centre Head(s) are emailed when a claim is submitted; the claimant and Finance Head(s) are emailed at every decision (verified, approved, denied), with delivery status recorded on the claim.
 
-#### 8. Budget & Funds (`/dashboard/budget`)
+#### 11. Budget & Funds (`/dashboard/budget`)
 - **Financial Governance**: Ledger for university fund allocations, department budgets, and operational expenditures.
-- **Income Sources & Sponsorships**: Track external corporate sponsors, research/institutional grants, alumni donations, and general Centre income. Income sources can be linked to specific events or assigned as General Centre Income.
 - **Smart Sponsorship Calculation Engine**:
-  - *Sponsor Depletion First*: Event expenses automatically deplete linked event sponsor funds first before touching the Centre's main budget allocation.
-  - *Centre Budget Fallback*: Any expenses exceeding total sponsorship are deducted from the Centre's main account.
-  - *Sponsor Surplus Return Rule*: If actual event spending is less than sponsorship received, unused sponsor funds automatically return to the Centre's main account, increasing the Centre's total available balance.
-  - *Total Available Capital*: Real-time financial formula: `Annual Approved Budget + General Income/Grants + Returned Sponsor Surplus`.
-- **Multi-Year Budgeting Engine**: Extended Financial Year selector allowing proposing, reviewing, editing, and inspecting budgets across a 9-year range (`-5` years back to `+3` years forward) for historical access and multi-year forward planning.
-- **Financial Analytics & Metric Dashboard**: 6 real-time stat cards (Annual Approved Budget, General Income & Grants, Sponsor Surplus Returned, Total Available Capital, Realized Net Spent, Net Remaining Balance) along with event line-item badges (`🤝 Depleted` and `🔄 Returned to Centre`).
-- **Encrypted API Data Layer**: Fully backed by AES-256-GCM encrypted server collection persistence via `/api/income-sources` and `/api/income-sources/[id]`.
-- **Access Scoping**: Restricted strictly to Super User, Centre Head, and Finance Leadership.
+  - *Sponsor Depletion First*: Event expenses deplete sponsor funds before touching the Centre's allocation.
+  - *Sponsor Surplus Return Rule*: Unused event sponsorship returns to the Centre's main account.
+  - *Total Available Capital*: Real-time formula: `Annual Approved Budget + General Income/Grants + Returned Sponsor Surplus`.
+- **Multi-Year Budgeting Engine**: Extended 9-year Financial Year selector (`-5` years back to `+3` years forward).
+- **Auto-Emails**: Same submit/decision email flow as Reimbursements — Centre Head(s) on submission, submitter and Finance Head(s) at every decision stage.
 
-#### 9. Public Forms Builder (`/dashboard/forms` & `/forms/[slug]`)
-- **Interactive Form Builder**: Custom form creation engine for student signups, feedback collection, and event registrations.
-- **QR Code Preview & Download**: Instant QR Code preview generated for every public form (`/forms/[slug]`), with a single-click download of a high-resolution PNG poster card (featuring official branding header, event title, scannable QR code, and URL string) for physical printing and distribution, plus direct browser printing.
-- **Reusable Field Templates & "Start from Template"**: Save any form's field schema as a reusable template, then start a future form from it via the **Start from Template** picker instead of rebuilding it field-by-field. Server-side, the built-in templates (below) are guaranteed present and kept in sync with their code-defined field list on every boot — even on a database that predates the template shipping — so the picker never silently comes up empty.
-- **Feedback Form Template & Word Export**: A built-in template matching the Centre's official `Feedback_Events.docx` field-for-field — Name/Type of Event, Date/Duration, Participant details, the 9-parameter 1–5 rating grid, Learning Outcomes, four open-ended questions, and the Outcome & Impact section. Every submission to a form built from this template can be downloaded as a filled copy of the real Word document (same header, layout, and branding as the official form), with every answer placed exactly where it would be hand-written — ticked scale boxes, checked event types, filled blanks — plus a footer disclaimer noting the response was completed and verified through the LEADS Operational Portal, so no physical copy needs to be filled or signed.
-- **Event Linking**: Tag a form to a specific event — shown as a badge in the builder and on the public form page itself.
-- **Field Customization**: Text inputs, textareas, dropdowns, checkboxes, and file upload fields.
-- **Public Form Slugs**: Custom public landing pages rendered at `/forms/[slug]` — the only routes in the app reachable without authentication.
-- **Form Protection**: Deletion of public forms is strictly restricted to Centre Head and Super User.
+#### 12. Public Forms Builder (`/dashboard/forms` & `/forms/[slug]`)
+- **Interactive Form Builder**: Custom form engine for student signups, feedback collection, and event registrations.
+- **Instant QR Code & Poster Download**: Generates high-res printable poster PNG cards with branding header and scannable QR code.
+- **Official Word (DOCX) Export**: Built-in Feedback Form template generates field-for-field filled copies matching `Feedback_Events.docx`.
 
-#### 10. Analytics & Reports (`/dashboard/reports`)
-- **Executive Report Generator**: Styled PDF report generation and CSV data exports.
-- **Report Types**: Performance scorecards, event post-mortems, financial audit summaries, and member activity reports.
-- **Time Period Filter**: Scope any report to a specific month or a custom date range instead of a fixed quarter.
+#### 13. Analytics & Reports (`/dashboard/reports`)
+- **Executive Report Generator**: Styled PDF report generation and CSV data exports for scorecards, event post-mortems, and financial audits.
 
-#### 11. Announcements Engine (`/dashboard/announcements`)
-- **Targeted Broadcasting**: Multi-scope message delivery (`ALL_MEMBERS`, `CORE_COMMITTEE`, `DEPARTMENTS`, `INDIVIDUAL`).
-- **Dual Notification**: In-dashboard bell alerts combined with automated Light Mode HTML email dispatch.
-- **Authoring Rules**: Allowed for Leadership, Core Committee, and Heads; blocked for Alumni & Executive Council without approval.
+#### 14. Announcements Engine (`/dashboard/announcements`)
+- **Targeted Broadcasting**: Multi-scope broadcasting (`ALL_MEMBERS`, `CORE_COMMITTEE`, `DEPARTMENTS`, `INDIVIDUAL`).
+- **Dual Notification**: In-dashboard alerts paired with Light Mode HTML emails.
 
-#### 12. Member Directory & Roster (`/dashboard/directory`)
-- **Central Roster**: Complete roster management covering Advisory Board, Core Committee, Training Associates, and Alumni.
-- **Bulk Roster Import**: Download a CSV template and bulk-upload members.
-- **Tier & Persona Control**: Manage Tiers 1 through 7, roles, divisions, and departments.
-- **Status Controls**: Active vs. Terminated account status toggles — restricted to the Centre Head, and requires a typed reason for the record.
-- **Automated Termination Email**: Terminating a member automatically dispatches an official notification email (including the stated reason) to their registered address, retaining historical records in the database.
-- **Member Protection**: Member removal and termination controls are strictly blocked for Executive Council roles.
+#### 15. Member Directory & Roster (`/dashboard/directory`)
+- **Central Roster**: Complete roster management covering Advisory Board, Core Committee, Training Associates, and Alumni across Tiers 1–7.
+- **Bulk CSV Importer**: Template-based batch member creation.
+- **Account Termination Engine**: Requires typed reason and dispatches automated termination notification emails.
+- **Add/Remove Hard-Locked**: Adding or removing a member is restricted to Centre Head, Advisor, and Super User only — a Group Policy grant can no longer be used to delegate this (it can still grant read-only directory access, or a one-time edit of a record someone personally added).
+- **New Designations**: **Faculty Ambassador** (Core Committee / Advisory Board — same standing as Chief Coordinator) and **Chief Advisor** (Faculty — deliberately view-only, kept distinct from the edit-capable Advisor position despite the shared word in the title).
+- **"Pending Activation / Reset" Filter Tab**: Quickly find members who haven't completed account activation or are flagged to set up a new password.
+- **Auto-Capitalized Names**: The first letter of a member's name is capitalized automatically as it's typed in the Add/Edit forms.
+- **Promotion / Demotion Notice**: A tier or role change now pops up a notice for the affected member either way — a genuine promotion still gets the celebratory "Congratulations on Your Promotion!" card, and a tier increase (demotion) now shows a matching "Congratulations on Your New Designation — you have been demoted" notice instead of staying silent.
 
-#### 13. Guest Directory (`/dashboard/guest-directory`)
-- **External Contact Cards**: Directory for visiting guests, external VIPs, faculty advisors, and industry partners.
-- **Bulk Roster Import**: Download a CSV template and bulk-upload guests, same pattern as the Member Directory.
-- **Access Scoping**: View and add contacts allowed for Executive Council, Centre Head, and Faculty; contact deletion restricted to Centre Head and Super User.
+#### 16. Guest Directory (`/dashboard/guest-directory`)
+- **External VIP Directory**: Directory for guest speakers, VIPs, and corporate contacts with CSV bulk import.
 
-#### 14. Guest Invites Dispatcher (`/dashboard/guest-invites`)
-- **Mass Email Dispatcher**: Batch invitation engine for official events and guest communications.
-- **Mail-Merge Engine**: Dynamic placeholder substitution (`{{name}}`, `{{email}}`, `{{role}}`).
-- **Delivery Monitoring**: Progress tracking bar with real-time success and failure reporting.
+#### 17. Mail Merge (`/dashboard/guest-invites`)
+- Renamed from "Guest Invites" — same tool, same route, same underlying `GUEST_INVITES`/`MANAGE_GUEST_INVITES` permission keys (a display-only rename).
+- **Mass Email Dispatcher**: Batch invitation engine with mail-merge placeholders (`{{name}}`, `{{email}}`, `{{role}}`) and live delivery progress bar.
+- **File Attachments**: Attach one or more files (15MB total cap) sent identically to every recipient in the batch, with a one-click "Please find attached the following file(s)" note inserted into the message body.
 
-#### 15. Dynamic Group Policies (`/dashboard/policies`)
-- **Granular RBAC Engine**: Super User authority to grant any of 15 capability keys (`EVENTS_CREATE`, `TASKS_EDIT`, `EDIT_DIRECTORY`, `BUILD_FORMS`, etc.).
-- **Quick Selection Controls**: Integrated **Select All** and **Select None** controls for capabilities/privileges, divisions, and tiers.
-- **Targeting Matrix**: Target by Member ID, Division, Tier, or Designation Keyword.
-- **Approval Gateways**: Configure optional approval sign-offs (Centre Head, specific member, policy tag holder).
-- **Scope Restrictions**: Apply `OWN_ONLY` visibility restrictions to specific users or tiers.
+#### 18. Dynamic Group Policies (`/dashboard/policies`)
+- **Granular RBAC Engine**: Super User capability grants across 15 privilege keys with division/tier targeting, `Select All` controls, and approval gateways.
 
-#### 16. Backup & Restore (`/dashboard/backup`)
-- **Database Snapshot Manager**: Export complete system state to formatted JSON backup files.
-- **System Restoration**: Restore database state with validation checks, rollback protection, and backup history logs.
+#### 19. Backup & Restore (`/dashboard/backup`)
+- **Snapshot Manager**: Export and restore AES-256 encrypted JSON database snapshots with rollback protection.
 
-#### 17. Email Management & Client (`/dashboard/email`)
-- **SMTP Client Configuration**: Configure Nodemailer for Google Workspace SMTP, Local Postfix, or Custom SMTP.
-- **Diagnostics & Testing**: Live connection verification tool with instant test mail delivery.
-- **Dispatch Logs**: Detailed audit log of all sent and failed email notifications.
-- **Master Light Mode Template Engine**: Centralized HTML email wrapper styling.
+#### 20. Email Management & Client (`/dashboard/email`)
+- **SMTP Engine**: Diagnostic testing, live queue monitoring, test email delivery, and dispatch logs.
+- **File Attachments**: The Broadcast Composer can attach files to a single-recipient or division-scope send (same 15MB cap and attachment-note helper as Mail Merge).
+- **Debounced Task-Assignment Digest**: Task assignment emails batch into one digest per recipient over a 10-minute quiet window — now correctly fires for tasks the in-process schedulers create automatically (holiday social-media approval tasks, event-lapse social-media tasks), not just tasks created through the Tasks page, and now survives a mid-debounce server restart (flushed on shutdown instead of dropped).
 
-#### 18. System & Account Settings (`/dashboard/settings`)
-- **Personal Profile**: Profile customization and password updates.
-- **Profile Photo Upload**: Upload a profile photo (max 2 MB) — shows immediately in the header, sidebar, and Settings itself.
-- **Secure Email Update**: Updating login email sends a 5-minute OTP code to the CURRENT email inbox for security verification.
-- **Emergency System Lockdown**: Super User toggle to lock the dashboard site-wide (renders plain 404 for non-admin session attempts).
-
-Settings is also reachable directly from the dashboard header: clicking the name/avatar in the top navbar opens a dropdown with **Settings** and **Sign Out**, alongside the sidebar's own links.
+#### 21. System & Account Settings (`/dashboard/settings`)
+- **Profile & Security**: Avatar upload, OTP-verified email updates, password change, and Super User Emergency System Lockdown.
 
 ---
 
 ## 🔐 Access Level Tiers & Privileges Matrix
 
-The system enforces a multi-tiered permission model backed by dynamic policy grants (`leads-dashboard/src/lib/permissions.ts`):
-
 | Tier | Role Title | Typical Division | Core Permissions & Scope |
 | :--- | :--- | :--- | :--- |
-| **Tier 1** | **Super User** | Core Committee | Complete system governance, dynamic Quick Switch impersonator, system lockdown, global audit logs, backup/restore. |
-| **Tier 2** | **Centre Head** | Faculty | University-wide operational authority, final budget sign-off, Level-2 reimbursement clearance, email broadcasts, guest directory. |
-| **Tier 2.5** | **GG Campus Head** | Faculty | Regional operational authority and event oversight for the Gnanagangothri (GG) campus; cross-campus full view, edit, and evaluation authority over both **GG Campus** and **RTC Campus** events. |
-| **Tier 3** | **Faculty / Event Heads** | Faculty | Event proposal approval, Level-1 reimbursement audit, student task lead delegation, rating reviews, campus-restricted student evaluation (RTC Events Head manages RTC Campus only). |
-| **Tier 4** | **Advisory Board** | Faculty | Read-only access to institutional analytics, event summaries, and evaluation reports. |
-| **Tier 5** | **Core Committee** | Core Committee | Executive Council (President & Vice President) hold universal task oversight across the platform; Event orchestration, task assignments, public form builder & QR generation, financial claims. Event creation requires **Centre Head approval**; task allotment requires **Event Head approval**. Member termination is strictly blocked. Festival events require post sign-off to appear in dropdowns. |
-| **Tier 6** | **Training Associates** | Training Associate | Task execution & status updates, personal workspace, expense claim submission, feedback participation. |
-| **Tier 7** | **Alumni / Guests** | Alumni / Guest | Read-only historical event records, own performance ratings, past reimbursements, guest invites, certificate downloads, and profile settings. |
+| **Tier 1** | **Super User** | Core Committee | Complete root authority, quick switch impersonator, emergency lockdown, global audit logs, backup/restore. |
+| **Tier 2** | **Centre Head** | Faculty | University-wide authority, budget sign-off, Level-2 reimbursement clearance, email broadcasts, roster management. |
+| **Tier 2.5** | **GG Campus Head** | Faculty | Regional operational authority for GG Campus; cross-campus oversight and evaluation authority for both GG and RTC events. |
+| **Tier 3** | **Faculty / Event Heads** | Faculty | Event approval, Level-1 reimbursement audit, task delegation, and student performance ratings. |
+| **Tier 4** | **Advisory Board** | Faculty | Multi-reviewer evaluation participation, institutional analytics, event summaries, and report viewing. |
+| **Tier 5** | **Core Committee** | Core Committee | Executive Council (President & VP) platform-wide task oversight; event creation (requires Centre Head approval), task allotment. |
+| **Tier 6** | **Training Associates** | Training Associate | Task execution, status updates, personal deliverables, expense claim submissions. |
+| **Tier 7** | **Alumni / Guests** | Alumni / Guest | Read-only access to past event records, personal ratings, digital visiting cards, and profile settings. |
 
 ---
 
 ## ⚡ Super User Features
 
-- **Dynamic Quick Switch:** The Super User can instantly impersonate any active account in the Directory without entering a password. The switcher queries the live database in real time. A prominent top bar allows one-click return to the Super User session.
-- **Emergency Lockdown Mode:** Instantly restricts non-Super-User access in case of administrative maintenance.
-- **Encrypted Backup & Restore:** Export complete AES-256 encrypted snapshots of the database with offline decryptor tool (`scripts/decrypt-backup.js`).
+- **Dynamic Quick Switch:** Instant impersonation of any active directory member in real time with a persistent return bar.
+- **Emergency Lockdown Mode:** Restricts non-Super-User access site-wide for maintenance.
+- **Standing Approval Override:** Super User can view and resolve any pending approval across all departments directly.
+- **Encrypted Backup & Restore:** Full AES-256 encrypted database backup and offline decryption utility (`scripts/decrypt-backup.js`).
 
 ---
 
-## 🖥️ Self-Hosted Deployment (Hostinger KVM VPS)
+## 🖥️ Production Deployment (AWS EC2)
 
-The application runs as a production service under **PM2** on a self-hosted Hostinger KVM VPS at **[leadsnextgencentre.online](https://leadsnextgencentre.online)**, reverse-proxied with **Nginx** and automated SSL.
+> **Migration note:** the application previously ran on a Hostinger KVM VPS at `leadsnextgencentre.online`. It has since moved to an **AWS EC2** instance; that old domain is no longer the live deployment and should not be used for anything that needs to reach the real server (e.g. asset/logo URLs baked into the wallet-pass code once pointed at it by mistake — see Recent Updates below).
 
-### Deployment Workflow:
-1. Develop, test, and commit locally to git.
-2. Push commits to `main`.
-3. On the VPS:
-   ```bash
-   git pull
-   npm install
-   npm run build
-   pm2 restart leads-dashboard
-   ```
-4. All client browsers synchronize with the VPS over HTTPS.
+- **Host:** AWS EC2, region `ap-south-1` (Mumbai), instance tagged **"LEADS Next Gen"**.
+- **Access:** no direct SSH — administration is done through **AWS Systems Manager Session Manager** (browser-based shell from the EC2 console).
+- **Public domain:** **[portal-leads.msruas.ac.in](https://portal-leads.msruas.ac.in)**, routed through an AWS Application Load Balancer (`msruas-ac-in-prod-...`) straight to the instance.
+- **Process manager:** **PM2**, single fork-mode process named `leads-dashboard`, serving `next start -p 3030`.
+- **Repo path on the instance:** `/home/ssm-user/ERP/leads-dashboard`.
 
-See [`docs/vps-deployment-guide.html`](docs/vps-deployment-guide.html) and [`docs/vps-setup.sh`](docs/vps-setup.sh) for the full server bootstrap procedure, and [`docs/dns-rebuild-guide.html`](docs/dns-rebuild-guide.html) / [`docs/direct-send-setup-guide.html`](docs/direct-send-setup-guide.html) for DNS and outbound mail configuration.
+```bash
+# Production deployment workflow — run from the SSM shell, inside leads-dashboard/
+cd /home/ssm-user/ERP/leads-dashboard
+git pull origin main
+npm install
+npm run build
+pm2 restart leads-dashboard
+```
 
 ---
 
 ## 🔒 Data Persistence & Encryption
 
-- Database files reside under `leads-dashboard/data/` as per-collection JSON files (`members.json`, `events.json`, `tasks.json`, etc.).
-- Each file is encrypted at rest using **AES-256-GCM** using the `DATA_ENCRYPTION_KEY` in `.env`.
-- Uploaded assets (Design Portal images, reimbursement receipts) are stored on disk under `data/uploads/`.
-- **Live Sync:** Connected clients automatically poll every 7 seconds, pulling live updates into local context.
+- Encrypted JSON collections stored on server under `leads-dashboard/data/` (`members.json`, `events.json`, `tasks.json`, etc.).
+- Encrypted at rest using **AES-256-GCM** with the server `DATA_ENCRYPTION_KEY`.
+- Uploaded assets (receipts, design submissions, event reports) stored in `data/uploads/`.
+- Live client polling synchronizes updates across all active sessions.
 
 ---
 
 ## 📐 System Architecture & Engineering Diagrams
-
-The LEADS ERP platform is designed with a decoupled modular architecture, encrypted persistent JSON data stores, and cross-module data integration pipelines.
 
 ### 1. Database Entity-Relationship (ER) Schema
 ![Database Entity-Relationship ER Diagram](docs/database_er_diagram.png)
@@ -357,37 +399,29 @@ The LEADS ERP platform is designed with a decoupled modular architecture, encryp
 ### 2. Module-to-Module Data Flow Architecture
 ![Module Data Flow Diagram](docs/module_data_flow_diagram.png)
 
-### 3. Individual Subsystem Architectural Flowcharts
+### 3. Subsystem Architectural Flowcharts
 
-| Subsystem Area | Structural Flowchart Diagram | Core Module Connections |
-| :--- | :--- | :--- |
-| **Events & Tasks Subsystem** | ![Events & Tasks Diagram](docs/modules/events_and_tasks_module_structure.png) | Draft validation → Approval queues → Sub-committee rosters → Sponsor merge → Deliverable tracking → Automatic completion triggers. |
-| **Finance & Budget Subsystem** | ![Finance & Budget Diagram](docs/modules/finance_and_budget_module_structure.png) | Annual budget → Income/Sponsorship ingestion → Claim validation → 2-Stage audit → Sponsor depletion first → Net Centre cost & surplus return engine. |
-| **Design & Forms Subsystem** | ![Design & Forms Diagram](docs/modules/designs_and_forms_module_structure.png) | Asset upload → AI OCR scan → Gate 1 Style & Gate 2 Proofread clearances → Task auto-completion → Dynamic form creation → Public sign-ups → Word DOCX template exports. |
-
-Deeper product specification, sitemap, data model (ERD), design system, and content copy documents live in [`PROJECT DOCS/`](PROJECT%20DOCS/).
+| Subsystem Area | Structural Flowchart Diagram |
+| :--- | :--- |
+| **Events & Tasks Subsystem** | ![Events & Tasks Diagram](docs/modules/events_and_tasks_module_structure.png) |
+| **Finance & Budget Subsystem** | ![Finance & Budget Diagram](docs/modules/finance_and_budget_module_structure.png) |
+| **Design & Forms Subsystem** | ![Design & Forms Diagram](docs/modules/designs_and_forms_module_structure.png) |
 
 ---
 
-## 🎨 UI Aesthetics & Light Mode Styling
+## 🎨 UI Aesthetics & Mobile Design
 
-- **Dynamic Inspirational Quotes Carousel**: Auto-rotating hero banner on the login screen (`leads-dashboard/src/app/page.tsx`) cycling through 20 quotes on leadership and inspiring young minds — global and Indian leaders, education advocates, and business leaders — every ~3.5 seconds, with smooth cross-fade transitions (no manual prev/next controls; the dot indicators still allow jumping to a specific quote).
-- **Branded Loading Splash**: A centered LEADS logo splash (spinning ring, timed progress bar) shows for 5 seconds after login and for 2 seconds when switching between dashboard modules.
-- **Collapsible Sidebar**: The desktop sidebar collapses to an icon-only rail to reclaim page width, and temporarily flies out to full width on hover without shifting the page content underneath. The collapsed/expanded preference persists across reloads.
-- **Isometric Light Mode Background**: Custom geometric isometric cube background image (`/images/light-bg.jpg`) rendered fixed across Light Mode layout (`leads-dashboard/src/app/globals.css`).
-- **Master Light Mode Email Template**: Institutional HTML email wrapper with clean white cards (`#ffffff`), soft slate borders (`#e2e8f0`), LEADS institutional blue accents (`#0284c7`), and dark slate body text (`#0f172a`, `#334155`) (`leads-dashboard/src/lib/email-service.ts`).
+- **Responsive Mobile Navigation Drawer**: Elevated navigation drawer (`z-index: 9999`) preventing overlap with filter cards or background content.
+- **Interactive Photo Cropping**: Touch and mouse-friendly canvas cropper with zoom slider and preset aspect ratios.
+- **Glassmorphism Design System**: Tailored HSL color palettes, backdrop blurs, and border glows (`.glass-panel`).
+- **Inspirational Quotes Carousel**: Auto-rotating hero banner cycling through 20 curated leadership quotes on the login screen.
+- **Collapsible Desktop Sidebar**: Icon-only collapsed rail with hover flyout that preserves page flow.
 
 ---
 
 ## 📄 Comprehensive Operations Manual
 
-A formal Microsoft Word document detailing all workflows, security protocols, and module guidelines is available in the repository:
 - **[LEADS ERP Operations & Privileges Manual (DOCX)](docs/LEADS_ERP_Instruction_and_Privileges_Manual.docx)**
-
-Additional engineering references:
-- [`docs/bugs-to-fix.md`](docs/bugs-to-fix.md) — known-issue tracker
-- [`docs/recommended-fixes.md`](docs/recommended-fixes.md) — proposed engineering improvements
-- [`docs/changes-needed-for-claude.md`](docs/changes-needed-for-claude.md) — outstanding work notes for AI-assisted development sessions
 
 ---
 

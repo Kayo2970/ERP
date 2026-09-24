@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   Plus, 
   Download, 
@@ -65,7 +66,11 @@ import { StudentProfileModal } from '@/components/student-profile-modal';
 import { RequestApprovalModal } from '@/components/request-approval-modal';
 import { canViewFullDirectory, canEditDirectory, canAddMember, getMemberApprovalRequirement, canApprovePendingMember, canEditMemberRecordRow, isRestrictedDirectoryEditor, isCentreHead, canViewHiddenAccounts, canSetMemberPassword, isKayomarzPavri } from '@/lib/permissions';
 
+const capitalizeFirstLetter = (value: string) =>
+  value.length > 0 ? value.charAt(0).toUpperCase() + value.slice(1) : value;
+
 export default function DirectoryPage() {
+  const router = useRouter();
   const [members, setMembers] = useState<Member[]>([]);
   const [user, setUser] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -107,8 +112,8 @@ export default function DirectoryPage() {
     'Operations & Logistics',
   ];
 
-  type FacultyPosition = 'Events Head' | 'Industrial Connects' | 'Finance Head' | 'Centre Head' | 'Advisor';
-  type CorePosition = 'President' | 'Vice President' | 'General Secretary' | 'Chief Coordinator' | 'Department Head';
+  type FacultyPosition = 'Events Head' | 'Industrial Connects' | 'Finance Head' | 'Centre Head' | 'Advisor' | 'Chief Advisor';
+  type CorePosition = 'President' | 'Vice President' | 'General Secretary' | 'Chief Coordinator' | 'Faculty Ambassador' | 'Department Head';
   type AssociatePosition = 'Associate' | 'Department Associate';
 
   const deriveMemberRoleAndDepartment = (
@@ -149,6 +154,18 @@ export default function DirectoryPage() {
         role = 'Advisor';
         department = 'Faculty Advisory';
         tier = 2;
+      } else if (pos === 'Chief Advisor') {
+        // View-only across the app, deliberately never given the (edit-
+        // capable) Advisor's tier or role-keyword privileges — see
+        // isCentreHead/isAdvisor in permissions.ts and permissions-server.ts,
+        // which both explicitly exclude this role from their "advisor"
+        // keyword match so it's never mistaken for the real Advisor
+        // position above. Tier 4 (same as a plain Faculty Member) keeps it
+        // clear of both the sector-head and base-leadership tier
+        // thresholds that would otherwise grant edit access.
+        role = 'Chief Advisor';
+        department = 'Chief Advisor Office';
+        tier = 4;
       } else {
         role = 'Faculty Member';
         department = opts.departmentSelect || 'Faculty';
@@ -169,6 +186,12 @@ export default function DirectoryPage() {
       } else if (pos === 'Chief Coordinator') {
         role = 'Chief Coordinator';
         department = 'Coordination';
+      } else if (pos === 'Faculty Ambassador') {
+        // Same standing/privileges as Chief Coordinator — see isExecutiveRole
+        // in permissions.ts/permissions-server.ts, which matches this role
+        // text directly rather than deriving it from division/tier.
+        role = 'Faculty Ambassador';
+        department = 'Faculty Ambassador Program';
       } else if (pos === 'Department Head') {
         const dept = opts.departmentSelect || STANDARDIZED_DEPARTMENTS[0];
         role = `Head of ${dept}`;
@@ -191,6 +214,12 @@ export default function DirectoryPage() {
       } else if (pos === 'Chief Coordinator') {
         role = 'Senior Chief Coordinator';
         department = 'Coordination';
+      } else if (pos === 'Faculty Ambassador') {
+        // Deliberately not prefixed "Senior" — Faculty Ambassador is the same
+        // named role/privilege level in both Core Committee and Advisory
+        // Board (see isExecutiveRole), not a senior variant of another title.
+        role = 'Faculty Ambassador';
+        department = 'Faculty Ambassador Program';
       } else if (pos === 'Department Head') {
         const dept = opts.departmentSelect || STANDARDIZED_DEPARTMENTS[0];
         role = `Senior Head of ${dept}`;
@@ -279,7 +308,6 @@ export default function DirectoryPage() {
         console.error(e);
       }
     }
-
     window.addEventListener('leads-data-sync', refreshData);
     window.addEventListener('storage', refreshData);
     return () => {
@@ -288,11 +316,15 @@ export default function DirectoryPage() {
     };
   }, []);
 
+  // Activation & One-Time Password Setup Modal state
+  const [activationModalData, setActivationModalData] = useState<{ member: Member; link?: string } | null>(null);
+  const [copiedActivationLink, setCopiedActivationLink] = useState(false);
+  const [adminPasswordInput, setAdminPasswordInput] = useState('');
+  const [isAdminSettingPassword, setIsAdminSettingPassword] = useState(false);
+  const [adminPasswordSuccessMsg, setAdminPasswordSuccessMsg] = useState('');
+
   // Rows skipped during the last CSV import specifically because their email
-  // already exists elsewhere (in the roster or earlier in the same file) —
-  // kept around (not auto-dismissed like the toasts above) so the user can
-  // download them, fix the email, and re-upload rather than losing track of
-  // which rows didn't make it in.
+  // already exists elsewhere (in the roster or earlier in the same file)
   const [emailConflicts, setEmailConflicts] = useState<{ name: string; email: string; division: string; role: string; department: string; program: string; batch: string }[]>([]);
 
   const triggerSuccess = (msg: string) => {
@@ -307,12 +339,32 @@ export default function DirectoryPage() {
     setTimeout(() => setErrorMsg(''), 4000);
   };
 
-  // Activation & One-Time Password Setup Modal state
-  const [activationModalData, setActivationModalData] = useState<{ member: Member; link?: string } | null>(null);
-  const [copiedActivationLink, setCopiedActivationLink] = useState(false);
-  const [adminPasswordInput, setAdminPasswordInput] = useState('');
-  const [isAdminSettingPassword, setIsAdminSettingPassword] = useState(false);
-  const [adminPasswordSuccessMsg, setAdminPasswordSuccessMsg] = useState('');
+  // Listen for Escape key to close any open modal on the Members Directory page
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isModalOpen) setIsModalOpen(false);
+        if (editingMember) setEditingMember(null);
+        if (deletingMember) setDeletingMember(null);
+        if (terminatingMember) { setTerminatingMember(null); setTerminationReason(''); setTerminationError(''); }
+        if (reactivatingMember) setReactivatingMember(null);
+        if (isBulkDeleteModalOpen) setIsBulkDeleteModalOpen(false);
+        if (isBulkEditModalOpen) setIsBulkEditModalOpen(false);
+        if (passwordResetModalMember) setPasswordResetModalMember(null);
+        if (setPasswordModalMember) setSetPasswordModalMember(null);
+        if (approvalRequestMember) setApprovalRequestMember(null);
+        if (rejectingMemberId) { setRejectingMemberId(null); setRejectionReasonInput(''); }
+        if (activationModalData) setActivationModalData(null);
+        if (selectedStudentForProfile) setSelectedStudentForProfile(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    isModalOpen, editingMember, deletingMember, terminatingMember, reactivatingMember,
+    isBulkDeleteModalOpen, isBulkEditModalOpen, passwordResetModalMember, setPasswordModalMember,
+    approvalRequestMember, rejectingMemberId, activationModalData, selectedStudentForProfile
+  ]);
 
   const handleOpenActivationModal = async (member: Member, initialLink?: string) => {
     setCopiedActivationLink(false);
@@ -504,6 +556,10 @@ export default function DirectoryPage() {
       setEditFacultyPosition('Finance Head');
     } else if (r.includes('Centre Head') || r.includes('Center Head')) {
       setEditFacultyPosition('Centre Head');
+    } else if (r.includes('Chief Advisor')) {
+      // Must be checked before the plain 'Advisor' match below — "Chief
+      // Advisor" also contains the substring "Advisor".
+      setEditFacultyPosition('Chief Advisor');
     } else if (r.includes('Advisor')) {
       setEditFacultyPosition('Advisor');
     } else {
@@ -520,6 +576,8 @@ export default function DirectoryPage() {
       setEditCorePosition('General Secretary');
     } else if (r.includes('Chief Coordinator')) {
       setEditCorePosition('Chief Coordinator');
+    } else if (r.includes('Faculty Ambassador')) {
+      setEditCorePosition('Faculty Ambassador');
     } else {
       setEditCorePosition('Department Head');
     }
@@ -915,6 +973,9 @@ export default function DirectoryPage() {
     .filter(m => {
       if (selectedDivision === 'TERMINATED') {
         if (m.status !== 'Terminated') return false;
+      } else if (selectedDivision === 'PENDING_CREDENTIALS') {
+        if (m.status === 'Terminated' || m.approvalStatus === 'pending_create' || m.approvalStatus === 'rejected') return false;
+        if (!(!m.hasPassword || m.mustSetupPassword)) return false;
       } else if (selectedDivision !== 'ALL' && m.division !== selectedDivision) {
         return false;
       }
@@ -942,6 +1003,15 @@ export default function DirectoryPage() {
   const alumniCount = visibleMembers.filter(m => m.division === 'Alumni').length;
   const facultyCount = visibleMembers.filter(m => m.division === 'Faculty').length;
   const terminatedCount = visibleMembers.filter(m => m.status === 'Terminated').length;
+  // Activation still pending (never logged in / set a password) OR flagged
+  // by an admin to set up a new one — the two "this account isn't fully
+  // credentialed yet" states, surfaced together as one filter tab.
+  const pendingCredentialsCount = visibleMembers.filter(m =>
+    m.status !== 'Terminated' &&
+    m.approvalStatus !== 'pending_create' &&
+    m.approvalStatus !== 'rejected' &&
+    (!m.hasPassword || m.mustSetupPassword)
+  ).length;
 
   const totalPages = Math.ceil(filteredMembers.length / pageSize) || 1;
   const paginatedMembers = filteredMembers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -1077,7 +1147,7 @@ export default function DirectoryPage() {
         </div>
         <StudentProfileModal
           memberIdOrName={user.id || user.name}
-          onClose={() => {}}
+          onClose={() => router.push('/dashboard/home')}
         />
       </div>
     );
@@ -1266,6 +1336,20 @@ export default function DirectoryPage() {
           <GraduationCap className="h-3.5 w-3.5 text-purple-400" />
           Alumni Mentors ({alumniCount})
         </button>
+
+        {pendingCredentialsCount > 0 && (
+          <button
+            onClick={() => { setSelectedDivision('PENDING_CREDENTIALS'); setCurrentPage(1); }}
+            className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
+              selectedDivision === 'PENDING_CREDENTIALS'
+                ? 'bg-accent text-white shadow-sm'
+                : 'bg-theme-border/20 text-theme-text-secondary hover:text-theme-text-primary'
+            }`}
+          >
+            <KeyRound className="h-3.5 w-3.5 text-warning" />
+            Pending Activation / Reset ({pendingCredentialsCount})
+          </button>
+        )}
 
         {terminatedCount > 0 && (
           <button
@@ -1672,14 +1756,21 @@ export default function DirectoryPage() {
         });
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-            <div className="glass-panel w-full max-w-lg rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div
+            onClick={() => setIsModalOpen(false)}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="glass-panel w-full max-w-lg rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl max-h-[90vh] overflow-y-auto"
+            >
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-base font-bold text-theme-text-primary">Add Member to Organization</h2>
                   <p className="text-[11px] text-theme-text-secondary">Enrolling a new member into the organization directory</p>
                 </div>
                 <button 
+                  type="button"
                   onClick={() => setIsModalOpen(false)}
                   className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
                 >
@@ -1694,7 +1785,7 @@ export default function DirectoryPage() {
                     type="text"
                     required
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    onChange={(e) => setName(capitalizeFirstLetter(e.target.value))}
                     placeholder="e.g. Ananya Sharma"
                     className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   />
@@ -1742,38 +1833,39 @@ export default function DirectoryPage() {
                         <option value="Finance Head">Finance Head</option>
                         <option value="Centre Head">Centre Head</option>
                         <option value="Advisor">Advisor</option>
+                        <option value="Chief Advisor">Chief Advisor (view-only)</option>
                       </select>
                     </div>
                   )}
 
                   {(division === 'Core Committee' || division === 'Advisory Board') && (
                     <div className="space-y-1.5">
-                      <label className="block font-medium text-theme-text-secondary">Position / Role</label>
+                      <label className="block font-medium text-theme-text-secondary">Council Position</label>
                       <select
                         value={corePosition}
                         onChange={(e) => setCorePosition(e.target.value as CorePosition)}
-                        className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                        className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-semibold"
                       >
                         <option value="Department Head">Department Head</option>
                         <option value="President">President</option>
                         <option value="Vice President">Vice President</option>
                         <option value="General Secretary">General Secretary</option>
                         <option value="Chief Coordinator">Chief Coordinator</option>
+                        <option value="Faculty Ambassador">Faculty Ambassador</option>
                       </select>
                     </div>
                   )}
 
                   {division === 'Training Associate' && (
                     <div className="space-y-1.5">
-                      <label className="block font-medium text-theme-text-secondary">Select Department *</label>
+                      <label className="block font-medium text-theme-text-secondary">Associate Role</label>
                       <select
-                        value={departmentSelect}
-                        onChange={(e) => setDepartmentSelect(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-semibold"
+                        value={associatePosition}
+                        onChange={(e) => setAssociatePosition(e.target.value as AssociatePosition)}
+                        className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                       >
-                        {STANDARDIZED_DEPARTMENTS.map(dept => (
-                          <option key={dept} value={dept}>{dept}</option>
-                        ))}
+                        <option value="Associate">General Associate</option>
+                        <option value="Department Associate">Department Associate</option>
                       </select>
                     </div>
                   )}
@@ -1781,95 +1873,83 @@ export default function DirectoryPage() {
 
                 {/* Sub-Selection for Events Head Campus */}
                 {division === 'Faculty' && facultyPosition === 'Events Head' && (
-                  <div className="space-y-1.5 p-3 bg-accent/5 border border-accent/20 rounded-xl">
-                    <label className="block font-medium text-accent">Campus Sub-Selection</label>
-                    <div className="flex items-center gap-4 pt-1">
-                      <label className="flex items-center gap-2 cursor-pointer text-theme-text-primary font-medium">
-                        <input
-                          type="radio"
-                          name="campus"
-                          value="GG Campus"
-                          checked={campus === 'GG Campus'}
-                          onChange={() => setCampus('GG Campus')}
-                          className="accent-accent"
-                        />
-                        GG Campus
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer text-theme-text-primary font-medium">
-                        <input
-                          type="radio"
-                          name="campus"
-                          value="RTC Campus"
-                          checked={campus === 'RTC Campus'}
-                          onChange={() => setCampus('RTC Campus')}
-                          className="accent-accent"
-                        />
-                        RTC Campus
-                      </label>
-                    </div>
-                  </div>
-                )}
-
-                {/* Department Selection for Department Heads */}
-                {(division === 'Core Committee' || division === 'Advisory Board') && corePosition === 'Department Head' && (
                   <div className="space-y-1.5">
-                    <label className="block font-medium text-theme-text-secondary">Select Department *</label>
+                    <label className="block font-medium text-theme-text-secondary">Campus Designation</label>
                     <select
-                      value={departmentSelect}
-                      onChange={(e) => setDepartmentSelect(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-semibold"
+                      value={campus}
+                      onChange={(e) => setCampus(e.target.value as 'GG Campus' | 'RTC Campus')}
+                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                     >
-                      {STANDARDIZED_DEPARTMENTS.map(dept => (
-                        <option key={dept} value={dept}>{dept}</option>
-                      ))}
+                      <option value="GG Campus">GG Campus</option>
+                      <option value="RTC Campus">RTC Campus</option>
                     </select>
                   </div>
                 )}
 
-                {/* Live Derived Designation Preview Banner */}
-                <div className="p-3.5 bg-accent/10 border border-accent/30 rounded-2xl flex flex-col space-y-1">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-accent">Auto-Generated Designation</span>
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-sm text-theme-text-primary">{preview.role}</span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-accent/20 text-accent border border-accent/30">
-                      Tier {preview.tier}
-                    </span>
-                  </div>
-                  {preview.department && (
-                    <span className="text-[11px] text-theme-text-secondary">Department: {preview.department}</span>
-                  )}
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block font-medium text-theme-text-secondary">Program (Optional)</label>
-                  <input
-                    type="text"
-                    value={program}
-                    onChange={(e) => setProgram(e.target.value)}
-                    placeholder="e.g. B.Tech Computer Science Engineering, MBA"
-                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                  />
-                </div>
-
-                {division === 'Alumni' && (
+                {((division === 'Core Committee' || division === 'Advisory Board') && corePosition === 'Department Head') || (division === 'Training Associate' && associatePosition === 'Department Associate') ? (
                   <div className="space-y-1.5">
-                    <label className="block font-medium text-theme-text-secondary">Graduating Class / Batch</label>
+                    <label className="block font-medium text-theme-text-secondary">Department</label>
+                    <select
+                      value={departmentSelect}
+                      onChange={(e) => setDepartmentSelect(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                    >
+                      {STANDARDIZED_DEPARTMENTS.map(d => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="block font-medium text-theme-text-secondary">Degree / Program</label>
+                    <input
+                      type="text"
+                      value={program}
+                      onChange={(e) => setProgram(e.target.value)}
+                      placeholder="e.g. B.Tech CSE"
+                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block font-medium text-theme-text-secondary">Batch / Class</label>
                     <input
                       type="text"
                       value={batch}
                       onChange={(e) => setBatch(e.target.value)}
-                      placeholder="e.g. Class of 2024"
+                      placeholder="e.g. 2022 - 2026"
                       className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                     />
                   </div>
-                )}
+                </div>
 
-                <button
-                  type="submit"
-                  className="w-full py-3 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer mt-4"
-                >
-                  Add Member to Organization
-                </button>
+                {/* Live Preview Box */}
+                <div className="p-3.5 bg-accent/10 border border-accent/20 rounded-2xl space-y-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-bold text-accent uppercase">Computed Role Preview:</span>
+                    <span className="font-bold text-theme-text-primary">Tier {preview.tier}</span>
+                  </div>
+                  <p className="font-bold text-theme-text-primary text-xs">{preview.role || '—'}</p>
+                  <p className="text-theme-text-secondary text-[11px]">Department: <span className="text-theme-text-primary font-medium">{preview.department || '—'}</span></p>
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="px-5 py-2.5 rounded-xl font-semibold text-theme-text-secondary hover:bg-theme-border/30 transition-all cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2.5 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/20 cursor-pointer"
+                  >
+                    Add Member to Organization
+                  </button>
+                </div>
               </form>
             </div>
           </div>
@@ -1887,14 +1967,21 @@ export default function DirectoryPage() {
         });
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-            <div className="glass-panel w-full max-w-lg rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div
+            onClick={() => setEditingMember(null)}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="glass-panel w-full max-w-lg rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl max-h-[90vh] overflow-y-auto"
+            >
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-base font-bold text-theme-text-primary">Edit Member Details</h2>
                   <p className="text-[11px] text-theme-text-secondary">Updating profile and designation for {editingMember.name}</p>
                 </div>
                 <button 
+                  type="button"
                   onClick={() => setEditingMember(null)}
                   className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
                 >
@@ -1909,7 +1996,7 @@ export default function DirectoryPage() {
                     type="text"
                     required
                     value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
+                    onChange={(e) => setEditName(capitalizeFirstLetter(e.target.value))}
                     className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                   />
                 </div>
@@ -1977,6 +2064,7 @@ export default function DirectoryPage() {
                         <option value="Finance Head">Finance Head</option>
                         <option value="Centre Head">Centre Head</option>
                         <option value="Advisor">Advisor</option>
+                        <option value="Chief Advisor">Chief Advisor (view-only)</option>
                       </select>
                     </div>
                   )}
@@ -2005,6 +2093,7 @@ export default function DirectoryPage() {
                         <option value="Vice President">Vice President</option>
                         <option value="General Secretary">General Secretary</option>
                         <option value="Chief Coordinator">Chief Coordinator</option>
+                        <option value="Faculty Ambassador">Faculty Ambassador</option>
                       </select>
                     </div>
                   )}
@@ -2191,8 +2280,14 @@ export default function DirectoryPage() {
 
       {/* Terminate Member Modal — reason required, sent in the official notification email */}
       {terminatingMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="glass-panel w-full max-w-md rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl">
+        <div
+          onClick={() => { setTerminatingMember(null); setTerminationReason(''); setTerminationError(''); }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="glass-panel w-full max-w-md rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl"
+          >
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-2xl bg-danger/15 text-danger">
@@ -2204,6 +2299,7 @@ export default function DirectoryPage() {
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => { setTerminatingMember(null); setTerminationReason(''); setTerminationError(''); }}
                 className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
               >
@@ -2236,12 +2332,14 @@ export default function DirectoryPage() {
 
             <div className="flex items-center justify-end gap-2.5 pt-2">
               <button
+                type="button"
                 onClick={() => { setTerminatingMember(null); setTerminationReason(''); setTerminationError(''); }}
                 className="px-4 py-2.5 text-xs font-semibold text-theme-text-primary bg-theme-border/30 hover:bg-theme-border/50 rounded-xl transition-all cursor-pointer"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleConfirmTerminate}
                 className="px-4 py-2.5 text-xs font-semibold rounded-xl transition-all shadow-md cursor-pointer bg-red-600 hover:bg-red-700 text-white shadow-red-600/20"
               >
@@ -2370,8 +2468,14 @@ export default function DirectoryPage() {
 
       {/* Uniform Bulk Edit Modal */}
       {isBulkEditModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="glass-panel w-full max-w-lg rounded-2xl p-6 border border-theme-card-border shadow-2xl space-y-5">
+        <div
+          onClick={() => setIsBulkEditModalOpen(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="glass-panel w-full max-w-lg rounded-2xl p-6 border border-theme-card-border shadow-2xl space-y-5"
+          >
             <div className="flex items-center justify-between border-b border-theme-border/30 pb-4">
               <div>
                 <h3 className="text-base font-bold text-theme-text-primary flex items-center gap-2">
@@ -2381,6 +2485,7 @@ export default function DirectoryPage() {
                 <p className="text-xs text-theme-text-secondary">Apply synchronized updates across all selected members</p>
               </div>
               <button
+                type="button"
                 onClick={() => setIsBulkEditModalOpen(false)}
                 className="p-1.5 text-theme-text-secondary hover:text-theme-text-primary rounded-lg transition-colors cursor-pointer"
               >
@@ -2513,8 +2618,14 @@ export default function DirectoryPage() {
 
       {/* Set Password Directly (Super User Only) Modal */}
       {setPasswordModalMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="glass-panel w-full max-w-md rounded-2xl p-6 border border-theme-card-border shadow-2xl space-y-5">
+        <div
+          onClick={() => setSetPasswordModalMember(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="glass-panel w-full max-w-md rounded-2xl p-6 border border-theme-card-border shadow-2xl space-y-5"
+          >
             <div className="flex items-center justify-between border-b border-theme-border/30 pb-4">
               <div>
                 <h3 className="text-base font-bold text-theme-text-primary flex items-center gap-2">
@@ -2526,6 +2637,7 @@ export default function DirectoryPage() {
                 </p>
               </div>
               <button
+                type="button"
                 onClick={() => setSetPasswordModalMember(null)}
                 className="p-1.5 text-theme-text-secondary hover:text-theme-text-primary rounded-lg transition-colors cursor-pointer"
               >
@@ -2602,11 +2714,18 @@ export default function DirectoryPage() {
 
       {/* Reject Pending Roster Addition Modal */}
       {rejectingMemberId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="glass-panel w-full max-w-md rounded-3xl p-6 flex flex-col space-y-4 relative border border-white/15 shadow-2xl">
+        <div
+          onClick={() => { setRejectingMemberId(null); setRejectionReasonInput(''); }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="glass-panel w-full max-w-md rounded-3xl p-6 flex flex-col space-y-4 relative border border-white/15 shadow-2xl"
+          >
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-theme-text-primary">Reject Roster Addition</h2>
               <button
+                type="button"
                 onClick={() => { setRejectingMemberId(null); setRejectionReasonInput(''); }}
                 className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
               >
@@ -2623,12 +2742,14 @@ export default function DirectoryPage() {
             />
             <div className="flex justify-end gap-2">
               <button
+                type="button"
                 onClick={() => { setRejectingMemberId(null); setRejectionReasonInput(''); }}
                 className="px-4 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleConfirmRejectMember}
                 className="px-4 py-2 bg-danger hover:bg-red-600 text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-danger/15 cursor-pointer"
               >
@@ -2641,9 +2762,16 @@ export default function DirectoryPage() {
 
       {/* Account Activation & One-Time Password Setup Link Modal */}
       {activationModalData && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-theme-card border border-theme-card-border rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl relative">
+        <div
+          onClick={() => setActivationModalData(null)}
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-theme-card border border-theme-card-border rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl relative"
+          >
             <button
+              type="button"
               onClick={() => setActivationModalData(null)}
               className="absolute top-4 right-4 text-theme-text-secondary hover:text-theme-text-primary p-1 rounded-lg transition-all cursor-pointer"
             >

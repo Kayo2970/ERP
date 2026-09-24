@@ -1,4 +1,5 @@
 import { readCollection, mutateCollection } from './server-db';
+import { enqueueTaskEmailNotification } from './task-email-queue';
 
 /**
  * Google's own publicly-maintained "Holidays in India" calendar, exposed as a
@@ -203,6 +204,27 @@ export async function runHolidayApprovalTasks(): Promise<{ created: number }> {
     }
     return next;
   });
+
+  // This scheduler writes straight to the tasks collection via
+  // mutateCollection — unlike a task created through POST /api/tasks (the
+  // normal Tasks page flow), which enqueues the debounced assignment email
+  // itself, so that never happens here on its own. Enqueue it explicitly
+  // for every approver on every newly-created holiday task, same as a
+  // manually-assigned task would get.
+  for (const h of toCreate) {
+    for (const approver of approvers) {
+      if (!approver.email) continue;
+      await enqueueTaskEmailNotification({
+        id: `task_holiday_approval_${h.id}`,
+        title: `Social media post needed for "${h.title}"?`,
+        event: h.title,
+        dueDate: h.startDate,
+        creatorName: 'Holiday Scheduler',
+        assigneeEmail: approver.email,
+        assigneeName: approver.name,
+      });
+    }
+  }
 
   return { created };
 }

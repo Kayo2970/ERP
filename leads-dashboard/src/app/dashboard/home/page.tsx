@@ -28,6 +28,9 @@ import {
   formatEventPlanningNote,
   getEventSortTime,
   isTaskAssignee,
+  hasAcknowledgedTask,
+  acknowledgeTask,
+  isFestivalEvent,
   TaskItem,
   EventItem,
   AnnouncementItem
@@ -52,6 +55,7 @@ export default function DashboardHome() {
   const [overallAvgScore, setOverallAvgScore] = useState<number>(0);
   const [hasRatings, setHasRatings] = useState(false);
   const [selectedStudentForProfile, setSelectedStudentForProfile] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
 
   useEffect(() => {
     const refreshData = () => {
@@ -60,10 +64,10 @@ export default function DashboardHome() {
 
       const allTasks = getTasks();
       setTasks(allTasks);
-      
+
       setMembersCount(getMembers().length);
       setAnnouncements(getAnnouncements());
-      
+
       // Dynamic Individual Student Leaderboard
       const studentRanks = getStudentLeaderboard();
       setLeaderboard(studentRanks.slice(0, 5));
@@ -74,6 +78,8 @@ export default function DashboardHome() {
         const totalScore = ratingsList.reduce((acc, r) => acc + r.overallScore, 0);
         setOverallAvgScore(parseFloat((totalScore / ratingsList.length).toFixed(1)));
       }
+
+      setLastUpdatedAt(new Date());
     };
     refreshData();
 
@@ -94,9 +100,14 @@ export default function DashboardHome() {
     };
   }, []);
 
-  const handleAcknowledge = (id: string) => {
-    updateTaskStatus(id, 'In Progress');
-    setTasks(getTasks());
+  // Acknowledgment is a personal attestation, not a status change anyone
+  // else can make on a student's behalf — routed through the dedicated
+  // /api/tasks/ack endpoint (see acknowledgeTask in local-data.ts), which
+  // independently re-verifies server-side that the caller is genuinely the
+  // task's own assignee before recording anything under their id.
+  const handleAcknowledge = async (id: string) => {
+    const updated = await acknowledgeTask(id, user);
+    if (updated) setTasks(getTasks());
   };
 
   const handleComplete = (id: string) => {
@@ -115,7 +126,7 @@ export default function DashboardHome() {
   // own-vs-all Group Policy scope; pending/rejected submissions are only shown to
   // their submitter, their resolved approver, or the Super User.
   const visibleEvents = events
-    .filter(event => !event.isHoliday)
+    .filter(event => !isFestivalEvent(event))
     .filter(event => {
       if (event.approvalStatus === 'pending_create' || event.approvalStatus === 'rejected') {
         return user?.tier === 1 || event.submittedByEmail === user?.email || canApprovePendingEvent(event, user);
@@ -124,7 +135,7 @@ export default function DashboardHome() {
     });
 
   const visibleFestivals = events
-    .filter(event => event.isHoliday || event.description?.includes('holiday') || event.description?.includes('festival'))
+    .filter(isFestivalEvent)
     .filter(event => event.startDate >= todayStr)
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
 
@@ -141,6 +152,23 @@ export default function DashboardHome() {
   // Filter tasks based on shared permission helper
   const displayedTasks = tasks.filter(task => canViewTaskExtended(task, user));
 
+  // The "Assigned Tasks" dashboard tile is meant to show what's actually
+  // outstanding — tasks still needing action (acknowledgment, progress, or
+  // completion) — not the full historical list including everything already
+  // wrapped up. TaskItem has no createdAt, so due-date year is the only
+  // available signal for "this year's" tasks; scoping the active count to
+  // the current calendar year keeps the tile from accumulating stale,
+  // long-overdue tasks from prior years forever — it naturally resets each
+  // January as new tasks get due dates in the new year.
+  const currentYear = new Date().getFullYear();
+  const isCurrentYearTask = (t: TaskItem) => {
+    const due = new Date(t.dueDate);
+    return !isNaN(due.getTime()) && due.getFullYear() === currentYear;
+  };
+
+  const activeDisplayedTasks = displayedTasks.filter(t => t.status !== 'Completed' && isCurrentYearTask(t));
+  const activeTasksCount = activeDisplayedTasks.length;
+
   // Count tasks awaiting THIS member's own acknowledgment — must check
   // isTaskAssignee (am I literally the assignee?), not canViewTaskExtended
   // (can I see this task at all?). The latter is deliberately broad —
@@ -149,9 +177,24 @@ export default function DashboardHome() {
   // this "awaiting YOUR acknowledgment" banner with tasks assigned to
   // other people entirely, showing every leadership/Executive viewer the
   // same non-personal number regardless of what's actually theirs to act on.
-  const pendingAckCount = tasks.filter(t => t.status === 'Assigned' && isTaskAssignee(t, user)).length;
+  // Checking hasAcknowledgedTask instead of status === 'Assigned' matters
+  // for a group/committee task specifically: the shared status can already
+  // read 'In Progress' purely because a DIFFERENT assignee acknowledged
+  // first, but that never counts as THIS member's own acknowledgment, so
+  // they'd otherwise silently drop off this banner despite never having
+  // personally acknowledged anything themselves.
+  const pendingAckCount = tasks.filter(t =>
+    t.status !== 'Completed' && isTaskAssignee(t, user) && !hasAcknowledgedTask(t, user) && isCurrentYearTask(t)
+  ).length;
+
+  const completedTasksCount = displayedTasks.filter(t => t.status === 'Completed' && isCurrentYearTask(t)).length;
 
   const scorePercentage = Math.min(100, Math.max(0, (overallAvgScore / 5.0) * 100));
+
+  const ratingsList = getRatings();
+  const performanceBreakdown = hasRatings
+    ? `Average of ${ratingsList.length} evaluation${ratingsList.length === 1 ? '' : 's'} across ${new Set(ratingsList.map(r => r.targetId)).size} member(s), on a 5.0 scale covering quality, timeliness, initiative, and collaboration.`
+    : 'No evaluations submitted yet — visit Ratings to score task deliverables.';
 
   return (
     <div className="p-6 md:p-8 space-y-6">
@@ -194,9 +237,13 @@ export default function DashboardHome() {
 
       {/* Grid: Stats Widgets */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        
+
         {/* Active Events */}
-        <div className="glass-panel rounded-2xl p-5 flex items-center justify-between">
+        <Link
+          href="/dashboard/events"
+          className="glass-panel rounded-2xl p-5 flex items-center justify-between transition-all hover:ring-2 hover:ring-accent/30 cursor-pointer"
+          title="Open the Events module"
+        >
           <div className="space-y-1.5">
             <span className="text-xs font-semibold text-theme-text-secondary uppercase tracking-wider">Active Events</span>
             <h3 className="text-2xl font-bold text-theme-text-primary">{activeEventsCount}</h3>
@@ -207,24 +254,34 @@ export default function DashboardHome() {
           <div className="h-11 w-11 bg-accent/15 rounded-xl flex items-center justify-center border border-accent/15">
             <Calendar className="h-5 w-5 text-accent" />
           </div>
-        </div>
+        </Link>
 
         {/* Tasks Assigned */}
-        <div className="glass-panel rounded-2xl p-5 flex items-center justify-between">
+        <Link
+          href="/dashboard/tasks"
+          className="glass-panel rounded-2xl p-5 flex items-center justify-between transition-all hover:ring-2 hover:ring-success/30 cursor-pointer"
+          title="Open the Tasks module"
+        >
           <div className="space-y-1.5">
             <span className="text-xs font-semibold text-theme-text-secondary uppercase tracking-wider">Assigned Tasks</span>
-            <h3 className="text-2xl font-bold text-theme-text-primary">{displayedTasks.length}</h3>
-            <span className="text-[11px] text-success font-semibold">
-              {displayedTasks.filter(t => t.status === 'Completed').length} completed
+            <h3 className="text-2xl font-bold text-theme-text-primary">{activeTasksCount}</h3>
+            <span className="text-[11px] font-semibold flex items-center gap-1.5">
+              <span className="text-warning">{activeTasksCount} pending</span>
+              <span className="text-theme-text-secondary font-normal">&middot;</span>
+              <span className="text-success">{completedTasksCount} completed this year</span>
             </span>
           </div>
           <div className="h-11 w-11 bg-success/15 rounded-xl flex items-center justify-center border border-success/15">
             <CheckSquare className="h-5 w-5 text-success" />
           </div>
-        </div>
+        </Link>
 
         {/* Members / Roster Count */}
-        <div className="glass-panel rounded-2xl p-5 flex items-center justify-between">
+        <Link
+          href="/dashboard/directory"
+          className="glass-panel rounded-2xl p-5 flex items-center justify-between transition-all hover:ring-2 hover:ring-primary/30 cursor-pointer"
+          title="Open the Member Directory"
+        >
           <div className="space-y-1.5">
             <span className="text-xs font-semibold text-theme-text-secondary uppercase tracking-wider">Member Roster</span>
             <h3 className="text-2xl font-bold text-theme-text-primary">{membersCount}</h3>
@@ -233,10 +290,14 @@ export default function DashboardHome() {
           <div className="h-11 w-11 bg-primary/15 rounded-xl flex items-center justify-center border border-primary/15">
             <Users className="h-5 w-5 text-accent" />
           </div>
-        </div>
+        </Link>
 
         {/* Performance Rollup */}
-        <div className="glass-panel rounded-2xl p-5 flex items-center justify-between">
+        <Link
+          href="/dashboard/ratings"
+          className="glass-panel rounded-2xl p-5 flex items-center justify-between transition-all hover:ring-2 hover:ring-emerald-500/30 cursor-pointer"
+          title={performanceBreakdown}
+        >
           <div className="space-y-1.5 flex-1 pr-2">
             <span className="text-xs font-semibold text-theme-text-secondary uppercase tracking-wider">Performance Rollup</span>
             {hasRatings ? (
@@ -253,13 +314,22 @@ export default function DashboardHome() {
                 style={{ width: `${hasRatings ? scorePercentage : 0}%` }}
               ></div>
             </div>
+            <span className="text-[10px] text-theme-text-secondary font-medium">
+              {hasRatings ? `Avg of ${ratingsList.length} evaluation${ratingsList.length === 1 ? '' : 's'}` : 'Hover for details'}
+            </span>
           </div>
           <div className="h-11 w-11 bg-emerald-500/15 rounded-xl flex items-center justify-center border border-emerald-500/20">
             <Star className="h-5 w-5 text-emerald-500 fill-emerald-500" />
           </div>
-        </div>
+        </Link>
 
       </div>
+
+      {lastUpdatedAt && (
+        <p className="text-[10px] text-theme-text-secondary font-medium -mt-2 text-right">
+          Last updated {lastUpdatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </p>
+      )}
 
       {/* Cross-Module Project Timeline (Gantt) */}
       <GanttTimeline events={visibleEvents} tasks={displayedTasks} />
@@ -406,7 +476,15 @@ export default function DashboardHome() {
                         </span>
                       </td>
                       <td className="py-3 text-right">
-                        {task.status === 'Assigned' ? (
+                        {/* Acknowledgment is personal — gated on isTaskAssignee
+                            (am I literally the one this was allotted to?), not
+                            just this row being visible to a broad viewer like
+                            leadership, and checked against hasAcknowledgedTask
+                            rather than status alone so a group/committee task
+                            already In Progress from a DIFFERENT member's
+                            acknowledgment still prompts this viewer for their
+                            own if they haven't given it yet. */}
+                        {task.status !== 'Completed' && isTaskAssignee(task, user) && !hasAcknowledgedTask(task, user) ? (
                           <button
                             onClick={() => handleAcknowledge(task.id)}
                             className="px-2.5 py-1 bg-accent hover:bg-primary-light text-white text-[10px] font-semibold rounded-lg transition-all cursor-pointer"
@@ -429,6 +507,8 @@ export default function DashboardHome() {
                               Extend
                             </button>
                           </div>
+                        ) : task.status === 'Assigned' ? (
+                          <span className="text-[10px] text-theme-text-secondary">Awaiting acknowledgment</span>
                         ) : (
                           <span className="text-[10px] text-theme-text-secondary">Closed</span>
                         )}

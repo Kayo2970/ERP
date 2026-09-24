@@ -19,10 +19,12 @@ import {
   Search,
   CheckSquare,
   Square,
+  Paperclip,
 } from 'lucide-react';
 import { logAuditEvent, getGuests, getMembers, Guest as DirectoryGuest, Member, authHeaders } from '@/lib/local-data';
 import { canManageGuestInvites } from '@/lib/permissions';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ComposedAttachment, filesToAttachments, formatBytes, buildAttachmentNoticeLine, MAX_TOTAL_ATTACHMENT_BYTES } from '@/lib/email-attachments';
 
 interface Guest {
   id: string;
@@ -210,6 +212,41 @@ export default function GuestInvitesPage() {
   const [badgeOption, setBadgeOption] = useState<string>('NONE');
   const [customBadgeText, setCustomBadgeText] = useState<string>('');
 
+  const [attachments, setAttachments] = useState<ComposedAttachment[]>([]);
+  const [isProcessingAttachments, setIsProcessingAttachments] = useState(false);
+  const [attachmentError, setAttachmentError] = useState('');
+
+  const handleAttachFiles = async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    setAttachmentError('');
+    setIsProcessingAttachments(true);
+    try {
+      const files = Array.from(fileList);
+      const existingBytes = attachments.reduce((sum, a) => sum + a.size, 0);
+      const incomingBytes = files.reduce((sum, f) => sum + f.size, 0);
+      if (existingBytes + incomingBytes > MAX_TOTAL_ATTACHMENT_BYTES) {
+        setAttachmentError(`Total attachment size can't exceed ${formatBytes(MAX_TOTAL_ATTACHMENT_BYTES)} — most SMTP servers (including Outlook) reject larger messages, and this attaches the same file(s) to every guest's email.`);
+        return;
+      }
+      const newAttachments = await filesToAttachments(files);
+      setAttachments(prev => [...prev, ...newAttachments]);
+    } catch (err: any) {
+      setAttachmentError(err?.message || 'Failed to read one or more files.');
+    } finally {
+      setIsProcessingAttachments(false);
+    }
+  };
+
+  const handleRemoveAttachment = (filename: string) => {
+    setAttachments(prev => prev.filter(a => a.filename !== filename));
+  };
+
+  const handleInsertAttachmentNote = () => {
+    if (attachments.length === 0) return;
+    const line = buildAttachmentNoticeLine(attachments.map(a => a.filename));
+    setBodyText(prev => (prev.trim() ? `${prev}\n\n${line}` : line));
+  };
+
   const handleSendInvites = async () => {
     if (guests.length === 0 || !subject.trim() || !bodyText.trim()) return;
     setIsSending(true);
@@ -227,6 +264,9 @@ export default function GuestInvitesPage() {
     else if (badgeOption === 'CUSTOM') resolvedBadgeText = customBadgeText.trim() || undefined;
     else resolvedBadgeText = undefined;
 
+    // Same attachment(s) sent to every guest — computed once, not per-recipient.
+    const payloadAttachments = attachments.map(({ filename, contentBase64, contentType }) => ({ filename, contentBase64, contentType }));
+
     for (const guest of guests) {
       try {
         const res = await fetch('/api/email/send', {
@@ -239,6 +279,7 @@ export default function GuestInvitesPage() {
             bodyText: applyMailMerge(bodyText, guest.name, guest.email),
             category: 'GUEST_INVITE',
             badgeText: resolvedBadgeText,
+            attachments: payloadAttachments,
           }),
         });
         if (res.ok) sent++; else failed++;
@@ -270,7 +311,7 @@ export default function GuestInvitesPage() {
         <EmptyState
           icon={ShieldAlert}
           title="Centre Head Access Required"
-          description="Sending guest invitations is limited to the Centre Head, or a member granted Guest Invites access via Group Policies."
+          description="Sending mail merge campaigns is limited to the Centre Head, or a member granted Mail Merge access via Group Policies."
         />
       </div>
     );
@@ -283,10 +324,10 @@ export default function GuestInvitesPage() {
       <div>
         <h1 className="text-xl font-bold text-theme-text-primary flex items-center gap-2">
           <Send className="h-5 w-5 text-accent" />
-          Guest Invites
+          Mail Merge
         </h1>
         <p className="text-xs text-theme-text-secondary">
-          Compose one invitation and personalize it for each guest using <code className="px-1 py-0.5 bg-theme-border/30 rounded text-[11px]">{'{{name}}'}</code> — pick people from the Guest Directory or add them by hand. This is a one-off invite batch and isn&apos;t saved back to the Directory.
+          Compose one message and personalize it for each guest using <code className="px-1 py-0.5 bg-theme-border/30 rounded text-[11px]">{'{{name}}'}</code> — pick people from the Guest Directory or add them by hand. This is a one-off send batch and isn&apos;t saved back to the Directory.
         </p>
       </div>
 
@@ -486,6 +527,16 @@ export default function GuestInvitesPage() {
                     >
                       + @email
                     </button>
+                    {attachments.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleInsertAttachmentNote}
+                        className="px-2 py-0.5 bg-accent/15 text-accent border border-accent/30 rounded-md font-semibold hover:bg-accent/25 transition-all cursor-pointer"
+                        title="Insert a 'Please find attached...' line naming the current attachments"
+                      >
+                        + Attachment Note
+                      </button>
+                    )}
                   </div>
                 </div>
                 <textarea
@@ -495,6 +546,52 @@ export default function GuestInvitesPage() {
                   rows={10}
                   className="w-full px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl text-xs text-theme-text-primary focus:outline-none focus:border-accent"
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-medium text-theme-text-secondary flex items-center gap-1.5">
+                  <Paperclip className="h-3.5 w-3.5" />
+                  Attachments (optional — same file(s) sent to every guest)
+                </label>
+                <label className="flex items-center justify-center gap-2 px-3 py-2.5 bg-theme-background/30 border border-dashed border-theme-card-border rounded-xl text-xs text-theme-text-secondary cursor-pointer hover:border-accent hover:text-accent transition-all">
+                  {isProcessingAttachments ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Paperclip className="h-3.5 w-3.5" />
+                  )}
+                  <span className="font-medium">Click to attach file(s) (max {formatBytes(MAX_TOTAL_ATTACHMENT_BYTES)} total)</span>
+                  <input
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={e => { handleAttachFiles(e.target.files); e.target.value = ''; }}
+                    disabled={isProcessingAttachments}
+                  />
+                </label>
+                {attachmentError && (
+                  <p className="text-[11px] text-danger">{attachmentError}</p>
+                )}
+                {attachments.length > 0 && (
+                  <div className="space-y-1.5">
+                    {attachments.map(a => (
+                      <div key={a.filename} className="flex items-center justify-between gap-2 px-3 py-2 bg-theme-background/30 border border-theme-border/20 rounded-xl text-xs">
+                        <div className="min-w-0 flex items-center gap-2">
+                          <Paperclip className="h-3.5 w-3.5 text-theme-text-secondary shrink-0" />
+                          <span className="font-semibold text-theme-text-primary truncate">{a.filename}</span>
+                          <span className="text-theme-text-secondary shrink-0">({formatBytes(a.size)})</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAttachment(a.filename)}
+                          className="p-1 text-danger hover:bg-danger/10 rounded-lg transition-all cursor-pointer shrink-0"
+                          title="Remove attachment"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </>
           ) : (

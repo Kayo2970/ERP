@@ -30,10 +30,11 @@ import {
   EventReportItem,
   TaskItem,
 } from '@/lib/local-data';
-import { canSubmitEventReport, canReviewEventReports, canViewEventReports, isCentreHead, isEventsHeadGgCampus } from '@/lib/permissions';
+import { canSubmitEventReport, canReviewEventReports, canViewEventReports, isCentreHead, isEventsHeadGgCampus, isChiefCoordinator, isGeneralSecretary, hasCapability, hasModuleViewAllGrant } from '@/lib/permissions';
 import { RATING_CRITERIA } from '@/lib/rating-criteria';
 import { FileDropzone, FilePreviewRow, createProgressTracker } from '@/components/ui/file-dropzone';
 import { EmptyState } from '@/components/ui/empty-state';
+import { SearchableSelect } from '@/components/searchable-select';
 
 export default function EventReportsPage() {
   const [user, setUser] = useState<any>(null);
@@ -65,6 +66,25 @@ export default function EventReportsPage() {
 
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [hasScrolled, setHasScrolled] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const target = params.get('id') || params.get('highlight');
+      if (target) setHighlightId(target);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!highlightId || hasScrolled || reports.length === 0) return;
+    const el = document.getElementById(`report-${highlightId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHasScrolled(true);
+    }
+  }, [highlightId, hasScrolled, reports]);
 
   useEffect(() => {
     const refresh = () => {
@@ -176,7 +196,7 @@ export default function EventReportsPage() {
         fileName: file.name,
         fileSize: file.size,
         fileType: file.type || 'application/octet-stream',
-        submittedBy: user?.name || 'General Secretary',
+        submittedBy: user?.name || (isChiefCoordinator(user) ? 'Chief Coordinator' : isGeneralSecretary(user) ? 'General Secretary' : 'Submitter'),
         submittedByEmail: user?.email || '',
       }, tracker);
 
@@ -208,7 +228,7 @@ export default function EventReportsPage() {
     setIsResubmitting(true);
     try {
       const tracker = createProgressTracker((pct) => setResubmitProgress(pct));
-      await resubmitEventReport(report.id, resubmitFileData, resubmitFile.name, resubmitFile.size, resubmitFile.type || 'application/octet-stream', user?.name || 'General Secretary', tracker);
+      await resubmitEventReport(report.id, resubmitFileData, resubmitFile.name, resubmitFile.size, resubmitFile.type || 'application/octet-stream', user?.name || (isChiefCoordinator(user) ? 'Chief Coordinator' : isGeneralSecretary(user) ? 'General Secretary' : 'Submitter'), tracker);
       setReports(getEventReports());
       setResubmittingId(null);
       setResubmitFile(null);
@@ -261,7 +281,7 @@ export default function EventReportsPage() {
     setReports(getEventReports());
     setRejectingId(null);
     setRejectionReasonInput('');
-    triggerSuccess('Rejected. The General Secretary can resubmit a corrected file.');
+    triggerSuccess('Rejected. The submitter can resubmit a corrected file.');
   };
 
   const handleConfirmDelete = async () => {
@@ -276,7 +296,7 @@ export default function EventReportsPage() {
     setDeletingId(null);
   };
 
-  const myReports = reports.filter(r => r.submittedByEmail === user?.email);
+  const myReports = reports.filter(r => (user?.email && r.submittedByEmail === user?.email) || (user?.name && r.submittedBy?.toLowerCase() === user.name.toLowerCase()));
   const pendingForReview = reports.filter(r => r.status === 'pending_review');
   const eligibleEvents = hasStandingAccess
     ? events.filter(ev => !ev.isHoliday && isApprovedEvent(ev, tasks))
@@ -334,16 +354,13 @@ export default function EventReportsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <div className="space-y-1.5">
               <label className="block font-medium text-theme-text-secondary">Event *</label>
-              <select
+              <SearchableSelect
                 value={eventId}
-                onChange={e => setEventId(e.target.value)}
-                className="w-full px-4 py-2.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-              >
-                <option value="">-- Select an event --</option>
-                {eligibleEvents.map(ev => (
-                  <option key={ev.id} value={ev.id}>{ev.title}</option>
-                ))}
-              </select>
+                onChange={setEventId}
+                allLabel="-- Select an event --"
+                allValue=""
+                options={eligibleEvents.map(ev => ({ value: ev.id, label: ev.title }))}
+              />
             </div>
           </div>
 
@@ -387,8 +404,16 @@ export default function EventReportsPage() {
             <EmptyState icon={FileCheck2} title="Nothing pending" description="Every submitted event report has been decided." />
           ) : (
             <div className="space-y-3">
-              {pendingForReview.map(report => (
-                <div key={report.id} className="p-4 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2.5 text-xs">
+              {pendingForReview.map(report => {
+                const isHighlighted = highlightId && (report.id === highlightId || report.eventId === highlightId);
+                return (
+                  <div
+                    key={report.id}
+                    id={`report-${report.id}`}
+                    className={`p-4 rounded-xl space-y-2.5 text-xs transition-all ${
+                      isHighlighted ? 'bg-accent/10 border-2 border-accent ring-2 ring-accent/50' : 'bg-theme-border/10 border border-theme-border/20'
+                    }`}
+                  >
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <h4 className="font-bold text-theme-text-primary text-xs">{report.eventTitle}</h4>
@@ -459,7 +484,8 @@ export default function EventReportsPage() {
                     </div>
                   )}
                 </div>
-              ))}
+              );
+            })}
             </div>
           )}
         </div>

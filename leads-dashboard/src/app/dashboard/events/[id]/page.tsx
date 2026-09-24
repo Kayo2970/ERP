@@ -22,6 +22,7 @@ import {
   X,
   Ban,
   UserCheck,
+  Search,
 } from 'lucide-react';
 import {
   getEventById,
@@ -51,6 +52,7 @@ import { canManageEvents, isCommitteeApprover, canDeleteTask } from '@/lib/permi
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { StudentProfileModal } from '@/components/student-profile-modal';
 import { RequestApprovalModal } from '@/components/request-approval-modal';
+import { SearchableSelect } from '@/components/searchable-select';
 
 export default function EventDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -67,6 +69,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
 
   const [managingCommittee, setManagingCommittee] = useState<EventCommittee | null>(null);
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
+  const [committeeMemberQuery, setCommitteeMemberQuery] = useState('');
   const [approvalRequestCommittee, setApprovalRequestCommittee] = useState<EventCommittee | null>(null);
   const [reviewingCommittee, setReviewingCommittee] = useState<EventCommittee | null>(null);
 
@@ -127,7 +130,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
       triggerSuccess(`Created event committee "${committeeName}"`);
     } else {
       submitEventCommitteeCreate(event.id, committeeName, user?.name || 'User', user?.email || '');
-      triggerSuccess(`Committee "${committeeName}" submitted for approval from the Centre Head or GG Campus Head of Events.`);
+      triggerSuccess(`Committee "${committeeName}" submitted for approval from the Centre Head, Advisor, or GG Campus Head of Events.`);
     }
     setNewCommitteeName('');
     setIsAddCommitteeModalOpen(false);
@@ -137,6 +140,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
   const openManageMembers = (committee: EventCommittee) => {
     setManagingCommittee(committee);
     setSelectedMemberIds([...committee.memberIds]);
+    setCommitteeMemberQuery('');
   };
 
   const handleToggleMember = (memberId: string) => {
@@ -153,7 +157,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
       triggerSuccess(`Updated student roster for "${managingCommittee.name}"`);
     } else {
       submitEventCommitteeMembers(event.id, managingCommittee.id, selectedMemberIds, user?.name || 'User', user?.email || '');
-      triggerSuccess(`Roster update for "${managingCommittee.name}" submitted for approval from the Centre Head or GG Campus Head of Events.`);
+      triggerSuccess(`Roster update for "${managingCommittee.name}" submitted for approval from the Centre Head, Advisor, or GG Campus Head of Events.`);
     }
     setManagingCommittee(null);
     setEvent(getEventById(eventId));
@@ -521,7 +525,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                     {isPendingCreate ? (
                       <div className="flex items-center gap-1.5 text-[11px] font-semibold text-warning">
                         <Clock className="h-3 w-3" />
-                        Awaiting approval from Centre Head / GG Campus Head of Events
+                        Awaiting approval from Centre Head / Advisor / GG Campus Head of Events
                       </div>
                     ) : (
                       <>
@@ -765,11 +769,37 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
               <p className="text-xs text-theme-text-secondary mt-0.5">Select organizers from the full member directory</p>
             </div>
 
+            <div className="flex items-center gap-2 px-4 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl focus-within:border-accent">
+              <Search className="h-3.5 w-3.5 text-theme-text-secondary shrink-0" />
+              <input
+                type="text"
+                value={committeeMemberQuery}
+                onChange={(e) => setCommitteeMemberQuery(e.target.value)}
+                placeholder="Search by name, division, or email..."
+                className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-theme-text-primary placeholder-theme-text-secondary text-xs"
+              />
+            </div>
+
             <div className="space-y-2 overflow-y-auto max-h-96 pr-1 divide-y divide-theme-border/20">
-              {members.filter(m => m.status !== 'Terminated').slice().sort((a, b) => a.name.localeCompare(b.name)).map(student => {
+              {(() => {
+                const q = committeeMemberQuery.trim().toLowerCase();
+                const filteredMembers = members
+                  .filter(m => m.status !== 'Terminated')
+                  .filter(m => !q ||
+                    m.name.toLowerCase().includes(q) ||
+                    m.division.toLowerCase().includes(q) ||
+                    m.email.toLowerCase().includes(q)
+                  )
+                  .slice().sort((a, b) => a.name.localeCompare(b.name));
+
+                if (filteredMembers.length === 0) {
+                  return <p className="py-6 text-center text-xs text-theme-text-secondary italic">No members match &ldquo;{committeeMemberQuery}&rdquo;.</p>;
+                }
+
+                return filteredMembers.map(student => {
                 const isSelected = selectedMemberIds.includes(student.id);
                 return (
-                  <div 
+                  <div
                     key={student.id}
                     onClick={() => handleToggleMember(student.id)}
                     className="flex items-center justify-between p-2.5 hover:bg-theme-border/10 rounded-xl cursor-pointer transition-all text-xs"
@@ -778,15 +808,16 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                       <p className="font-semibold text-theme-text-primary">{student.name}</p>
                       <p className="text-[10px] text-theme-text-secondary">{student.division} &middot; {student.email}</p>
                     </div>
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       checked={isSelected}
                       onChange={() => {}}
                       className="h-4 w-4 accent-accent cursor-pointer"
                     />
                   </div>
                 );
-              })}
+                });
+              })()}
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-theme-border/20">
@@ -907,34 +938,30 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="block font-medium text-theme-text-secondary">Event Committee</label>
-                  <select
+                  <SearchableSelect
                     value={taskCommitteeId}
-                    onChange={(e) => setTaskCommitteeId(e.target.value)}
-                    className="w-full px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                  >
-                    <option value="">General Event Task</option>
-                    {event.committees.filter(c => c.approvalStatus !== 'pending_create').map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
+                    onChange={setTaskCommitteeId}
+                    allLabel="General Event Task"
+                    allValue=""
+                    options={event.committees
+                      .filter(c => c.approvalStatus !== 'pending_create')
+                      .map(c => ({ value: c.id, label: c.name }))}
+                  />
                 </div>
 
                 <div className="space-y-1">
                   <label className="block font-medium text-theme-text-secondary">Assignee Student</label>
-                  <select
+                  <SearchableSelect
                     value={taskAssigneeId}
-                    onChange={(e) => setTaskAssigneeId(e.target.value)}
-                    className="w-full px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                  >
-                    <option value="">Select individual assignee...</option>
-                    {members
+                    onChange={setTaskAssigneeId}
+                    allLabel="Select individual assignee..."
+                    allValue=""
+                    options={members
                       .filter(m => m.status !== 'Terminated')
                       .slice()
                       .sort((a, b) => a.name.localeCompare(b.name))
-                      .map(p => (
-                        <option key={p.id} value={p.id}>{p.name} ({p.division})</option>
-                      ))}
-                  </select>
+                      .map(p => ({ value: p.id, label: `${p.name} (${p.division})` }))}
+                  />
                 </div>
               </div>
 
@@ -952,16 +979,15 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
               {!taskAssigneeId && (
                 <div className="space-y-1">
                   <label className="block font-medium text-theme-text-secondary">Require Review From (optional)</label>
-                  <select
+                  <SearchableSelect
                     value={taskReviewerId}
-                    onChange={(e) => setTaskReviewerId(e.target.value)}
-                    className="w-full px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                  >
-                    <option value="">No review needed — assign immediately</option>
-                    {members.filter(m => m.status !== 'Terminated' && m.id !== (user?.id || '')).map(m => (
-                      <option key={m.id} value={m.id}>{m.name} ({m.role})</option>
-                    ))}
-                  </select>
+                    onChange={setTaskReviewerId}
+                    allLabel="No review needed — assign immediately"
+                    allValue=""
+                    options={members
+                      .filter(m => m.status !== 'Terminated' && m.id !== (user?.id || ''))
+                      .map(m => ({ value: m.id, label: `${m.name} (${m.role})` }))}
+                  />
                   {taskReviewerId && (
                     <p className="text-[10px] text-theme-text-secondary pt-0.5">
                       The task stays hidden from the committee until this reviewer approves it.

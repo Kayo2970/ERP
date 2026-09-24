@@ -58,6 +58,7 @@ import {
   getTasks,
   isApprovedEvent,
   FEEDBACK_FORM_TEMPLATE_ID,
+  initialFormTemplates,
   PublicFormItem,
   FormField,
   FormSubmissionItem,
@@ -68,6 +69,7 @@ import {
 import { canBuildForms, getFormApprovalRequirement, canApprovePendingForm } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
+import { SearchableSelect } from '@/components/searchable-select';
 
 const CHART_COLORS = ['#3b82f6', '#6366f1', '#8b5cf6', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4'];
 
@@ -259,19 +261,30 @@ export default function FormsBuilderPage() {
 
   const handleApplyTemplate = (templateId: string) => {
     setSelectedTemplateId(templateId);
-    if (!templateId) return;
+    if (!templateId) {
+      setFields([
+        { id: 'f_1', label: 'Full Name', type: 'text', required: true },
+        { id: 'f_2', label: 'University Email', type: 'email', required: true }
+      ]);
+      return;
+    }
     const template = templates.find(t => t.id === templateId);
     if (template) {
       setFields(template.fields.map((f, i) => ({ ...f, id: `field_${Date.now()}_${i}` })));
-    }
-    // A form built from the Feedback Form Template should actually be
-    // titled "Feedback Form" (for the linked event, if one's already
-    // picked) — not left as whatever generic/blank title happened to be
-    // in the field, which is what was showing up on the QR poster and
-    // everywhere else the form's name is displayed.
-    if (templateId === FEEDBACK_FORM_TEMPLATE_ID) {
-      const linkedEvent = events.find(ev => ev.id === eventId);
-      setTitle(linkedEvent ? `Feedback Form – ${linkedEvent.title}` : 'Feedback Form');
+      if (templateId === FEEDBACK_FORM_TEMPLATE_ID) {
+        const linkedEvent = events.find(ev => ev.id === eventId);
+        setTitle(linkedEvent ? `Feedback Form – ${linkedEvent.title}` : 'Feedback Form');
+      } else if (!title || title.trim() === '') {
+        setTitle(template.name.replace(' Template', ''));
+      }
+      if (!slug || slug.trim() === '') {
+        const generatedSlug = template.name
+          .toLowerCase()
+          .replace(/template/g, '')
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '');
+        setSlug(generatedSlug);
+      }
     }
   };
 
@@ -1057,34 +1070,42 @@ export default function FormsBuilderPage() {
               </div>
             )}
 
-            {!editingForm && templates.length > 0 && (
-              <div className="space-y-1.5 text-xs">
-                <label className="block font-medium text-theme-text-secondary flex items-center gap-1.5">
-                  <LayoutTemplate className="h-3.5 w-3.5" />
-                  Start from Template (optional)
-                </label>
-                <div className="flex items-center gap-2">
-                  <select
-                    value={selectedTemplateId}
-                    onChange={(e) => handleApplyTemplate(e.target.value)}
-                    className="flex-1 px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                  >
-                    <option value="">-- Blank Form --</option>
-                    {templates.map(t => (
-                      <option key={t.id} value={t.id}>{t.name} ({t.fields.length} fields)</option>
-                    ))}
-                  </select>
+            {!editingForm && (
+              <div className="p-3.5 bg-accent/10 border border-accent/20 rounded-2xl space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-xs text-theme-text-primary flex items-center gap-1.5">
+                    <LayoutTemplate className="h-4 w-4 text-accent" />
+                    Select Template (optional)
+                  </label>
                   {selectedTemplateId && (
+                    <span className="text-[10px] text-accent font-semibold px-2 py-0.5 rounded-md bg-accent/15 border border-accent/25">
+                      Template Applied
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <SearchableSelect
+                    value={selectedTemplateId}
+                    onChange={handleApplyTemplate}
+                    allLabel="-- Blank Form (Custom Schema) --"
+                    allValue=""
+                    className="flex-1"
+                    options={templates.map(t => ({ value: t.id, label: `${t.name} (${t.fields.length} fields)` }))}
+                  />
+                  {selectedTemplateId && !initialFormTemplates.some(it => it.id === selectedTemplateId) && (
                     <button
                       type="button"
                       onClick={() => handleDeleteTemplate(selectedTemplateId)}
                       className="p-2.5 hover:bg-danger/10 rounded-xl text-danger transition-all cursor-pointer"
-                      title="Delete This Template"
+                      title="Delete This Custom Template"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
                   )}
                 </div>
+                <p className="text-[10px] text-theme-text-secondary">
+                  Choose a pre-built template to auto-populate form questions, or start with blank questions below.
+                </p>
               </div>
             )}
 
@@ -1131,16 +1152,13 @@ export default function FormsBuilderPage() {
                   <CalendarDays className="h-3.5 w-3.5" />
                   Link to Event (optional)
                 </label>
-                <select
+                <SearchableSelect
                   value={eventId}
-                  onChange={(e) => handleEventLink(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                >
-                  <option value="">-- No Event Linked --</option>
-                  {events.filter(ev => isApprovedEvent(ev, tasks)).map(ev => (
-                    <option key={ev.id} value={ev.id}>{ev.title}</option>
-                  ))}
-                </select>
+                  onChange={handleEventLink}
+                  allLabel="-- No Event Linked --"
+                  allValue=""
+                  options={events.filter(ev => isApprovedEvent(ev, tasks)).map(ev => ({ value: ev.id, label: ev.title }))}
+                />
               </div>
 
               {/* Dynamic Field Builder */}

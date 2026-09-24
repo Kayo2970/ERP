@@ -196,7 +196,7 @@ interface ContextValue {
 const contexts = new WeakMap<HTMLDivElement, ContextValue>();
 
 export function GhostFibers({
-  lineColor = '#001f53',
+  lineColor = '#361C6A',
   glowColor = '#03d8fc',
   speed = 0.2,
   scale = 2,

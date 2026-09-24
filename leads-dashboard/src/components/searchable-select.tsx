@@ -67,7 +67,7 @@ export function SearchableSelect({
   };
 
   return (
-    <div className={`relative ${className}`} ref={ref}>
+    <div className={`relative ${isOpen ? 'z-50' : 'z-10'} ${className}`} ref={ref}>
       <div
         className={`flex items-center bg-theme-background/30 border border-theme-card-border rounded-lg focus-within:border-accent cursor-text ${compact ? 'gap-1.5 px-2 py-1.5' : 'gap-2 px-3 py-2'}`}
         onClick={() => setIsOpen(true)}
@@ -91,12 +91,12 @@ export function SearchableSelect({
       </div>
 
       {isOpen && (
-        <div className={`absolute left-0 right-0 mt-1.5 max-h-60 overflow-y-auto glass-panel rounded-xl border border-white/15 shadow-2xl z-20 divide-y divide-theme-border/20 animate-in fade-in zoom-in-95 duration-150 ${compact ? 'text-[11px]' : ''}`}>
+        <div className={`absolute left-0 right-0 mt-1.5 max-h-60 overflow-y-auto bg-white/95 dark:bg-[#0B1B2E]/98 backdrop-blur-2xl rounded-xl border border-slate-200/90 dark:border-white/20 shadow-2xl z-50 divide-y divide-slate-100 dark:divide-white/10 animate-in fade-in zoom-in-95 duration-150 ${compact ? 'text-[11px]' : ''}`}>
           {allLabel && (
             <button
               type="button"
               onClick={() => handleSelect(allValue)}
-              className={`w-full text-left px-3 py-2 hover:bg-theme-border/20 transition-all cursor-pointer font-medium ${value === allValue ? 'bg-accent/10 text-accent' : 'text-theme-text-primary'}`}
+              className={`w-full text-left px-3 py-2 hover:bg-slate-100 dark:hover:bg-white/10 transition-all cursor-pointer font-medium ${value === allValue ? 'bg-accent/15 text-accent font-bold' : 'text-theme-text-primary'}`}
             >
               {allLabel}
             </button>
@@ -109,9 +109,9 @@ export function SearchableSelect({
                 key={o.value}
                 type="button"
                 onClick={() => handleSelect(o.value)}
-                className={`w-full flex items-center justify-between gap-2 text-left px-3 py-2 hover:bg-theme-border/20 transition-all cursor-pointer ${o.value === value ? 'bg-accent/10' : ''}`}
+                className={`w-full flex items-center justify-between gap-2 text-left px-3 py-2 hover:bg-slate-100 dark:hover:bg-white/10 transition-all cursor-pointer ${o.value === value ? 'bg-accent/15 text-accent font-bold' : 'text-theme-text-primary'}`}
               >
-                <span className="font-medium text-theme-text-primary">{o.label}</span>
+                <span className="font-medium text-inherit">{o.label}</span>
                 {o.sublabel && <span className="text-theme-text-secondary shrink-0 text-[11px]">{o.sublabel}</span>}
               </button>
             ))

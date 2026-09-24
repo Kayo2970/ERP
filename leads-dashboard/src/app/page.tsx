@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ShieldAlert, LogIn, Mail, Lock, Eye, EyeOff, KeyRound, CheckCircle2, Clock, ArrowLeft, Send, Quote } from 'lucide-react';
-import { logAuditEvent, requestPasswordReset, submitPasswordReset, submitAdminOverridePasswordReset, setSessionToken } from '@/lib/local-data';
+import { logAuditEvent, requestPasswordReset, submitPasswordReset, submitAdminOverridePasswordReset, setSessionToken, getSessionToken } from '@/lib/local-data';
 import { TermsModal } from '@/components/terms-modal';
 import { PrivacyPolicyModal } from '@/components/privacy-policy-modal';
 import { IosInstallPrompt } from '@/components/ios-install-prompt';
@@ -166,6 +166,17 @@ export default function LoginPage() {
   const [isKeyConfigured, setIsKeyConfigured] = useState(false);
   const [suggestedKey, setSuggestedKey] = useState('');
 
+  // Check if user is navigating with a pass serial parameter (e.g. from an invite link)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const passSerial = searchParams.get('pass') || searchParams.get('passId') || searchParams.get('serial');
+      if (passSerial) {
+        router.replace(`/pass/${encodeURIComponent(passSerial)}`);
+      }
+    }
+  }, [router]);
+
   // Check if system requires initial setup
   useEffect(() => {
     fetch('/api/setup')
@@ -220,10 +231,15 @@ export default function LoginPage() {
       localStorage.removeItem('logoutReason');
     }
 
-    // If already logged in, route to home
+    // If already logged in with an active session token, route to home or target URL
     const currentUser = localStorage.getItem('user');
-    if (currentUser) {
-      router.push('/dashboard/home');
+    const token = getSessionToken();
+    if (currentUser && token) {
+      const redirectTarget = sessionStorage.getItem('redirect_after_login') || '/dashboard/home';
+      sessionStorage.removeItem('redirect_after_login');
+      router.push(redirectTarget);
+    } else if (currentUser && !token) {
+      localStorage.removeItem('user');
     }
   }, [router]);
 
@@ -429,11 +445,17 @@ export default function LoginPage() {
   if (!themeLoaded) return null;
 
   if (showLoginSplash) {
+    const handleLoginComplete = () => {
+      const redirectTarget = sessionStorage.getItem('redirect_after_login') || '/dashboard/home';
+      sessionStorage.removeItem('redirect_after_login');
+      router.push(redirectTarget);
+    };
+
     return (
       <LoadingScreen
         duration={1000}
         subtitle="Signing you in..."
-        onComplete={() => router.push('/dashboard/home')}
+        onComplete={handleLoginComplete}
       />
     );
   }
@@ -457,7 +479,7 @@ export default function LoginPage() {
           restored to the originally requested 0.8.) */}
       <div className="absolute inset-0 pointer-events-none -z-10 opacity-70 dark:opacity-85">
         <GhostFibers
-          lineColor="#001f53"
+          lineColor="#361C6A"
           glowColor="#03d8fc"
           speed={0.2}
           scale={2}

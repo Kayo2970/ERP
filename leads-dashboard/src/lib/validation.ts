@@ -66,6 +66,15 @@ export const MemberWriteSchema = z.object({
   cardPhone: z.string().trim().max(32).optional(),
   cardSocials: z.object({
     linkedin: z.union([z.literal(''), z.string().trim().max(300).url()]).optional(),
+    customLinks: z.array(z.object({
+      label: z.string().trim().min(1).max(60),
+      url: z.string().trim().max(300).url(),
+      icon: z.string().trim().max(40),
+      customIconUrl: z.string().trim().max(2000).optional(),
+      customIconStorageKey: z.string().trim().max(500).optional(),
+      customIconData: z.string().max(1_400_000).optional(), // base64 data URL — small icon badge, capped well below the card photo's 3MB
+      customIconFileName: z.string().trim().max(300).optional(),
+    })).max(5).optional(),
   }).optional(),
   cardPhotoData: z.string().max(3_000_000).optional(), // base64 data URL — file-size cap enforced separately server-side
   cardPhotoFileName: z.string().trim().max(300).optional(),

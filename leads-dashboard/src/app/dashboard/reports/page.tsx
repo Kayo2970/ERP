@@ -23,6 +23,7 @@ import { generatePerformanceReportPdf, ReportType, CapturedChartImage } from '@/
 import { BarChart3, Download, FileText, Star, Loader2 } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 import { PeriodFilter } from '@/components/period-filter';
+import { SearchableSelect } from '@/components/searchable-select';
 import { PeriodFilterValue, extractAvailableMonths, isWithinPeriod, periodLabel } from '@/lib/period-filter';
 
 export default function ReportsPage() {
@@ -65,7 +66,7 @@ export default function ReportsPage() {
   }, []);
 
   // Filter ratings based on viewer's access, then selected division, target member, and time period
-  const filteredRatings = ratings.filter(r => {
+  const rawFilteredRatings = ratings.filter(r => {
     if (!canViewRating(r, user)) return false;
     // If division filter is active, check the target member's division
     if (selectedDivision !== 'ALL') {
@@ -74,6 +75,42 @@ export default function ReportsPage() {
     }
     if (selectedTarget !== 'All' && r.targetName !== selectedTarget) return false;
     return isWithinPeriod(r.createdAt, periodFilter);
+  });
+
+  // Group ratings by (target member + task deliverable) to show average score when multiple evaluators rated the same person for the same task
+  const groupedRatingsMap = new Map<string, RatingItem[]>();
+  rawFilteredRatings.forEach(r => {
+    const key = `${r.targetId || r.targetName}_${r.taskId || r.taskTitle}`;
+    const group = groupedRatingsMap.get(key) || [];
+    group.push(r);
+    groupedRatingsMap.set(key, group);
+  });
+
+  const filteredRatings: RatingItem[] = Array.from(groupedRatingsMap.values()).map(group => {
+    if (group.length === 1) return group[0];
+
+    const qualitySum = group.reduce((sum, r) => sum + r.quality, 0);
+    const timelinessSum = group.reduce((sum, r) => sum + r.timeliness, 0);
+    const initiativeSum = group.reduce((sum, r) => sum + r.initiative, 0);
+    const collaborationSum = group.reduce((sum, r) => sum + r.collaboration, 0);
+    const overallSum = group.reduce((sum, r) => sum + r.overallScore, 0);
+
+    const len = group.length;
+    const raters = Array.from(new Set(group.map(r => r.raterName))).join(', ');
+    const combinedNotes = group.map(r => r.notes).filter(Boolean).join(' | ');
+    const latestCreatedAt = group.reduce((latest, r) => (r.createdAt > latest ? r.createdAt : latest), group[0].createdAt);
+
+    return {
+      ...group[0],
+      raterName: `${raters} (Avg of ${len})`,
+      quality: parseFloat((qualitySum / len).toFixed(1)),
+      timeliness: parseFloat((timelinessSum / len).toFixed(1)),
+      initiative: parseFloat((initiativeSum / len).toFixed(1)),
+      collaboration: parseFloat((collaborationSum / len).toFixed(1)),
+      overallScore: parseFloat((overallSum / len).toFixed(1)),
+      notes: combinedNotes || undefined,
+      createdAt: latestCreatedAt,
+    };
   });
 
   const availableReportMonths = extractAvailableMonths(ratings.map(r => r.createdAt));
@@ -255,16 +292,13 @@ export default function ReportsPage() {
           <label className="block text-xs font-semibold text-theme-text-secondary uppercase">
             Filter by Member
           </label>
-          <select
+          <SearchableSelect
             value={selectedTarget}
-            onChange={(e) => setSelectedTarget(e.target.value)}
-            className="w-full px-3 py-2 bg-theme-background/30 border border-theme-border/40 rounded-xl text-xs text-theme-text-primary focus:outline-none focus:border-accent"
-          >
-            <option value="All">All Evaluated Members</option>
-            {targets.map(t => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
+            onChange={setSelectedTarget}
+            allLabel="All Evaluated Members"
+            allValue="All"
+            options={targets.map(t => ({ value: t, label: t }))}
+          />
         </div>
 
         {/* Time Period Selector: month or custom date range */}
