@@ -16,10 +16,13 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [honeypot, setHoneypot] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [isTermsOpen, setIsTermsOpen] = useState(false);
   const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
+  const formOpenedAt = React.useRef(Date.now());
 
   // Public form links are opened standalone (shared via QR code, email, etc.)
   // outside the dashboard's own theme toggle, so they'd otherwise inherit
@@ -95,22 +98,35 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form) return;
 
-    // Honeypot spam protection: if bot filled hidden field, simulate success but drop
-    if (honeypot.trim() !== '') {
+    // Honeypot spam protection: a real human never fills or fires this field
+    // in under a second, so only treat it as a bot when both signals agree —
+    // this field's name deliberately avoids "url"/"website"/etc. substrings
+    // that browser/password-manager autofill heuristics key off of, but the
+    // time check keeps things safe even if an autofill engine still catches it.
+    const filledTooFast = Date.now() - formOpenedAt.current < 1500;
+    if (honeypot.trim() !== '' && filledTooFast) {
       setIsSubmitted(true);
       return;
     }
 
-    addSubmission({
+    setSubmitError(false);
+    setIsSubmitting(true);
+    const { synced } = addSubmission({
       formId: form.id,
       slug: form.slug,
       data: formData,
     });
 
+    const ok = await synced;
+    setIsSubmitting(false);
+    if (!ok) {
+      setSubmitError(true);
+      return;
+    }
     setIsSubmitted(true);
   };
 
@@ -237,15 +253,21 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
           {/* Form Body */}
           <form onSubmit={handleSubmit} className="space-y-4 pt-1 text-xs">
             
-            {/* Honeypot field (hidden from human users for spam bot mitigation) */}
+            {/* Honeypot field (hidden from human users for spam bot mitigation).
+                Deliberately avoids "url"/"website"/"email"/etc. in its name —
+                those substrings make browser & password-manager autofill
+                heuristics blind-fill this field for real human respondents,
+                which silently drops their submission (it looked like a bot).
+                Positioned off-screen rather than display:none, since some
+                autofill engines still populate display:none inputs. */}
             <input
               type="text"
-              name="website_url_hp"
+              name="hp_field_xk92"
               value={honeypot}
               onChange={(e) => setHoneypot(e.target.value)}
               tabIndex={-1}
               autoComplete="off"
-              className="hidden"
+              style={{ position: 'absolute', left: '-9999px', width: '1px', height: '1px', overflow: 'hidden' }}
               aria-hidden="true"
             />
 
@@ -354,13 +376,21 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
               </div>
             ))}
 
+            {submitError && (
+              <div className="flex items-center gap-2 px-4 py-3 rounded-xl border border-danger/40 bg-danger/10 text-danger text-xs">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                <span>We couldn&apos;t confirm your submission reached the server. Please try again.</span>
+              </div>
+            )}
+
             <div className="pt-3">
               <button
                 type="submit"
-                className="w-full py-3.5 bg-accent hover:bg-accent/90 text-white font-bold rounded-xl transition-all shadow-xl shadow-accent/25 flex items-center justify-center gap-2.5 cursor-pointer text-xs uppercase tracking-wider"
+                disabled={isSubmitting}
+                className="w-full py-3.5 bg-accent hover:bg-accent/90 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all shadow-xl shadow-accent/25 flex items-center justify-center gap-2.5 cursor-pointer text-xs uppercase tracking-wider"
               >
                 <Send className="h-4 w-4" />
-                Submit Registration
+                {isSubmitting ? 'Submitting...' : 'Submit Registration'}
               </button>
             </div>
 

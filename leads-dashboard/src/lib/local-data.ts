@@ -4905,7 +4905,7 @@ export function saveSubmissions(submissions: FormSubmissionItem[]): void {
   markLocalWrite('leads_form_submissions');
 }
 
-export function addSubmission(sub: Omit<FormSubmissionItem, 'id' | 'submittedAt'>): FormSubmissionItem {
+export function addSubmission(sub: Omit<FormSubmissionItem, 'id' | 'submittedAt'>): { submission: FormSubmissionItem; synced: Promise<boolean> } {
   const current = getSubmissions();
   const now = new Date();
   const formatted = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -4916,13 +4916,18 @@ export function addSubmission(sub: Omit<FormSubmissionItem, 'id' | 'submittedAt'
     submittedAt: formatted
   };
   current.unshift(newSub);
+  // The server write is the source of truth admins actually see (this is the
+  // only side of this flow anonymous respondents can reach), so callers that
+  // need to know the submission actually landed should await `synced`
+  // instead of treating the localStorage write as success on its own.
+  let synced: Promise<boolean> = Promise.resolve(false);
   if (typeof window !== 'undefined') {
     localStorage.setItem('leads_form_submissions', JSON.stringify(current));
     markLocalWrite('leads_form_submissions');
-    serverPost('/api/submissions', newSub);
+    synced = serverPost('/api/submissions', newSub).then(() => true).catch(() => false);
   }
   logAuditEvent('FORM_SUBMITTED', 'Public Respondent', `New response submitted for form slug "${sub.slug}"`);
-  return newSub;
+  return { submission: newSub, synced };
 }
 
 // -------------------------------------------------------------
