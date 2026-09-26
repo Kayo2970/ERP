@@ -415,7 +415,7 @@ export default function DashboardHome() {
                       className={`flex items-center gap-1 px-2.5 py-1 rounded-xl font-bold text-xs border ${colorTokens.bg} ${colorTokens.text} ${colorTokens.border}`}
                       title={
                         perf.ratingsCount > 0
-                          ? `Confidence-weighted from a raw average of ${perf.rawScore.toFixed(1)} across ${perf.ratingsCount} rating${perf.ratingsCount === 1 ? '' : 's'} — fewer ratings pull the score toward the org-wide typical score`
+                          ? `Raw average ${perf.rawScore.toFixed(1)} (recency-weighted: ${perf.recencyScore.toFixed(1)}) across ${perf.ratingsCount} rating${perf.ratingsCount === 1 ? '' : 's'}, ${Math.round(perf.consistencyRatio * 100)}% weekly-active since their first rating — fewer or older or more sporadic ratings pull the score down toward the org-wide typical score`
                           : 'No ratings yet — 0.0 until they receive their first evaluation'
                       }
                     >

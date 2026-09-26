@@ -74,6 +74,132 @@ export function computeWeightedRatingScore(
   return parseFloat(weighted.toFixed(1));
 }
 
+const RECENCY_HALF_LIFE_DAYS = 90; // a rating "loses half its weight" after ~3 months
+const RECENCY_LAMBDA = Math.log(2) / RECENCY_HALF_LIFE_DAYS;
+const CONSISTENCY_UNIT_DAYS = 7; // consistency is measured in calendar weeks
+const CONSISTENCY_FLOOR = 0.8; // a totally inconsistent contributor loses at most 20%, never zeroed out
+
+export interface DatedScore {
+  score: number;
+  date: string; // ISO date string (RatingItem.createdAt)
+}
+
+/**
+ * Recency-weighted average: each individual rating's influence decays
+ * exponentially with age (half-life ~90 days), so a student's displayed
+ * average reflects how they're performing *now*, not a high mark scored
+ * a year ago that they've since coasted on.
+ */
+export function computeRecencyWeightedAverage(entries: DatedScore[], now: Date = new Date()): number {
+  if (entries.length === 0) return 0;
+  let weightedSum = 0;
+  let weightTotal = 0;
+  entries.forEach(({ score, date }) => {
+    const ageDays = Math.max(0, (now.getTime() - new Date(date).getTime()) / (1000 * 60 * 60 * 24));
+    const weight = Math.exp(-RECENCY_LAMBDA * ageDays);
+    weightedSum += weight * score;
+    weightTotal += weight;
+  });
+  if (weightTotal === 0) return 0;
+  return parseFloat((weightedSum / weightTotal).toFixed(2));
+}
+
+/**
+ * Consistency ratio: how much of the time BETWEEN A STUDENT'S FIRST RATING
+ * AND TODAY has actually had contribution in it, measured in calendar weeks.
+ * Anchoring the denominator to "today" (not to their last rating) means a
+ * student who was active early on and then went quiet keeps losing ground
+ * as time passes, even with no new ratings — consistency is relative to the
+ * present, not just to their own history.
+ *
+ * activeWeeks = number of distinct weeks (since their first rating) that
+ *   contain at least one rating.
+ * expectedWeeks = number of weeks elapsed from their first rating to now.
+ *
+ * Returns a ratio in [0, 1]: 1.0 = rated in every single week since they
+ * started; closer to 0 = a single burst of activity long ago, then nothing.
+ */
+export function computeConsistencyRatio(dates: string[], now: Date = new Date()): number {
+  if (dates.length === 0) return 0;
+  const sorted = [...dates].map(d => new Date(d).getTime()).sort((a, b) => a - b);
+  const firstMs = sorted[0];
+  const unitMs = CONSISTENCY_UNIT_DAYS * 24 * 60 * 60 * 1000;
+
+  const expectedWeeks = Math.max(1, Math.ceil((now.getTime() - firstMs) / unitMs));
+  const activeWeeks = new Set(sorted.map(t => Math.floor((t - firstMs) / unitMs))).size;
+
+  return Math.min(1, activeWeeks / expectedWeeks);
+}
+
+export interface FinalStudentScoreBreakdown {
+  finalScore: number;
+  rawAverage: number;
+  recencyAverage: number;
+  confidenceWeighted: number;
+  consistencyRatio: number;
+  consistencyMultiplier: number;
+  ratingCount: number;
+}
+
+/**
+ * Combines all three signals into the score the Leaderboard ranks and
+ * displays by:
+ *
+ *   1. Recency-weighted average  — recent performance counts more than old.
+ *   2. Confidence weighting (n)  — few ratings get pulled toward the
+ *      org-wide baseline; this is also where volume ("amount of tasks")
+ *      does the heavy lifting — the more a student has been rated, the
+ *      closer their score sits to their real (recency-weighted) average.
+ *   3. Consistency multiplier    — steady week-over-week contribution
+ *      relative to TODAY is rewarded; a single old burst is not, even if
+ *      the raw volume was high. Ranges 0.8–1.0, so it fine-tunes rather
+ *      than overrides the volume-driven confidence weighting above.
+ *
+ * Net effect: a student who does many tasks AND stays consistently active
+ * scores highest; high volume with no consistency, or high consistency
+ * with barely any volume, both land below that — exactly the "scales up
+ * with the amount of tasks, but only if it's kept up" behavior requested.
+ */
+export function computeFinalStudentScore(
+  ratings: DatedScore[],
+  baseline: number,
+  now: Date = new Date(),
+  confidenceThreshold: number = 5
+): FinalStudentScoreBreakdown {
+  const ratingCount = ratings.length;
+  const rawAverage = ratingCount > 0
+    ? parseFloat((ratings.reduce((sum, r) => sum + r.score, 0) / ratingCount).toFixed(2))
+    : 0;
+
+  if (ratingCount === 0) {
+    return {
+      finalScore: 0,
+      rawAverage: 0,
+      recencyAverage: 0,
+      confidenceWeighted: 0,
+      consistencyRatio: 0,
+      consistencyMultiplier: CONSISTENCY_FLOOR,
+      ratingCount: 0,
+    };
+  }
+
+  const recencyAverage = computeRecencyWeightedAverage(ratings, now);
+  const confidenceWeighted = computeWeightedRatingScore(ratingCount, recencyAverage, baseline, confidenceThreshold);
+  const consistencyRatio = computeConsistencyRatio(ratings.map(r => r.date), now);
+  const consistencyMultiplier = CONSISTENCY_FLOOR + (1 - CONSISTENCY_FLOOR) * consistencyRatio;
+  const finalScore = parseFloat((confidenceWeighted * consistencyMultiplier).toFixed(1));
+
+  return {
+    finalScore,
+    rawAverage,
+    recencyAverage,
+    confidenceWeighted,
+    consistencyRatio: parseFloat(consistencyRatio.toFixed(2)),
+    consistencyMultiplier: parseFloat(consistencyMultiplier.toFixed(2)),
+    ratingCount,
+  };
+}
+
 /**
  * Projects the new per-criterion scores onto the legacy fixed
  * quality/timeliness/initiative/collaboration fields so existing analytics

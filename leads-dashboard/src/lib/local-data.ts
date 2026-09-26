@@ -1,5 +1,5 @@
 import { trackSync } from './sync-status';
-import { averageScore, computeWeightedRatingScore } from './rating-criteria';
+import { averageScore, computeFinalStudentScore } from './rating-criteria';
 
 // -------------------------------------------------------------
 // Session token — attached to every authenticated API call so the server
@@ -4028,6 +4028,8 @@ export function getStudentLeaderboard(): {
   division: string;
   score: number;
   rawScore: number;
+  recencyScore: number;
+  consistencyRatio: number;
   completedTasks: number;
   totalTasks: number;
   ratingsCount: number;
@@ -4044,24 +4046,30 @@ export function getStudentLeaderboard(): {
     ? allRatings.reduce((sum, r) => sum + r.overallScore, 0) / allRatings.length
     : 3.0;
 
+  const now = new Date();
+
   const results = studentMembers.map(m => {
     const profile = getStudentProfile(m.id);
-    const rawScore = profile?.stats.averageRating || 0;
-    const ratingsCount = profile?.ratings.length || 0;
+    const datedScores = (profile?.ratings || []).map(r => ({ score: r.overallScore, date: r.createdAt }));
+    // Final score blends three signals — see computeFinalStudentScore in
+    // rating-criteria.ts: (1) a recency-weighted average so current
+    // performance outweighs a stale one-off, (2) confidence weighting by
+    // rating count so volume of contribution matters, and (3) a
+    // consistency multiplier so steady contribution relative to TODAY beats
+    // an old burst of activity. This is what the leaderboard ranks by.
+    const breakdown = computeFinalStudentScore(datedScores, baseline, now);
     return {
       id: m.id,
       name: m.name,
       role: m.role,
       division: m.division,
-      // Confidence-weighted score: a handful of ratings gets pulled toward
-      // the org-wide baseline instead of standing entirely on its own — see
-      // computeWeightedRatingScore in rating-criteria.ts. This is what the
-      // leaderboard ranks and displays by.
-      score: computeWeightedRatingScore(ratingsCount, rawScore, baseline),
-      rawScore,
+      score: breakdown.finalScore,
+      rawScore: breakdown.rawAverage,
+      recencyScore: breakdown.recencyAverage,
+      consistencyRatio: breakdown.consistencyRatio,
       completedTasks: profile?.stats.completedTasks || 0,
       totalTasks: profile?.stats.totalTasks || 0,
-      ratingsCount,
+      ratingsCount: breakdown.ratingCount,
     };
   });
 
