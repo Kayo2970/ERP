@@ -410,7 +410,7 @@ export default function DashboardHome() {
                     </div>
 
                     <div className={`flex items-center gap-1 px-2.5 py-1 rounded-xl font-bold text-xs border ${colorTokens.bg} ${colorTokens.text} ${colorTokens.border}`}>
-                      <span>{perf.score > 0 ? perf.score.toFixed(1) : '—'}</span>
+                      <span>{perf.score.toFixed(1)}</span>
                       <Star className="h-3 w-3 fill-current" />
                     </div>
                   </div>

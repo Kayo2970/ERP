@@ -86,7 +86,7 @@ export function StudentProfileModal({ memberIdOrName, onClose }: StudentProfileM
             <div className="mt-2">
               <div className="flex items-baseline gap-1">
                 <span className="text-xl font-black text-theme-text-primary">
-                  {stats.averageRating > 0 ? stats.averageRating.toFixed(1) : '—'}
+                  {stats.averageRating.toFixed(1)}
                 </span>
                 <span className="text-[10px] text-theme-text-secondary">/ 5.0</span>
               </div>
