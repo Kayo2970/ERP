@@ -23,7 +23,8 @@ import {
   Info,
   ChevronRight,
   Sparkles,
-  LayoutTemplate
+  LayoutTemplate,
+  History
 } from 'lucide-react';
 import {
   getApprovalRequests,
@@ -56,7 +57,7 @@ import {
 } from '@/lib/local-data';
 import { EmptyState } from '@/components/ui/empty-state';
 
-type Tab = 'inbox' | 'sent';
+type Tab = 'inbox' | 'sent' | 'decided';
 
 const entityIcon = (type: ApprovalRequest['entityType']) => {
   if (type === 'task') return CheckSquare;
@@ -198,7 +199,7 @@ export default function ApprovalsPage() {
 
   const isSuperUser = user?.tier === 1;
   const inboxRequestsRaw = requests.filter(r => user && (r.targetMemberId === user.id || isSuperUser));
-  
+
   const inboxRequests = isSuperUser
     ? Object.values(
         inboxRequestsRaw.reduce((acc: Record<string, ApprovalRequest>, r) => {
@@ -208,9 +209,15 @@ export default function ApprovalsPage() {
         }, {})
       )
     : inboxRequestsRaw;
+  // "Awaiting My Decision" only ever shows what's actually still pending —
+  // an already-approved/rejected request moves to the "Decided" tab instead
+  // of lingering in the same list and cluttering it.
+  const pendingInbox = inboxRequests.filter(r => r.status === 'pending');
+  const decidedInbox = [...inboxRequests.filter(r => r.status !== 'pending')]
+    .sort((a, b) => (b.decidedAt || '').localeCompare(a.decidedAt || ''));
   const sentRequests = requests.filter(r => user && r.requesterId === user.id);
-  const list = tab === 'inbox' ? inboxRequests : sentRequests;
-  const pendingInboxCount = inboxRequests.filter(r => r.status === 'pending').length;
+  const list = tab === 'inbox' ? pendingInbox : tab === 'decided' ? decidedInbox : sentRequests;
+  const pendingInboxCount = pendingInbox.length;
 
   const directlyResolvable = (type: ApprovalRequest['entityType']) => type === 'task' || type === 'event' || type === 'announcement' || type === 'form';
 
@@ -318,16 +325,28 @@ export default function ApprovalsPage() {
           <Send className="h-3.5 w-3.5" />
           Sent By Me
         </button>
+        <button
+          onClick={() => setTab('decided')}
+          className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 transition-all cursor-pointer ${tab === 'decided' ? 'border-accent text-accent' : 'border-transparent text-theme-text-secondary hover:text-theme-text-primary'}`}
+        >
+          <History className="h-3.5 w-3.5" />
+          Decided
+          {decidedInbox.length > 0 && (
+            <span className="ml-1 px-1.5 py-0.5 rounded-full bg-theme-border/40 text-theme-text-secondary text-[10px] font-bold">{decidedInbox.length}</span>
+          )}
+        </button>
       </div>
 
       {list.length === 0 ? (
         <EmptyState
           icon={UserCheck}
-          title={tab === 'inbox' ? 'Nothing waiting on you' : 'No requests sent yet'}
+          title={tab === 'inbox' ? 'Nothing waiting on you' : tab === 'decided' ? 'No decided requests yet' : 'No requests sent yet'}
           description={
             tab === 'inbox'
               ? "When a member asks you to approve an announcement, task, committee, or event, it'll show up here."
-              : 'Use the "Request Approval" button on an announcement, task, committee, or event to ask a member to sign off on it.'
+              : tab === 'decided'
+                ? 'Requests you\'ve approved or rejected will move here, out of your Awaiting My Decision list.'
+                : 'Use the "Request Approval" button on an announcement, task, committee, or event to ask a member to sign off on it.'
           }
         />
       ) : (
@@ -379,10 +398,12 @@ export default function ApprovalsPage() {
 
                   {/* Requester Context */}
                   <p className="text-theme-text-secondary text-[11px]">
-                    {tab === 'inbox' ? (
+                    {tab === 'sent' ? (
+                      <>Sent to <span className="font-semibold text-theme-text-primary">{req.targetMemberName}</span> for approval.</>
+                    ) : req.status === 'pending' ? (
                       <><span className="font-semibold text-theme-text-primary">{req.requesterName}</span> is asking you to approve this.</>
                     ) : (
-                      <>Sent to <span className="font-semibold text-theme-text-primary">{req.targetMemberName}</span> for approval.</>
+                      <><span className="font-semibold text-theme-text-primary">{req.requesterName}</span> asked you to approve this.</>
                     )}
                   </p>
 

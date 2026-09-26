@@ -14,7 +14,8 @@ import {
   Palette,
   ChevronDown,
   Briefcase,
-  ListFilter
+  ListFilter,
+  Check
 } from 'lucide-react';
 import {
   getRatings,
@@ -103,6 +104,11 @@ export default function RatingsPage() {
   const [queueStudentFilter, setQueueStudentFilter] = useState('ALL');
   const [queueEventFilter, setQueueEventFilter] = useState('ALL');
   const [queueSortBy, setQueueSortBy] = useState<'pendingFirst' | 'titleAsc' | 'assigneeAsc' | 'eventAsc'>('pendingFirst');
+  // Mirrors the Approvals page's Awaiting/Decided split — deliverables this
+  // viewer has already evaluated move to their own tab instead of just
+  // vanishing, so there's still a quick way to see what's been evaluated
+  // without it cluttering the main pending queue.
+  const [queueTab, setQueueTab] = useState<'pending' | 'evaluated'>('pending');
 
   // Evaluation Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -314,12 +320,23 @@ export default function RatingsPage() {
     return ratings.some(r => r.taskId === task.id && r.targetId === targetId && (r.reviewerRole === reviewerRole || r.raterName === user?.name));
   };
 
+  // The actual rating record hasMyRating found, if any — used by the
+  // Evaluated tab's "Edit My Review" action.
+  const getMyRatingForTask = (task: TaskItem): RatingItem | undefined => {
+    const reviewerRole = resolveRatingReviewerRole(user, isDesignTask(task));
+    if (!reviewerRole) return undefined;
+    const targetId = getRatingTargetId(task);
+    return ratings.find(r => r.taskId === task.id && r.targetId === targetId && (r.reviewerRole === reviewerRole || r.raterName === user?.name));
+  };
+
   // Task Evaluation Queue surfaces completed deliverables that are pending evaluation by the current user.
-  // Once evaluated by the current user, the task deliverable moves into Performance Evaluation Scorecards.
+  // Once evaluated by the current user, the task deliverable moves to the "Evaluated" tab.
   const completedTasks = tasks.filter(t => t.status === 'Completed');
   const pendingQueueTasks = completedTasks.filter(t => !hasMyRating(t));
+  const evaluatedQueueTasks = completedTasks.filter(t => hasMyRating(t));
+  const activeQueueTasks = queueTab === 'pending' ? pendingQueueTasks : evaluatedQueueTasks;
 
-  const searchedQueueTasks = pendingQueueTasks.filter(t => {
+  const searchedQueueTasks = activeQueueTasks.filter(t => {
     const q = taskSearchQuery.toLowerCase();
     return (
       t.title.toLowerCase().includes(q) ||
@@ -551,7 +568,40 @@ export default function RatingsPage() {
               <CheckSquare className="h-4 w-4 text-accent" />
               Task Evaluation Queue
             </h3>
-            <p className="text-xs text-theme-text-secondary">Select any pending task deliverable to evaluate assignee performance</p>
+            <p className="text-xs text-theme-text-secondary">
+              {queueTab === 'pending' ? 'Select any pending task deliverable to evaluate assignee performance' : 'Deliverables you have already evaluated'}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-1 p-0.5 bg-theme-background/40 border border-theme-border/40 rounded-lg">
+            <button
+              type="button"
+              onClick={() => setQueueTab('pending')}
+              className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] font-semibold rounded-md transition-all cursor-pointer ${
+                queueTab === 'pending' ? 'bg-accent text-white' : 'text-theme-text-secondary hover:text-theme-text-primary'
+              }`}
+            >
+              Pending
+              {pendingQueueTasks.length > 0 && (
+                <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${queueTab === 'pending' ? 'bg-white/25' : 'bg-theme-border/40'}`}>
+                  {pendingQueueTasks.length}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setQueueTab('evaluated')}
+              className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] font-semibold rounded-md transition-all cursor-pointer ${
+                queueTab === 'evaluated' ? 'bg-accent text-white' : 'text-theme-text-secondary hover:text-theme-text-primary'
+              }`}
+            >
+              Evaluated
+              {evaluatedQueueTasks.length > 0 && (
+                <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${queueTab === 'evaluated' ? 'bg-white/25' : 'bg-theme-border/40'}`}>
+                  {evaluatedQueueTasks.length}
+                </span>
+              )}
+            </button>
           </div>
 
           <div className="relative">
@@ -560,7 +610,7 @@ export default function RatingsPage() {
               type="text"
               value={taskSearchQuery}
               onChange={(e) => setTaskSearchQuery(e.target.value)}
-              placeholder="Search pending tasks or assignees..."
+              placeholder={queueTab === 'pending' ? 'Search pending tasks or assignees...' : 'Search evaluated tasks or assignees...'}
               className="w-full pl-8 pr-3 py-1.5 bg-theme-background/40 border border-theme-border/40 rounded-xl text-xs text-theme-text-primary placeholder-theme-text-secondary focus:outline-none focus:border-accent"
             />
           </div>
@@ -615,7 +665,11 @@ export default function RatingsPage() {
           <div className="flex-1 overflow-y-auto space-y-3 pr-1">
             {sortedQueueTasks.length === 0 ? (
               <div className="text-center py-8 text-theme-text-secondary text-xs bg-theme-border/5 rounded-xl border border-theme-border/20">
-                {hasActiveQueueFilters ? 'No pending deliverables match the selected filters.' : 'No pending deliverables currently waiting for your evaluation.'}
+                {hasActiveQueueFilters
+                  ? `No ${queueTab === 'pending' ? 'pending' : 'evaluated'} deliverables match the selected filters.`
+                  : queueTab === 'pending'
+                    ? 'No pending deliverables currently waiting for your evaluation.'
+                    : "You haven't evaluated any deliverables yet."}
               </div>
             ) : (
               queueGroups.map(group => (
@@ -715,12 +769,16 @@ export default function RatingsPage() {
                                   ? 'Evaluations restricted to Super User, Centre Head, Advisor, Head of Events (GG Campus), or Design Head'
                                   : 'Evaluations restricted to Super User, Centre Head, Advisor, or Head of Events (GG Campus)'}
                               </span>
+                            ) : queueTab === 'evaluated' ? (
+                              <span className="text-[10px] text-success font-semibold flex items-center gap-1">
+                                <Check className="h-3 w-3" /> You evaluated this
+                              </span>
                             ) : (
                               <span className="text-[10px] text-theme-text-secondary">
                                 {task.assigneeType === 'committee' ? 'Rates entire committee' : task.assigneeType === 'group' ? 'Rates entire group' : 'Pending Evaluation'}
                               </span>
                             )}
-                            {canEval && (
+                            {canEval && queueTab === 'pending' && (
                               <button
                                 onClick={() => openEvaluationForTask(task)}
                                 className="px-3 py-1 text-[11px] font-medium rounded-lg cursor-pointer transition-all bg-accent hover:bg-primary-light text-white shadow-sm"
@@ -728,6 +786,17 @@ export default function RatingsPage() {
                                 Evaluate Performance
                               </button>
                             )}
+                            {canEval && queueTab === 'evaluated' && (() => {
+                              const myRating = getMyRatingForTask(task);
+                              return myRating ? (
+                                <button
+                                  onClick={() => openEditEvaluation(myRating)}
+                                  className="px-3 py-1 text-[11px] font-medium rounded-lg cursor-pointer transition-all bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary"
+                                >
+                                  Edit My Review
+                                </button>
+                              ) : null;
+                            })()}
                           </div>
                         </div>
                       );
