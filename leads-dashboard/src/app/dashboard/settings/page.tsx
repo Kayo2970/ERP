@@ -21,7 +21,7 @@ import {
   AlertCircle,
   Crop,
 } from 'lucide-react';
-import { getAuditLogs, getMembers, saveMembers, updateMember, updateMemberAvatar, logAuditEvent, AuditLogItem, getEmailLogs, requestEmailChange, confirmEmailChange, confirmNewEmailChange, authHeaders } from '@/lib/local-data';
+import { getAuditLogs, getMembers, saveMembers, updateMember, updateMemberAvatar, logAuditEvent, AuditLogItem, getEmailLogs, requestEmailChange, confirmEmailChange, confirmNewEmailChange, authHeaders, setSessionToken } from '@/lib/local-data';
 import { isCentreHead } from '@/lib/permissions';
 import { FileDropzone, useUploadTask, formatFileSize } from '@/components/ui/file-dropzone';
 import { ImageCropModal } from '@/components/image-crop-modal';
@@ -335,6 +335,14 @@ export default function SettingsPage() {
         triggerError(data.error || 'Failed to change password.');
         return;
       }
+      // The server invalidates every session for this account (including
+      // the one making this very request) and issues a fresh token in
+      // data.token — without swapping it in here, every subsequent
+      // authenticated call from this tab (starting with updateMember just
+      // below) would be using a now-dead token and fail with 401, making a
+      // password change that actually succeeded look like it silently
+      // broke the account.
+      setSessionToken(data.token);
     }
 
     const changes = {
