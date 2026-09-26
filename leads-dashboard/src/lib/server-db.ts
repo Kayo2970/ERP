@@ -475,6 +475,91 @@ function ensureOrphanedSubmissionsPruned(): Promise<void> {
 }
 
 /**
+ * One-time, idempotent recalculation: committee/group task evaluations are
+ * submitted once against a placeholder targetId/targetName (the committee's
+ * name, or a generated "N students: ..." string — see addRating/
+ * propagateCommitteeRating/propagateGroupRating in local-data.ts), then
+ * fanned out into a real row per student. Before RatingItem.isGroupPlaceholder
+ * existed, that placeholder row was never marked, so it showed up everywhere
+ * as if the committee/group itself were a rated individual — inflating the
+ * org-wide baseline and appearing as a phantom "student" in Reports/Ratings.
+ * This retroactively flags every already-stored placeholder row so existing
+ * data benefits from the same fix without anyone having to touch it by hand.
+ * A row is identified as a placeholder if its task is a committee/group task
+ * AND its targetId isn't one of that committee's/group's real member ids —
+ * i.e. it's the original bookkeeping row, not one of the fanned-out copies.
+ * Runs once per boot; a permanent no-op once every existing placeholder is
+ * already flagged.
+ */
+let groupPlaceholderRatingsRecalcPromise: Promise<void> | null = null;
+function ensureGroupPlaceholderRatingsRecalculated(): Promise<void> {
+  if (!groupPlaceholderRatingsRecalcPromise) {
+    groupPlaceholderRatingsRecalcPromise = (async () => {
+      try {
+        const readJsonArray = async (key: keyof DbSchema): Promise<any[] | null> => {
+          const raw = await fs.readFile(collectionPath(key), 'utf-8');
+          const parsed = JSON.parse(raw);
+          let content: any = parsed;
+          if (isEncryptedPayload(parsed)) {
+            try {
+              content = JSON.parse(decryptData(parsed));
+            } catch {
+              return null;
+            }
+          }
+          return Array.isArray(content) ? content : null;
+        };
+
+        const ratings = await readJsonArray('ratings');
+        if (!ratings || ratings.length === 0) return;
+        const tasks = await readJsonArray('tasks');
+        const events = await readJsonArray('events');
+        if (!tasks) return;
+
+        let changed = false;
+        const recalculated = ratings.map((r: any) => {
+          if (r?.isGroupPlaceholder) return r; // already flagged, no-op
+
+          const task = tasks.find((t: any) => t?.id === r?.taskId);
+          if (!task) return r;
+
+          const isCommitteeTask = task.assigneeType === 'committee' || !!task.eventCommitteeId;
+          const isGroupTask = task.assigneeType === 'group';
+          if (!isCommitteeTask && !isGroupTask) return r;
+
+          let realMemberIds: string[] = [];
+          if (isCommitteeTask && events) {
+            const event = events.find((e: any) => e?.id === task.eventId || e?.title === task.event);
+            const committee = (event?.committees || []).find(
+              (c: any) => c?.id === task.eventCommitteeId || c?.name?.toLowerCase() === task.assignee?.toLowerCase()
+            );
+            realMemberIds = committee?.memberIds || [];
+          } else if (isGroupTask) {
+            realMemberIds = task.assigneeIds || [];
+          }
+
+          // A row whose targetId IS one of the real members is a genuine
+          // fanned-out per-student rating — leave it exactly as is. A row
+          // that isn't (the original bookkeeping row, keyed by the
+          // committee/group's own placeholder string) gets flagged.
+          if (realMemberIds.includes(r.targetId)) return r;
+
+          changed = true;
+          return { ...r, isGroupPlaceholder: true };
+        });
+
+        if (changed) await writeCollectionFile('ratings', recalculated);
+      } catch (err: any) {
+        if (err?.code !== 'ENOENT') {
+          console.error('[server-db] Group-placeholder ratings recalculation failed:', err);
+        }
+      }
+    })();
+  }
+  return groupPlaceholderRatingsRecalcPromise;
+}
+
+/**
  * One-time, idempotent seed: the built-in Feedback Form Template only
  * auto-appears via SEED_DB on a brand-new formTemplates.json (first boot
  * for that specific collection). Any database that already existed before
@@ -602,6 +687,7 @@ async function readCollectionFile<T = any>(key: keyof DbSchema): Promise<T[]> {
   await ensureStaleEmailsFixed();
   await ensureProductionRosterPruned();
   await ensureOrphanedSubmissionsPruned();
+  await ensureGroupPlaceholderRatingsRecalculated();
   await ensureFeedbackFormTemplateSeeded();
   try {
     const raw = await fs.readFile(collectionPath(key), 'utf-8');
