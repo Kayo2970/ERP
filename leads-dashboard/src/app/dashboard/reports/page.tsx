@@ -67,6 +67,11 @@ export default function ReportsPage() {
 
   // Filter ratings based on viewer's access, then selected division, target member, and time period
   const rawFilteredRatings = ratings.filter(r => {
+    // Committee/group bookkeeping rows are keyed by the committee/group's
+    // placeholder name, not a real person — exclude them everywhere here so
+    // a committee/group never shows up as if it were a rated individual.
+    // The real per-student rows already carry the correct individual name.
+    if (r.isGroupPlaceholder) return false;
     if (!canViewRating(r, user)) return false;
     // If division filter is active, check the target member's division
     if (selectedDivision !== 'ALL') {
@@ -160,7 +165,7 @@ export default function ReportsPage() {
   }));
 
   // Unique Targets List for selector
-  const targets = Array.from(new Set(ratings.map(r => r.targetName)));
+  const targets = Array.from(new Set(ratings.filter(r => !r.isGroupPlaceholder).map(r => r.targetName)));
 
   const handleDownloadReport = () => {
     if (filteredRatings.length === 0) {

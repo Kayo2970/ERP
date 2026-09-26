@@ -587,6 +587,16 @@ export interface RatingItem {
   quarter?: string; // e.g. "2026-Q3"
   createdAt: string;
   updatedAt?: string;
+  // True ONLY on the master bookkeeping row a committee/group task's rating
+  // is originally submitted against (targetId/targetName is the committee's
+  // or group's placeholder string, not a real person — see addRating below,
+  // which immediately fans this out into one real per-member row each via
+  // propagateCommitteeRating/propagateGroupRating). This row is kept around
+  // so the app can detect "has this reviewer already scored this task" and
+  // show a live running average in the Task Evaluation Queue, but it must
+  // never be treated as if it were a real rated person: every place that
+  // lists, aggregates, or exports ratings by target should filter it out.
+  isGroupPlaceholder?: boolean;
 }
 
 export interface ReceiptFile {
@@ -3978,8 +3988,8 @@ export function getStudentProfile(memberIdOrName: string): StudentProfileData | 
 
   const allRatings = getRatings();
   const memberRatings = allRatings.filter(r =>
-    r.targetId === member.id ||
-    r.targetName.toLowerCase() === member.name.toLowerCase()
+    !r.isGroupPlaceholder &&
+    (r.targetId === member.id || r.targetName.toLowerCase() === member.name.toLowerCase())
   );
 
   const totalTasks = memberTasks.length;
@@ -4043,7 +4053,10 @@ export function getStudentLeaderboard(): {
   // Everything below only looks at ratings from the current annual scoring
   // cycle (resets every 1 August, see currentScoringCycleStart) — last
   // year's volume, recency, and consistency history doesn't carry over.
-  const cycleRatings = getRatings().filter(r => isWithinCurrentScoringCycle(r.createdAt, now));
+  // Excludes committee/group placeholder rows (see RatingItem.isGroupPlaceholder)
+  // so the same evaluation isn't counted once for the placeholder AND again
+  // for every student it was fanned out to, which would skew this baseline.
+  const cycleRatings = getRatings().filter(r => !r.isGroupPlaceholder && isWithinCurrentScoringCycle(r.createdAt, now));
 
   // Org-wide baseline for the confidence weighting below — the mean overall
   // score across every in-cycle rating. Falls back to the neutral midpoint

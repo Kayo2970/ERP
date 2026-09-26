@@ -90,6 +90,7 @@ export default function RatingsPage() {
   const [taskSearchQuery, setTaskSearchQuery] = useState('');
   const [historySearchQuery, setHistorySearchQuery] = useState('');
   const [periodFilter, setPeriodFilter] = useState<PeriodFilterValue>({ mode: 'ALL' });
+  const [historyStudentFilter, setHistoryStudentFilter] = useState('ALL');
 
   // Task Evaluation Queue — student/event filters, sort, and event grouping
   const [queueStudentFilter, setQueueStudentFilter] = useState('ALL');
@@ -257,6 +258,13 @@ export default function RatingsPage() {
           ...legacy,
           overallScore: overall,
           notes,
+          // Committee/group tasks don't have a real person as their target —
+          // targetId/targetName here is the committee's or group's
+          // placeholder string. Flag it so it never surfaces as if it were
+          // an actual rated person (see RatingItem.isGroupPlaceholder); the
+          // real per-student rows are created right below by addRating's
+          // propagateCommitteeRating/propagateGroupRating fan-out.
+          isGroupPlaceholder: Boolean(isCommittee || isGroup) || undefined,
         });
       }
 
@@ -367,6 +375,11 @@ export default function RatingsPage() {
 
   // Filtered ratings history
   const filteredRatingsHistory = ratings.filter(r => {
+    // Committee/group bookkeeping rows are keyed by the committee/group's
+    // placeholder name, not a real person — never list them as a scorecard.
+    // The real per-student rows (created by the propagate* fan-out) are
+    // what should show up here instead.
+    if (r.isGroupPlaceholder) return false;
     if (!canViewRating(r, user)) return false;
 
     const matchesSearch =
@@ -376,8 +389,16 @@ export default function RatingsPage() {
       r.raterName.toLowerCase().includes(historySearchQuery.toLowerCase()) ||
       (r.notes && r.notes.toLowerCase().includes(historySearchQuery.toLowerCase()));
 
+    if (historyStudentFilter !== 'ALL' && r.targetName !== historyStudentFilter) return false;
+
     return matchesSearch && isWithinPeriod(r.createdAt, periodFilter);
   });
+
+  // Student options for the Scorecard History filter below — placeholder
+  // rows excluded so a committee/group name never appears as a choice.
+  const historyStudentOptions = Array.from(
+    new Set(ratings.filter(r => !r.isGroupPlaceholder).map(r => r.targetName))
+  ).sort((a, b) => a.localeCompare(b));
 
   // Group scorecards by evaluated deliverable (taskId + targetId or taskTitle + targetName)
   interface ScorecardGroup {
@@ -695,6 +716,17 @@ export default function RatingsPage() {
             </div>
 
             <div className="flex items-center gap-2.5 flex-wrap">
+              {/* Filter to one specific student's scorecards */}
+              <SearchableSelect
+                value={historyStudentFilter}
+                onChange={setHistoryStudentFilter}
+                allLabel="All Students"
+                allValue="ALL"
+                placeholder="Search students..."
+                compact
+                options={historyStudentOptions.map(name => ({ value: name, label: name }))}
+              />
+
               {/* Period Filter: month or custom date range */}
               <PeriodFilter
                 value={periodFilter}
@@ -893,7 +925,7 @@ export default function RatingsPage() {
       {/* Task Performance Evaluation Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="glass-panel w-full max-w-lg rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl">
+          <div className="glass-panel w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-theme-text-primary">
                 {editingRating ? 'Edit Task Performance Scorecard' : 'Evaluate Task Performance'}
