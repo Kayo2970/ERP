@@ -614,7 +614,12 @@ async function readCollectionFile<T = any>(key: keyof DbSchema): Promise<T[]> {
         jsonContent = JSON.parse(decryptedText);
       } catch (decErr) {
         console.error(`[server-db] Decryption failed for collection "${String(key)}":`, decErr);
-        return ((EMPTY_DB[key] as any[]) ?? []) as T[];
+        // Never treat an undecryptable file as "empty" — that empty array can
+        // flow straight into mutateCollection's write-back and permanently
+        // overwrite the real (still-intact-on-disk) data with just the new
+        // mutation. Surface the failure instead so the caller sees an error
+        // rather than silent data loss.
+        throw new Error(`[server-db] Collection "${String(key)}" could not be decrypted — refusing to treat it as empty.`);
       }
     }
 
@@ -622,7 +627,17 @@ async function readCollectionFile<T = any>(key: keyof DbSchema): Promise<T[]> {
     if (key === 'designs') arr = processDesignRetention(arr);
     return arr as T[];
   } catch (err: any) {
-    if (err?.code !== 'ENOENT') return ((EMPTY_DB[key] as any[]) ?? []) as T[];
+    if (err?.code !== 'ENOENT') {
+      // A corrupted/unparsable file, a transient disk error, etc. Same
+      // reasoning as above: returning EMPTY_DB here used to make a
+      // transient read failure look like a genuinely empty collection,
+      // and mutateCollection would then happily persist that emptiness,
+      // wiping out real data on the very next write. Log loudly and
+      // rethrow so the failure surfaces as an error instead of silent
+      // data loss.
+      console.error(`[server-db] Failed to read collection "${String(key)}":`, err);
+      throw err;
+    }
     // First boot for this specific collection: seed it from local-data.ts's initial* export.
     const seeded = ((SEED_DB[key] as any[]) ?? []) as T[];
     try {
