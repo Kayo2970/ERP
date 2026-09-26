@@ -132,9 +132,16 @@ export async function fillFeedbackFormDocx(form: PublicFormItem, submission: For
         if (n >= 1 && n <= 5) tokens[`${mapping.tokenPrefix}_${n}`] = '☒';
         break;
       }
-      case 'checkbox':
-        if (raw === true || raw === 'true' || raw === 'on' || raw === '1' || raw === 1) tokens[mapping.token] = '☒';
+      case 'checkbox': {
+        // The Learning Outcomes fields used to be plain boolean checkboxes;
+        // they're now a Yes/No select (see FEEDBACK_FORM_TEMPLATE_ID in
+        // local-data.ts), so 'raw' arrives as the string "Yes"/"No" — keep
+        // accepting the old boolean-ish values too for any already-submitted
+        // responses recorded before that change.
+        const v = typeof raw === 'string' ? raw.trim().toLowerCase() : raw;
+        if (v === true || v === 'true' || v === 'yes' || v === 'on' || v === '1' || v === 1) tokens[mapping.token] = '☒';
         break;
+      }
       case 'yesno': {
         const v = String(raw).trim().toLowerCase();
         if (v === 'yes') tokens[mapping.yesToken] = '☒';
