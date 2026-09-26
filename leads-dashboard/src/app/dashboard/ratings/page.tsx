@@ -91,6 +91,13 @@ export default function RatingsPage() {
   const [historySearchQuery, setHistorySearchQuery] = useState('');
   const [periodFilter, setPeriodFilter] = useState<PeriodFilterValue>({ mode: 'ALL' });
   const [historyStudentFilter, setHistoryStudentFilter] = useState('ALL');
+  // Score-range filter + sort for the Scorecard History table below — lets an
+  // editor quickly isolate outlier scores (e.g. every 5.0, or everything
+  // under 3.0) and sort them together, so a batch of scores that need
+  // correcting can be reviewed and edited one after another instead of
+  // hunting through the whole list in date order.
+  const [historyScoreBand, setHistoryScoreBand] = useState<'ALL' | '5' | '4-4.9' | '3-3.9' | '2-2.9' | '0-1.9'>('ALL');
+  const [historySortBy, setHistorySortBy] = useState<'newest' | 'oldest' | 'scoreHigh' | 'scoreLow' | 'nameAsc'>('newest');
 
   // Task Evaluation Queue — student/event filters, sort, and event grouping
   const [queueStudentFilter, setQueueStudentFilter] = useState('ALL');
@@ -444,7 +451,32 @@ export default function RatingsPage() {
     g.aggregateScore = parseFloat((sum / g.ratings.length).toFixed(1));
   });
 
-  scorecardGroups.sort((a, b) => b.latestCreatedAt.localeCompare(a.latestCreatedAt));
+  // Score-range filter: isolate a specific band (e.g. every 5.0, or every
+  // sub-3.0) to review together before editing.
+  const scoreBandMatches = (score: number): boolean => {
+    switch (historyScoreBand) {
+      case '5': return score >= 5;
+      case '4-4.9': return score >= 4 && score < 5;
+      case '3-3.9': return score >= 3 && score < 4;
+      case '2-2.9': return score >= 2 && score < 3;
+      case '0-1.9': return score < 2;
+      default: return true;
+    }
+  };
+  const scoreFilteredGroups = historyScoreBand === 'ALL'
+    ? scorecardGroups
+    : scorecardGroups.filter(g => scoreBandMatches(g.aggregateScore));
+
+  scoreFilteredGroups.sort((a, b) => {
+    switch (historySortBy) {
+      case 'oldest': return a.latestCreatedAt.localeCompare(b.latestCreatedAt);
+      case 'scoreHigh': return b.aggregateScore - a.aggregateScore;
+      case 'scoreLow': return a.aggregateScore - b.aggregateScore;
+      case 'nameAsc': return a.targetName.localeCompare(b.targetName);
+      case 'newest':
+      default: return b.latestCreatedAt.localeCompare(a.latestCreatedAt);
+    }
+  });
 
   const availableRatingMonths = extractAvailableMonths(ratings.map(r => r.createdAt));
 
@@ -734,6 +766,35 @@ export default function RatingsPage() {
                 availableMonths={availableRatingMonths}
               />
 
+              {/* Score-range filter — isolate a band (e.g. every 5.0, or every sub-3.0) to review/edit as a batch */}
+              <select
+                value={historyScoreBand}
+                onChange={(e) => setHistoryScoreBand(e.target.value as typeof historyScoreBand)}
+                title="Filter by score range"
+                className="px-2.5 py-1.5 bg-theme-background/30 border border-theme-border/40 rounded-xl text-xs text-theme-text-primary focus:outline-none focus:border-accent"
+              >
+                <option value="ALL">All Scores</option>
+                <option value="5">5.0 only</option>
+                <option value="4-4.9">4.0 – 4.9</option>
+                <option value="3-3.9">3.0 – 3.9</option>
+                <option value="2-2.9">2.0 – 2.9</option>
+                <option value="0-1.9">Below 2.0</option>
+              </select>
+
+              {/* Sort order */}
+              <select
+                value={historySortBy}
+                onChange={(e) => setHistorySortBy(e.target.value as typeof historySortBy)}
+                title="Sort order"
+                className="px-2.5 py-1.5 bg-theme-background/30 border border-theme-border/40 rounded-xl text-xs text-theme-text-primary focus:outline-none focus:border-accent"
+              >
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="scoreHigh">Score: High to Low</option>
+                <option value="scoreLow">Score: Low to High</option>
+                <option value="nameAsc">Student Name (A-Z)</option>
+              </select>
+
               {/* Search filter */}
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-theme-text-secondary" />
@@ -749,7 +810,7 @@ export default function RatingsPage() {
           </div>
 
           <div className="overflow-x-auto flex-1">
-            {scorecardGroups.length === 0 ? (
+            {scoreFilteredGroups.length === 0 ? (
               <div className="text-center py-12 text-theme-text-secondary text-xs">
                 No evaluated task scorecards found matching the selected filter.
               </div>
@@ -767,7 +828,7 @@ export default function RatingsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-theme-border/20">
-                  {scorecardGroups.map(group => {
+                  {scoreFilteredGroups.map(group => {
                     const colorTokens = getRatingColor(group.aggregateScore);
 
                     return (
