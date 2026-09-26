@@ -31,6 +31,7 @@ import {
   Palette,
   Download,
   ExternalLink,
+  Mail,
 } from 'lucide-react';
 import {
   getTasks,
@@ -63,7 +64,7 @@ import {
   DesignSubmissionItem,
   authHeaders
 } from '@/lib/local-data';
-import { canViewTaskExtended, canManageTasks, canCreateTask, canEditTask, canDeleteTask, canRequestTaskExtension, canDecideTaskExtension, canChangeTaskStatus, isHeadRole, getTaskApprovalRequirement, canApprovePendingTask, canRespondToHolidayApproval, canDelegateAutoTask, canViewTaskDelegationTrail, canViewAllDesigns } from '@/lib/permissions';
+import { canViewTaskExtended, canManageTasks, canCreateTask, canEditTask, canDeleteTask, canRequestTaskExtension, canDecideTaskExtension, canChangeTaskStatus, isHeadRole, getTaskApprovalRequirement, canApprovePendingTask, canRespondToHolidayApproval, canDelegateAutoTask, canViewTaskDelegationTrail, canViewAllDesigns, canSendTaskAllotmentEmail } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 import { RequestApprovalModal } from '@/components/request-approval-modal';
@@ -178,6 +179,7 @@ export default function TasksPage() {
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [existingAttachments, setExistingAttachments] = useState<ReceiptFile[]>([]);
   const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
+  const [isSendingAllotmentEmail, setIsSendingAllotmentEmail] = useState(false);
 
   // Searchable assignee combobox
   const [assigneeQuery, setAssigneeQuery] = useState('');
@@ -284,6 +286,35 @@ export default function TasksPage() {
   const triggerSuccess = (msg: string) => {
     setSuccessMsg(msg);
     setTimeout(() => setSuccessMsg(''), 4000);
+  };
+
+  // Manually (re-)send the "this task has been allotted to you" assignment
+  // email on demand — a straightforward assignment notice, not a deadline
+  // reminder. Restricted server-side (and gated here client-side) to
+  // Centre Head, Advisor, and Super User — see POST /api/tasks/[id]/notify.
+  const handleSendAllotmentEmail = async (task: TaskItem) => {
+    setIsSendingAllotmentEmail(true);
+    setFormError('');
+    try {
+      const res = await fetch(`/api/tasks/${task.id}/notify`, {
+        method: 'POST',
+        headers: authHeaders(),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || 'Failed to send the task-allotment email.');
+      }
+      triggerSuccess(
+        data.sent > 0
+          ? `Task-allotment email sent to ${data.sent} of ${data.total} assignee${data.total === 1 ? '' : 's'} for "${task.title}".`
+          : `Could not deliver the email to any assignee for "${task.title}" — check Email Management for details.`
+      );
+    } catch (e: any) {
+      setFormError(e?.message || 'Failed to send the task-allotment email.');
+      setTimeout(() => setFormError(''), 5000);
+    } finally {
+      setIsSendingAllotmentEmail(false);
+    }
   };
 
   const openCaptionDraft = (task: TaskItem) => {
@@ -1650,6 +1681,19 @@ export default function TasksPage() {
                 <X className="h-5 w-5" />
               </button>
             </div>
+
+            {editingTask && canSendTaskAllotmentEmail(user) && (
+              <button
+                type="button"
+                onClick={() => handleSendAllotmentEmail(editingTask)}
+                disabled={isSendingAllotmentEmail}
+                className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-accent/10 hover:bg-accent/15 disabled:opacity-60 disabled:cursor-not-allowed text-accent text-xs font-semibold rounded-xl border border-accent/20 transition-all cursor-pointer"
+                title="Manually send the assignee(s) an email that this task has been allotted to them"
+              >
+                <Mail className="h-3.5 w-3.5" />
+                {isSendingAllotmentEmail ? 'Sending...' : 'Send Task-Allotment Email'}
+              </button>
+            )}
 
             {formError && (
               <div className="p-3 bg-danger/10 border border-danger/25 rounded-xl text-danger text-xs flex items-center gap-2">

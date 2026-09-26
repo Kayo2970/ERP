@@ -281,6 +281,18 @@ export function isEventsHeadRtcCampus(user: SessionUser): boolean {
 }
 
 /**
+ * Manually (re-)send a task's "this has been allotted to you" assignment
+ * email on demand — see POST /api/tasks/[id]/notify. Deliberately hard-
+ * restricted to exactly these three roles with no Group Policy capability
+ * escape hatch, unlike most of this file's other checks — isCentreHead
+ * already covers Super User (tier 1), so this only needs one extra check
+ * for Advisor.
+ */
+export function canSendTaskAllotmentEmail(user: SessionUser): boolean {
+  return isCentreHead(user) || isAdvisor(user);
+}
+
+/**
  * Multi-reviewer evaluation rule: Super User, Centre Head, Advisor, and GG Campus Events Head
  * can each submit independent evaluations for a task deliverable, and the score shown is the
  * live average of all submitted reviews. A Design Portal deliverable task (`isDesignDeliverable`)
@@ -346,8 +358,6 @@ export const CAPABILITY_CATALOG: { key: string; label: string; description: stri
   { key: 'EVENTS_EDIT', label: 'Edit Events', description: "Edit any existing event's details.", module: 'Events' },
   { key: 'EVENTS_DELETE', label: 'Delete Events', description: 'Delete any event.', module: 'Events' },
   { key: 'EVENTS_VIEW_ALL', label: 'View All Events', description: 'See every event, not just ones created by or listing this person.', module: 'Events' },
-  { key: 'MANAGE_EVENT_PASSES', label: 'Manage Event Passes & Tickets', description: 'Issue, view, and manage on-the-spot event passes and tickets.', module: 'Events' },
-  { key: 'SCAN_EVENT_PASSES', label: 'Scan & Verify Event Passes', description: 'Scan QR codes on event passes at turnstiles/entrances to verify genuineness and check in guests.', module: 'Events' },
   { key: 'FESTIVALS_MANAGE', label: 'Manage Festivals', description: 'Create, edit, and organize festival schedules and events.', module: 'Festivals' },
   { key: 'TASKS_CREATE', label: 'Create Tasks', description: 'Assign new tasks to individuals or committees.', module: 'Tasks' },
   { key: 'TASKS_EDIT', label: 'Edit Tasks', description: 'Edit any existing task.', module: 'Tasks' },
@@ -379,6 +389,7 @@ export const CAPABILITY_CATALOG: { key: string; label: string; description: stri
   { key: 'VIEW_ALL_REPORTS', label: 'View All Performance Reports', description: 'See every report/rating record, not just their own or their department’s.', module: 'Ratings & Reports' },
   { key: 'EVENT_REPORTS_SUBMIT', label: 'Submit Event Reports', description: 'Submit formal post-event reports for approval.', module: 'Event Reports' },
   { key: 'EVENT_REPORTS_REVIEW', label: 'Review Event Reports', description: 'Approve or reject submitted event reports.', module: 'Event Reports' },
+  { key: 'EVENT_REPORTS_VIEW_ALL', label: 'View All Event Reports', description: 'See every submitted event report, not just ones this person submitted or is reviewing.', module: 'Event Reports' },
   { key: 'EVENT_REPORTS_DELETE', label: 'Delete Event Reports', description: 'Delete submitted event reports.', module: 'Event Reports' },
   { key: 'MANAGE_GUEST_INVITES', label: 'Manage Mail Merge', description: 'Access the Mail Merge tool (personalized bulk email — formerly "Guest Invites").', module: 'Mail Merge' },
   { key: 'MANAGE_EVENT_PASSES', label: 'Manage Event Passes & Tickets', description: 'Issue digital and on-the-spot verified luxury passes, manage rosters, and broadcast push alerts.', module: 'Event Passes' },
