@@ -81,7 +81,7 @@ export async function DELETE(
   try {
     const actor = await requireSession(request);
     const settings = await getAccessLevelSettingsServer();
-    if (!canDeleteForms(actor, settings)) throw new ForbiddenError();
+    if (!(await canDeleteForms(actor, settings))) throw new ForbiddenError();
     const { id } = await params;
     let found = false;
     let deletedSlug: string | undefined;

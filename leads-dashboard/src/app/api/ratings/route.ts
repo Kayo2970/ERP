@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   try {
     const actor = await requireSession(request);
     const settings = await getAccessLevelSettingsServer();
-    requirePermission(canEvaluateEventStudent(actor, settings), 'You do not have permission to submit ratings.');
+    requirePermission(await canEvaluateEventStudent(actor, settings), 'You do not have permission to submit ratings.');
     const item = await request.json();
     const updated = await mutateCollection('ratings', (current) => [item, ...current]);
     const created = updated.find((r: any) => r.id === item.id);

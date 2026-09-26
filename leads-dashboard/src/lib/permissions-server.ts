@@ -73,6 +73,37 @@ export async function getAccessLevelSettingsServer(): Promise<AccessLevelSetting
 
 export type ServerUser = { id?: string; tier?: number; role?: string; division?: string; department?: string; email?: string; name?: string } | null | undefined;
 
+/**
+ * Server-side port of permissions.ts's hasCapability/isPolicyActive/
+ * memberMatchesPolicy — the "deliberate, disclosed limitation" this file's
+ * header calls out (Group Policy capability grants weren't consulted by any
+ * server route). Only wired into the small set of routes below that
+ * actually need a specific capability to be enforceable end-to-end (a
+ * client-visible grant that always 403s server-side is worse than no grant
+ * at all); everywhere else in the app, a capability grant remains a
+ * client-side-only UI gate exactly as it always has been — this function
+ * does not change that for anything it isn't explicitly called from.
+ */
+export async function hasCapabilityServer(user: ServerUser, capability: string): Promise<boolean> {
+  if (!user) return false;
+  if (user.tier === 1) return true;
+  const policies = await readCollection<any>('groupPolicies');
+  const now = new Date().toISOString();
+  return (policies || []).some((p: any) => {
+    if (p.enabled === false) return false;
+    if (p.expiresAt && p.expiresAt <= now) return false;
+    if (!p.capabilities?.includes(capability)) return false;
+    if (user.id && p.targetMemberIds?.includes(user.id)) return true;
+    if (p.targetDivisions?.length && user.division && p.targetDivisions.includes(user.division)) return true;
+    if (p.targetTiers?.length && typeof user.tier === 'number' && p.targetTiers.includes(user.tier)) return true;
+    if (p.targetDesignationKeyword?.trim()) {
+      const kw = p.targetDesignationKeyword.trim().toLowerCase();
+      if ((user.role || '').toLowerCase().includes(kw)) return true;
+    }
+    return false;
+  });
+}
+
 // Mirrors permissions.ts's isExecutiveRole — Faculty Ambassador is deliberately
 // given identical standing to Chief Coordinator by matching here too.
 export function isExecutiveRole(user: ServerUser): boolean {
@@ -240,9 +271,10 @@ export function canRemoveGuestContact(user: ServerUser, settings: AccessLevelSet
   return isCentreHead(user, settings) || user?.tier === 1;
 }
 
-export function canDeleteForms(user: ServerUser, settings: AccessLevelSettings): boolean {
+export async function canDeleteForms(user: ServerUser, settings: AccessLevelSettings): Promise<boolean> {
   if (isExecutiveRole(user) || isAlumniRole(user)) return false;
-  return isCentreHead(user, settings) || user?.tier === 1;
+  if (isCentreHead(user, settings) || user?.tier === 1) return true;
+  return hasCapabilityServer(user, 'FORMS_DELETE');
 }
 
 export function canDeleteEvent(user: ServerUser, settings: AccessLevelSettings): boolean {
@@ -489,9 +521,10 @@ export function canApprovePendingTask(task: ServerTask, user: ServerUser, settin
  * the Design Head/isDesignDeliverable lane are omitted for simplicity, per
  * the ratings module having no alumni actors in practice).
  */
-export function canEvaluateEventStudent(user: ServerUser, settings: AccessLevelSettings): boolean {
+export async function canEvaluateEventStudent(user: ServerUser, settings: AccessLevelSettings): Promise<boolean> {
   if (!user) return false;
-  return isSuperUser(user) || isCentreHead(user, settings) || isAdvisor(user) || isEventsHeadGgCampus(user) || user.tier === 2.5;
+  if (isSuperUser(user) || isCentreHead(user, settings) || isAdvisor(user) || isEventsHeadGgCampus(user) || user.tier === 2.5) return true;
+  return hasCapabilityServer(user, 'CREATE_RATING');
 }
 
 /**

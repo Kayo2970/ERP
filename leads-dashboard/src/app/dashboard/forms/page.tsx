@@ -67,7 +67,7 @@ import {
   EventItem,
   TaskItem
 } from '@/lib/local-data';
-import { canBuildForms, getFormApprovalRequirement, canApprovePendingForm } from '@/lib/permissions';
+import { canBuildForms, getFormApprovalRequirement, canApprovePendingForm, hasCapability } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SearchableSelect } from '@/components/searchable-select';
@@ -567,6 +567,11 @@ export default function FormsBuilderPage() {
 
   // PRD Gating: Super User (Tier 1) and Core Committee (Tier 5)
   const canBuild = canBuildForms(user);
+  // Response data (submissions, exports, analytics) is more sensitive than
+  // the form's own metadata/share link, which stays visible to everyone who
+  // can reach this page — form-builders always see it, others only with an
+  // explicit FORMS_VIEW_RESPONSES grant. Previously ungated entirely.
+  const canViewResponses = canBuild || hasCapability(user, 'FORMS_VIEW_RESPONSES');
 
   // Visibility: a pending/rejected submission is only shown to its submitter, its
   // resolved approver, and the Super User — mirrors the same rule on Events/Tasks.
@@ -883,6 +888,7 @@ export default function FormsBuilderPage() {
                 </div>
 
                 {/* Submissions: Table / Charts toggle */}
+                {canViewResponses ? (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h4 className="text-xs font-bold text-theme-text-primary uppercase tracking-wider">
@@ -1093,6 +1099,11 @@ export default function FormsBuilderPage() {
                     })()
                   )}
                 </div>
+                ) : (
+                  <div className="text-center py-12 text-theme-text-secondary text-xs">
+                    You don&apos;t have permission to view this form&apos;s responses.
+                  </div>
+                )}
               </>
             ) : (
               <div className="text-center py-12 text-theme-text-secondary text-xs">

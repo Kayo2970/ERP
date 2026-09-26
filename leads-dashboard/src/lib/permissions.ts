@@ -292,6 +292,12 @@ export function canSendTaskAllotmentEmail(user: SessionUser): boolean {
   return isCentreHead(user) || isAdvisor(user);
 }
 
+/** Request a social-media post task for a festival/holiday — leadership, any Head role, Faculty, or a FESTIVALS_MANAGE grant. Previously ungated (anyone could trigger this). */
+export function canManageFestivals(user: SessionUser): boolean {
+  if (!user) return false;
+  return isBaseLeadership(user) || isHeadRole(user) || isFaculty(user) || hasCapability(user, 'FESTIVALS_MANAGE');
+}
+
 /**
  * Multi-reviewer evaluation rule: Super User, Centre Head, Advisor, and GG Campus Events Head
  * can each submit independent evaluations for a task deliverable, and the score shown is the
@@ -301,7 +307,7 @@ export function canSendTaskAllotmentEmail(user: SessionUser): boolean {
 export function canEvaluateEventStudent(user: SessionUser, eventCampus?: string, isDesignDeliverable?: boolean): boolean {
   if (!user || isAlumniRole(user)) return false;
   if (isDesignDeliverable && isDesignHead(user)) return true;
-  return isSuperUser(user) || isAdvisor(user) || isCentreHead(user) || isEventsHeadGgCampus(user) || user.tier === 2.5;
+  return isSuperUser(user) || isAdvisor(user) || isCentreHead(user) || isEventsHeadGgCampus(user) || user.tier === 2.5 || hasCapability(user, 'CREATE_RATING');
 }
 
 /** The fixed reviewer slots a rating submission fills. */
@@ -801,8 +807,9 @@ export function canViewReimbursement(claim: ReimbursementItem, user: SessionUser
   // Super User sees all
   if (user.tier === 1) return true;
 
-  // An explicit moduleAccess.REIMBURSEMENTS.view === 'ALL' Group Policy grant
-  if (hasModuleViewAllGrant(user, 'REIMBURSEMENTS')) return true;
+  // An explicit moduleAccess.REIMBURSEMENTS.view === 'ALL' Group Policy grant,
+  // or the REIMBURSEMENTS_VIEW_ALL capability
+  if (hasModuleViewAllGrant(user, 'REIMBURSEMENTS') || hasCapability(user, 'REIMBURSEMENTS_VIEW_ALL')) return true;
 
   // Sector Head sees all claims, including stage-1 Pending claims
   if (isSectorHead(user)) return true;
@@ -1394,6 +1401,12 @@ export function canCreateAnnouncement(user: SessionUser): boolean {
   if (override === 'ALL') return true;
   if (isChiefAdvisor(user)) return false; // view-only
   return isBaseLeadership(user) || isCoreCommitteeTier(user) || user.tier === 4 || user.tier === 5 || isFaculty(user) || isHeadRole(user) || hasCapability(user, 'CREATE_ANNOUNCEMENT');
+}
+
+/** Delete/retract a published announcement — Centre Head, Super User, or a DELETE_ANNOUNCEMENT grant. Enforced server-side too, see /api/announcements/[id]'s DELETE. */
+export function canDeleteAnnouncement(user: SessionUser): boolean {
+  if (!user) return false;
+  return isCentreHead(user) || hasCapability(user, 'DELETE_ANNOUNCEMENT');
 }
 
 /**

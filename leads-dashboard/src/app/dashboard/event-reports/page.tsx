@@ -451,6 +451,11 @@ export default function EventReportsPage() {
                     <button onClick={() => setRejectingId(report.id)} className="flex-1 py-1.5 bg-danger/15 hover:bg-danger/25 text-danger border border-danger/30 text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5">
                       <X className="h-3 w-3" /> Reject
                     </button>
+                    {hasCapability(user, 'EVENT_REPORTS_DELETE') && (
+                      <button onClick={() => setDeletingId(report.id)} className="p-1.5 text-danger hover:bg-danger/10 rounded-lg transition-all cursor-pointer" title="Delete">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
 
                   {scoringId === report.id && (

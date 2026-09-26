@@ -36,7 +36,7 @@ import {
   EventItem,
   TaskItem
 } from '@/lib/local-data';
-import { isCentreHead, canCreateAnnouncement, canApproveAnnouncement } from '@/lib/permissions';
+import { isCentreHead, canCreateAnnouncement, canApproveAnnouncement, canDeleteAnnouncement } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SearchableSelect } from '@/components/searchable-select';
@@ -369,6 +369,7 @@ export default function AnnouncementsPage() {
 
   const canPublish = canCreateAnnouncement(user);
   const canApprove = canApproveAnnouncement(user);
+  const canDelete = canDeleteAnnouncement(user);
 
   const displayedAnnouncements = announcements.filter(ann => {
     if (canApprove) return true;
@@ -514,20 +515,24 @@ export default function AnnouncementsPage() {
                 </div>
               )}
 
-              {canPublish && (
+              {(canPublish || canDelete) && (
                 <div className="flex justify-end gap-2 pt-1">
-                  <button
-                    onClick={() => handleOpenEdit(ann)}
-                    className="p-1 hover:bg-theme-border/30 rounded text-theme-text-secondary hover:text-accent transition-all cursor-pointer flex items-center gap-1 text-[11px]"
-                  >
-                    <Edit2 className="h-3 w-3" /> Edit
-                  </button>
-                  <button
-                    onClick={() => setDeletingAnnouncementId(ann.id)}
-                    className="p-1 hover:bg-danger/10 rounded text-danger transition-all cursor-pointer flex items-center gap-1 text-[11px]"
-                  >
-                    <Trash2 className="h-3 w-3" /> Retract
-                  </button>
+                  {canPublish && (
+                    <button
+                      onClick={() => handleOpenEdit(ann)}
+                      className="p-1 hover:bg-theme-border/30 rounded text-theme-text-secondary hover:text-accent transition-all cursor-pointer flex items-center gap-1 text-[11px]"
+                    >
+                      <Edit2 className="h-3 w-3" /> Edit
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button
+                      onClick={() => setDeletingAnnouncementId(ann.id)}
+                      className="p-1 hover:bg-danger/10 rounded text-danger transition-all cursor-pointer flex items-center gap-1 text-[11px]"
+                    >
+                      <Trash2 className="h-3 w-3" /> Retract
+                    </button>
+                  )}
                 </div>
               )}
             </div>

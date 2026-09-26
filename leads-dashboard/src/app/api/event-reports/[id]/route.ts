@@ -3,7 +3,7 @@ import { mutateCollection, readCollection } from '@/lib/server-db';
 import { saveBase64File, deleteStoredFile, deleteStoredFilesForRecord, readStoredFile } from '@/lib/file-storage';
 import { cascadeCloseAutoApprovals, deleteLinkedApprovalRequests } from '@/lib/approval-sync';
 import { requireSession, ForbiddenError } from '@/lib/session';
-import { getAccessLevelSettingsServer, canReviewEventReports } from '@/lib/permissions-server';
+import { getAccessLevelSettingsServer, canReviewEventReports, hasCapabilityServer } from '@/lib/permissions-server';
 import { apiError } from '@/lib/api-error';
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
@@ -185,7 +185,12 @@ export async function DELETE(
     const settings = await getAccessLevelSettingsServer();
     const existingReports = await readCollection<any>('eventReports');
     const existing = existingReports.find((r: any) => r.id === id);
-    if (!isEventReportAuthor(existing, actor) && !canReviewEventReports(actor, settings) && actor.tier !== 1) {
+    if (
+      !isEventReportAuthor(existing, actor) &&
+      !canReviewEventReports(actor, settings) &&
+      actor.tier !== 1 &&
+      !(await hasCapabilityServer(actor, 'EVENT_REPORTS_DELETE'))
+    ) {
       throw new ForbiddenError();
     }
     let found = false;

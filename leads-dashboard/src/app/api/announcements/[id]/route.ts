@@ -3,7 +3,7 @@ import { mutateCollection, readCollection } from '@/lib/server-db';
 import { dispatchAnnouncementEmails } from '@/lib/announcement-email';
 import { cascadeCloseAutoApprovals, deleteLinkedApprovalRequests } from '@/lib/approval-sync';
 import { requireSession, ForbiddenError } from '@/lib/session';
-import { getAccessLevelSettingsServer, canCreateAnnouncement, canApproveAnnouncement, isCentreHead } from '@/lib/permissions-server';
+import { getAccessLevelSettingsServer, canCreateAnnouncement, canApproveAnnouncement, isCentreHead, hasCapabilityServer } from '@/lib/permissions-server';
 import { apiError } from '@/lib/api-error';
 
 export async function PATCH(
@@ -76,7 +76,9 @@ export async function DELETE(
   try {
     const actor = await requireSession(request);
     const settings = await getAccessLevelSettingsServer();
-    if (!isCentreHead(actor, settings) && actor.tier !== 1) throw new ForbiddenError();
+    if (!isCentreHead(actor, settings) && actor.tier !== 1 && !(await hasCapabilityServer(actor, 'DELETE_ANNOUNCEMENT'))) {
+      throw new ForbiddenError();
+    }
     const { id } = await params;
     let found = false;
     await mutateCollection('announcements', (current) => {

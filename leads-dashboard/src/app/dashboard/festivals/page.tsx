@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { getEvents, getTasks, addTask, isFestivalEvent, EventItem, TaskItem, Member } from '@/lib/local-data';
+import { canManageFestivals } from '@/lib/permissions';
 import { Button } from '@/components/ui/button';
 import { Chip } from '@/components/ui/chip';
 
@@ -72,7 +73,7 @@ export default function FestivalsPage() {
 
   // Helper to request a social media creative post for a festival
   const handleCreateSocialPostTask = (festival: EventItem) => {
-    if (!user) return;
+    if (!user || !canManageFestivals(user)) return;
     const taskTitle = `Social media post needed for "${festival.title}"?`;
     addTask({
       title: taskTitle,
@@ -342,7 +343,7 @@ export default function FestivalsPage() {
                       >
                         View Assigned Task <ChevronRight className="h-3.5 w-3.5" />
                       </Link>
-                    ) : (
+                    ) : canManageFestivals(user) ? (
                       <Button
                         variant="solid"
                         color="accent"
@@ -352,6 +353,8 @@ export default function FestivalsPage() {
                       >
                         Request Social Post (Yes)
                       </Button>
+                    ) : (
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400 italic">No social post requested yet</span>
                     )}
 
                     <Link href={`/dashboard/calendar?date=${festival.startDate}`}>

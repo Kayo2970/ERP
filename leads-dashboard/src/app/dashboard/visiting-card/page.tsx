@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Save, QrCode, Copy, ExternalLink, RotateCw, AlertCircle, Sparkles, Maximize2, X, ShieldCheck, Crop, Plus, Trash2, Upload } from 'lucide-react';
 import { getMembers, saveMembers, updateMemberCard, updateMemberCardPhoto, authHeaders } from '@/lib/local-data';
-import { isCentreHead } from '@/lib/permissions';
+import { isCentreHead, hasCapability } from '@/lib/permissions';
 import { FileDropzone, useUploadTask } from '@/components/ui/file-dropzone';
 import { VisitingCardView } from '@/components/visiting-card-view';
 import { InteractiveKeycardHolder } from '@/components/interactive-keycard-holder';
@@ -67,7 +67,7 @@ export default function VisitingCardPage() {
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  const isWalletAdmin = !!(user && (user.role === 'SUPER_USER' || isCentreHead(user)));
+  const isWalletAdmin = !!(user && (user.role === 'SUPER_USER' || isCentreHead(user) || hasCapability(user, 'VISITING_CARD_ACCESS')));
 
   const triggerSuccess = (msg: string) => {
     setSuccessMsg(msg);
