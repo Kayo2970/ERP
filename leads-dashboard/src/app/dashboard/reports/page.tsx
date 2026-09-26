@@ -296,7 +296,14 @@ export default function ReportsPage() {
       </div>
 
       {/* Control Selector Filters */}
-      <div className="glass-panel rounded-2xl p-5 grid grid-cols-1 md:grid-cols-4 gap-4 items-center print:hidden">
+      {/* relative z-20: .glass-panel's backdrop-filter creates its own CSS
+          stacking context, so the "Filter by Member" dropdown's internal
+          z-index only ranks it within THIS card — without an explicit
+          z-index here, this card's whole stacking context paints below the
+          later glass-panel cards in the Visual Analytics section per normal
+          DOM paint order, so the open dropdown appeared to render behind
+          the chart cards instead of floating cleanly above them. */}
+      <div className="relative z-20 glass-panel rounded-2xl p-5 grid grid-cols-1 md:grid-cols-4 gap-4 items-center print:hidden">
 
         {/* Report Type — governs the structure of the downloaded PDF only */}
         <div className="space-y-1.5">
