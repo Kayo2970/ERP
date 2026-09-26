@@ -76,6 +76,13 @@ export async function runEventLapseSocialTasks(): Promise<{ created: number }> {
         status: 'Assigned',
         creatorName: 'Event Scheduler',
         workflowType: 'event_social_post',
+        // Flag this as a real Design Task, not a general one, so it shows
+        // up in the Design Portal's "Design Task Requests" queue — without
+        // this, a design submitted against it had no way to reference this
+        // task (no sourceTaskId), leaving it orphaned and never
+        // auto-completed by the resulting design's approval.
+        taskCategory: 'design',
+        briefDescription: `Create and post recap/highlight content for "${e.title}" on social media. Submit the design asset here once ready.`,
       });
       created++;
     }

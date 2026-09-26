@@ -52,6 +52,7 @@ import {
   submitDesignCaptions,
   reviewDesignCaptions,
   completeDesignPosting,
+  updateApprovedCaption,
   isTaskAssignee,
   hasAcknowledgedTask,
   acknowledgeTask,
@@ -123,6 +124,11 @@ export default function TasksPage() {
   const [captionReviewTaskId, setCaptionReviewTaskId] = useState<string | null>(null);
   const [captionReviewApproved, setCaptionReviewApproved] = useState(true);
   const [captionReviewComments, setCaptionReviewComments] = useState('');
+  // Editing an already-approved caption on a design_social_posting task
+  // (change & resubmit before/after posting) — same one-open-at-a-time
+  // pattern as the draft/review forms above.
+  const [captionEditTaskId, setCaptionEditTaskId] = useState<string | null>(null);
+  const [captionEditText, setCaptionEditText] = useState('');
 
   // Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -325,6 +331,22 @@ export default function TasksPage() {
       setDesigns(getDesigns());
       setTasks(getTasks());
       triggerSuccess(`Marked posted on ${platform === 'instagram' ? 'Instagram' : 'LinkedIn'}.`);
+    }
+  };
+
+  const openCaptionEdit = (task: TaskItem, currentCaption: string) => {
+    setCaptionEditTaskId(task.id);
+    setCaptionEditText(currentCaption);
+  };
+
+  const handleSaveCaptionEdit = (e: React.FormEvent, task: TaskItem, platform: 'instagram' | 'linkedin') => {
+    e.preventDefault();
+    if (!user || !task.designId || !captionEditText.trim()) return;
+    const updated = updateApprovedCaption(task.designId, platform, captionEditText.trim(), user.name);
+    if (updated) {
+      setDesigns(getDesigns());
+      setCaptionEditTaskId(null);
+      triggerSuccess(`${platform === 'instagram' ? 'Instagram' : 'LinkedIn'} caption updated.`);
     }
   };
 
@@ -1327,9 +1349,42 @@ export default function TasksPage() {
                     const platform = task.platform || 'instagram';
                     const caption = platform === 'linkedin' ? (design.approvedLinkedinCaption || design.approvedInstagramCaption) : design.approvedInstagramCaption;
                     const done = platform === 'linkedin' ? design.postingLinkedinDone : design.postingInstagramDone;
+                    const canEditCaption = isTaskAssignee(task, user);
                     return (
                       <div className="p-3 bg-theme-background/30 border border-theme-border/30 rounded-xl space-y-2">
-                        <p className="text-[11px] text-theme-text-secondary whitespace-pre-wrap">{caption}</p>
+                        {captionEditTaskId === task.id ? (
+                          <form onSubmit={(e) => handleSaveCaptionEdit(e, task, platform)} className="space-y-2">
+                            <textarea
+                              rows={3}
+                              required
+                              autoFocus
+                              value={captionEditText}
+                              onChange={e => setCaptionEditText(e.target.value)}
+                              className="w-full bg-theme-background border border-theme-border rounded-lg px-2.5 py-1.5 text-[11px] focus:outline-none focus:border-accent"
+                            />
+                            <div className="flex items-center gap-2">
+                              <button type="submit" className="px-2.5 py-1 bg-accent hover:bg-primary-light text-white font-semibold rounded-lg transition-all text-[11px] cursor-pointer">
+                                Resubmit Caption
+                              </button>
+                              <button type="button" onClick={() => setCaptionEditTaskId(null)} className="px-2.5 py-1 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary font-semibold rounded-lg transition-all text-[11px] cursor-pointer">
+                                Cancel
+                              </button>
+                            </div>
+                          </form>
+                        ) : (
+                          <>
+                            <p className="text-[11px] text-theme-text-secondary whitespace-pre-wrap">{caption}</p>
+                            {canEditCaption && (
+                              <button
+                                type="button"
+                                onClick={() => openCaptionEdit(task, caption || '')}
+                                className="inline-flex items-center gap-1 px-2 py-1 bg-accent/10 hover:bg-accent/20 border border-accent/25 text-accent text-[10px] font-medium rounded-lg transition-all cursor-pointer"
+                              >
+                                <Edit2 className="h-3 w-3" /> Change &amp; Resubmit Caption
+                              </button>
+                            )}
+                          </>
+                        )}
                         {done ? (
                           <p className="text-[11px] font-semibold text-success">Posted &amp; marked complete</p>
                         ) : (

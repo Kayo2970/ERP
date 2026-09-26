@@ -3400,6 +3400,14 @@ export function respondToHolidayApproval(taskId: string, approved: boolean, acto
       dueDate: task.dueDate,
       creatorName: actorName,
       workflowType: 'holiday_design_social',
+      // Flag this as a real Design Task, not a general one — without this
+      // it never showed up in the Design Portal's "Design Task Requests"
+      // queue, so whoever picked it up had no way to submit a design
+      // against it: they could only upload a disconnected standalone
+      // design with no sourceTaskId, leaving this task orphaned forever
+      // (never auto-completed) instead of linked to the resulting design.
+      taskCategory: 'design',
+      briefDescription: `Create and post social media content for "${task.event || task.title}". Submit the design asset here once ready.`,
     });
   }
 
@@ -4891,6 +4899,35 @@ export function deleteFormTemplate(id: string, actorName: string): boolean {
   return true;
 }
 
+/**
+ * Edit a custom (user-saved) template's name, description, or fields.
+ * Built-in templates (anything in initialFormTemplates, e.g. the Feedback
+ * Form Template) are refused — getFormTemplates() always serves the in-code
+ * copy for those ids and silently discards any saved override, and the
+ * Feedback Form Template is additionally re-synced from local-data.ts by
+ * server-db.ts's ensureFeedbackFormTemplateSeeded on every boot, so an edit
+ * here would appear to save and then quietly revert.
+ */
+export function updateFormTemplate(
+  id: string,
+  changes: Partial<Pick<FormTemplateItem, 'name' | 'description' | 'fields'>>,
+  actorName: string
+): FormTemplateItem | null {
+  if (initialFormTemplates.some(t => t.id === id)) return null;
+
+  const current = getFormTemplates();
+  const idx = current.findIndex(t => t.id === id);
+  if (idx === -1) return null;
+
+  const updated: FormTemplateItem = { ...current[idx], ...changes };
+  const next = [...current];
+  next[idx] = updated;
+  saveFormTemplates(next);
+  serverPatch('/api/form-templates', id, updated);
+  logAuditEvent('FORM_TEMPLATE_UPDATED', actorName, `Updated form template "${updated.name}"`);
+  return updated;
+}
+
 export function getSubmissions(): FormSubmissionItem[] {
   if (typeof window === 'undefined') return initialSubmissions;
   const saved = localStorage.getItem('leads_form_submissions');
@@ -5458,6 +5495,38 @@ export function completeDesignPosting(designId: string, platform: 'instagram' | 
   saveDesigns(designs);
   serverPatch('/api/designs', design.id, design);
   logAuditEvent('DESIGN_POSTING_COMPLETED', actorName, `Marked ${platform === 'instagram' ? 'Instagram' : 'LinkedIn'} posting complete for design "${design.title}"`);
+  return design;
+}
+
+/**
+ * Lets whoever's on a "[Social Media Posting] Post on Instagram/LinkedIn"
+ * task change and resubmit the approved caption text — e.g. a typo spotted
+ * right before (or after) publishing — without re-running the full
+ * draft/approval cycle in submitDesignCaptions/reviewDesignCaptions. Editable
+ * regardless of whether that platform's post is already marked done, since a
+ * correction can still be needed after the fact.
+ */
+export function updateApprovedCaption(
+  designId: string,
+  platform: 'instagram' | 'linkedin',
+  newCaption: string,
+  actorName: string
+): DesignSubmissionItem | null {
+  const designs = getDesigns();
+  const idx = designs.findIndex(d => d.id === designId);
+  if (idx === -1) return null;
+
+  const design = { ...designs[idx] };
+  if (platform === 'instagram') {
+    design.approvedInstagramCaption = newCaption;
+  } else {
+    design.approvedLinkedinCaption = newCaption;
+  }
+
+  designs[idx] = design;
+  saveDesigns(designs);
+  serverPatch('/api/designs', design.id, design);
+  logAuditEvent('DESIGN_CAPTION_EDITED', actorName, `Edited the ${platform === 'linkedin' ? 'LinkedIn' : 'Instagram'} caption for design "${design.title}"`);
   return design;
 }
 
