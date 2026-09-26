@@ -56,8 +56,11 @@ export function averageScore(scores: Record<string, number>): number {
  *
  *   weighted = (n / (n + k)) * rawAverage + (k / (n + k)) * baseline
  *
- * At n=0 this is just the baseline; at n=k it's a 50/50 blend; as n grows
- * past k it approaches rawAverage. `confidenceThreshold` (k) defaults to 5.
+ * At n=k it's a 50/50 blend; as n grows past k it approaches rawAverage.
+ * `confidenceThreshold` (k) defaults to 5. Someone with zero ratings hasn't
+ * contributed anything to weight in the first place, so n=0 is 0, not the
+ * baseline — that would credit them for an org-wide average they never
+ * actually earned.
  */
 export function computeWeightedRatingScore(
   ratingCount: number,
@@ -65,7 +68,7 @@ export function computeWeightedRatingScore(
   baseline: number,
   confidenceThreshold: number = 5
 ): number {
-  if (ratingCount <= 0) return parseFloat(baseline.toFixed(1));
+  if (ratingCount <= 0) return 0;
   const weight = ratingCount / (ratingCount + confidenceThreshold);
   const weighted = weight * rawAverage + (1 - weight) * baseline;
   return parseFloat(weighted.toFixed(1));

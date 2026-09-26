@@ -416,7 +416,7 @@ export default function DashboardHome() {
                       title={
                         perf.ratingsCount > 0
                           ? `Confidence-weighted from a raw average of ${perf.rawScore.toFixed(1)} across ${perf.ratingsCount} rating${perf.ratingsCount === 1 ? '' : 's'} — fewer ratings pull the score toward the org-wide typical score`
-                          : 'No ratings yet — shown at the org-wide typical score'
+                          : 'No ratings yet — 0.0 until they receive their first evaluation'
                       }
                     >
                       <span>{perf.score.toFixed(1)}</span>
