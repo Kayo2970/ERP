@@ -53,6 +53,12 @@ This platform replaces a scattered mix of WhatsApp groups, spreadsheets, and ema
 
 Everything that's changed since this README was last updated (2026-09-15). Full detail is in the git history (`git log`); this is the summary.
 
+### 2026-09-26
+- **Ratings**: Faculty division members can no longer be selected as an individual, group, or committee task assignee — Faculty are evaluators, never rating targets, but the assignee pickers previously let them through, so a Faculty member could end up looking "rated" in Ratings/Reports (#152).
+- **Ratings**: new evaluation score sliders now default to `3` (Satisfactory) instead of `5` (the maximum) — a reviewer who opened the evaluation modal and submitted without touching a slider was silently handing out a perfect 5/5 score to someone who was never actually evaluated (#152).
+- **Reports**: the bar chart tooltip and the downloaded PDF's Event-wise Breakdown table now show the evaluator's (rater's) name alongside each score — previously only the Student-wise Breakdown table had it (#152).
+- **Student Performance Leaderboard / Student Profile**: a member with zero ratings now explicitly shows `0.0` instead of a `—` placeholder that could be mistaken for missing data (#152).
+
 ### Infrastructure — moved to AWS
 - **Migrated production hosting from a Hostinger KVM VPS to AWS EC2** (region `ap-south-1`), now served at **`portal-leads.msruas.ac.in`** through an AWS Application Load Balancer, administered via AWS Systems Manager Session Manager instead of direct SSH. See [Production Deployment (AWS EC2)](#️-production-deployment-aws-ec2) below.
 - Fixed a bug left over from that migration: several places (wallet pass logo/photo URLs, background-worker email links) were still hardcoded to the old `leadsnextgencentre.online` domain — a completely different, stale deployment — instead of the real live domain. This was the root cause of Apple/Google Wallet passes silently failing to generate.
@@ -243,6 +249,9 @@ Configuration lives in `leads-dashboard/.env`:
 - **Live Aggregate Averaging**: Reviews submitted by any panel member automatically compute into a live composite average score.
 - **Design Evaluation Lane**: Dedicated evaluation slot for the Design Head on creative deliverables.
 - **Searchable Combobox Filters**: Quick search filters for students and events with custom monthly or date-range filtering.
+- **Faculty Cannot Be Rated**: Faculty division members are excluded from every task assignee/group/committee picker, so they can never enter the ratings pipeline as a target.
+- **Neutral Default Scores**: New evaluation sliders start at `3` (Satisfactory), not `5`, so an unedited submission never silently reads as a perfect score.
+- **Zero Means Zero**: Members with no ratings at all show an explicit `0.0` average on the Leaderboard and Student Profile, never a placeholder that could be mistaken for a real score.
 
 #### 6. Approvals & Governance Desk (`/dashboard/approvals`)
 - **Centralized Approvals Inbox**: Dedicated management hub for pending sign-offs across **Announcements**, **Tasks**, **Events**, **Designs**, **Event Reports**, **Members**, and **Committees**.
@@ -298,6 +307,7 @@ Configuration lives in `leads-dashboard/.env`:
 
 #### 13. Analytics & Reports (`/dashboard/reports`)
 - **Executive Report Generator**: Styled PDF report generation and CSV data exports for scorecards, event post-mortems, and financial audits.
+- **Evaluator Attribution**: The bar chart tooltip and the PDF's Event-wise Breakdown table both show who submitted each score, not just the score itself.
 
 #### 14. Announcements Engine (`/dashboard/announcements`)
 - **Targeted Broadcasting**: Multi-scope broadcasting (`ALL_MEMBERS`, `CORE_COMMITTEE`, `DEPARTMENTS`, `INDIVIDUAL`).

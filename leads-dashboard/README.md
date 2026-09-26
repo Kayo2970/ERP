@@ -60,6 +60,9 @@ pm2 restart leads-dashboard
 - **Live Aggregate Averaging**: Reviews submitted by any panel member automatically compute into a live composite average score.
 - **Design Evaluation Lane**: Dedicated evaluation slot for the Design Head on creative deliverables.
 - **Searchable Combobox Filters**: Quick search filters for students and events with custom monthly or date-range filtering.
+- **Faculty Cannot Be Rated**: Faculty division members are excluded from every task assignee/group/committee picker, so they can never enter the ratings pipeline as a target.
+- **Neutral Default Scores**: New evaluation sliders start at `3` (Satisfactory), not `5`, so an unedited submission never silently reads as a perfect score.
+- **Zero Means Zero**: Members with no ratings at all show an explicit `0.0` average on the Leaderboard and Student Profile, never a placeholder that could be mistaken for a real score.
 
 #### 6. Approvals & Governance Desk (`/dashboard/approvals`)
 - **Centralized Approvals Inbox**: Dedicated management hub for pending sign-offs across Announcements, Tasks, Events, Designs, Event Reports, Members, and Committees.
@@ -112,6 +115,7 @@ pm2 restart leads-dashboard
 
 #### 13. Analytics & Reports (`/dashboard/reports`)
 - **Executive Report Generator**: Styled PDF report generation and CSV data exports for scorecards, event post-mortems, and financial audits.
+- **Evaluator Attribution**: The bar chart tooltip and the PDF's Event-wise Breakdown table both show who submitted each score, not just the score itself.
 
 #### 14. Announcements Engine (`/dashboard/announcements`)
 - **Targeted Broadcasting**: Multi-scope broadcasting (`ALL_MEMBERS`, `CORE_COMMITTEE`, `DEPARTMENTS`, `INDIVIDUAL`).
