@@ -131,6 +131,63 @@ export function computeConsistencyRatio(dates: string[], now: Date = new Date())
   return Math.min(1, activeWeeks / expectedWeeks);
 }
 
+export interface DatedRatingRow extends DatedScore {
+  /** Groups independent reviewer submissions on the same deliverable — see groupRatingsByTask. */
+  taskKey: string;
+}
+
+/**
+ * The 4-way Multi-Reviewer rubric (Super User / Centre Head / Advisor / GG
+ * Campus Events Head, see resolveRatingReviewerRole in permissions.ts) has
+ * each reviewer submit their OWN separate rating row for the same task —
+ * so one task reviewed by 4 people produces 4 rows, while an identical task
+ * reviewed by 1 person produces 1 row. Feeding raw rows into the volume-
+ * and-consistency scoring above would reward reviewer redundancy, not task
+ * volume: two students who each did 10 tasks would score differently
+ * purely because one of them happened to get multi-reviewed more often.
+ *
+ * This collapses every row for the same (task, target) pair into a single
+ * data point — its score is the average across reviewers, its date is the
+ * latest of theirs — so `n` always reflects DISTINCT EVALUATED TASKS,
+ * consistent across events regardless of how many reviewers each one had.
+ */
+export function groupRatingsByTask(rows: DatedRatingRow[]): DatedScore[] {
+  const byTask = new Map<string, DatedRatingRow[]>();
+  rows.forEach(row => {
+    const group = byTask.get(row.taskKey);
+    if (group) group.push(row); else byTask.set(row.taskKey, [row]);
+  });
+  return Array.from(byTask.values()).map(group => ({
+    score: group.reduce((sum, r) => sum + r.score, 0) / group.length,
+    date: group.reduce((latest, r) => (r.date > latest ? r.date : latest), group[0].date),
+  }));
+}
+
+const SCORING_CYCLE_START_MONTH = 8; // August, 1-indexed
+const SCORING_CYCLE_START_DAY = 1;
+
+/**
+ * 'YYYY-MM-DD' for the most recent 1 August on or before `now` — the start
+ * of the current annual scoring cycle. Everything the scoring functions
+ * above compute (raw/recency average, rating count, consistency) should be
+ * fed only ratings on or after this date, so every student's volume,
+ * recency, and consistency history resets to a clean slate each 1 August
+ * rather than accumulating across academic years forever.
+ */
+export function currentScoringCycleStart(now: Date = new Date()): string {
+  const year = now.getFullYear();
+  const isOnOrAfterCycleStart =
+    now.getMonth() + 1 > SCORING_CYCLE_START_MONTH ||
+    (now.getMonth() + 1 === SCORING_CYCLE_START_MONTH && now.getDate() >= SCORING_CYCLE_START_DAY);
+  const cycleYear = isOnOrAfterCycleStart ? year : year - 1;
+  return `${cycleYear}-08-01`;
+}
+
+/** Whether a 'YYYY-MM-DD' (or full ISO) date string falls in the current scoring cycle (see currentScoringCycleStart). */
+export function isWithinCurrentScoringCycle(dateStr: string, now: Date = new Date()): boolean {
+  return dateStr.slice(0, 10) >= currentScoringCycleStart(now);
+}
+
 export interface FinalStudentScoreBreakdown {
   finalScore: number;
   rawAverage: number;

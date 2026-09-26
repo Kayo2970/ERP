@@ -1,5 +1,5 @@
 import { trackSync } from './sync-status';
-import { averageScore, computeFinalStudentScore } from './rating-criteria';
+import { averageScore, computeFinalStudentScore, groupRatingsByTask, isWithinCurrentScoringCycle } from './rating-criteria';
 
 // -------------------------------------------------------------
 // Session token — attached to every authenticated API call so the server
@@ -4038,25 +4038,36 @@ export function getStudentLeaderboard(): {
   // Filter for student contributors: Core Committee, Training Associates, Alumni
   const studentMembers = members.filter(m => m.division !== 'Advisory Board' && m.tier >= 5);
 
-  // Org-wide baseline for the confidence weighting below — the mean overall
-  // score across every rating currently in the system. Falls back to the
-  // neutral midpoint (3.0) when nothing has been rated yet.
-  const allRatings = getRatings();
-  const baseline = allRatings.length > 0
-    ? allRatings.reduce((sum, r) => sum + r.overallScore, 0) / allRatings.length
-    : 3.0;
-
   const now = new Date();
+
+  // Everything below only looks at ratings from the current annual scoring
+  // cycle (resets every 1 August, see currentScoringCycleStart) — last
+  // year's volume, recency, and consistency history doesn't carry over.
+  const cycleRatings = getRatings().filter(r => isWithinCurrentScoringCycle(r.createdAt, now));
+
+  // Org-wide baseline for the confidence weighting below — the mean overall
+  // score across every in-cycle rating. Falls back to the neutral midpoint
+  // (3.0) when nothing has been rated yet this cycle.
+  const baseline = cycleRatings.length > 0
+    ? cycleRatings.reduce((sum, r) => sum + r.overallScore, 0) / cycleRatings.length
+    : 3.0;
 
   const results = studentMembers.map(m => {
     const profile = getStudentProfile(m.id);
-    const datedScores = (profile?.ratings || []).map(r => ({ score: r.overallScore, date: r.createdAt }));
+    const inCycle = (profile?.ratings || []).filter(r => isWithinCurrentScoringCycle(r.createdAt, now));
+    // Collapse independent multi-reviewer rows (Super User / Centre Head /
+    // Advisor / GG Head each rate the same task separately) into one data
+    // point per distinct task, so volume tracks tasks actually done, not
+    // how many reviewers happened to rate each one — see groupRatingsByTask.
+    const datedScores = groupRatingsByTask(
+      inCycle.map(r => ({ score: r.overallScore, date: r.createdAt, taskKey: r.taskId || r.taskTitle }))
+    );
     // Final score blends three signals — see computeFinalStudentScore in
     // rating-criteria.ts: (1) a recency-weighted average so current
     // performance outweighs a stale one-off, (2) confidence weighting by
-    // rating count so volume of contribution matters, and (3) a
-    // consistency multiplier so steady contribution relative to TODAY beats
-    // an old burst of activity. This is what the leaderboard ranks by.
+    // task count so volume of contribution matters, and (3) a consistency
+    // multiplier so steady contribution relative to TODAY beats an old
+    // burst of activity. This is what the leaderboard ranks by.
     const breakdown = computeFinalStudentScore(datedScores, baseline, now);
     return {
       id: m.id,

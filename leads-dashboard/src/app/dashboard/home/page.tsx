@@ -406,7 +406,7 @@ export default function DashboardHome() {
                           <span>&middot;</span>
                           <span>{perf.completedTasks} tasks done</span>
                           <span>&middot;</span>
-                          <span>{perf.ratingsCount} rating{perf.ratingsCount === 1 ? '' : 's'}</span>
+                          <span>{perf.ratingsCount} task{perf.ratingsCount === 1 ? '' : 's'} evaluated</span>
                         </div>
                       </div>
                     </div>
@@ -415,8 +415,8 @@ export default function DashboardHome() {
                       className={`flex items-center gap-1 px-2.5 py-1 rounded-xl font-bold text-xs border ${colorTokens.bg} ${colorTokens.text} ${colorTokens.border}`}
                       title={
                         perf.ratingsCount > 0
-                          ? `Raw average ${perf.rawScore.toFixed(1)} (recency-weighted: ${perf.recencyScore.toFixed(1)}) across ${perf.ratingsCount} rating${perf.ratingsCount === 1 ? '' : 's'}, ${Math.round(perf.consistencyRatio * 100)}% weekly-active since their first rating — fewer or older or more sporadic ratings pull the score down toward the org-wide typical score`
-                          : 'No ratings yet — 0.0 until they receive their first evaluation'
+                          ? `Since 1 Aug: raw average ${perf.rawScore.toFixed(1)} (recency-weighted: ${perf.recencyScore.toFixed(1)}) across ${perf.ratingsCount} evaluated task${perf.ratingsCount === 1 ? '' : 's'} (multi-reviewer tasks count once), ${Math.round(perf.consistencyRatio * 100)}% weekly-active since their first rating this cycle — fewer, older, or more sporadic ratings pull the score down toward the org-wide typical score`
+                          : 'No ratings this cycle (resets every 1 Aug) — 0.0 until their first evaluation'
                       }
                     >
                       <span>{perf.score.toFixed(1)}</span>
