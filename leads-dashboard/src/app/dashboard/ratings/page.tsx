@@ -51,9 +51,12 @@ const CRITERIA_SET_LABEL: Record<RatingCriteriaSet, string> = {
   reportWriting: 'Report Writing Task',
 };
 
+// Sliders default to the midpoint (3 = Satisfactory), not the maximum score —
+// defaulting to 5 meant a reviewer who opened the modal and submitted without
+// touching a single slider silently handed out a perfect rating.
 function defaultScoresFor(set: RatingCriteriaSet): Record<string, number> {
   const scores: Record<string, number> = {};
-  RATING_CRITERIA[set].forEach(c => { scores[c.key] = 5; });
+  RATING_CRITERIA[set].forEach(c => { scores[c.key] = 3; });
   return scores;
 }
 
@@ -960,11 +963,11 @@ export default function RatingsPage() {
                   <div className="space-y-1" key={criterion.key} title={criterion.description}>
                     <div className="flex justify-between items-center text-xs">
                       <span className="font-semibold text-theme-text-primary">{idx + 1}. {criterion.label}</span>
-                      <span className="font-bold text-accent">{(scores[criterion.key] ?? 5).toFixed(1)} / 5</span>
+                      <span className="font-bold text-accent">{(scores[criterion.key] ?? 3).toFixed(1)} / 5</span>
                     </div>
                     <input
                       type="range" min="1" max="5" step="0.5"
-                      value={scores[criterion.key] ?? 5}
+                      value={scores[criterion.key] ?? 3}
                       onChange={(e) => setScores(s => ({ ...s, [criterion.key]: parseFloat(e.target.value) }))}
                       className="w-full accent-accent h-1.5 bg-theme-border/40 rounded-lg appearance-none cursor-pointer"
                     />

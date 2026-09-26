@@ -154,6 +154,7 @@ export default function ReportsPage() {
   const barData = filteredRatings.map(r => ({
     name: r.targetName,
     task: r.taskTitle,
+    rater: r.raterName,
     score: r.overallScore,
     fill: getRatingColor(r.overallScore).hex,
   }));
@@ -409,14 +410,17 @@ export default function ReportsPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                   <XAxis dataKey="name" tick={{ fill: 'currentColor', fontSize: 10 }} interval={0} angle={-25} textAnchor="end" />
                   <YAxis domain={[0, 5]} tick={{ fill: 'currentColor', fontSize: 10 }} />
-                  <Tooltip 
-                    formatter={(value: any) => [`${value} / 5.0`, 'Score']}
-                    contentStyle={{ 
-                      backgroundColor: 'rgba(15, 23, 42, 0.9)', 
-                      borderColor: 'rgba(255,255,255,0.1)', 
+                  <Tooltip
+                    formatter={(value: any, _name: any, props: any) => [
+                      `${value} / 5.0 — rated by ${props?.payload?.rater || 'Unknown'}`,
+                      'Score',
+                    ]}
+                    contentStyle={{
+                      backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                      borderColor: 'rgba(255,255,255,0.1)',
                       borderRadius: '12px',
-                      fontSize: '11px' 
-                    }} 
+                      fontSize: '11px'
+                    }}
                   />
                   <Bar dataKey="score" radius={[6, 6, 0, 0]}>
                     {barData.map((entry, index) => (
