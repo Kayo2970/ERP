@@ -191,6 +191,11 @@ export default function FormsBuilderPage() {
   const [templateEditName, setTemplateEditName] = useState('');
   const [templateEditFields, setTemplateEditFields] = useState<FormField[]>([]);
 
+  // Manage Templates modal — a direct entry point to edit/delete a custom
+  // template without first having to start building a new form and select
+  // it from the dropdown.
+  const [isManageTemplatesOpen, setIsManageTemplatesOpen] = useState(false);
+
   // Form Creator State
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
@@ -605,13 +610,22 @@ export default function FormsBuilderPage() {
           <p className="text-xs text-theme-text-secondary">Generate responsive, shareable student registration and survey links</p>
         </div>
         {canBuild ? (
-          <button
-            onClick={handleOpenCreate}
-            className="flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer"
-          >
-            <Plus className="h-4 w-4" />
-            Build New Form
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsManageTemplatesOpen(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer"
+            >
+              <LayoutTemplate className="h-4 w-4" />
+              Manage Templates
+            </button>
+            <button
+              onClick={handleOpenCreate}
+              className="flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer"
+            >
+              <Plus className="h-4 w-4" />
+              Build New Form
+            </button>
+          </div>
         ) : (
           <span className="text-xs text-theme-text-secondary italic">
             Form creation permissions: Super User (Tier 1) & Core Committee (Tier 5)
@@ -1388,6 +1402,93 @@ export default function FormsBuilderPage() {
                 Save Template
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Manage Templates Modal — direct entry point to edit/delete a custom
+          template without going through the "Build New Form" flow first. */}
+      {isManageTemplatesOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="glass-panel w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-3xl p-6 flex flex-col space-y-4 relative border border-white/15 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-theme-text-primary flex items-center gap-1.5">
+                <LayoutTemplate className="h-4 w-4" />
+                Manage Templates
+              </h2>
+              <button
+                onClick={() => setIsManageTemplatesOpen(false)}
+                className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {(() => {
+              const customTemplates = templates.filter(t => !initialFormTemplates.some(it => it.id === t.id));
+              const builtInTemplates = templates.filter(t => initialFormTemplates.some(it => it.id === t.id));
+              return (
+                <div className="space-y-4 text-xs">
+                  <div className="space-y-2">
+                    <p className="font-semibold text-theme-text-secondary uppercase tracking-wider text-[10px]">
+                      Your Templates ({customTemplates.length})
+                    </p>
+                    {customTemplates.length === 0 ? (
+                      <div className="text-center py-6 text-theme-text-secondary bg-theme-border/5 rounded-xl border border-theme-border/20">
+                        No custom templates yet — build a form, then use &quot;Save as Template&quot; to create one.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {customTemplates.map(t => (
+                          <div key={t.id} className="flex items-center justify-between gap-2 p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl">
+                            <div>
+                              <p className="font-bold text-theme-text-primary">{t.name}</p>
+                              <p className="text-[10px] text-theme-text-secondary">{t.fields.length} field{t.fields.length === 1 ? '' : 's'}</p>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => { setIsManageTemplatesOpen(false); handleOpenEditTemplate(t.id); }}
+                                className="p-2 hover:bg-accent/10 rounded-lg text-accent transition-all cursor-pointer"
+                                title="Edit Template"
+                              >
+                                <Edit2 className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTemplate(t.id)}
+                                className="p-2 hover:bg-danger/10 rounded-lg text-danger transition-all cursor-pointer"
+                                title="Delete Template"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {builtInTemplates.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="font-semibold text-theme-text-secondary uppercase tracking-wider text-[10px]">
+                        Built-in Templates ({builtInTemplates.length})
+                      </p>
+                      <div className="space-y-2">
+                        {builtInTemplates.map(t => (
+                          <div key={t.id} className="flex items-center justify-between gap-2 p-3 bg-theme-border/5 border border-theme-border/10 rounded-xl opacity-75">
+                            <div>
+                              <p className="font-bold text-theme-text-primary">{t.name}</p>
+                              <p className="text-[10px] text-theme-text-secondary">{t.fields.length} field{t.fields.length === 1 ? '' : 's'} &middot; managed by the app, not editable</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
