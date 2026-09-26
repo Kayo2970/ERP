@@ -2418,11 +2418,17 @@ export function getEffectiveEventStatus(event: EventItem, tasks?: TaskItem[]): E
   return event.status;
 }
 
-export function addEventCommittee(eventId: string, committeeName: string, actorName: string): EventItem | null {
+export function addEventCommittee(eventId: string, committeeName: string, actorName: string): { event: EventItem; committee: EventCommittee } | null {
   const events = getEvents();
   const event = events.find(e => e.id === eventId);
   if (!event) return null;
 
+  // Unique id, generated here — callers that need the committee they just
+  // created must use the `committee` returned below, NOT re-look it up by
+  // name (nothing stops two committees on the same event sharing a name,
+  // and a name-based re-lookup after this call can silently resolve to the
+  // WRONG committee, corrupting which members a task/rating gets attached
+  // to — see the tasks/page.tsx caller this was fixed alongside).
   const newComm: EventCommittee = {
     id: 'comm_' + Date.now(),
     name: committeeName,
@@ -2434,7 +2440,7 @@ export function addEventCommittee(eventId: string, committeeName: string, actorN
   // so a server-side upsert of a client-only sample event stays complete).
   serverPatch('/api/events', eventId, event);
   logAuditEvent('EVENT_COMMITTEE_ADDED', actorName, `Added committee "${committeeName}" to event "${event.title}"`);
-  return event;
+  return { event, committee: newComm };
 }
 
 export function updateEventCommitteeMembers(eventId: string, committeeId: string, memberIds: string[], actorName: string): EventItem | null {

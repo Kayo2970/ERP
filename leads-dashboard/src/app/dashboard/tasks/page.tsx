@@ -508,12 +508,16 @@ export default function TasksPage() {
           setFormError('Enter a name for the new committee.');
           return;
         }
-        const updatedEvent = addEventCommittee(eventIdVal, newCommitteeName.trim(), user?.name || 'User');
-        const createdCommittee = updatedEvent?.committees.find(c => c.name === newCommitteeName.trim());
-        if (!createdCommittee) {
+        const created = addEventCommittee(eventIdVal, newCommitteeName.trim(), user?.name || 'User');
+        if (!created) {
           setFormError('Could not create the committee. Please try again.');
           return;
         }
+        // Use the committee object returned directly — re-finding it by name
+        // afterward could silently resolve to a DIFFERENT, pre-existing
+        // committee if this event already has one with the same name,
+        // corrupting which members this task and its ratings attach to.
+        const createdCommittee = created.committee;
         if (newCommitteeMemberIds.length > 0) {
           updateEventCommitteeMembers(eventIdVal, createdCommittee.id, newCommitteeMemberIds, user?.name || 'User');
         }
