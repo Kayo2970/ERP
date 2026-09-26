@@ -53,6 +53,7 @@ import {
   isSlugUnique,
   getFormTemplates,
   addFormTemplate,
+  updateFormTemplate,
   deleteFormTemplate,
   getEvents,
   getTasks,
@@ -182,6 +183,13 @@ export default function FormsBuilderPage() {
   const [isSaveTemplateOpen, setIsSaveTemplateOpen] = useState(false);
   const [templateNameDraft, setTemplateNameDraft] = useState('');
   const [qrModalForm, setQrModalForm] = useState<PublicFormItem | null>(null);
+
+  // Edit Template modal — editing a custom (user-saved) template's name and
+  // fields in place. Built-in templates aren't editable here (see
+  // updateFormTemplate's doc comment in local-data.ts).
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [templateEditName, setTemplateEditName] = useState('');
+  const [templateEditFields, setTemplateEditFields] = useState<FormField[]>([]);
 
   // Form Creator State
   const [title, setTitle] = useState('');
@@ -340,6 +348,36 @@ export default function FormsBuilderPage() {
     deleteFormTemplate(templateId, user?.name || 'User');
     setTemplates(getFormTemplates());
     if (selectedTemplateId === templateId) setSelectedTemplateId('');
+  };
+
+  const handleOpenEditTemplate = (templateId: string) => {
+    const template = templates.find(t => t.id === templateId);
+    if (!template) return;
+    setEditingTemplateId(templateId);
+    setTemplateEditName(template.name);
+    setTemplateEditFields(template.fields.map(f => ({ ...f })));
+  };
+
+  const handleSaveTemplateEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTemplateId || !templateEditName.trim() || templateEditFields.length === 0) return;
+    updateFormTemplate(editingTemplateId, { name: templateEditName.trim(), fields: templateEditFields }, user?.name || 'User');
+    setTemplates(getFormTemplates());
+    setEditingTemplateId(null);
+    triggerNotification('Template updated.');
+  };
+
+  const addEditTemplateField = () => {
+    setTemplateEditFields([...templateEditFields, { id: 'field_' + Date.now(), label: 'New Question / Field', type: 'text', required: false }]);
+  };
+
+  const removeEditTemplateField = (index: number) => {
+    if (templateEditFields.length <= 1) return;
+    setTemplateEditFields(templateEditFields.filter((_, i) => i !== index));
+  };
+
+  const updateEditTemplateField = (index: number, key: keyof FormField, value: any) => {
+    setTemplateEditFields(templateEditFields.map((f, i) => i === index ? { ...f, [key]: value } : f));
   };
 
   const addField = () => {
@@ -1116,14 +1154,24 @@ export default function FormsBuilderPage() {
                     options={templates.map(t => ({ value: t.id, label: `${t.name} (${t.fields.length} fields)` }))}
                   />
                   {selectedTemplateId && !initialFormTemplates.some(it => it.id === selectedTemplateId) && (
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteTemplate(selectedTemplateId)}
-                      className="p-2.5 hover:bg-danger/10 rounded-xl text-danger transition-all cursor-pointer"
-                      title="Delete This Custom Template"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditTemplate(selectedTemplateId)}
+                        className="p-2.5 hover:bg-accent/10 rounded-xl text-accent transition-all cursor-pointer"
+                        title="Edit This Custom Template"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteTemplate(selectedTemplateId)}
+                        className="p-2.5 hover:bg-danger/10 rounded-xl text-danger transition-all cursor-pointer"
+                        title="Delete This Custom Template"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </>
                   )}
                 </div>
                 <p className="text-[10px] text-theme-text-secondary">
@@ -1327,6 +1375,128 @@ export default function FormsBuilderPage() {
                 className="w-full py-2.5 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer"
               >
                 Save Template
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Template Modal — custom templates only; built-in ones (Feedback
+          Form Template etc.) are code-managed and not editable here. */}
+      {editingTemplateId && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="glass-panel w-full max-w-xl max-h-[85vh] overflow-y-auto rounded-3xl p-6 flex flex-col space-y-4 relative border border-white/15 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-theme-text-primary flex items-center gap-1.5">
+                <Edit2 className="h-4 w-4" />
+                Edit Template
+              </h2>
+              <button
+                onClick={() => setEditingTemplateId(null)}
+                className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveTemplateEdit} className="space-y-3 text-xs">
+              <input
+                type="text"
+                required
+                autoFocus
+                value={templateEditName}
+                onChange={(e) => setTemplateEditName(e.target.value)}
+                placeholder="Template name"
+                className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+              />
+
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-theme-text-primary">Fields</label>
+                  <button
+                    type="button"
+                    onClick={addEditTemplateField}
+                    className="px-2.5 py-1 bg-accent/20 hover:bg-accent text-accent hover:text-white rounded-lg transition-all text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add Question
+                  </button>
+                </div>
+
+                {templateEditFields.map((field, idx) => (
+                  <div key={field.id} className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2">
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 space-y-1">
+                        <input
+                          type="text"
+                          required
+                          value={field.label}
+                          onChange={(e) => updateEditTemplateField(idx, 'label', e.target.value)}
+                          placeholder="Question Label"
+                          className="w-full px-3 py-1.5 bg-theme-background/40 border border-theme-border/30 rounded-lg text-theme-text-primary text-xs"
+                        />
+                      </div>
+
+                      <div className="w-36">
+                        <select
+                          value={field.type}
+                          onChange={(e) => updateEditTemplateField(idx, 'type', e.target.value)}
+                          className="w-full px-2 py-1.5 bg-theme-background/40 border border-theme-border/30 rounded-lg text-theme-text-primary text-xs"
+                        >
+                          <option value="text">Short Text</option>
+                          <option value="email">Email</option>
+                          <option value="number">Number</option>
+                          <option value="textarea">Paragraph</option>
+                          <option value="scale">Scale (1-5)</option>
+                          <option value="select">Single Choice</option>
+                          <option value="multiselect">Multiple Choice</option>
+                          <option value="checkbox">Checkbox (Yes toggle)</option>
+                        </select>
+                      </div>
+
+                      <label className="flex items-center gap-1 text-[11px] text-theme-text-secondary cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={field.required}
+                          onChange={(e) => updateEditTemplateField(idx, 'required', e.target.checked)}
+                          className="accent-accent"
+                        />
+                        Required
+                      </label>
+
+                      <button
+                        type="button"
+                        onClick={() => removeEditTemplateField(idx)}
+                        disabled={templateEditFields.length <= 1}
+                        className="p-1.5 hover:bg-danger/10 rounded-lg text-danger transition-all cursor-pointer disabled:opacity-30"
+                        title="Remove Question"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+
+                    {(field.type === 'select' || field.type === 'multiselect') && (
+                      <div className="pl-0.5 space-y-1">
+                        <label className="block text-[10px] font-medium text-theme-text-secondary">
+                          {field.type === 'multiselect' ? 'Choices (respondent can pick one or more)' : 'Choices (respondent picks exactly one)'}
+                        </label>
+                        <input
+                          type="text"
+                          value={(field.options || []).join(', ')}
+                          onChange={(e) => updateEditTemplateField(idx, 'options', e.target.value.split(',').map(o => o.trim()).filter(Boolean))}
+                          placeholder="e.g. Workshop, Guest Lecture, Seminar/Conference"
+                          className="w-full px-3 py-1.5 bg-theme-background/40 border border-theme-border/30 rounded-lg text-theme-text-primary text-xs"
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-2.5 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer"
+              >
+                Save Template Changes
               </button>
             </form>
           </div>
