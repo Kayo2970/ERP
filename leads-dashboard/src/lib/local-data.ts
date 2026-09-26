@@ -371,6 +371,14 @@ export interface TaskItem {
     // assigned to the senior Head of Design + Core Committee, asking for social
     // media coverage of the just-concluded event.
     | 'event_social_post'
+    // Auto-created once an event is approved and dated (see
+    // runEventPosterTasks in event-social-scheduler.ts) — a single
+    // INDIVIDUAL task (not group/committee) assigned to whoever holds the
+    // Head of Design / Social Media Head role, asking for the event's
+    // poster/promotional assets ahead of time. Distinct from
+    // 'event_social_post', which is post-event recap content assigned to a
+    // whole pool.
+    | 'event_poster_request'
     // Auto-created the moment an 'event_social_post' task is marked Completed
     // (see updateTask below) — assigned as a group to the Centre Head, Advisor,
     // and GG Campus Events Head, asking them to pick the student who should
