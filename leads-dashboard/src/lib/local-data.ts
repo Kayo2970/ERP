@@ -1,5 +1,5 @@
 import { trackSync } from './sync-status';
-import { averageScore } from './rating-criteria';
+import { averageScore, computeWeightedRatingScore } from './rating-criteria';
 
 // -------------------------------------------------------------
 // Session token — attached to every authenticated API call so the server
@@ -4027,6 +4027,7 @@ export function getStudentLeaderboard(): {
   role: string;
   division: string;
   score: number;
+  rawScore: number;
   completedTasks: number;
   totalTasks: number;
   ratingsCount: number;
@@ -4035,22 +4036,38 @@ export function getStudentLeaderboard(): {
   // Filter for student contributors: Core Committee, Training Associates, Alumni
   const studentMembers = members.filter(m => m.division !== 'Advisory Board' && m.tier >= 5);
 
+  // Org-wide baseline for the confidence weighting below — the mean overall
+  // score across every rating currently in the system. Falls back to the
+  // neutral midpoint (3.0) when nothing has been rated yet.
+  const allRatings = getRatings();
+  const baseline = allRatings.length > 0
+    ? allRatings.reduce((sum, r) => sum + r.overallScore, 0) / allRatings.length
+    : 3.0;
+
   const results = studentMembers.map(m => {
     const profile = getStudentProfile(m.id);
+    const rawScore = profile?.stats.averageRating || 0;
+    const ratingsCount = profile?.ratings.length || 0;
     return {
       id: m.id,
       name: m.name,
       role: m.role,
       division: m.division,
-      score: profile?.stats.averageRating || 0,
+      // Confidence-weighted score: a handful of ratings gets pulled toward
+      // the org-wide baseline instead of standing entirely on its own — see
+      // computeWeightedRatingScore in rating-criteria.ts. This is what the
+      // leaderboard ranks and displays by.
+      score: computeWeightedRatingScore(ratingsCount, rawScore, baseline),
+      rawScore,
       completedTasks: profile?.stats.completedTasks || 0,
       totalTasks: profile?.stats.totalTasks || 0,
-      ratingsCount: profile?.ratings.length || 0,
+      ratingsCount,
     };
   });
 
   return results.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
+    if (b.ratingsCount !== a.ratingsCount) return b.ratingsCount - a.ratingsCount;
     return b.completedTasks - a.completedTasks;
   });
 }

@@ -405,11 +405,20 @@ export default function DashboardHome() {
                           <span className="font-medium">{perf.division}</span>
                           <span>&middot;</span>
                           <span>{perf.completedTasks} tasks done</span>
+                          <span>&middot;</span>
+                          <span>{perf.ratingsCount} rating{perf.ratingsCount === 1 ? '' : 's'}</span>
                         </div>
                       </div>
                     </div>
 
-                    <div className={`flex items-center gap-1 px-2.5 py-1 rounded-xl font-bold text-xs border ${colorTokens.bg} ${colorTokens.text} ${colorTokens.border}`}>
+                    <div
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-xl font-bold text-xs border ${colorTokens.bg} ${colorTokens.text} ${colorTokens.border}`}
+                      title={
+                        perf.ratingsCount > 0
+                          ? `Confidence-weighted from a raw average of ${perf.rawScore.toFixed(1)} across ${perf.ratingsCount} rating${perf.ratingsCount === 1 ? '' : 's'} — fewer ratings pull the score toward the org-wide typical score`
+                          : 'No ratings yet — shown at the org-wide typical score'
+                      }
+                    >
                       <span>{perf.score.toFixed(1)}</span>
                       <Star className="h-3 w-3 fill-current" />
                     </div>

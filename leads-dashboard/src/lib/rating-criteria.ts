@@ -48,6 +48,30 @@ export function averageScore(scores: Record<string, number>): number {
 }
 
 /**
+ * Bayesian-weighted ("confidence-adjusted") rating score — the same idea
+ * IMDb uses for its Top 250: a handful of ratings shouldn't outrank a track
+ * record. A person's raw average is pulled toward the org-wide baseline in
+ * proportion to how few ratings they've received; it converges to their
+ * real average once they've accumulated `confidenceThreshold` ratings.
+ *
+ *   weighted = (n / (n + k)) * rawAverage + (k / (n + k)) * baseline
+ *
+ * At n=0 this is just the baseline; at n=k it's a 50/50 blend; as n grows
+ * past k it approaches rawAverage. `confidenceThreshold` (k) defaults to 5.
+ */
+export function computeWeightedRatingScore(
+  ratingCount: number,
+  rawAverage: number,
+  baseline: number,
+  confidenceThreshold: number = 5
+): number {
+  if (ratingCount <= 0) return parseFloat(baseline.toFixed(1));
+  const weight = ratingCount / (ratingCount + confidenceThreshold);
+  const weighted = weight * rawAverage + (1 - weight) * baseline;
+  return parseFloat(weighted.toFixed(1));
+}
+
+/**
  * Projects the new per-criterion scores onto the legacy fixed
  * quality/timeliness/initiative/collaboration fields so existing analytics
  * (report-generator.ts, reports/page.tsx, student-profile-modal.tsx) that
