@@ -422,7 +422,11 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       const storedLastRole = localStorage.getItem(`leads_seen_role_${userKey}`);
 
       if (storedLastTier !== null && storedLastRole !== null) {
-        const lastTierNum = parseInt(storedLastTier, 10);
+        // parseFloat, not parseInt — tiers can be fractional (2.5 = GG Campus
+        // Head). parseInt("2.5", 10) truncates to 2, which made this
+        // permanently misread a stored "2.5" back as "2" on every later
+        // login, re-triggering the demotion notice forever instead of once.
+        const lastTierNum = parseFloat(storedLastTier);
         // In LEADS ERP, lower tier number indicates higher rank (Tier 1 = Super User, Tier 2 = Leadership, Tier 3 = Core)
         const isTierElevated = !isNaN(lastTierNum) && parsedUser.tier < lastTierNum;
         const isTierDemoted = !isNaN(lastTierNum) && parsedUser.tier > lastTierNum;
@@ -504,7 +508,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           const storedLastRole = localStorage.getItem(`leads_seen_role_${userKey}`);
 
           if (storedLastTier !== null && storedLastRole !== null) {
-            const lastTierNum = parseInt(storedLastTier, 10);
+            // parseFloat — see the matching fix/comment on the login-time
+            // check above; tiers can be fractional (2.5 = GG Campus Head).
+            const lastTierNum = parseFloat(storedLastTier);
             const isTierElevated = !isNaN(lastTierNum) && liveRecord.tier < lastTierNum;
             const isTierDemoted = !isNaN(lastTierNum) && liveRecord.tier > lastTierNum;
             const isRolePromoted = isTierElevated || (storedLastRole !== (liveRecord.role || '') && liveRecord.tier <= lastTierNum);
