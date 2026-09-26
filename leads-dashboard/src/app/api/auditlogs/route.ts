@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     const item = await request.json();
     const updated = await mutateCollection('auditLogs', (current) => {
       const next = [item, ...current];
-      return next.slice(0, 200); // Keep latest 200 log entries
+      return next.slice(0, 1000); // Keep latest 1000 log entries
     });
     const created = updated.find((l: any) => l.id === item.id);
     return NextResponse.json(created, { status: 201 });

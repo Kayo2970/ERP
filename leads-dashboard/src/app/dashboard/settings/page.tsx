@@ -20,8 +20,13 @@ import {
   RotateCw,
   AlertCircle,
   Crop,
+  Search,
+  Download,
 } from 'lucide-react';
 import { getAuditLogs, getMembers, saveMembers, updateMember, updateMemberAvatar, logAuditEvent, AuditLogItem, getEmailLogs, requestEmailChange, confirmEmailChange, confirmNewEmailChange, authHeaders, setSessionToken } from '@/lib/local-data';
+import { toCsvRow, downloadCsv } from '@/lib/csv';
+import { PeriodFilter } from '@/components/period-filter';
+import { PeriodFilterValue, extractAvailableMonths, isWithinPeriod } from '@/lib/period-filter';
 import { isCentreHead } from '@/lib/permissions';
 import { FileDropzone, useUploadTask, formatFileSize } from '@/components/ui/file-dropzone';
 import { ImageCropModal } from '@/components/image-crop-modal';
@@ -33,6 +38,9 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<'account' | 'reimbursement' | 'roles' | 'audit' | 'emails'>('account');
   const [user, setUser] = useState<any>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
+  const [auditSearchQuery, setAuditSearchQuery] = useState('');
+  const [auditPeriodFilter, setAuditPeriodFilter] = useState<PeriodFilterValue>({ mode: 'ALL' });
+  const [auditVisibleCount, setAuditVisibleCount] = useState(50);
   const [emailLogs, setEmailLogs] = useState<any[]>([]);
   const [emailFilter, setEmailFilter] = useState<string>('ALL');
   const [previewEmail, setPreviewEmail] = useState<any | null>(null);
@@ -419,6 +427,45 @@ export default function SettingsPage() {
     if (emailFilter === 'ALL') return true;
     return log.category === emailFilter;
   });
+
+  // Audit Trail — search across action/actor/details, an optional date
+  // range, and severity color-coding so a destructive action (delete,
+  // terminate, reject, lockdown) stands out from a routine one at a glance.
+  const auditSeverity = (action: string): 'danger' | 'warning' | 'success' | 'neutral' => {
+    const a = action.toUpperCase();
+    if (a.includes('DELETE') || a.includes('TERMINAT') || a.includes('REJECT') || a.includes('LOCKDOWN') || a.includes('REVOKE')) return 'danger';
+    if (a.includes('UPDATE') || a.includes('EDIT') || a.includes('CHANGE') || a.includes('OVERRIDE')) return 'warning';
+    if (a.includes('CREATE') || a.includes('ADD') || a.includes('APPROVE') || a.includes('ACTIVAT')) return 'success';
+    return 'neutral';
+  };
+  const auditSeverityClasses: Record<ReturnType<typeof auditSeverity>, string> = {
+    danger: 'bg-danger/10 text-danger',
+    warning: 'bg-warning/10 text-warning',
+    success: 'bg-success/10 text-success',
+    neutral: 'bg-accent/10 text-accent',
+  };
+
+  const auditSearchedLogs = auditLogs.filter(log => {
+    const q = auditSearchQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      log.action.toLowerCase().includes(q) ||
+      log.actorName.toLowerCase().includes(q) ||
+      log.actorEmail.toLowerCase().includes(q) ||
+      log.details.toLowerCase().includes(q)
+    );
+  });
+  const filteredAuditLogs = auditSearchedLogs.filter(log => isWithinPeriod(log.timestamp, auditPeriodFilter));
+  const availableAuditMonths = extractAvailableMonths(auditLogs.map(l => l.timestamp));
+  const displayedAuditLogs = filteredAuditLogs.slice(0, auditVisibleCount);
+
+  const handleExportAuditCsv = () => {
+    let csv = toCsvRow(['Timestamp', 'Action', 'Actor Name', 'Actor Email', 'Details']) + '\n';
+    filteredAuditLogs.forEach(log => {
+      csv += toCsvRow([log.timestamp, log.action, log.actorName, log.actorEmail, log.details]) + '\n';
+    });
+    downloadCsv(`leads_audit_trail_${new Date().toISOString().split('T')[0]}.csv`, csv);
+  };
 
   return (
     <div className="p-6 md:p-8 space-y-6">
@@ -1183,50 +1230,90 @@ export default function SettingsPage() {
       {/* Tab 4: Security & Audit Trail */}
       {activeTab === 'audit' && isSuperAdmin && (
         <div className="glass-panel rounded-2xl p-6 space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h3 className="text-base font-bold text-theme-text-primary">Security Audit Trail</h3>
-              <p className="text-xs text-theme-text-secondary">Immutable log of system actions, member updates, and governance events</p>
+              <p className="text-xs text-theme-text-secondary">Immutable log of system actions, member updates, and governance events — retains the latest 1,000 events</p>
             </div>
-            <span className="text-xs font-semibold text-accent px-2.5 py-0.5 bg-accent/15 rounded-md">
-              {auditLogs.length} events logged
-            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-semibold text-accent px-2.5 py-0.5 bg-accent/15 rounded-md whitespace-nowrap">
+                {filteredAuditLogs.length} of {auditLogs.length} events
+              </span>
+              <button
+                onClick={handleExportAuditCsv}
+                disabled={filteredAuditLogs.length === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-theme-border/30 hover:bg-theme-border/50 disabled:opacity-50 disabled:cursor-not-allowed text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Export CSV
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            <div className="relative flex-1 min-w-[220px]">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-theme-text-secondary" />
+              <input
+                type="text"
+                value={auditSearchQuery}
+                onChange={(e) => { setAuditSearchQuery(e.target.value); setAuditVisibleCount(50); }}
+                placeholder="Search by action, actor, email, or details..."
+                className="w-full pl-8 pr-3 py-2 bg-theme-background/30 border border-theme-border/40 rounded-xl text-xs text-theme-text-primary placeholder-theme-text-secondary focus:outline-none focus:border-accent"
+              />
+            </div>
+            <PeriodFilter
+              value={auditPeriodFilter}
+              onChange={(v) => { setAuditPeriodFilter(v); setAuditVisibleCount(50); }}
+              availableMonths={availableAuditMonths}
+            />
           </div>
 
           <div className="overflow-x-auto">
-            {auditLogs.length === 0 ? (
+            {filteredAuditLogs.length === 0 ? (
               <div className="text-center py-10 text-theme-text-secondary text-xs">
-                No audit logs recorded yet in this session.
+                {auditLogs.length === 0 ? 'No audit logs recorded yet in this session.' : 'No events match the selected search/filter.'}
               </div>
             ) : (
-              <table className="min-w-full text-xs text-left">
-                <thead>
-                  <tr className="text-theme-text-secondary border-b border-theme-border/40 text-xs">
-                    <th className="pb-3 font-semibold">Timestamp</th>
-                    <th className="pb-3 font-semibold">Event Action</th>
-                    <th className="pb-3 font-semibold">Actor Name</th>
-                    <th className="pb-3 font-semibold">Actor Email</th>
-                    <th className="pb-3 font-semibold">Details</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-theme-border/20">
-                  {auditLogs.map(log => (
-                    <tr key={log.id} className="hover:bg-theme-border/10 transition-all text-xs">
-                      <td className="py-3 pr-2 text-theme-text-secondary whitespace-nowrap font-mono">{log.timestamp}</td>
-                      <td className="py-3 pr-2">
-                        <span className="font-semibold px-2 py-0.5 bg-accent/10 text-accent rounded text-[10px] uppercase">
-                          {log.action}
-                        </span>
-                      </td>
-                      <td className="py-3 pr-2 font-bold text-theme-text-primary">{log.actorName}</td>
-                      <td className="py-3 pr-2 text-theme-text-secondary font-mono">{log.actorEmail}</td>
-                      <td className="py-3 text-theme-text-secondary max-w-md truncate" title={log.details}>
-                        {log.details}
-                      </td>
+              <>
+                <table className="min-w-full text-xs text-left">
+                  <thead>
+                    <tr className="text-theme-text-secondary border-b border-theme-border/40 text-xs">
+                      <th className="pb-3 font-semibold">Timestamp</th>
+                      <th className="pb-3 font-semibold">Event Action</th>
+                      <th className="pb-3 font-semibold">Actor Name</th>
+                      <th className="pb-3 font-semibold">Actor Email</th>
+                      <th className="pb-3 font-semibold">Details</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-theme-border/20">
+                    {displayedAuditLogs.map(log => (
+                      <tr key={log.id} className="hover:bg-theme-border/10 transition-all text-xs align-top">
+                        <td className="py-3 pr-2 text-theme-text-secondary whitespace-nowrap font-mono">{log.timestamp}</td>
+                        <td className="py-3 pr-2">
+                          <span className={`font-semibold px-2 py-0.5 rounded text-[10px] uppercase whitespace-nowrap ${auditSeverityClasses[auditSeverity(log.action)]}`}>
+                            {log.action}
+                          </span>
+                        </td>
+                        <td className="py-3 pr-2 font-bold text-theme-text-primary whitespace-nowrap">{log.actorName}</td>
+                        <td className="py-3 pr-2 text-theme-text-secondary font-mono whitespace-nowrap">{log.actorEmail}</td>
+                        <td className="py-3 text-theme-text-secondary max-w-lg break-words">
+                          {log.details}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {filteredAuditLogs.length > displayedAuditLogs.length && (
+                  <div className="flex justify-center pt-4">
+                    <button
+                      onClick={() => setAuditVisibleCount(c => c + 50)}
+                      className="px-4 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer"
+                    >
+                      Load More ({filteredAuditLogs.length - displayedAuditLogs.length} remaining)
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

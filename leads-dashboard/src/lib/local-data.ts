@@ -5068,8 +5068,8 @@ export function logAuditEvent(action: string, actorName: string, details: string
     timestamp
   };
   current.unshift(newLog);
-  // Keep last 200 logs in localStorage (aligns with server)
-  localStorage.setItem('leads_audit_logs', JSON.stringify(current.slice(0, 200)));
+  // Keep last 1000 logs in localStorage (aligns with server)
+  localStorage.setItem('leads_audit_logs', JSON.stringify(current.slice(0, 1000)));
   markLocalWrite('leads_audit_logs');
   // Push to server asynchronously (fire-and-forget)
   serverPost('/api/auditlogs', newLog);
