@@ -36,6 +36,13 @@ export default function ReportsPage() {
   const [periodFilter, setPeriodFilter] = useState<PeriodFilterValue>({ mode: 'ALL' });
   const [reportType, setReportType] = useState<ReportType>('overall');
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  // Bar chart breakdown: 'student' (default) aggregates every task a
+  // student was rated on into one bar showing their average, so a student
+  // with several rated tasks appears once, not once per task with their
+  // name repeated across the chart. 'event' aggregates by event instead;
+  // 'task' is the detailed view — one bar per individual evaluated
+  // deliverable, names repeated on purpose when that level of detail is wanted.
+  const [barBreakdown, setBarBreakdown] = useState<'student' | 'event' | 'task'>('student');
 
   const radarChartRef = useRef<HTMLDivElement>(null);
   const barChartRef = useRef<HTMLDivElement>(null);
@@ -155,14 +162,42 @@ export default function ReportsPage() {
     { subject: 'Collaboration', A: averages.collaboration, fullMark: 5 },
   ];
 
-  // Bar Data with dynamic color tokens from design system
-  const barData = filteredRatings.map(r => ({
-    name: r.targetName,
-    task: r.taskTitle,
-    rater: r.raterName,
-    score: r.overallScore,
-    fill: getRatingColor(r.overallScore).hex,
-  }));
+  // Bar Data with dynamic color tokens from design system — grouped
+  // according to barBreakdown so a student (or event) with several rated
+  // tasks shows up as ONE bar (their average), instead of one bar per task
+  // with the same name repeated across the chart.
+  const barData = (() => {
+    if (barBreakdown === 'task') {
+      // Detailed view: one bar per individual evaluated deliverable —
+      // repeated names here are expected, this is the "show me everything" mode.
+      return filteredRatings.map(r => ({
+        name: r.targetName,
+        detail: `"${r.taskTitle}" — rated by ${r.raterName}`,
+        score: r.overallScore,
+        fill: getRatingColor(r.overallScore).hex,
+      }));
+    }
+
+    const groupKeyOf = (r: RatingItem) => barBreakdown === 'event' ? (r.eventName || 'Standalone / No Event') : r.targetName;
+    const groups = new Map<string, RatingItem[]>();
+    filteredRatings.forEach(r => {
+      const key = groupKeyOf(r);
+      const group = groups.get(key);
+      if (group) group.push(r); else groups.set(key, [r]);
+    });
+
+    return Array.from(groups.entries())
+      .map(([key, group]) => {
+        const avg = parseFloat((group.reduce((sum, r) => sum + r.overallScore, 0) / group.length).toFixed(1));
+        return {
+          name: key,
+          detail: `Average of ${group.length} evaluated task${group.length === 1 ? '' : 's'}`,
+          score: avg,
+          fill: getRatingColor(avg).hex,
+        };
+      })
+      .sort((a, b) => b.score - a.score);
+  })();
 
   // Unique Targets List for selector
   const targets = Array.from(new Set(ratings.filter(r => !r.isGroupPlaceholder).map(r => r.targetName)));
@@ -404,9 +439,31 @@ export default function ReportsPage() {
 
           {/* Bar Chart: Comparative Performance */}
           <div className="glass-panel rounded-2xl p-6 flex flex-col justify-between space-y-4">
-            <div>
-              <h3 className="font-bold text-sm text-theme-text-primary">Deliverable Performance Distribution</h3>
-              <p className="text-[11px] text-theme-text-secondary">Task scores awarded to individual student contributors</p>
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <h3 className="font-bold text-sm text-theme-text-primary">Deliverable Performance Distribution</h3>
+                <p className="text-[11px] text-theme-text-secondary">
+                  {barBreakdown === 'student' && 'One bar per student — their average across every evaluated task in scope'}
+                  {barBreakdown === 'event' && 'One bar per event — the average score of everyone evaluated on it'}
+                  {barBreakdown === 'task' && 'One bar per individual evaluated deliverable (detailed view)'}
+                </p>
+              </div>
+              <div className="flex items-center gap-1 p-0.5 bg-theme-background/40 border border-theme-border/40 rounded-lg print:hidden">
+                {(['student', 'event', 'task'] as const).map(mode => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setBarBreakdown(mode)}
+                    className={`px-2.5 py-1 text-[10px] font-semibold rounded-md transition-all cursor-pointer ${
+                      barBreakdown === mode
+                        ? 'bg-accent text-white'
+                        : 'text-theme-text-secondary hover:text-theme-text-primary'
+                    }`}
+                  >
+                    {mode === 'student' ? 'By Student' : mode === 'event' ? 'By Event' : 'By Task'}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div ref={barChartRef} className="h-64 w-full">
@@ -417,7 +474,7 @@ export default function ReportsPage() {
                   <YAxis domain={[0, 5]} tick={{ fill: 'currentColor', fontSize: 10 }} />
                   <Tooltip
                     formatter={(value: any, _name: any, props: any) => [
-                      `${value} / 5.0 — rated by ${props?.payload?.rater || 'Unknown'}`,
+                      `${value} / 5.0 — ${props?.payload?.detail || ''}`,
                       'Score',
                     ]}
                     contentStyle={{
