@@ -810,6 +810,9 @@ export default function TasksPage() {
   // sorted first for convenience, exactly like the "prioritize" comment
   // always intended, instead of being the only ones shown.
   const filteredAssignees = members
+    // Faculty members evaluate/oversee task performance — they are never task
+    // assignees and must never be selectable as a rating target.
+    .filter(m => m.division !== 'Faculty')
     .filter(m => {
       const q = assigneeQuery.toLowerCase();
       return !q || m.name.toLowerCase().includes(q) || m.role.toLowerCase().includes(q) || m.email.toLowerCase().includes(q);
@@ -1906,6 +1909,7 @@ export default function TasksPage() {
                     </div>
                     <div className="max-h-48 overflow-y-auto rounded-xl border border-theme-card-border divide-y divide-theme-border/20">
                       {members
+                        .filter(m => m.division !== 'Faculty')
                         .filter(m => {
                           const q = groupQuery.toLowerCase();
                           return !q || m.name.toLowerCase().includes(q) || m.role.toLowerCase().includes(q);
@@ -1965,7 +1969,7 @@ export default function TasksPage() {
                               Add Students ({newCommitteeMemberIds.length} selected)
                             </p>
                             <div className="max-h-36 overflow-y-auto rounded-lg border border-theme-card-border divide-y divide-theme-border/20">
-                              {members.map(m => (
+                              {members.filter(m => m.division !== 'Faculty').map(m => (
                                 <label
                                   key={m.id}
                                   className="flex items-center justify-between gap-2 px-3 py-1.5 hover:bg-theme-border/20 cursor-pointer"

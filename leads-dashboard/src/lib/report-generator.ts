@@ -264,10 +264,11 @@ export function generatePerformanceReportPdf(params: PerformanceReportParams): v
       autoTable(doc, {
         startY: y,
         margin: { left: margin, right: margin },
-        head: [['Contributor', 'Task', 'Quality', 'Timeliness', 'Initiative', 'Collab.', 'Overall']],
+        head: [['Contributor', 'Task', 'Evaluator', 'Quality', 'Timeliness', 'Initiative', 'Collab.', 'Overall']],
         body: eventRatings.map(r => [
           r.targetName,
           r.taskTitle,
+          r.raterName,
           r.quality.toFixed(1),
           r.timeliness.toFixed(1),
           r.initiative.toFixed(1),
