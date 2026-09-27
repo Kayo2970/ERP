@@ -261,6 +261,8 @@ export interface EventItem {
   // deleted task stays deleted instead of coming back as a "zombie" on the
   // next boot/weekly/daily catch-up.
   socialTaskDismissed?: boolean;
+  posterTaskDismissed?: boolean;
+  dismissedAutoTaskTypes?: string[];
   // External sponsor contributions. In the Budget module, sponsor money is
   // drawn down against an event's actual spend before the Centre's own
   // budget is counted as used — see getEventSponsorTotal() and the Budget
@@ -1036,6 +1038,7 @@ export interface SystemSettings {
   lockdownEnabled: boolean;
   lockdownEnabledAt?: string;
   lockdownEnabledBy?: string;
+  dismissedAutoTaskIds?: string[];
   updatedAt?: string;
   updatedBy?: string;
 }
@@ -1043,6 +1046,7 @@ export interface SystemSettings {
 export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   id: 'default',
   lockdownEnabled: false,
+  dismissedAutoTaskIds: [],
 };
 
 export const initialSystemSettings: SystemSettings[] = [DEFAULT_SYSTEM_SETTINGS];
@@ -3492,6 +3496,53 @@ export function deleteTask(id: string, actorName: string): boolean {
   // if there is not any task, then it makes no sense that there would be a rating for said task.
   const remainingRatings = getRatings().filter(r => r.taskId !== id);
   saveRatings(remainingRatings);
+
+  // Record dismissed auto-task in systemSettings so it is never recreated or resurrected
+  const settings = getSystemSettings();
+  const dismissedIds = new Set(settings.dismissedAutoTaskIds || []);
+  dismissedIds.add(id);
+  if (target.eventId) {
+    dismissedIds.add(target.eventId);
+    if (target.workflowType) {
+      dismissedIds.add(`${target.workflowType}_${target.eventId}`);
+    }
+  }
+  saveSystemSettings({
+    ...settings,
+    dismissedAutoTaskIds: Array.from(dismissedIds),
+  });
+
+  // Direct correlation: if this task is tied to an event, mark dismissal flags on the event
+  if (target.eventId || target.event) {
+    const events = getEvents();
+    let eventsChanged = false;
+    const nextEvents = events.map(e => {
+      const match = (target.eventId && (e.id === target.eventId || e.id.includes(target.eventId) || target.eventId.includes(e.id))) ||
+        (target.event && e.title?.toLowerCase() === target.event.toLowerCase());
+      if (!match) return e;
+
+      eventsChanged = true;
+      const dismissedTypes = new Set(e.dismissedAutoTaskTypes || []);
+      if (target.workflowType) dismissedTypes.add(target.workflowType);
+      const isPoster = target.workflowType === 'event_poster_request' || id.startsWith('task_event_poster_');
+      const isSocial =
+        target.workflowType === 'event_social_post' ||
+        target.workflowType === 'holiday_social_approval' ||
+        target.workflowType === 'holiday_design_social' ||
+        id.startsWith('task_event_social_') ||
+        id.startsWith('task_holiday_');
+
+      return {
+        ...e,
+        posterTaskDismissed: isPoster ? true : e.posterTaskDismissed,
+        socialTaskDismissed: isSocial ? true : e.socialTaskDismissed,
+        dismissedAutoTaskTypes: Array.from(dismissedTypes),
+      };
+    });
+    if (eventsChanged) {
+      saveEvents(nextEvents);
+    }
+  }
 
   serverDelete('/api/tasks', id);
   logAuditEvent('TASK_DELETED', actorName, `Deleted task: ${target.title}`);
@@ -5968,6 +6019,14 @@ export function getSystemSettings(): SystemSettings {
   return DEFAULT_SYSTEM_SETTINGS;
 }
 
+export function saveSystemSettings(settings: SystemSettings): void {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('leads_system_settings', JSON.stringify([settings]));
+    markLocalWrite('leads_system_settings');
+  }
+  serverPost('/api/system-settings', settings);
+}
+
 export function updateSystemSettings(updates: Partial<SystemSettings>, actorName: string): SystemSettings {
   const current = getSystemSettings();
   const updated: SystemSettings = {
@@ -5977,16 +6036,14 @@ export function updateSystemSettings(updates: Partial<SystemSettings>, actorName
     updatedAt: new Date().toISOString(),
     updatedBy: actorName,
   };
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('leads_system_settings', JSON.stringify([updated]));
-    markLocalWrite('leads_system_settings');
+  saveSystemSettings(updated);
+  if (updates.lockdownEnabled !== undefined && updates.lockdownEnabled !== current.lockdownEnabled) {
+    logAuditEvent(
+      'SYSTEM_LOCKDOWN_CHANGED',
+      actorName,
+      updated.lockdownEnabled ? 'Enabled site-wide lockdown — every user except the Super User now sees a Not Found screen' : 'Disabled site-wide lockdown — normal access restored for everyone'
+    );
   }
-  serverPost('/api/system-settings', updated);
-  logAuditEvent(
-    'SYSTEM_LOCKDOWN_CHANGED',
-    actorName,
-    updated.lockdownEnabled ? 'Enabled site-wide lockdown — every user except the Super User now sees a Not Found screen' : 'Disabled site-wide lockdown — normal access restored for everyone'
-  );
   return updated;
 }
 

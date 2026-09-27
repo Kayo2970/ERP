@@ -29,13 +29,21 @@ function todayDateString(): string {
  * every day is always safe and never creates a duplicate.
  */
 export async function runEventLapseSocialTasks(): Promise<{ created: number }> {
-  const events = await readCollection<any>('events');
+  const [events, systemSettingsList] = await Promise.all([
+    readCollection<any>('events'),
+    readCollection<any>('systemSettings'),
+  ]);
+  const dismissedSet = new Set<string>(systemSettingsList?.[0]?.dismissedAutoTaskIds || []);
   const today = todayDateString();
 
   const lapsedEvents = events.filter((e: any) =>
     !e.isHoliday &&
     !e.datesTBD &&
     !e.socialTaskDismissed &&
+    !e.dismissedAutoTaskTypes?.includes('event_social_post') &&
+    !dismissedSet.has(`task_event_social_${e.id}`) &&
+    !dismissedSet.has(`event_social_post_${e.id}`) &&
+    !dismissedSet.has(e.id) &&
     typeof e.endDate === 'string' && e.endDate.length > 0 && e.endDate < today &&
     e.approvalStatus !== 'pending_create' && e.approvalStatus !== 'rejected' && e.approvalStatus !== 'pending_delete'
   );
@@ -123,15 +131,28 @@ export async function runEventLapseSocialTasks(): Promise<{ created: number }> {
  * Every operation here is idempotent (a deterministic task id per event,
  * `task_event_poster_${event.id}`), so re-running this on every boot and
  * every day is always safe and never creates a duplicate. Skips events
- * still pending/rejected approval — an event that never got approved
- * shouldn't have prep work assigned against it.
+ * still pending/rejected approval, already dismissed/deleted, or events
+ * that already have a design asset created for them.
  */
 export async function runEventPosterTasks(): Promise<{ created: number }> {
-  const events = await readCollection<any>('events');
+  const [events, systemSettingsList, designs] = await Promise.all([
+    readCollection<any>('events'),
+    readCollection<any>('systemSettings'),
+    readCollection<any>('designs'),
+  ]);
+
+  const dismissedSet = new Set<string>(systemSettingsList?.[0]?.dismissedAutoTaskIds || []);
+  const eventsWithDesigns = new Set((designs || []).filter((d: any) => d.eventId).map((d: any) => d.eventId));
 
   const approvedDatedEvents = events.filter((e: any) =>
     !e.isHoliday &&
     !e.datesTBD &&
+    !e.posterTaskDismissed &&
+    !e.dismissedAutoTaskTypes?.includes('event_poster_request') &&
+    !dismissedSet.has(`task_event_poster_${e.id}`) &&
+    !dismissedSet.has(`event_poster_request_${e.id}`) &&
+    !dismissedSet.has(e.id) &&
+    !eventsWithDesigns.has(e.id) &&
     typeof e.startDate === 'string' && e.startDate.length > 0 &&
     e.approvalStatus !== 'pending_create' && e.approvalStatus !== 'rejected' && e.approvalStatus !== 'pending_delete'
   );

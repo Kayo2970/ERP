@@ -648,19 +648,26 @@ function ensureHolidaysAndRatingsCleaned(): Promise<void> {
           let eventsChanged = false;
           const seenHolidays = new Map<string, any>();
           for (const ev of events) {
-            const isHoliday = ev.type === 'Holiday' || ev.category === 'Holiday' || ev.id?.startsWith('holiday_');
-            if (isHoliday && ev.date) {
+            const isHoliday = ev.isHoliday || ev.type === 'Holiday' || ev.category === 'Holiday' || ev.id?.startsWith('holiday_');
+            const evDate = ev.startDate || ev.date;
+            if (isHoliday && evDate) {
               const norm = normalizeHoliday(ev.title);
-              const key = `${ev.date}_${norm}`;
+              const key = `${evDate}_${norm}`;
               if (seenHolidays.has(key)) {
                 const existing = seenHolidays.get(key);
                 const hasParens = /\([^)]*\)/.test(ev.title || '');
                 const existingHasParens = /\([^)]*\)/.test(existing.title || '');
                 if (existingHasParens && !hasParens) {
                   discardedHolidayIds.add(existing.id);
+                  if (existing.socialTaskDismissed) ev.socialTaskDismissed = true;
+                  if (existing.posterTaskDismissed) ev.posterTaskDismissed = true;
+                  if (existing.dismissedAutoTaskTypes) ev.dismissedAutoTaskTypes = existing.dismissedAutoTaskTypes;
                   seenHolidays.set(key, ev);
                 } else {
                   discardedHolidayIds.add(ev.id);
+                  if (ev.socialTaskDismissed) existing.socialTaskDismissed = true;
+                  if (ev.posterTaskDismissed) existing.posterTaskDismissed = true;
+                  if (ev.dismissedAutoTaskTypes) existing.dismissedAutoTaskTypes = ev.dismissedAutoTaskTypes;
                 }
                 eventsChanged = true;
               } else {
@@ -674,6 +681,26 @@ function ensureHolidaysAndRatingsCleaned(): Promise<void> {
           }
         }
 
+        // Synchronize systemSettings dismissedAutoTaskIds
+        const systemSettingsList = await readJsonArray('systemSettings');
+        const settings = systemSettingsList?.[0] || { id: 'default', lockdownEnabled: false };
+        const dismissed = new Set<string>(settings.dismissedAutoTaskIds || []);
+        let settingsChanged = false;
+        for (const hid of discardedHolidayIds) {
+          if (!dismissed.has(hid)) {
+            dismissed.add(hid);
+            settingsChanged = true;
+          }
+        }
+        if (!dismissed.has('task_holiday_approval_holiday_2026-09-04_janmashtami-smarta')) {
+          dismissed.add('task_holiday_approval_holiday_2026-09-04_janmashtami-smarta');
+          dismissed.add('holiday_2026-09-04_janmashtami-smarta');
+          settingsChanged = true;
+        }
+        if (settingsChanged) {
+          await writeCollectionFile('systemSettings', [{ ...settings, dismissedAutoTaskIds: Array.from(dismissed) }]);
+        }
+
         // 2. Deduplicate holiday approval tasks and remove orphaned holiday tasks
         let currentTasks: any[] = tasks || [];
         if (tasks && tasks.length > 0) {
@@ -682,7 +709,12 @@ function ensureHolidaysAndRatingsCleaned(): Promise<void> {
           const cleanedTasks: any[] = [];
 
           for (const t of tasks) {
-            if (discardedHolidayIds.has(t.eventId) || t.id === 'task_holiday_approval_holiday_2026-09-04_janmashtami-smarta') {
+            if (
+              discardedHolidayIds.has(t.eventId) ||
+              t.id === 'task_holiday_approval_holiday_2026-09-04_janmashtami-smarta' ||
+              dismissed.has(t.id) ||
+              (t.eventId && dismissed.has(t.eventId))
+            ) {
               tasksChanged = true;
               continue;
             }

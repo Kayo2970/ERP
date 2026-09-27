@@ -168,7 +168,18 @@ export async function runHolidaySync(): Promise<{ fetched: number; upserted: num
     for (const h of deduplicatedUpcoming) {
       const id = `holiday_${h.date}_${slugify(h.title)}`;
       const existing = byId.get(id);
-      if (existing && existing.title === h.title && existing.startDate === h.date && existing.isHoliday) continue;
+      const sameDateExisting = Array.from(byId.values()).find(
+        (e: any) => e.isHoliday && e.startDate === h.date && (e.socialTaskDismissed || e.posterTaskDismissed || e.dismissedAutoTaskTypes?.length)
+      );
+
+      if (existing && existing.title === h.title && existing.startDate === h.date && existing.isHoliday) {
+        if (sameDateExisting && !existing.socialTaskDismissed && sameDateExisting.socialTaskDismissed) {
+          existing.socialTaskDismissed = true;
+          existing.posterTaskDismissed = sameDateExisting.posterTaskDismissed;
+          existing.dismissedAutoTaskTypes = sameDateExisting.dismissedAutoTaskTypes;
+        }
+        continue;
+      }
 
       byId.set(id, {
         ...(existing || {}),
@@ -181,6 +192,9 @@ export async function runHolidaySync(): Promise<{ fetched: number; upserted: num
         committees: existing?.committees || [],
         isHoliday: true,
         approvalStatus: 'approved',
+        socialTaskDismissed: existing?.socialTaskDismissed ?? sameDateExisting?.socialTaskDismissed ?? false,
+        posterTaskDismissed: existing?.posterTaskDismissed ?? sameDateExisting?.posterTaskDismissed ?? false,
+        dismissedAutoTaskTypes: existing?.dismissedAutoTaskTypes ?? sameDateExisting?.dismissedAutoTaskTypes ?? [],
       });
       upserted++;
     }
@@ -198,12 +212,22 @@ export async function runHolidaySync(): Promise<{ fetched: number; upserted: num
  * Strictly deduplicates so multiple tasks are never created for the same holiday.
  */
 export async function runHolidayApprovalTasks(): Promise<{ created: number }> {
-  const events = await readCollection<any>('events');
+  const [events, systemSettingsList] = await Promise.all([
+    readCollection<any>('events'),
+    readCollection<any>('systemSettings'),
+  ]);
+  const dismissedSet = new Set<string>(systemSettingsList?.[0]?.dismissedAutoTaskIds || []);
   const today = todayDateString();
   const windowEnd = addDaysDateString(today, 7);
 
   const upcomingHolidays = events.filter((e: any) =>
-    e.isHoliday && !e.socialTaskDismissed && e.startDate >= today && e.startDate <= windowEnd
+    e.isHoliday &&
+    !e.socialTaskDismissed &&
+    !e.dismissedAutoTaskTypes?.includes('holiday_social_approval') &&
+    !dismissedSet.has(`task_holiday_approval_${e.id}`) &&
+    !dismissedSet.has(`holiday_social_approval_${e.id}`) &&
+    !dismissedSet.has(e.id) &&
+    e.startDate >= today && e.startDate <= windowEnd
   );
   if (upcomingHolidays.length === 0) return { created: 0 };
 
@@ -217,6 +241,17 @@ export async function runHolidayApprovalTasks(): Promise<{ created: number }> {
       return `${t.dueDate || ''}_${cleanTitle.toLowerCase()}`;
     })
   );
+
+  for (const item of dismissedSet) {
+    const m = item.match(/\d{4}-\d{2}-\d{2}/);
+    if (m) {
+      const parts = item.split(m[0]);
+      if (parts[1]) {
+        const slug = parts[1].replace(/^[_-]+/, '');
+        alreadyAskedDateKeys.add(`${m[0]}_${slug.toLowerCase()}`);
+      }
+    }
+  }
 
   const toCreate: any[] = [];
   const seenInRun = new Set<string>();

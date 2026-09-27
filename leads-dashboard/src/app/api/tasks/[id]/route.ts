@@ -118,7 +118,14 @@ export async function PATCH(
 // Scheduler-generated workflows (see holiday-scheduler.ts / event-social-scheduler.ts)
 // that recreate a deterministic-id task for an event on every boot/weekly/daily
 // catch-up run as long as the event still exists and no such task is present.
-const AUTO_RECREATED_WORKFLOWS = new Set(['holiday_social_approval', 'event_social_post']);
+const AUTO_RECREATED_WORKFLOWS = new Set([
+  'holiday_social_approval',
+  'holiday_design_social',
+  'event_social_post',
+  'event_poster_request',
+  'event_report_request',
+  'event_report_assignment',
+]);
 
 export async function DELETE(
   request: Request,
@@ -153,20 +160,57 @@ export async function DELETE(
     // if there is not any task, then it makes no sense that there would be a rating for said task.
     await mutateCollection('ratings', (current) => current.filter((r: any) => r.taskId !== id));
 
-    // Deleting a scheduler-generated task is a deliberate "no, don't ask about
+    // Deleting an auto-generated task is a deliberate "no, don't ask about
     // this one" — without this, the next scheduler run sees the event still
     // there and no task for it, and recreates the exact task the user just
-    // deleted (it comes back like a zombie). Flag the event so the scheduler
-    // skips it going forward; a manual "Request Social Post" action elsewhere
-    // in the app is unaffected since it doesn't consult this flag.
-    if (deleted?.eventId && AUTO_RECREATED_WORKFLOWS.has(deleted.workflowType)) {
-      await mutateCollection('events', (current) => {
-        const idx = current.findIndex((e: any) => e.id === deleted.eventId);
-        if (idx === -1) return current;
-        const next = [...current];
-        next[idx] = { ...next[idx], socialTaskDismissed: true };
-        return next;
+    // deleted (it comes back like a zombie). Flag the event and persist the
+    // task id in systemSettings so schedulers never recreate it going forward.
+    const isAutoTask =
+      (deleted?.workflowType && AUTO_RECREATED_WORKFLOWS.has(deleted.workflowType)) ||
+      id.startsWith('task_event_') ||
+      id.startsWith('task_holiday_');
+
+    if (isAutoTask || deleted?.eventId) {
+      // 1. Record in systemSettings.dismissedAutoTaskIds
+      await mutateCollection<any>('systemSettings', (current) => {
+        const currentSettings = current[0] || { id: 'default', lockdownEnabled: false };
+        const dismissed = new Set<string>(currentSettings.dismissedAutoTaskIds || []);
+        dismissed.add(id);
+        if (deleted?.eventId) {
+          dismissed.add(deleted.eventId);
+          if (deleted?.workflowType) {
+            dismissed.add(`${deleted.workflowType}_${deleted.eventId}`);
+          }
+        }
+        return [{ ...currentSettings, dismissedAutoTaskIds: Array.from(dismissed) }];
       });
+
+      // 2. Mark event as dismissed
+      if (deleted?.eventId || deleted?.event) {
+        await mutateCollection<any>('events', (current) => {
+          return current.map((e: any) => {
+            const match =
+              (deleted?.eventId && (e.id === deleted.eventId || e.id.includes(deleted.eventId) || deleted.eventId.includes(e.id))) ||
+              (deleted?.event && e.title?.toLowerCase() === deleted.event.toLowerCase());
+            if (!match) return e;
+            const dismissedTypes = new Set(e.dismissedAutoTaskTypes || []);
+            if (deleted?.workflowType) dismissedTypes.add(deleted.workflowType);
+            const isPoster = deleted?.workflowType === 'event_poster_request' || id.startsWith('task_event_poster_');
+            const isSocial =
+              deleted?.workflowType === 'event_social_post' ||
+              deleted?.workflowType === 'holiday_social_approval' ||
+              deleted?.workflowType === 'holiday_design_social' ||
+              id.startsWith('task_event_social_') ||
+              id.startsWith('task_holiday_');
+            return {
+              ...e,
+              posterTaskDismissed: isPoster ? true : e.posterTaskDismissed,
+              socialTaskDismissed: isSocial ? true : e.socialTaskDismissed,
+              dismissedAutoTaskTypes: Array.from(dismissedTypes),
+            };
+          });
+        });
+      }
     }
 
     return NextResponse.json({ success: true });
