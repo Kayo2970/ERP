@@ -350,6 +350,18 @@ export function isDesignHead(user: SessionUser): boolean {
   return isHeadRole(user) && isDesign;
 }
 
+/**
+ * Canva Link Library (Design Portal): the standalone directory of every
+ * design-brief task's Canva reference link, including CSV export/import.
+ * Deliberately the exact same roster as design review authority — Design
+ * Head, Centre Head, Advisor, and Super User — isDesignHead() already folds
+ * in the latter three via isCentreHead(), so this is just a named alias for
+ * that check kept separate in case the two ever need to diverge.
+ */
+export function canManageCanvaLibrary(user: SessionUser): boolean {
+  return isDesignHead(user);
+}
+
 /** Resolve the full Member record for a session user (persona objects are a subset of Member). */
 function resolveMember(user: SessionUser): Member | undefined {
   if (!user) return undefined;
