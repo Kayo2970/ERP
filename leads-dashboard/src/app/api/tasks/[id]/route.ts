@@ -187,7 +187,14 @@ export async function DELETE(
       id.startsWith('task_event_') ||
       id.startsWith('task_holiday_');
 
-    if (isAutoTask || deleted?.eventId) {
+    // Gated strictly on isAutoTask: this bookkeeping exists only so scheduler-
+    // generated tasks don't resurrect themselves. It must never fire for a
+    // manually created task that merely happens to reference an eventId (e.g.
+    // a Design Portal brief with a Canva link) — the boot-time cleanup below
+    // purges every task whose eventId is dismissed here, so treating a manual
+    // task's eventId as "dismissed" would wipe out unrelated, unsubmitted
+    // design tasks for the same event on the next server restart.
+    if (isAutoTask) {
       // 1. Record in systemSettings.dismissedAutoTaskIds
       await mutateCollection<any>('systemSettings', (current) => {
         const currentSettings = current[0] || { id: 'default', lockdownEnabled: false };

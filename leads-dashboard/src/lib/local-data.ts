@@ -3512,6 +3512,23 @@ export function respondToHolidayApproval(taskId: string, approved: boolean, acto
   return getTasks().find(t => t.id === taskId) || null;
 }
 
+// Workflow types the schedulers (holiday-scheduler.ts / event-social-scheduler.ts)
+// recreate deterministically for an event on every boot/weekly/daily catch-up
+// run. Keep this in sync with AUTO_RECREATED_WORKFLOWS in
+// src/app/api/tasks/[id]/route.ts — both gate the same "don't resurrect a
+// deliberately deleted auto-task" bookkeeping, which must never apply to a
+// manually created task (e.g. a Design Portal brief) that simply references
+// an eventId.
+const AUTO_RECREATED_WORKFLOW_TYPES = new Set([
+  'holiday_social_approval',
+  'holiday_design_social',
+  'event_social_post',
+  'event_poster_request',
+  'event_report_request',
+  'event_report_assignment',
+  'procurement',
+]);
+
 export function deleteTask(id: string, actorName: string): boolean {
   const tasks = getTasks();
   const target = tasks.find(t => t.id === id);
@@ -3526,23 +3543,36 @@ export function deleteTask(id: string, actorName: string): boolean {
   const remainingRatings = getRatings().filter(r => r.taskId !== id);
   saveRatings(remainingRatings);
 
-  // Record dismissed auto-task in systemSettings so it is never recreated or resurrected
-  const settings = getSystemSettings();
-  const dismissedIds = new Set(settings.dismissedAutoTaskIds || []);
-  dismissedIds.add(id);
-  if (target.eventId) {
+  // Record dismissed auto-task in systemSettings so it is never recreated or resurrected.
+  // Strictly gated on AUTO_RECREATED_WORKFLOW_TYPES: this bookkeeping exists only
+  // so scheduler-generated tasks (holiday/event social posts, poster requests,
+  // report requests, procurement) don't resurrect themselves on the next
+  // scheduler pass. It must never fire for a manually created task that merely
+  // references an eventId — e.g. a Design Portal brief with a Canva link —
+  // because ensureHolidaysAndRatingsCleaned purges every task whose eventId is
+  // dismissed here, and that would wipe out unrelated, unsubmitted design tasks
+  // for the same event on the next server restart.
+  const isAutoRecreatedTask =
+    (target.workflowType && AUTO_RECREATED_WORKFLOW_TYPES.has(target.workflowType)) ||
+    id.startsWith('task_event_') ||
+    id.startsWith('task_holiday_');
+
+  if (isAutoRecreatedTask && target.eventId) {
+    const settings = getSystemSettings();
+    const dismissedIds = new Set(settings.dismissedAutoTaskIds || []);
+    dismissedIds.add(id);
     dismissedIds.add(target.eventId);
     if (target.workflowType) {
       dismissedIds.add(`${target.workflowType}_${target.eventId}`);
     }
+    saveSystemSettings({
+      ...settings,
+      dismissedAutoTaskIds: Array.from(dismissedIds),
+    });
   }
-  saveSystemSettings({
-    ...settings,
-    dismissedAutoTaskIds: Array.from(dismissedIds),
-  });
 
   // Direct correlation: if this task is tied to an event, mark dismissal flags on the event
-  if (target.eventId || target.event) {
+  if (isAutoRecreatedTask && (target.eventId || target.event)) {
     const events = getEvents();
     let eventsChanged = false;
     const nextEvents = events.map(e => {

@@ -616,6 +616,22 @@ function ensureFeedbackFormTemplateSeeded(): Promise<void> {
   return feedbackFormTemplateSeedPromise;
 }
 
+// Workflow types the schedulers (holiday-scheduler.ts / event-social-scheduler.ts)
+// recreate deterministically for an event on every boot/weekly/daily catch-up
+// run. Keep in sync with AUTO_RECREATED_WORKFLOWS in
+// src/app/api/tasks/[id]/route.ts — only these task types (plus deterministic
+// task_event_*/task_holiday_* ids) are eligible for the eventId-based purge
+// below.
+const AUTO_RECREATED_WORKFLOWS = new Set([
+  'holiday_social_approval',
+  'holiday_design_social',
+  'event_social_post',
+  'event_poster_request',
+  'event_report_request',
+  'event_report_assignment',
+  'procurement',
+]);
+
 let holidaysAndRatingsCleanedPromise: Promise<void> | null = null;
 function ensureHolidaysAndRatingsCleaned(): Promise<void> {
   if (!holidaysAndRatingsCleanedPromise) {
@@ -708,13 +724,23 @@ function ensureHolidaysAndRatingsCleaned(): Promise<void> {
           const seenApprovalTasks = new Map<string, any>();
           const cleanedTasks: any[] = [];
 
+          // Only scheduler-generated tasks are ever purged by an eventId/holiday
+          // match here — a manually created task (e.g. a Design Portal brief
+          // with a Canva link, taskCategory 'design') that merely references
+          // the same eventId must survive even though it has never been
+          // submitted. Without this guard, deleting one auto-generated task
+          // for an event (or deduplicating a holiday) would wipe out every
+          // other, unrelated task tied to that event on the next boot.
+          const isAutoRecreatedWorkflow = (task: any) =>
+            (task.workflowType && AUTO_RECREATED_WORKFLOWS.has(task.workflowType)) ||
+            (typeof task.id === 'string' && (task.id.startsWith('task_event_') || task.id.startsWith('task_holiday_')));
+
           for (const t of tasks) {
-            if (
-              discardedHolidayIds.has(t.eventId) ||
-              t.id === 'task_holiday_approval_holiday_2026-09-04_janmashtami-smarta' ||
-              dismissed.has(t.id) ||
-              (t.eventId && dismissed.has(t.eventId))
-            ) {
+            if (t.id === 'task_holiday_approval_holiday_2026-09-04_janmashtami-smarta' || dismissed.has(t.id)) {
+              tasksChanged = true;
+              continue;
+            }
+            if (isAutoRecreatedWorkflow(t) && (discardedHolidayIds.has(t.eventId) || (t.eventId && dismissed.has(t.eventId)))) {
               tasksChanged = true;
               continue;
             }
