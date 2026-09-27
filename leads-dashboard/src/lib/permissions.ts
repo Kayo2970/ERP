@@ -1307,9 +1307,43 @@ export function canSetMemberPassword(user: SessionUser): boolean {
   return user?.tier === 1;
 }
 
-/** Check if user is in the Faculty division. */
+/** Check if user is in the Faculty division or holds a professor/faculty title. */
 export function isFaculty(user: SessionUser): boolean {
-  return !!user && user.division === 'Faculty';
+  if (!user) return false;
+  if (user.division === 'Faculty') return true;
+  const role = (user.role || '').toLowerCase();
+  return role.includes('faculty') || role.includes('professor') || role.includes('prof.');
+}
+
+/** Check if a member belongs to the student Social Media team. Professors/Faculty are strictly excluded. */
+export function isSocialMediaTeamMember(member: { division?: string; department?: string; committee?: string; role?: string; status?: string } | null | undefined): boolean {
+  if (!member || isFaculty(member as SessionUser) || member.status === 'Terminated') return false;
+  const dept = (member.department || '').toLowerCase();
+  const comm = (member.committee || '').toLowerCase();
+  const role = (member.role || '').toLowerCase();
+  return (
+    dept.includes('social media') ||
+    comm.includes('social media') ||
+    role.includes('social media')
+  );
+}
+
+/** Check if a task is a social media posting/design deliverable task. */
+export function isSocialMediaPostTask(task: {
+  title?: string;
+  workflowType?: string;
+  taskCategory?: string;
+  isSocialMediaPost?: boolean;
+  platform?: string;
+} | null | undefined): boolean {
+  if (!task) return false;
+  if (task.workflowType === 'design_social_posting' || task.workflowType === 'holiday_design_social' || task.workflowType === 'event_social_post') {
+    return true;
+  }
+  if (task.isSocialMediaPost === true) return true;
+  if (task.platform === 'instagram' || task.platform === 'linkedin') return true;
+  const title = (task.title || '').toLowerCase();
+  return title.includes('social media') || title.includes('[social media posting]');
 }
 
 /** Guest Directory (visiting-card contacts) — Centre Head, Faculty, Executive Council, or a GUEST_DIRECTORY_ACCESS/moduleAccess grant. */

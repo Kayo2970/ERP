@@ -13,7 +13,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import Link from 'next/link';
-import { getEvents, getTasks, addTask, isFestivalEvent, EventItem, TaskItem, Member } from '@/lib/local-data';
+import { getEvents, getTasks, addTask, isFestivalEvent, EventItem, TaskItem, Member, resolveSocialPostingAssignees } from '@/lib/local-data';
 import { canManageFestivals } from '@/lib/permissions';
 import { Button } from '@/components/ui/button';
 import { Chip } from '@/components/ui/chip';
@@ -74,18 +74,24 @@ export default function FestivalsPage() {
   // Helper to request a social media creative post for a festival
   const handleCreateSocialPostTask = (festival: EventItem) => {
     if (!user || !canManageFestivals(user)) return;
+    const existing = getFestivalSocialTask(festival);
+    if (existing) {
+      triggerSuccess(`A social media post task already exists for ${festival.title}.`);
+      return;
+    }
+    const postingPool = resolveSocialPostingAssignees();
     const taskTitle = `Social media post needed for "${festival.title}"?`;
     addTask({
       title: taskTitle,
       event: festival.title,
       eventId: festival.id,
-      assignee: user.name || 'Media & Design Head',
-      assigneeEmail: user.email || 'design@leads.edu',
-      assigneeType: 'individual',
+      assignee: postingPool.map(m => m.name).join(', ') || 'Social Media Team (Unassigned)',
+      assigneeEmail: postingPool[0]?.email,
+      assigneeType: 'group',
+      assigneeIds: postingPool.map(m => m.id),
       status: 'Assigned',
       dueDate: festival.startDate,
       creatorName: user.name || 'User',
-      isDesignDeliverable: true,
       workflowType: 'holiday_social_approval',
     });
     refreshData();

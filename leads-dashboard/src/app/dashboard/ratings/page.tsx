@@ -31,7 +31,7 @@ import {
   EventItem
 } from '@/lib/local-data';
 import { getRatingColor } from '@/lib/design-tokens';
-import { canViewRating, canEvaluateEventStudent, canEditRating, resolveRatingReviewerRole } from '@/lib/permissions';
+import { canViewRating, canEvaluateEventStudent, canEditRating, resolveRatingReviewerRole, isFaculty, isSocialMediaTeamMember, isSocialMediaPostTask } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { PeriodFilter } from '@/components/period-filter';
 import { SearchableSelect } from '@/components/searchable-select';
@@ -213,6 +213,17 @@ export default function RatingsPage() {
     if (!user) return;
 
     if (selectedTask) {
+      const assigneeMember = members.find(m => m.name.toLowerCase() === selectedTask.assignee.toLowerCase() || m.id === selectedTask.assigneeId);
+      if ((assigneeMember && isFaculty(assigneeMember)) || /prof\.|professor|faculty/i.test(selectedTask.assignee)) {
+        setFormError('Evaluation Access Denied: Professors and faculty members cannot receive performance ratings.');
+        return;
+      }
+      if (isSocialMediaPostTask(selectedTask)) {
+        if (!assigneeMember || !isSocialMediaTeamMember(assigneeMember)) {
+          setFormError('Evaluation Access Denied: Only student members of the Social Media team can be evaluated for social media posts.');
+          return;
+        }
+      }
       const linkedEvent = events.find(ev => ev.id === selectedTask.eventId || ev.title === selectedTask.event);
       const eventCampus = linkedEvent?.campus || selectedTask.eventCampus || 'GG Campus';
       if (!canEvaluateEventStudent(user, eventCampus, isDesignTask(selectedTask))) {
@@ -329,9 +340,19 @@ export default function RatingsPage() {
     return ratings.find(r => r.taskId === task.id && r.targetId === targetId && (r.reviewerRole === reviewerRole || r.raterName === user?.name));
   };
 
-  // Task Evaluation Queue surfaces completed deliverables that are pending evaluation by the current user.
-  // Once evaluated by the current user, the task deliverable moves to the "Evaluated" tab.
-  const completedTasks = tasks.filter(t => t.status === 'Completed');
+  // Task Evaluation Queue surfaces completed student deliverables pending evaluation by the current user.
+  // Administrative approval tasks, faculty deliverables, and social media tasks for non-team members are strictly excluded.
+  const completedTasks = tasks.filter(t => {
+    if (t.status !== 'Completed') return false;
+    if (t.workflowType === 'holiday_social_approval') return false;
+    const assigneeMember = members.find(m => m.id === t.assigneeId || m.name.toLowerCase() === t.assignee.toLowerCase());
+    if (assigneeMember && isFaculty(assigneeMember)) return false;
+    if (/prof\.|professor|faculty/i.test(t.assignee)) return false;
+    if (isSocialMediaPostTask(t)) {
+      if (!assigneeMember || !isSocialMediaTeamMember(assigneeMember)) return false;
+    }
+    return true;
+  });
   const pendingQueueTasks = completedTasks.filter(t => !hasMyRating(t));
   const evaluatedQueueTasks = completedTasks.filter(t => hasMyRating(t));
   const activeQueueTasks = queueTab === 'pending' ? pendingQueueTasks : evaluatedQueueTasks;
@@ -406,6 +427,17 @@ export default function RatingsPage() {
     if (r.isGroupPlaceholder) return false;
     if (!canViewRating(r, user)) return false;
 
+    // Professors/Faculty cannot get a rating or be part of ratings history
+    const targetMember = members.find(m => m.id === r.targetId || m.name.toLowerCase() === r.targetName.toLowerCase());
+    if (targetMember && isFaculty(targetMember)) return false;
+    if (/prof\.|professor|faculty/i.test(r.targetName)) return false;
+
+    // For social media tasks: only student members of the social media team
+    const matchedTask = tasks.find(t => t.id === r.taskId || t.title === r.taskTitle);
+    if ((matchedTask && isSocialMediaPostTask(matchedTask)) || /\[social media posting\]|social media post/i.test(r.taskTitle)) {
+      if (!targetMember || !isSocialMediaTeamMember(targetMember)) return false;
+    }
+
     const matchesSearch =
       r.targetName.toLowerCase().includes(historySearchQuery.toLowerCase()) ||
       r.taskTitle.toLowerCase().includes(historySearchQuery.toLowerCase()) ||
@@ -419,9 +451,9 @@ export default function RatingsPage() {
   });
 
   // Student options for the Scorecard History filter below — placeholder
-  // rows excluded so a committee/group name never appears as a choice.
+  // rows, faculty, and ineligible members excluded.
   const historyStudentOptions = Array.from(
-    new Set(ratings.filter(r => !r.isGroupPlaceholder).map(r => r.targetName))
+    new Set(filteredRatingsHistory.map(r => r.targetName))
   ).sort((a, b) => a.localeCompare(b));
 
   // Group scorecards by evaluated deliverable (taskId + targetId or taskTitle + targetName)
@@ -498,8 +530,8 @@ export default function RatingsPage() {
   const availableRatingMonths = extractAvailableMonths(ratings.map(r => r.createdAt));
 
   // Report Writing Final Score leaderboard — decay-weighted average of each
-  // submitter's scored event reports (see report-scoring.ts).
-  const reportScoreLeaderboard = groupScoredReportsBySubmitter(eventReports);
+  // submitter's scored event reports (see report-scoring.ts). Excludes faculty.
+  const reportScoreLeaderboard = groupScoredReportsBySubmitter(eventReports, members);
 
   return (
     <div className="p-6 md:p-8 space-y-6">

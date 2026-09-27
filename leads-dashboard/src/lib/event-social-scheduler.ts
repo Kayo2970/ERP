@@ -1,5 +1,6 @@
 import { readCollection, mutateCollection } from './server-db';
 import { enqueueTaskEmailNotification } from './task-email-queue';
+import { isSocialMediaTeamMember, isFaculty } from './permissions-server';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -49,14 +50,8 @@ export async function runEventLapseSocialTasks(): Promise<{ created: number }> {
 
   const members = await readCollection<any>('members');
   const activeMembers = members.filter((m: any) => m.status !== 'Terminated' && m.email);
-  let pool = activeMembers.filter((m: any) => {
-    const role = (m.role || '').toLowerCase();
-    const isSeniorDesignHead = role.includes('design') && role.includes('head') && role.includes('senior');
-    const isCoreCommittee = m.division === 'Core Committee';
-    return isSeniorDesignHead || isCoreCommittee;
-  });
-  // Never leave the task with no one able to see/answer it.
-  if (pool.length === 0) pool = activeMembers.filter((m: any) => m.tier <= 2);
+  // Strictly members of the student Social Media team. Professors/Faculty and non-team members excluded.
+  const pool = activeMembers.filter((m: any) => isSocialMediaTeamMember(m));
 
   let created = 0;
   await mutateCollection<any>('tasks', (current) => {
@@ -69,13 +64,14 @@ export async function runEventLapseSocialTasks(): Promise<{ created: number }> {
         title: `Social media posts required for "${e.title}" (event concluded ${e.endDate})`,
         event: e.title,
         eventId: e.id,
-        assignee: pool.map((m: any) => m.name).join(', ') || 'Design Head',
+        assignee: pool.map((m: any) => m.name).join(', ') || 'Social Media Team (Unassigned)',
         assigneeType: 'group',
         assigneeIds: pool.map((m: any) => m.id),
         dueDate: today,
         status: 'Assigned',
         creatorName: 'Event Scheduler',
         workflowType: 'event_social_post',
+        isSocialMediaPost: true,
         // Flag this as a real Design Task, not a general one, so it shows
         // up in the Design Portal's "Design Task Requests" queue — without
         // this, a design submitted against it had no way to reference this
@@ -155,15 +151,12 @@ export async function runEventPosterTasks(): Promise<{ created: number }> {
   // client-side getMembers() that helper reads from, so it's re-expressed
   // here — kept in sync by hand if that matching rule ever changes.
   let pool = activeMembers.filter((m: any) => {
+    if (isFaculty(m)) return false;
     const role = (m.role || '').toLowerCase();
-    const isDesignOrSocialMediaHead = role.includes('design head')
-      || role.includes('social media head')
-      || (role.includes('design') && role.includes('social media') && role.includes('head'));
-    const isSeniorHead = role.includes('senior') && role.includes('head');
-    return isDesignOrSocialMediaHead || isSeniorHead;
+    const dept = (m.department || '').toLowerCase();
+    return role.includes('design') || role.includes('social media') || dept.includes('design') || dept.includes('social media');
   });
-  if (pool.length === 0) pool = activeMembers.filter((m: any) => m.tier <= 2);
-  if (pool.length === 0) return { created: 0 }; // no one at all to assign to — nothing safe to create
+  if (pool.length === 0) return { created: 0 }; // no one in design/social media to assign to — nothing safe to create
 
   // One individual owner, not a group — the first match is deterministic
   // across repeated runs as long as the roster doesn't change in between.

@@ -99,13 +99,22 @@ function addDaysDateString(base: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+function normalizeHolidayTitle(title: string): string {
+  return title
+    .replace(/\s*\([^)]*\)/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /**
  * Fetches the Indian-holidays ICS feed and upserts each upcoming entry as an
  * `isHoliday: true` EventItem in the `events` collection. Each holiday gets a
  * stable, content-derived id (`holiday_<date>_<slug>`), so re-running this
  * every week naturally updates a holiday whose date the source corrects and
- * never creates a duplicate for one that hasn't changed — no separate sync
- * log needed.
+ * never creates a duplicate for one that hasn't changed.
+ *
+ * Automatically deduplicates festival variants (e.g. "Janmashtami" vs
+ * "Janmashtami (Smarta)") sharing the same date.
  */
 export async function runHolidaySync(): Promise<{ fetched: number; upserted: number }> {
   const res = await fetch(INDIAN_HOLIDAYS_ICS_URL);
@@ -117,10 +126,46 @@ export async function runHolidaySync(): Promise<{ fetched: number; upserted: num
   const horizon = addDaysDateString(today, SYNC_HORIZON_DAYS);
   const upcoming = parsed.filter((h) => h.date >= today && h.date <= horizon);
 
+  // Deduplicate festival variants on the same date (e.g. Janmashtami and Janmashtami (Smarta))
+  const deduplicatedUpcoming: ParsedHoliday[] = [];
+  const seenUpcoming = new Map<string, ParsedHoliday>();
+  for (const h of upcoming) {
+    const norm = normalizeHolidayTitle(h.title).toLowerCase();
+    const key = `${h.date}_${norm}`;
+    if (!seenUpcoming.has(key)) {
+      seenUpcoming.set(key, h);
+      deduplicatedUpcoming.push(h);
+    } else {
+      const existing = seenUpcoming.get(key)!;
+      // Prefer cleaner title without parenthetical qualifiers
+      if (existing.title.includes('(') && !h.title.includes('(')) {
+        seenUpcoming.set(key, h);
+        const idx = deduplicatedUpcoming.indexOf(existing);
+        if (idx !== -1) deduplicatedUpcoming[idx] = h;
+      }
+    }
+  }
+
   let upserted = 0;
   await mutateCollection<any>('events', (current) => {
     const byId = new Map(current.map((e: any) => [e.id, e]));
-    for (const h of upcoming) {
+
+    // Prune existing duplicate variant holidays on the same date
+    const canonicalKeys = new Set(deduplicatedUpcoming.map(h => `${h.date}_${normalizeHolidayTitle(h.title).toLowerCase()}`));
+    for (const [id, e] of byId.entries()) {
+      if (e.isHoliday && e.startDate) {
+        const k = `${e.startDate}_${normalizeHolidayTitle(e.title || '').toLowerCase()}`;
+        if (canonicalKeys.has(k) && e.title && e.title.includes('(')) {
+          // If a cleaner non-parenthetical title exists for this date, drop the parenthetical duplicate
+          const matchingCanonical = deduplicatedUpcoming.find(h => `${h.date}_${normalizeHolidayTitle(h.title).toLowerCase()}` === k);
+          if (matchingCanonical && !matchingCanonical.title.includes('(') && e.title !== matchingCanonical.title) {
+            byId.delete(id);
+          }
+        }
+      }
+    }
+
+    for (const h of deduplicatedUpcoming) {
       const id = `holiday_${h.date}_${slugify(h.title)}`;
       const existing = byId.get(id);
       if (existing && existing.title === h.title && existing.startDate === h.date && existing.isHoliday) continue;
@@ -150,10 +195,7 @@ export async function runHolidaySync(): Promise<{ fetched: number; upserted: num
  * Sunday sync run, IS "one weekend before" that holiday), creates a
  * `holiday_social_approval` task — assigned as a group to every Centre Head /
  * Events Head on the roster — asking whether a social media post is needed.
- * Skips any holiday that already has one (keyed by a deterministic task id),
- * so a re-run (or the boot catch-up) never creates duplicates. Also skips any
- * holiday flagged `socialTaskDismissed` — set when a user explicitly deletes
- * this task (see DELETE /api/tasks/[id]) — so a deleted task stays deleted.
+ * Strictly deduplicates so multiple tasks are never created for the same holiday.
  */
 export async function runHolidayApprovalTasks(): Promise<{ created: number }> {
   const events = await readCollection<any>('events');
@@ -166,10 +208,25 @@ export async function runHolidayApprovalTasks(): Promise<{ created: number }> {
   if (upcomingHolidays.length === 0) return { created: 0 };
 
   const tasks = await readCollection<any>('tasks');
-  const alreadyAsked = new Set(
+  const alreadyAskedEventIds = new Set(
     tasks.filter((t: any) => t.workflowType === 'holiday_social_approval').map((t: any) => t.eventId)
   );
-  const toCreate = upcomingHolidays.filter((h: any) => !alreadyAsked.has(h.id));
+  const alreadyAskedDateKeys = new Set(
+    tasks.filter((t: any) => t.workflowType === 'holiday_social_approval').map((t: any) => {
+      const cleanTitle = normalizeHolidayTitle(t.event || t.title.replace(/^Social media post needed for "|\"\?$/g, ''));
+      return `${t.dueDate || ''}_${cleanTitle.toLowerCase()}`;
+    })
+  );
+
+  const toCreate: any[] = [];
+  const seenInRun = new Set<string>();
+  for (const h of upcomingHolidays) {
+    if (alreadyAskedEventIds.has(h.id)) continue;
+    const dateKey = `${h.startDate}_${normalizeHolidayTitle(h.title).toLowerCase()}`;
+    if (alreadyAskedDateKeys.has(dateKey) || seenInRun.has(dateKey)) continue;
+    seenInRun.add(dateKey);
+    toCreate.push(h);
+  }
   if (toCreate.length === 0) return { created: 0 };
 
   const members = await readCollection<any>('members');

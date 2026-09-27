@@ -47,14 +47,26 @@ export interface SubmitterReportScore {
 /**
  * Groups scored event reports by submitter and computes each one's decayed
  * Final Score, for the Ratings page's report-scoring leaderboard.
+ * Professors/Faculty are strictly excluded per core rating policy.
  */
-export function groupScoredReportsBySubmitter(reports: EventReportItem[]): SubmitterReportScore[] {
+export function groupScoredReportsBySubmitter(reports: EventReportItem[], members?: any[]): SubmitterReportScore[] {
   const bySubmitter = new Map<string, EventReportItem[]>();
 
   reports
     .filter((r): r is EventReportItem & { reportScore: number } => typeof r.reportScore === 'number')
     .forEach(r => {
       const key = r.submittedBy || 'Unknown';
+      if (members && members.length > 0) {
+        const m = members.find((mb: any) =>
+          (r.submittedByEmail && mb.email && mb.email.toLowerCase() === r.submittedByEmail.toLowerCase()) ||
+          (mb.name && mb.name.toLowerCase() === key.toLowerCase())
+        );
+        if (m && (m.division === 'Faculty' || /prof\.|professor|faculty/i.test(m.role || ''))) {
+          return;
+        }
+      }
+      if (/prof\.|professor|faculty/i.test(key)) return;
+
       if (!bySubmitter.has(key)) bySubmitter.set(key, []);
       bySubmitter.get(key)!.push(r);
     });

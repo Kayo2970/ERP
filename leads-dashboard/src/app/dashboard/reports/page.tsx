@@ -18,7 +18,7 @@ import {
 } from 'recharts';
 import { getRatings, getMembers, getEvents, RatingItem, Member, EventItem } from '@/lib/local-data';
 import { getRatingColor } from '@/lib/design-tokens';
-import { canViewRating } from '@/lib/permissions';
+import { canViewRating, isFaculty, isSocialMediaTeamMember } from '@/lib/permissions';
 import { generatePerformanceReportPdf, ReportType, CapturedChartImage } from '@/lib/report-generator';
 import { BarChart3, Download, FileText, Star, Loader2 } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -80,6 +80,17 @@ export default function ReportsPage() {
     // The real per-student rows already carry the correct individual name.
     if (r.isGroupPlaceholder) return false;
     if (!canViewRating(r, user)) return false;
+
+    // Exclude Faculty / Professors from reports
+    const targetMember = members.find(m => m.id === r.targetId || m.name.toLowerCase() === r.targetName.toLowerCase());
+    if (targetMember && isFaculty(targetMember)) return false;
+    if (/prof\.|professor|faculty/i.test(r.targetName)) return false;
+
+    // For social media tasks: only student members of the social media team
+    if (/\[social media posting\]|social media post/i.test(r.taskTitle)) {
+      if (!targetMember || !isSocialMediaTeamMember(targetMember)) return false;
+    }
+
     // If division filter is active, check the target member's division
     if (selectedDivision !== 'ALL') {
       const member = members.find(m => m.name.toLowerCase() === r.targetName.toLowerCase() || m.id === r.targetId);
@@ -199,8 +210,18 @@ export default function ReportsPage() {
       .sort((a, b) => b.score - a.score);
   })();
 
-  // Unique Targets List for selector
-  const targets = Array.from(new Set(ratings.filter(r => !r.isGroupPlaceholder).map(r => r.targetName)));
+  // Unique Targets List for selector — professors and ineligible members strictly excluded
+  const targets = Array.from(new Set(
+    ratings
+      .filter(r => {
+        if (r.isGroupPlaceholder) return false;
+        const targetMember = members.find(m => m.id === r.targetId || m.name.toLowerCase() === r.targetName.toLowerCase());
+        if (targetMember && isFaculty(targetMember)) return false;
+        if (/prof\.|professor|faculty/i.test(r.targetName)) return false;
+        return true;
+      })
+      .map(r => r.targetName)
+  )).sort((a, b) => a.localeCompare(b));
 
   const handleDownloadReport = () => {
     if (filteredRatings.length === 0) {
@@ -256,7 +277,7 @@ export default function ReportsPage() {
         generatedBy: user?.name || 'LEADS Dashboard User',
         reportType,
         events,
-        members,
+        members: members.filter(m => !isFaculty(m)),
         chartImages: { radar, bar },
       });
     } finally {

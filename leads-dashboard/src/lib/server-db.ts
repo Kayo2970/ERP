@@ -38,6 +38,9 @@ import {
   initialIncomeSources,
   initialProcurementRequests,
   FEEDBACK_FORM_TEMPLATE_ID,
+  isFacultyMember,
+  isSocialMediaTeamMember,
+  isSocialMediaPostTask,
 } from './local-data';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -613,6 +616,129 @@ function ensureFeedbackFormTemplateSeeded(): Promise<void> {
   return feedbackFormTemplateSeedPromise;
 }
 
+let holidaysAndRatingsCleanedPromise: Promise<void> | null = null;
+function ensureHolidaysAndRatingsCleaned(): Promise<void> {
+  if (!holidaysAndRatingsCleanedPromise) {
+    holidaysAndRatingsCleanedPromise = (async () => {
+      try {
+        const readJsonArray = async (key: keyof DbSchema): Promise<any[] | null> => {
+          const raw = await fs.readFile(collectionPath(key), 'utf-8');
+          const parsed = JSON.parse(raw);
+          let content: any = parsed;
+          if (isEncryptedPayload(parsed)) {
+            try {
+              content = JSON.parse(decryptData(parsed));
+            } catch {
+              return null;
+            }
+          }
+          return Array.isArray(content) ? content : null;
+        };
+
+        const events = await readJsonArray('events');
+        const tasks = await readJsonArray('tasks');
+        const members = await readJsonArray('members');
+        const ratings = await readJsonArray('ratings');
+
+        const normalizeHoliday = (t: string) => (t || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
+
+        // 1. Deduplicate holidays in events
+        const discardedHolidayIds = new Set<string>();
+        if (events && events.length > 0) {
+          let eventsChanged = false;
+          const seenHolidays = new Map<string, any>();
+          for (const ev of events) {
+            const isHoliday = ev.type === 'Holiday' || ev.category === 'Holiday' || ev.id?.startsWith('holiday_');
+            if (isHoliday && ev.date) {
+              const norm = normalizeHoliday(ev.title);
+              const key = `${ev.date}_${norm}`;
+              if (seenHolidays.has(key)) {
+                const existing = seenHolidays.get(key);
+                const hasParens = /\([^)]*\)/.test(ev.title || '');
+                const existingHasParens = /\([^)]*\)/.test(existing.title || '');
+                if (existingHasParens && !hasParens) {
+                  discardedHolidayIds.add(existing.id);
+                  seenHolidays.set(key, ev);
+                } else {
+                  discardedHolidayIds.add(ev.id);
+                }
+                eventsChanged = true;
+              } else {
+                seenHolidays.set(key, ev);
+              }
+            }
+          }
+          if (eventsChanged) {
+            const cleanedEvents = events.filter((ev: any) => !discardedHolidayIds.has(ev.id));
+            await writeCollectionFile('events', cleanedEvents);
+          }
+        }
+
+        // 2. Deduplicate holiday approval tasks and remove orphaned holiday tasks
+        let currentTasks: any[] = tasks || [];
+        if (tasks && tasks.length > 0) {
+          let tasksChanged = false;
+          const seenApprovalTasks = new Map<string, any>();
+          const cleanedTasks: any[] = [];
+
+          for (const t of tasks) {
+            if (discardedHolidayIds.has(t.eventId) || t.id === 'task_holiday_approval_holiday_2026-09-04_janmashtami-smarta') {
+              tasksChanged = true;
+              continue;
+            }
+
+            const isApproval = t.workflowType === 'holiday_social_approval' || (t.title && t.title.toLowerCase().includes('holiday social media post approval'));
+            if (isApproval) {
+              const dateMatch = t.id?.match(/\d{4}-\d{2}-\d{2}/) || (t.deadline ? [t.deadline] : null);
+              const norm = normalizeHoliday(t.title || t.event || '');
+              const key = `${dateMatch ? dateMatch[0] : ''}_${norm}`;
+              if (seenApprovalTasks.has(key)) {
+                tasksChanged = true;
+                continue;
+              }
+              seenApprovalTasks.set(key, t);
+            }
+
+            cleanedTasks.push(t);
+          }
+
+          if (tasksChanged) {
+            currentTasks = cleanedTasks;
+            await writeCollectionFile('tasks', cleanedTasks);
+          }
+        }
+
+        // 3. Prune ratings: faculty can never have ratings, and social media tasks can only rate social media team members
+        if (ratings && ratings.length > 0 && members && members.length > 0) {
+          const memberMap = new Map<string, any>(members.map((m: any) => [m.id, m]));
+          const taskMap = new Map<string, any>(currentTasks.map((t: any) => [t.id, t]));
+
+          const cleanedRatings = ratings.filter((r: any) => {
+            const m = memberMap.get(r.targetId);
+            if (m && isFacultyMember(m)) return false;
+            if (/prof\.|professor|faculty/i.test(r.targetName || '')) return false;
+
+            const t = taskMap.get(r.taskId);
+            if (t && isSocialMediaPostTask(t)) {
+              if (!m || !isSocialMediaTeamMember(m)) return false;
+            }
+            return true;
+          });
+
+          if (cleanedRatings.length !== ratings.length) {
+            await writeCollectionFile('ratings', cleanedRatings);
+          }
+        }
+      } catch (err: any) {
+        if (err?.code !== 'ENOENT') {
+          console.error('[server-db] Holiday and rating cleanup check failed:', err);
+        }
+      }
+    })();
+  }
+  return holidaysAndRatingsCleanedPromise;
+}
+
 async function migrateDesignFilesToDisk(): Promise<void> {
   let designs: any[];
   try {
@@ -689,6 +815,7 @@ async function readCollectionFile<T = any>(key: keyof DbSchema): Promise<T[]> {
   await ensureOrphanedSubmissionsPruned();
   await ensureGroupPlaceholderRatingsRecalculated();
   await ensureFeedbackFormTemplateSeeded();
+  await ensureHolidaysAndRatingsCleaned();
   try {
     const raw = await fs.readFile(collectionPath(key), 'utf-8');
     const parsed = JSON.parse(raw);

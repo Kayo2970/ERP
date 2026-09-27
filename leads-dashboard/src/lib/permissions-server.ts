@@ -543,9 +543,43 @@ export function canEditRating(rating: ServerRating, user: ServerUser, settings: 
 // moduleAccess override clauses are intentionally NOT ported here, per this
 // file's header). ---
 
-/** Check if user is in the Faculty division. Ported from permissions.ts's isFaculty. */
+/** Check if user is in the Faculty division or holds a professor/faculty title. Ported from permissions.ts's isFaculty. */
 export function isFaculty(user: ServerUser): boolean {
-  return !!user && (user as any).division === 'Faculty';
+  if (!user) return false;
+  if ((user as any).division === 'Faculty') return true;
+  const role = ((user as any).role || '').toLowerCase();
+  return role.includes('faculty') || role.includes('professor') || role.includes('prof.');
+}
+
+/** Check if a member belongs to the student Social Media team. Professors/Faculty are strictly excluded. */
+export function isSocialMediaTeamMember(member: { division?: string; department?: string; committee?: string; role?: string; status?: string } | null | undefined): boolean {
+  if (!member || isFaculty(member as ServerUser) || member.status === 'Terminated') return false;
+  const dept = (member.department || '').toLowerCase();
+  const comm = (member.committee || '').toLowerCase();
+  const role = (member.role || '').toLowerCase();
+  return (
+    dept.includes('social media') ||
+    comm.includes('social media') ||
+    role.includes('social media')
+  );
+}
+
+/** Check if a task is a social media posting/design deliverable task. */
+export function isSocialMediaPostTask(task: {
+  title?: string;
+  workflowType?: string;
+  taskCategory?: string;
+  isSocialMediaPost?: boolean;
+  platform?: string;
+} | null | undefined): boolean {
+  if (!task) return false;
+  if (task.workflowType === 'design_social_posting' || task.workflowType === 'holiday_design_social' || task.workflowType === 'event_social_post') {
+    return true;
+  }
+  if (task.isSocialMediaPost === true) return true;
+  if (task.platform === 'instagram' || task.platform === 'linkedin') return true;
+  const title = (task.title || '').toLowerCase();
+  return title.includes('social media') || title.includes('[social media posting]');
 }
 
 /**

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { X, UserPlus, Search } from 'lucide-react';
-import { delegateAutoTask, Member, TaskItem } from '@/lib/local-data';
+import { delegateAutoTask, Member, TaskItem, isFacultyMember, isSocialMediaTeamMember, isSocialMediaPostTask } from '@/lib/local-data';
 
 interface DelegateTaskModalProps {
   isOpen: boolean;
@@ -27,8 +27,11 @@ export function DelegateTaskModal({
 
   if (!isOpen) return null;
 
+  const isSocialTask = isSocialMediaPostTask(task);
   const candidates = members
     .filter(m => m.status !== 'Terminated')
+    .filter(m => !isFacultyMember(m))
+    .filter(m => !isSocialTask || isSocialMediaTeamMember(m))
     .filter(m => !search.trim() || m.name.toLowerCase().includes(search.toLowerCase()) || (m.role || '').toLowerCase().includes(search.toLowerCase()));
 
   const handleClose = () => {

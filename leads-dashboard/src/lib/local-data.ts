@@ -365,6 +365,7 @@ export interface TaskItem {
   // Design Heads evaluation rights on it (see permissions.ts) without
   // relying on a fragile title-string match.
   isDesignDeliverable?: boolean;
+  isSocialMediaPost?: boolean;
   workflowType?: 'design_caption_draft' | 'design_caption_review' | 'design_social_posting'
     | 'holiday_social_approval' | 'holiday_design_social'
     // Auto-created the day an event's dates lapse (see event-social-scheduler.ts) —
@@ -454,6 +455,45 @@ export interface TaskItem {
   acknowledged?: boolean;
   acknowledgedAt?: string;
   acknowledgedByEmail?: string;
+}
+
+/** Check if a member belongs to Faculty or holds a professor title. */
+export function isFacultyMember(member: { division?: string; role?: string } | null | undefined): boolean {
+  if (!member) return false;
+  if (member.division === 'Faculty') return true;
+  const role = (member.role || '').toLowerCase();
+  return role.includes('faculty') || role.includes('professor') || role.includes('prof.');
+}
+
+/** Check if a member belongs to the student Social Media team. Professors/Faculty are strictly excluded. */
+export function isSocialMediaTeamMember(member: { division?: string; department?: string; committee?: string; role?: string; status?: string } | null | undefined): boolean {
+  if (!member || isFacultyMember(member) || member.status === 'Terminated') return false;
+  const dept = (member.department || '').toLowerCase();
+  const comm = (member.committee || '').toLowerCase();
+  const role = (member.role || '').toLowerCase();
+  return (
+    dept.includes('social media') ||
+    comm.includes('social media') ||
+    role.includes('social media')
+  );
+}
+
+/** Check if a task is a social media posting/design deliverable task. */
+export function isSocialMediaPostTask(task: {
+  title?: string;
+  workflowType?: string;
+  taskCategory?: string;
+  isSocialMediaPost?: boolean;
+  platform?: string;
+} | null | undefined): boolean {
+  if (!task) return false;
+  if (task.workflowType === 'design_social_posting' || task.workflowType === 'holiday_design_social' || task.workflowType === 'event_social_post') {
+    return true;
+  }
+  if (task.isSocialMediaPost === true) return true;
+  if (task.platform === 'instagram' || task.platform === 'linkedin') return true;
+  const title = (task.title || '').toLowerCase();
+  return title.includes('social media') || title.includes('[social media posting]');
 }
 
 export interface TaskDelegationEvent {
@@ -3407,32 +3447,33 @@ export function respondToHolidayApproval(taskId: string, approved: boolean, acto
   );
 
   if (approved) {
-    const members = getMembers().filter(m => m.status !== 'Terminated');
-    const matches = members.filter(m => {
-      const role = (m.role || '').toLowerCase();
-      return role.includes('design head') || role.includes('social media head');
-    });
-    const pool = matches.length > 0 ? matches : members.filter(m => m.tier <= 2);
-
-    addTask({
-      title: `Design & post content for "${task.event || task.title}"`,
-      event: task.event,
-      eventId: task.eventId,
-      assignee: pool.map(m => m.name).join(', ') || 'Design Head',
-      assigneeType: 'group',
-      assigneeIds: pool.map(m => m.id),
-      dueDate: task.dueDate,
-      creatorName: actorName,
-      workflowType: 'holiday_design_social',
-      // Flag this as a real Design Task, not a general one — without this
-      // it never showed up in the Design Portal's "Design Task Requests"
-      // queue, so whoever picked it up had no way to submit a design
-      // against it: they could only upload a disconnected standalone
-      // design with no sourceTaskId, leaving this task orphaned forever
-      // (never auto-completed) instead of linked to the resulting design.
-      taskCategory: 'design',
-      briefDescription: `Create and post social media content for "${task.event || task.title}". Submit the design asset here once ready.`,
-    });
+    const existing = getTasks().find(t =>
+      t.workflowType === 'holiday_design_social' &&
+      ((t.eventId && t.eventId === task.eventId) || (t.event && t.event === task.event))
+    );
+    if (!existing) {
+      const pool = resolveSocialPostingAssignees();
+      addTask({
+        title: `Design & post content for "${task.event || task.title}"`,
+        event: task.event,
+        eventId: task.eventId,
+        assignee: pool.map(m => m.name).join(', ') || 'Social Media Team (Unassigned)',
+        assigneeType: 'group',
+        assigneeIds: pool.map(m => m.id),
+        dueDate: task.dueDate,
+        creatorName: actorName,
+        workflowType: 'holiday_design_social',
+        isSocialMediaPost: true,
+        // Flag this as a real Design Task, not a general one — without this
+        // it never showed up in the Design Portal's "Design Task Requests"
+        // queue, so whoever picked it up had no way to submit a design
+        // against it: they could only upload a disconnected standalone
+        // design with no sourceTaskId, leaving this task orphaned forever
+        // (never auto-completed) instead of linked to the resulting design.
+        taskCategory: 'design',
+        briefDescription: `Create and post social media content for "${task.event || task.title}". Submit the design asset here once ready.`,
+      });
+    }
   }
 
   return getTasks().find(t => t.id === taskId) || null;
@@ -3760,6 +3801,8 @@ function propagateCommitteeRating(task: TaskItem, parentRating: RatingItem): voi
   committee.memberIds.forEach(mId => {
     const memberObj = members.find(m => m.id === mId || m.name.toLowerCase() === mId.toLowerCase());
     if (!memberObj) return;
+    if (isFacultyMember(memberObj)) return;
+    if (isSocialMediaPostTask(task) && !isSocialMediaTeamMember(memberObj)) return;
 
     // Scoped to the SAME reviewer role: a second reviewer (e.g. the GG Head,
     // fanning out after the Centre Head already rated this committee) must
@@ -3835,6 +3878,8 @@ function propagateGroupRating(task: TaskItem, parentRating: RatingItem): void {
   task.assigneeIds.forEach(mId => {
     const memberObj = members.find(m => m.id === mId);
     if (!memberObj) return;
+    if (isFacultyMember(memberObj)) return;
+    if (isSocialMediaPostTask(task) && !isSocialMediaTeamMember(memberObj)) return;
 
     // Same same-reviewer-role scoping as propagateCommitteeRating above.
     const existingIdx = ratings.findIndex(
@@ -3890,6 +3935,20 @@ function propagateGroupRating(task: TaskItem, parentRating: RatingItem): void {
 }
 
 export function addRating(rating: Omit<RatingItem, 'id' | 'createdAt'>): RatingItem {
+  const members = getMembers();
+  const targetMember = members.find(m => m.id === rating.targetId || m.name.toLowerCase() === rating.targetName.toLowerCase());
+  if ((targetMember && isFacultyMember(targetMember)) || /prof\.|professor|faculty/i.test(rating.targetName)) {
+    throw new Error('Professors and faculty members cannot receive performance ratings.');
+  }
+  if (rating.taskId) {
+    const task = getTasks().find(t => t.id === rating.taskId);
+    if (task && isSocialMediaPostTask(task)) {
+      if (!targetMember || !isSocialMediaTeamMember(targetMember)) {
+        throw new Error('Only student members of the Social Media team can be evaluated for social media posts.');
+      }
+    }
+  }
+
   const ratings = getRatings();
   const newRating: RatingItem = {
     ...rating,
@@ -3975,7 +4034,7 @@ export interface StudentProfileData {
 export function getStudentProfile(memberIdOrName: string): StudentProfileData | null {
   const members = getMembers();
   const member = members.find(m => m.id === memberIdOrName || m.name.toLowerCase() === memberIdOrName.toLowerCase());
-  if (!member) return null;
+  if (!member || isFacultyMember(member)) return null;
 
   const events = getEvents();
   const assignedEvents: { event: EventItem; committee: EventCommittee }[] = [];
@@ -5195,17 +5254,14 @@ export function resolveDesignReviewer(): { id: string; name: string; email: stri
  * the roster currently holds none of those titles, so the task is never
  * left orphaned with no one able to see it.
  */
+/**
+ * Resolves the member pool assigned to social-media posting tasks.
+ * Strictly limited to student members of the Social Media team.
+ * Non-social-media members and Professors/Faculty are strictly excluded.
+ */
 export function resolveSocialPostingAssignees(members?: Member[]): Member[] {
   const all = (members || getMembers()).filter(m => m.status !== 'Terminated');
-  const matches = all.filter(m => {
-    const role = (m.role || '').toLowerCase();
-    const isDesignOrSocialMediaHead = role.includes('design head')
-      || role.includes('social media head')
-      || (role.includes('design') && role.includes('social media') && role.includes('head'));
-    const isSeniorHead = role.includes('senior') && role.includes('head');
-    return isDesignOrSocialMediaHead || isSeniorHead;
-  });
-  return matches.length > 0 ? matches : all.filter(m => m.tier <= 2);
+  return all.filter(m => isSocialMediaTeamMember(m));
 }
 
 export async function addDesign(design: Omit<DesignSubmissionItem, 'id' | 'submittedAt' | 'expiresAt' | 'isExpired'>, onProgress?: UploadProgressCallback): Promise<DesignSubmissionItem> {
@@ -5445,47 +5501,71 @@ export function reviewDesignCaptions(designId: string, approved: boolean, commen
   if (approved) {
     const dueDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-    // Posting is always routed to the Design Head/Social Media Head/Senior
-    // Head group by default, never to whoever happened to submit or design
-    // the asset — see resolveSocialPostingAssignees's doc comment.
+    // Posting is strictly routed to the Social Media team pool.
+    // Non-team members and Faculty are strictly excluded.
     const postingPool = resolveSocialPostingAssignees();
     const postingAssignee = {
-      assignee: postingPool.map(m => m.name).join(', ') || 'Design Head',
+      assignee: postingPool.map(m => m.name).join(', ') || 'Social Media Team (Unassigned)',
       assigneeType: 'group' as const,
       assigneeIds: postingPool.map(m => m.id),
     };
 
-    // Two separate tasks, one per platform, each independently assignable
-    // and markable complete — not one combined task for both.
-    const instaTask = addTask({
-      title: `[Social Media Posting] Post on Instagram: ${design.title}`,
-      event: design.eventName || undefined,
-      eventId: design.eventId || undefined,
-      ...postingAssignee,
-      dueDate,
-      status: 'In Progress',
-      creatorName: actorName,
-      isDesignDeliverable: true,
-      workflowType: 'design_social_posting',
-      platform: 'instagram',
-      designId: design.id,
-      approvedInstagramCaption: design.draftInstagramCaption,
-    });
+    // Idempotent: check if platform posting tasks already exist for this design
+    const existingTasks = getTasks();
+    const existingInsta = existingTasks.find(t =>
+      (design.postingInstagramTaskId && t.id === design.postingInstagramTaskId) ||
+      (t.designId === design.id && t.workflowType === 'design_social_posting' && t.platform === 'instagram')
+    );
+    const existingLinkedin = existingTasks.find(t =>
+      (design.postingLinkedinTaskId && t.id === design.postingLinkedinTaskId) ||
+      (t.designId === design.id && t.workflowType === 'design_social_posting' && t.platform === 'linkedin')
+    );
 
-    const linkedinTask = addTask({
-      title: `[Social Media Posting] Post on LinkedIn: ${design.title}`,
-      event: design.eventName || undefined,
-      eventId: design.eventId || undefined,
-      ...postingAssignee,
-      dueDate,
-      status: 'In Progress',
-      creatorName: actorName,
-      isDesignDeliverable: true,
-      workflowType: 'design_social_posting',
-      platform: 'linkedin',
-      designId: design.id,
-      approvedLinkedinCaption: design.draftLinkedinCaption,
-    });
+    const instaTask = existingInsta
+      ? (updateTask(existingInsta.id, {
+          status: 'In Progress',
+          dueDate,
+          ...postingAssignee,
+          approvedInstagramCaption: design.draftInstagramCaption,
+        }, actorName) || existingInsta)
+      : addTask({
+          title: `[Social Media Posting] Post on Instagram: ${design.title}`,
+          event: design.eventName || undefined,
+          eventId: design.eventId || undefined,
+          ...postingAssignee,
+          dueDate,
+          status: 'In Progress',
+          creatorName: actorName,
+          isDesignDeliverable: true,
+          isSocialMediaPost: true,
+          workflowType: 'design_social_posting',
+          platform: 'instagram',
+          designId: design.id,
+          approvedInstagramCaption: design.draftInstagramCaption,
+        });
+
+    const linkedinTask = existingLinkedin
+      ? (updateTask(existingLinkedin.id, {
+          status: 'In Progress',
+          dueDate,
+          ...postingAssignee,
+          approvedLinkedinCaption: design.draftLinkedinCaption,
+        }, actorName) || existingLinkedin)
+      : addTask({
+          title: `[Social Media Posting] Post on LinkedIn: ${design.title}`,
+          event: design.eventName || undefined,
+          eventId: design.eventId || undefined,
+          ...postingAssignee,
+          dueDate,
+          status: 'In Progress',
+          creatorName: actorName,
+          isDesignDeliverable: true,
+          isSocialMediaPost: true,
+          workflowType: 'design_social_posting',
+          platform: 'linkedin',
+          designId: design.id,
+          approvedLinkedinCaption: design.draftLinkedinCaption,
+        });
 
     design.approvedInstagramCaption = design.draftInstagramCaption;
     design.approvedLinkedinCaption = design.draftLinkedinCaption;
