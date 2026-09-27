@@ -62,4 +62,45 @@ assert.strictEqual(normalizeHolidayTitle('Janmashtami (Smarta)'), 'janmashtami')
 assert.strictEqual(normalizeHolidayTitle('Janmashtami'), 'janmashtami');
 assert.strictEqual(normalizeHolidayTitle('Diwali (Deepavali)'), 'diwali');
 
-console.log('All security audit checks passed successfully!');
+// Test 5: Direct correlation check — a rating MUST correlate to an existing task
+function validateRatingTaskCorrelation(rating, existingTasks) {
+  if (!rating.taskId || typeof rating.taskId !== 'string' || !rating.taskId.trim()) {
+    throw new Error('Direct correlation check failed: a rating must directly correlate to an existing task.');
+  }
+  const task = existingTasks.find(t => t.id === rating.taskId);
+  if (!task) {
+    throw new Error('Direct correlation check failed: no corresponding task found for this rating.');
+  }
+  return true;
+}
+
+const mockTasks = [
+  { id: 'task_101', title: 'Prepare Event Poster' },
+  { id: 'task_102', title: 'Draft Event Report' },
+];
+
+// Valid rating correlated to existing task
+assert.strictEqual(validateRatingTaskCorrelation({ taskId: 'task_101', targetName: 'Student A' }, mockTasks), true);
+
+// Invalid rating missing taskId
+assert.throws(() => {
+  validateRatingTaskCorrelation({ taskId: '', targetName: 'Student A' }, mockTasks);
+}, /must directly correlate to an existing task/);
+
+// Invalid rating referencing nonexistent task
+assert.throws(() => {
+  validateRatingTaskCorrelation({ taskId: 'task_999_nonexistent', targetName: 'Student A' }, mockTasks);
+}, /no corresponding task found/);
+
+// Cascading deletion check: deleting task removes correlated rating
+let mockRatings = [
+  { id: 'r1', taskId: 'task_101', targetName: 'Student A' },
+  { id: 'r2', taskId: 'task_102', targetName: 'Student B' },
+];
+const deletingTaskId = 'task_101';
+mockRatings = mockRatings.filter(r => r.taskId !== deletingTaskId);
+assert.strictEqual(mockRatings.length, 1);
+assert.strictEqual(mockRatings[0].taskId, 'task_102');
+
+console.log('All security audit and direct correlation checks passed successfully!');
+

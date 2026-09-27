@@ -7,8 +7,14 @@ import { apiError } from '@/lib/api-error';
 export async function GET(request: Request) {
   try {
     await requireSession(request);
-    const items = await readCollection('ratings');
-    return NextResponse.json(items);
+    const [items, tasks] = await Promise.all([
+      readCollection<any>('ratings'),
+      readCollection<any>('tasks'),
+    ]);
+    const validTaskIds = new Set(tasks.map((t: any) => t.id));
+    // Direct correlation check: only return ratings correlated to an existing task
+    const correlated = items.filter((r: any) => r.taskId && validTaskIds.has(r.taskId));
+    return NextResponse.json(correlated);
   } catch (err: any) {
     return apiError(err, 'ratings-api-get', 500);
   }
@@ -21,18 +27,25 @@ export async function POST(request: Request) {
     requirePermission(await canEvaluateEventStudent(actor, settings), 'You do not have permission to submit ratings.');
     const item = await request.json();
 
+    // Direct correlation check: every rating MUST correlate directly to an existing task
+    if (!item.taskId || typeof item.taskId !== 'string' || !item.taskId.trim()) {
+      return NextResponse.json({ error: 'Direct correlation check failed: a rating must directly correlate to an existing task.' }, { status: 400 });
+    }
+    const tasks = await readCollection<any>('tasks');
+    const task = tasks.find((t: any) => t.id === item.taskId);
+    if (!task) {
+      return NextResponse.json({ error: 'Direct correlation check failed: no corresponding task found for this rating.' }, { status: 400 });
+    }
+
     const members = await readCollection<any>('members');
     const targetMember = members.find((m: any) => m.id === item.targetId || (m.name && m.name.toLowerCase() === (item.targetName || '').toLowerCase()));
     if ((targetMember && isFaculty(targetMember)) || /prof\.|professor|faculty/i.test(item.targetName || '')) {
       return NextResponse.json({ error: 'Professors and faculty members cannot receive performance ratings.' }, { status: 400 });
     }
-    if (item.taskId) {
-      const tasks = await readCollection<any>('tasks');
-      const task = tasks.find((t: any) => t.id === item.taskId);
-      if (task && isSocialMediaPostTask(task)) {
-        if (!targetMember || !isSocialMediaTeamMember(targetMember)) {
-          return NextResponse.json({ error: 'Only student members of the Social Media team can be evaluated for social media posts.' }, { status: 400 });
-        }
+
+    if (isSocialMediaPostTask(task)) {
+      if (!targetMember || !isSocialMediaTeamMember(targetMember)) {
+        return NextResponse.json({ error: 'Only student members of the Social Media team can be evaluated for social media posts.' }, { status: 400 });
       }
     }
 

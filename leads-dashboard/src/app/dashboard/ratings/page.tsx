@@ -206,7 +206,7 @@ export default function RatingsPage() {
     setFormError('');
 
     if (!selectedTask && !editingRating) {
-      setFormError('Task selection is mandatory. Performance ratings must be evaluated against a specific task deliverable.');
+      setFormError('Direct correlation check failed: Task selection is mandatory. Every rating must correlate directly to an active task deliverable.');
       return;
     }
 
@@ -236,6 +236,11 @@ export default function RatingsPage() {
     const legacy = projectLegacyRatingFields(activeCriteriaSet, scores);
 
     if (editingRating) {
+      const correlatedTask = tasks.find(t => t.id === editingRating.taskId);
+      if (!correlatedTask) {
+        setFormError('Direct correlation check failed: the task associated with this rating no longer exists.');
+        return;
+      }
       updateRating(editingRating.id, {
         criteriaSet: activeCriteriaSet,
         scores,
@@ -420,6 +425,9 @@ export default function RatingsPage() {
 
   // Filtered ratings history
   const filteredRatingsHistory = ratings.filter(r => {
+    // Direct correlation check: if there is not any task, then it makes no sense that there would be a rating for said task!
+    if (!r.taskId || !tasks.some(t => t.id === r.taskId)) return false;
+
     // Committee/group bookkeeping rows are keyed by the committee/group's
     // placeholder name, not a real person — never list them as a scorecard.
     // The real per-student rows (created by the propagate* fan-out) are

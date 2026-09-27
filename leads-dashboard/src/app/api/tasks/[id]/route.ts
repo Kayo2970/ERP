@@ -149,6 +149,10 @@ export async function DELETE(
     // Purge any pending/tracked approval requests for this deleted task
     await deleteLinkedApprovalRequests('task', id);
 
+    // Direct correlation check: if a task is deleted, purge any correlated ratings —
+    // if there is not any task, then it makes no sense that there would be a rating for said task.
+    await mutateCollection('ratings', (current) => current.filter((r: any) => r.taskId !== id));
+
     // Deleting a scheduler-generated task is a deliberate "no, don't ask about
     // this one" — without this, the next scheduler run sees the event still
     // there and no task for it, and recreates the exact task the user just

@@ -72,7 +72,8 @@ export default function DashboardHome() {
       const studentRanks = getStudentLeaderboard();
       setLeaderboard(studentRanks.slice(0, 5));
 
-      const ratingsList = getRatings();
+      const validTaskIds = new Set(allTasks.map(t => t.id));
+      const ratingsList = getRatings().filter(r => r.taskId && validTaskIds.has(r.taskId));
       setHasRatings(ratingsList.length > 0);
       if (ratingsList.length > 0) {
         const totalScore = ratingsList.reduce((acc, r) => acc + r.overallScore, 0);
@@ -191,7 +192,8 @@ export default function DashboardHome() {
 
   const scorePercentage = Math.min(100, Math.max(0, (overallAvgScore / 5.0) * 100));
 
-  const ratingsList = getRatings();
+  const validTaskIds = new Set(tasks.map(t => t.id));
+  const ratingsList = getRatings().filter(r => r.taskId && validTaskIds.has(r.taskId));
   const performanceBreakdown = hasRatings
     ? `Average of ${ratingsList.length} evaluation${ratingsList.length === 1 ? '' : 's'} across ${new Set(ratingsList.map(r => r.targetId)).size} member(s), on a 5.0 scale covering quality, timeliness, initiative, and collaboration.`
     : 'No evaluations submitted yet — visit Ratings to score task deliverables.';

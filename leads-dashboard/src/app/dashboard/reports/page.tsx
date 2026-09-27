@@ -16,7 +16,7 @@ import {
   Radar,
   Cell
 } from 'recharts';
-import { getRatings, getMembers, getEvents, RatingItem, Member, EventItem } from '@/lib/local-data';
+import { getRatings, getMembers, getEvents, getTasks, RatingItem, Member, EventItem, TaskItem } from '@/lib/local-data';
 import { getRatingColor } from '@/lib/design-tokens';
 import { canViewRating, isFaculty, isSocialMediaTeamMember } from '@/lib/permissions';
 import { generatePerformanceReportPdf, ReportType, CapturedChartImage } from '@/lib/report-generator';
@@ -30,6 +30,7 @@ export default function ReportsPage() {
   const [ratings, setRatings] = useState<RatingItem[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [user, setUser] = useState<any>(null);
   const [selectedDivision, setSelectedDivision] = useState<string>('ALL');
   const [selectedTarget, setSelectedTarget] = useState('All');
@@ -52,6 +53,7 @@ export default function ReportsPage() {
       setRatings(getRatings());
       setMembers(getMembers());
       setEvents(getEvents());
+      setTasks(getTasks());
     };
     refreshData();
 
@@ -74,6 +76,9 @@ export default function ReportsPage() {
 
   // Filter ratings based on viewer's access, then selected division, target member, and time period
   const rawFilteredRatings = ratings.filter(r => {
+    // Direct correlation check: if there is not any task, then it makes no sense that there would be a rating for said task!
+    if (!r.taskId || !tasks.some(t => t.id === r.taskId)) return false;
+
     // Committee/group bookkeeping rows are keyed by the committee/group's
     // placeholder name, not a real person — exclude them everywhere here so
     // a committee/group never shows up as if it were a rated individual.
@@ -214,6 +219,8 @@ export default function ReportsPage() {
   const targets = Array.from(new Set(
     ratings
       .filter(r => {
+        // Direct correlation check: if there is not any task, then it makes no sense that there would be a rating for said task!
+        if (!r.taskId || !tasks.some(t => t.id === r.taskId)) return false;
         if (r.isGroupPlaceholder) return false;
         const targetMember = members.find(m => m.id === r.targetId || m.name.toLowerCase() === r.targetName.toLowerCase());
         if (targetMember && isFaculty(targetMember)) return false;

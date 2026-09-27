@@ -3487,6 +3487,12 @@ export function deleteTask(id: string, actorName: string): boolean {
   const updated = tasks.filter(t => t.id !== id);
   saveTasks(updated);
   removeApprovalRequestsForEntity('task', id);
+
+  // Direct correlation check: if a task is deleted, purge any correlated ratings —
+  // if there is not any task, then it makes no sense that there would be a rating for said task.
+  const remainingRatings = getRatings().filter(r => r.taskId !== id);
+  saveRatings(remainingRatings);
+
   serverDelete('/api/tasks', id);
   logAuditEvent('TASK_DELETED', actorName, `Deleted task: ${target.title}`);
   return true;
@@ -3935,17 +3941,23 @@ function propagateGroupRating(task: TaskItem, parentRating: RatingItem): void {
 }
 
 export function addRating(rating: Omit<RatingItem, 'id' | 'createdAt'>): RatingItem {
+  // Direct correlation check: every rating MUST directly correlate to an existing task
+  if (!rating.taskId || typeof rating.taskId !== 'string' || !rating.taskId.trim()) {
+    throw new Error('Direct correlation check failed: a rating must directly correlate to an existing task.');
+  }
+  const task = getTasks().find(t => t.id === rating.taskId);
+  if (!task) {
+    throw new Error('Direct correlation check failed: no corresponding task found for this rating.');
+  }
+
   const members = getMembers();
   const targetMember = members.find(m => m.id === rating.targetId || m.name.toLowerCase() === rating.targetName.toLowerCase());
   if ((targetMember && isFacultyMember(targetMember)) || /prof\.|professor|faculty/i.test(rating.targetName)) {
     throw new Error('Professors and faculty members cannot receive performance ratings.');
   }
-  if (rating.taskId) {
-    const task = getTasks().find(t => t.id === rating.taskId);
-    if (task && isSocialMediaPostTask(task)) {
-      if (!targetMember || !isSocialMediaTeamMember(targetMember)) {
-        throw new Error('Only student members of the Social Media team can be evaluated for social media posts.');
-      }
+  if (isSocialMediaPostTask(task)) {
+    if (!targetMember || !isSocialMediaTeamMember(targetMember)) {
+      throw new Error('Only student members of the Social Media team can be evaluated for social media posts.');
     }
   }
 
@@ -4059,9 +4071,12 @@ export function getStudentProfile(memberIdOrName: string): StudentProfileData | 
     return false;
   });
 
+  const validTaskIds = new Set(allTasks.map(t => t.id));
   const allRatings = getRatings();
   const memberRatings = allRatings.filter(r =>
     !r.isGroupPlaceholder &&
+    r.taskId &&
+    validTaskIds.has(r.taskId) &&
     (r.targetId === member.id || r.targetName.toLowerCase() === member.name.toLowerCase())
   );
 
@@ -4129,7 +4144,15 @@ export function getStudentLeaderboard(): {
   // Excludes committee/group placeholder rows (see RatingItem.isGroupPlaceholder)
   // so the same evaluation isn't counted once for the placeholder AND again
   // for every student it was fanned out to, which would skew this baseline.
-  const cycleRatings = getRatings().filter(r => !r.isGroupPlaceholder && isWithinCurrentScoringCycle(r.createdAt, now));
+  // Direct correlation check: only count ratings correlated to an existing task.
+  const allCurrentTasks = getTasks();
+  const validCycleTaskIds = new Set(allCurrentTasks.map(t => t.id));
+  const cycleRatings = getRatings().filter(r =>
+    !r.isGroupPlaceholder &&
+    r.taskId &&
+    validCycleTaskIds.has(r.taskId) &&
+    isWithinCurrentScoringCycle(r.createdAt, now)
+  );
 
   // Org-wide baseline for the confidence weighting below — the mean overall
   // score across every in-cycle rating. Falls back to the neutral midpoint

@@ -708,12 +708,19 @@ function ensureHolidaysAndRatingsCleaned(): Promise<void> {
           }
         }
 
-        // 3. Prune ratings: faculty can never have ratings, and social media tasks can only rate social media team members
-        if (ratings && ratings.length > 0 && members && members.length > 0) {
-          const memberMap = new Map<string, any>(members.map((m: any) => [m.id, m]));
+        // 3. Prune ratings:
+        // Direct correlation check: if there is not any task, then it makes no sense that there would be a rating for said task!
+        // Every rating must directly correlate to an existing task in tasks collection.
+        // Also prune ratings where target is faculty, or social media tasks where target is not in social media team.
+        if (ratings && ratings.length > 0) {
+          const memberList = members || [];
+          const memberMap = new Map<string, any>(memberList.map((m: any) => [m.id, m]));
           const taskMap = new Map<string, any>(currentTasks.map((t: any) => [t.id, t]));
 
           const cleanedRatings = ratings.filter((r: any) => {
+            // Direct correlation check: a rating must directly correlate to an existing task
+            if (!r.taskId || !taskMap.has(r.taskId)) return false;
+
             const m = memberMap.get(r.targetId);
             if (m && isFacultyMember(m)) return false;
             if (/prof\.|professor|faculty/i.test(r.targetName || '')) return false;
