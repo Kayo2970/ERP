@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Palette,
   UploadCloud,
@@ -28,7 +28,9 @@ import {
   RefreshCw,
   GraduationCap,
   Check,
-  ExternalLink
+  ExternalLink,
+  Link2,
+  Pencil
 } from 'lucide-react';
 import { FileDropzone, FilePreviewRow, createProgressTracker } from '@/components/ui/file-dropzone';
 import { RequestApprovalModal } from '@/components/request-approval-modal';
@@ -45,6 +47,7 @@ import {
   isApprovedEvent,
   addEvent,
   getTasks,
+  updateTask,
   isTaskAssignee,
   submitDesignCaptions,
   reviewDesignCaptions,
@@ -58,7 +61,8 @@ import {
   OcrScanResult,
   authHeaders
 } from '@/lib/local-data';
-import { canViewAllDesigns, isDesignHead, isCentreHead, hasCapability, canReviewDesignProofread } from '@/lib/permissions';
+import { canViewAllDesigns, isDesignHead, isCentreHead, canManageCanvaLibrary, hasCapability, canReviewDesignProofread } from '@/lib/permissions';
+import { parseCsvLine, splitCsvLines, toCsvRow, downloadCsv } from '@/lib/csv';
 
 /** Renders an OCR scan's flagged spelling issues + extracted text preview. Advisory only. */
 function OcrScanPanel({
@@ -196,9 +200,20 @@ export default function DesignPortalPage() {
   const [user, setUser] = useState<any>(null);
 
   // Filter & Search states
-  const [activeTab, setActiveTab] = useState<'all' | 'mine' | 'proofread' | 'expired'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'mine' | 'proofread' | 'expired' | 'canva'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Canva Link Library (Design Head / Centre Head / Advisor / Super User only
+  // — see canManageCanvaLibrary in permissions.ts): a standalone directory of
+  // every design-brief task's Canva reference link, editable here and kept in
+  // sync with the Tasks module because both read/write the same
+  // TaskItem.canvaLink field via updateTask/getTasks.
+  const [canvaSearchQuery, setCanvaSearchQuery] = useState<string>('');
+  const [editingCanvaTaskId, setEditingCanvaTaskId] = useState<string>('');
+  const [editingCanvaValue, setEditingCanvaValue] = useState<string>('');
+  const [canvaImportSummary, setCanvaImportSummary] = useState<string>('');
+  const canvaCsvInputRef = useRef<HTMLInputElement>(null);
 
   // Modals
   const [showUploadModal, setShowUploadModal] = useState<boolean>(false);
@@ -772,6 +787,122 @@ export default function DesignPortalPage() {
     return diffDays;
   };
 
+  // Canva Link Library — every design-brief task (Tasks module,
+  // taskCategory === 'design'), whether or not it has a Canva link yet, so
+  // the Design Head can see what's still missing one. This is the exact same
+  // `tasks` array the Tasks page renders and edits, so a link added/edited
+  // here shows up there immediately (and vice versa) via the shared
+  // `leads-data-sync` event updateTask/saveTasks already dispatch.
+  const canvaLibraryTasks = tasks
+    .filter(t => t.taskCategory === 'design')
+    .sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''));
+
+  const filteredCanvaTasks = canvaLibraryTasks.filter(t => {
+    const q = canvaSearchQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      t.title.toLowerCase().includes(q) ||
+      (t.event || '').toLowerCase().includes(q) ||
+      (t.assignee || '').toLowerCase().includes(q) ||
+      (t.canvaLink || '').toLowerCase().includes(q)
+    );
+  });
+
+  const handleStartEditCanvaLink = (task: TaskItem) => {
+    setCanvaImportSummary('');
+    setEditingCanvaTaskId(task.id);
+    setEditingCanvaValue(task.canvaLink || '');
+  };
+
+  const handleCancelEditCanvaLink = () => {
+    setEditingCanvaTaskId('');
+    setEditingCanvaValue('');
+  };
+
+  const handleSaveCanvaLink = (taskId: string) => {
+    if (!canManageCanvaLibrary(user)) return;
+    updateTask(taskId, { canvaLink: editingCanvaValue.trim() || undefined }, user?.name || 'User');
+    setEditingCanvaTaskId('');
+    setEditingCanvaValue('');
+    refreshData();
+  };
+
+  const handleExportCanvaCsv = () => {
+    const header = toCsvRow(['Task ID', 'Title', 'Event', 'Assignee', 'Due Date', 'Status', 'Canva Link', 'Brief Description']);
+    const rows = canvaLibraryTasks.map(t => toCsvRow([
+      t.id,
+      t.title,
+      t.event || '',
+      t.assignee || '',
+      t.dueDate || '',
+      t.status,
+      t.canvaLink || '',
+      t.briefDescription || '',
+    ]));
+    downloadCsv(`canva_link_library_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows].join('\n'));
+  };
+
+  const handleCanvaCsvUploadClick = () => {
+    canvaCsvInputRef.current?.click();
+  };
+
+  // Import only ever touches the Canva Link column of an EXISTING
+  // design-brief task, matched by its Task ID (the column the export above
+  // produces) — it never creates, deletes, or reassigns a task, so a bad or
+  // stray CSV can't do anything worse than leave a link unchanged.
+  const handleCanvaCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !canManageCanvaLibrary(user)) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (!text) return;
+
+      try {
+        const lines = splitCsvLines(text);
+        if (lines.length < 2) {
+          setCanvaImportSummary('CSV file is empty or missing headers.');
+          return;
+        }
+
+        const headers = parseCsvLine(lines[0]).map(h => h.toLowerCase().trim());
+        const idIndex = headers.indexOf('task id');
+        const linkIndex = headers.indexOf('canva link');
+        if (idIndex === -1 || linkIndex === -1) {
+          setCanvaImportSummary('Invalid CSV headers. Required columns: "Task ID" and "Canva Link" — export the library first to get a file in the right format.');
+          return;
+        }
+
+        const currentTasks = getTasks();
+        let updated = 0;
+        let skipped = 0;
+        for (let i = 1; i < lines.length; i++) {
+          const values = parseCsvLine(lines[i]);
+          const taskId = values[idIndex]?.trim();
+          const link = values[linkIndex]?.trim() || '';
+          const match = taskId ? currentTasks.find(t => t.id === taskId && t.taskCategory === 'design') : undefined;
+          if (!match) {
+            skipped++;
+            continue;
+          }
+          updateTask(taskId, { canvaLink: link || undefined }, user?.name || 'User');
+          updated++;
+        }
+
+        setCanvaImportSummary(
+          `Imported ${updated} Canva link${updated === 1 ? '' : 's'}.` +
+          (skipped > 0 ? ` Skipped ${skipped} row${skipped === 1 ? '' : 's'} with no matching design task.` : '')
+        );
+        refreshData();
+      } catch {
+        setCanvaImportSummary('Failed to parse CSV file — check it matches the exported format.');
+      }
+    };
+    reader.readAsText(file);
+  };
+
   // Filtered designs
   const filteredDesigns = designs.filter(d => {
     // Search
@@ -1061,39 +1192,226 @@ export default function DesignPortalPage() {
           >
             30d Expired ({expiredCount})
           </button>
+
+          {/* Restricted to Design Head / Centre Head / Advisor / Super User —
+              see canManageCanvaLibrary in permissions.ts. */}
+          {canManageCanvaLibrary(user) && (
+            <button
+              onClick={() => setActiveTab('canva')}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                activeTab === 'canva'
+                  ? 'bg-accent text-white shadow-md shadow-accent/20'
+                  : 'text-theme-text-secondary hover:bg-white/40 dark:hover:bg-white/5 hover:text-theme-text-primary'
+              }`}
+            >
+              <Link2 className="h-3.5 w-3.5" />
+              Canva Link Library
+            </button>
+          )}
         </div>
 
-        {/* Search & Category Filter */}
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1 sm:w-48">
+        {/* Search & Category Filter — hidden on the Canva Link Library tab,
+            which has its own search below */}
+        {activeTab !== 'canva' && (
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 sm:w-48">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-theme-text-secondary" />
+              <input
+                type="text"
+                placeholder="Search design title..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl bg-white/40 dark:bg-white/5 border border-theme-border/30 text-theme-text-primary placeholder:text-theme-text-secondary focus:outline-none focus:border-accent"
+              />
+            </div>
+
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="px-3 py-1.5 text-xs rounded-xl bg-white/40 dark:bg-white/5 border border-theme-border/30 text-theme-text-primary focus:outline-none focus:border-accent cursor-pointer"
+            >
+              <option value="ALL">All Categories</option>
+              <option value="Poster">Poster</option>
+              <option value="Banner">Banner</option>
+              <option value="Social Media Post">Social Media Post</option>
+              <option value="ID Card / Certificate">ID Card / Certificate</option>
+              <option value="Brochure">Brochure</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        )}
+      </div>
+
+      {activeTab === 'canva' && canManageCanvaLibrary(user) ? (
+        <div className="glass-panel rounded-3xl p-5 md:p-6 border border-white/20 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-theme-text-primary flex items-center gap-2">
+                <Link2 className="h-4 w-4 text-accent" />
+                Canva Link Library
+              </h2>
+              <p className="text-[11px] text-theme-text-secondary max-w-md">
+                Every design-brief task's Canva reference link in one place — restricted to the Design Head, Centre Head, Advisor, and Super User.
+                Editing a link here updates the same task shown in the Tasks module, and vice versa.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={handleExportCanvaCsv}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/40 dark:bg-white/5 border border-theme-border/30 hover:border-accent/50 text-theme-text-primary text-xs font-bold transition-all cursor-pointer"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Export CSV
+              </button>
+              <button
+                onClick={handleCanvaCsvUploadClick}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-accent hover:bg-primary-light text-white text-xs font-bold transition-all cursor-pointer"
+              >
+                <UploadCloud className="h-3.5 w-3.5" />
+                Import CSV
+              </button>
+              <input
+                ref={canvaCsvInputRef}
+                type="file"
+                accept=".csv"
+                className="hidden"
+                onChange={handleCanvaCsvFileChange}
+              />
+            </div>
+          </div>
+
+          {canvaImportSummary && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-accent/10 border border-accent/25 text-xs text-theme-text-primary">
+              <FileCheck className="h-3.5 w-3.5 text-accent shrink-0" />
+              {canvaImportSummary}
+            </div>
+          )}
+
+          <div className="relative sm:w-72">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-theme-text-secondary" />
             <input
               type="text"
-              placeholder="Search design title..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by title, event, or assignee..."
+              value={canvaSearchQuery}
+              onChange={(e) => setCanvaSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl bg-white/40 dark:bg-white/5 border border-theme-border/30 text-theme-text-primary placeholder:text-theme-text-secondary focus:outline-none focus:border-accent"
             />
           </div>
 
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="px-3 py-1.5 text-xs rounded-xl bg-white/40 dark:bg-white/5 border border-theme-border/30 text-theme-text-primary focus:outline-none focus:border-accent cursor-pointer"
-          >
-            <option value="ALL">All Categories</option>
-            <option value="Poster">Poster</option>
-            <option value="Banner">Banner</option>
-            <option value="Social Media Post">Social Media Post</option>
-            <option value="ID Card / Certificate">ID Card / Certificate</option>
-            <option value="Brochure">Brochure</option>
-            <option value="Other">Other</option>
-          </select>
+          {filteredCanvaTasks.length === 0 ? (
+            <div className="text-center py-10 space-y-2">
+              <Link2 className="h-8 w-8 mx-auto text-theme-text-secondary" />
+              <p className="text-xs text-theme-text-secondary">
+                {canvaLibraryTasks.length === 0
+                  ? 'No design-brief tasks have been created yet — they show up here as soon as one is created on the Tasks page.'
+                  : 'No tasks match your search.'}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto -mx-1">
+              <table className="w-full text-xs min-w-[720px]">
+                <thead>
+                  <tr className="text-left text-[10px] uppercase tracking-wide text-theme-text-secondary border-b border-theme-border/20">
+                    <th className="px-1.5 py-2 font-bold">Title</th>
+                    <th className="px-1.5 py-2 font-bold">Event</th>
+                    <th className="px-1.5 py-2 font-bold">Assignee</th>
+                    <th className="px-1.5 py-2 font-bold">Due Date</th>
+                    <th className="px-1.5 py-2 font-bold">Status</th>
+                    <th className="px-1.5 py-2 font-bold">Canva Link</th>
+                    <th className="px-1.5 py-2 font-bold text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredCanvaTasks.map(task => {
+                    const linkedSubmission = designs.find(d => d.sourceTaskId === task.id);
+                    return (
+                      <tr key={task.id} className="border-b border-theme-border/10 align-top">
+                        <td className="px-1.5 py-2.5 font-semibold text-theme-text-primary max-w-[220px]">
+                          <div className="truncate" title={task.title}>{task.title}</div>
+                          {linkedSubmission && (
+                            <div className="text-[10px] text-theme-text-secondary font-normal">
+                              Submission: {linkedSubmission.review?.status || 'Pending Proofread'}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-1.5 py-2.5 text-theme-text-secondary">{task.event || '—'}</td>
+                        <td className="px-1.5 py-2.5 text-theme-text-secondary">{task.assignee || '—'}</td>
+                        <td className="px-1.5 py-2.5 text-theme-text-secondary whitespace-nowrap">{task.dueDate || '—'}</td>
+                        <td className="px-1.5 py-2.5">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/40 dark:bg-white/5 border border-theme-border/30 whitespace-nowrap">
+                            {task.status}
+                          </span>
+                        </td>
+                        <td className="px-1.5 py-2.5 min-w-[180px]">
+                          {editingCanvaTaskId === task.id ? (
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="url"
+                                autoFocus
+                                value={editingCanvaValue}
+                                onChange={(e) => setEditingCanvaValue(e.target.value)}
+                                placeholder="https://canva.com/design/..."
+                                className="w-full min-w-[160px] px-2 py-1 text-[11px] rounded-lg bg-white/60 dark:bg-white/10 border border-accent/40 text-theme-text-primary focus:outline-none focus:border-accent"
+                              />
+                              <button
+                                onClick={() => handleSaveCanvaLink(task.id)}
+                                title="Save"
+                                className="shrink-0 p-1.5 rounded-lg bg-accent hover:bg-primary-light text-white cursor-pointer"
+                              >
+                                <Check className="h-3 w-3" />
+                              </button>
+                              <button
+                                onClick={handleCancelEditCanvaLink}
+                                title="Cancel"
+                                className="shrink-0 p-1.5 rounded-lg bg-white/40 dark:bg-white/10 border border-theme-border/30 text-theme-text-secondary cursor-pointer"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ) : task.canvaLink ? (
+                            <div className="flex items-center gap-1.5">
+                              <a
+                                href={task.canvaLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 px-2 py-1 bg-accent/10 hover:bg-accent/20 border border-accent/25 text-accent text-[10px] font-medium rounded-lg transition-all truncate max-w-[160px]"
+                                title={task.canvaLink}
+                              >
+                                <ExternalLink className="h-3 w-3 shrink-0" />
+                                <span className="truncate">Open link</span>
+                              </a>
+                              <button
+                                onClick={() => handleStartEditCanvaLink(task)}
+                                title="Edit Canva link"
+                                className="shrink-0 p-1.5 rounded-lg hover:bg-white/40 dark:hover:bg-white/10 text-theme-text-secondary cursor-pointer"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => handleStartEditCanvaLink(task)}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-dashed border-theme-border/40 text-theme-text-secondary hover:text-accent hover:border-accent/50 text-[10px] font-medium transition-all cursor-pointer"
+                            >
+                              <Plus className="h-3 w-3" />
+                              Add link
+                            </button>
+                          )}
+                        </td>
+                        <td className="px-1.5 py-2.5 text-right">
+                          {task.attachments && task.attachments.length > 0 && (
+                            <span className="text-[10px] text-theme-text-secondary">{task.attachments.length} file{task.attachments.length === 1 ? '' : 's'}</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
-      </div>
-
-      {/* Design Grid & Empty State */}
-      {filteredDesigns.length === 0 ? (
+      ) : filteredDesigns.length === 0 ? (
         <div className="glass-panel rounded-3xl p-12 text-center space-y-4 border border-white/20">
           <div className="mx-auto w-12 h-12 rounded-full bg-accent/15 flex items-center justify-center text-accent">
             <Palette className="h-6 w-6" />
