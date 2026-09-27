@@ -528,6 +528,17 @@ export async function canEvaluateEventStudent(user: ServerUser, settings: Access
 }
 
 /**
+ * Checks whether a task is eligible for ratings & evaluation on the server.
+ * Procurement tasks and administrative approval requests are strictly excluded.
+ */
+export function isTaskRatable(task: { workflowType?: string; isProcurement?: boolean; procurementId?: string; title?: string } | null | undefined): boolean {
+  if (!task) return false;
+  if (task.workflowType === 'holiday_social_approval' || task.workflowType === 'procurement' || task.isProcurement || task.procurementId) return false;
+  if (typeof task.title === 'string' && /procure items|procurement/i.test(task.title)) return false;
+  return true;
+}
+
+/**
  * Rating edit/delete permission: the rating's own author, Centre Head, Advisor, or
  * the Super User. Ported from permissions.ts's canEditRating (Group Policy
  * RATING_EDIT_ANY grant / moduleAccess.RATINGS.edit override out of scope).

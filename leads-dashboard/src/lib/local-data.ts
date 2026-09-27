@@ -392,7 +392,13 @@ export interface TaskItem {
     // What 'event_report_assignment' becomes once one of the three panel
     // members delegates it to a specific student — that student now submits
     // the formal event report (see EventReportItem) for the same event.
-    | 'event_report_request';
+    | 'event_report_request'
+    // Administrative task created when a procurement request is approved —
+    // assigned to the Centre Head to procure materials. Strictly excluded
+    // from ratings and reviews.
+    | 'procurement';
+  procurementId?: string;
+  isProcurement?: boolean;
   // Only set on workflowType 'design_social_posting' tasks — distinguishes
   // the two separate posting tasks (one per platform) created once captions
   // are approved, so each can be assigned, viewed, and marked complete
@@ -757,6 +763,8 @@ export interface ProcurementRequestItem {
   completedBy?: string;
   completedAt?: string;
   submittedAt: string;
+  // The correlated Task assigned to the Centre Head to procure the items
+  procurementTaskId?: string;
   // Set server-side by /api/procurement-requests's POST handler once the
   // Centre Head + Advisor approval email actually goes out.
   approvalEmailSent?: boolean;
@@ -3339,6 +3347,27 @@ export function updateTask(id: string, updates: Partial<TaskItem>, actorName: st
     spawnEventReportRequestTask(tasks[idx].eventId!, tasks[idx].event, actorName);
   }
 
+  // Bi-directional completion: if a procurement task is marked Completed, mark the corresponding procurement request Completed
+  if (
+    updates.status === 'Completed' &&
+    previousStatus !== 'Completed' &&
+    (tasks[idx].workflowType === 'procurement' || tasks[idx].procurementId || tasks[idx].isProcurement)
+  ) {
+    const procId = tasks[idx].procurementId || tasks[idx].id.replace(/^task_procurement_/, '');
+    const procRequests = getProcurementRequests();
+    const reqIdx = procRequests.findIndex(r => r.id === procId || r.procurementTaskId === tasks[idx].id);
+    if (reqIdx !== -1 && procRequests[reqIdx].status !== 'Completed') {
+      procRequests[reqIdx] = {
+        ...procRequests[reqIdx],
+        status: 'Completed',
+        completedBy: actorName,
+        completedAt: new Date().toISOString(),
+      };
+      saveProcurementRequests(procRequests);
+      serverPatch('/api/procurement-requests', procRequests[reqIdx].id, procRequests[reqIdx]);
+    }
+  }
+
   return tasks[idx];
 }
 
@@ -4471,19 +4500,114 @@ export function saveProcurementRequests(items: ProcurementRequestItem[]): void {
   markLocalWrite('leads_procurement_requests');
 }
 
-export function addProcurementRequest(item: Omit<ProcurementRequestItem, 'id' | 'status' | 'submittedAt'>): ProcurementRequestItem {
+function isProcurementAutoApprover(user?: { role?: string; tier?: number; division?: string } | null): boolean {
+  if (!user) return false;
+  if (user.tier === 1) return true;
+  const role = (user.role || '').toLowerCase();
+  const division = (user.division || '').toLowerCase();
+  return (
+    role.includes('centre head') ||
+    role.includes('center head') ||
+    role.includes('advisor') ||
+    division.includes('advisory')
+  );
+}
+
+export function createProcurementTask(
+  request: ProcurementRequestItem,
+  members: Member[],
+  events: EventItem[],
+  tasks: TaskItem[]
+): TaskItem {
+  const active = members.filter(m => m.status !== 'Terminated' && m.email);
+  const centreHead = active.find(m => {
+    const role = (m.role || '').toLowerCase();
+    return role.includes('centre head') || role.includes('center head');
+  }) || active.find(m => m.tier === 1) || active[0];
+
+  const itemsSummary = request.items.map(i => `${i.quantity} ${i.unit || ''} ${i.name}`.replace(/\s+/g, ' ').trim()).join(', ');
+  const title = `Procure items for ${request.eventName || request.taskTitle || 'Centre'}: ${itemsSummary.length > 80 ? itemsSummary.slice(0, 77) + '...' : itemsSummary}`;
+
+  let dueDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  if (request.eventId) {
+    const ev = events.find(e => e.id === request.eventId);
+    if (ev?.startDate && !ev.datesTBD) dueDate = ev.startDate;
+  } else if (request.taskId) {
+    const t = tasks.find(tk => tk.id === request.taskId);
+    if (t?.dueDate) dueDate = t.dueDate;
+  }
+
+  const itemsDetail = (request.items || [])
+    .map(i => `• ${i.quantity} ${i.unit || ''} ${i.name}${i.notes ? ` (${i.notes})` : ''}`)
+    .join('\n');
+
+  const briefDescription = `This is for the Centre Head to procure:\n${itemsDetail}\n\nRequested by: ${request.requesterName}${request.justification ? `\nJustification: ${request.justification}` : ''}\n\nNote: Procurement tasks are administrative operations and not subject to ratings or reviews.`;
+
+  return {
+    id: `task_procurement_${request.id}`,
+    title,
+    event: request.eventName,
+    eventId: request.eventId,
+    assignee: centreHead ? centreHead.name : 'Centre Head',
+    assigneeId: centreHead?.id,
+    assigneeEmail: centreHead?.email,
+    assigneeType: 'individual',
+    dueDate,
+    status: 'Assigned',
+    creatorName: request.requesterName || 'Procurement System',
+    workflowType: 'procurement',
+    isProcurement: true,
+    procurementId: request.id,
+    briefDescription,
+  };
+}
+
+export function addProcurementRequest(
+  item: Omit<ProcurementRequestItem, 'id' | 'status' | 'submittedAt'>,
+  user?: { id?: string; name?: string; email?: string; role?: string; tier?: number; division?: string }
+): ProcurementRequestItem {
   const current = getProcurementRequests();
+  const members = getMembers();
+  const requester = user || members.find(m => m.id === item.requesterId || (item.requesterEmail && m.email?.toLowerCase() === item.requesterEmail.toLowerCase()));
+  const isAutoApprover = isProcurementAutoApprover(requester);
+
+  const id = 'proc_' + Date.now();
+  const status = isAutoApprover ? 'Approved' : 'Pending';
+  const decidedBy = isAutoApprover ? (requester?.name || item.requesterName) : undefined;
+  const decidedAt = isAutoApprover ? new Date().toISOString() : undefined;
+  const decisionNotes = isAutoApprover ? 'Auto-approved (created by Centre Head / Advisor / Super User)' : undefined;
+
+  let procurementTaskId: string | undefined = undefined;
+
   const newRequest: ProcurementRequestItem = {
     ...item,
-    id: 'proc_' + Date.now(),
-    status: 'Pending',
+    id,
+    status,
+    decidedBy,
+    decidedAt,
+    decisionNotes,
     submittedAt: new Date().toISOString(),
   };
+
+  if (isAutoApprover) {
+    const task = createProcurementTask(newRequest, members, getEvents(), getTasks());
+    procurementTaskId = task.id;
+    newRequest.procurementTaskId = task.id;
+    addTask(task);
+  }
+
   current.unshift(newRequest);
   saveProcurementRequests(current);
   serverPost('/api/procurement-requests', newRequest);
   const scopeLabel = item.eventName || item.taskTitle || 'no linked event/task';
-  logAuditEvent('PROCUREMENT_REQUEST_SUBMITTED', item.requesterName, `Requested procurement of ${item.items.length} item(s) for ${scopeLabel}`, item.requesterEmail);
+  logAuditEvent(
+    'PROCUREMENT_REQUEST_SUBMITTED',
+    item.requesterName,
+    isAutoApprover
+      ? `Added and auto-approved procurement of ${item.items.length} item(s) for ${scopeLabel} (task assigned to Centre Head)`
+      : `Requested procurement of ${item.items.length} item(s) for ${scopeLabel}`,
+    item.requesterEmail
+  );
   return newRequest;
 }
 
@@ -4497,12 +4621,27 @@ export function decideProcurementRequest(
   const idx = current.findIndex(r => r.id === id);
   if (idx === -1) return null;
 
+  let procurementTaskId = current[idx].procurementTaskId;
+
+  if (status === 'Approved') {
+    const tasks = getTasks();
+    const existingTask = tasks.find(t => t.id === `task_procurement_${id}` || t.procurementId === id);
+    if (!existingTask) {
+      const task = createProcurementTask({ ...current[idx], status: 'Approved' }, getMembers(), getEvents(), tasks);
+      procurementTaskId = task.id;
+      addTask(task);
+    } else {
+      procurementTaskId = existingTask.id;
+    }
+  }
+
   current[idx] = {
     ...current[idx],
     status,
     decidedBy,
     decidedAt: new Date().toISOString(),
     decisionNotes,
+    procurementTaskId,
   };
   saveProcurementRequests(current);
   serverPatch('/api/procurement-requests', id, current[idx]);
@@ -4526,6 +4665,13 @@ export function completeProcurementRequest(id: string, completedBy: string): Pro
     completedBy,
     completedAt: new Date().toISOString(),
   };
+
+  const tasks = getTasks();
+  const linkedTask = tasks.find(t => t.id === `task_procurement_${id}` || t.procurementId === id || t.id === current[idx].procurementTaskId);
+  if (linkedTask && linkedTask.status !== 'Completed') {
+    updateTask(linkedTask.id, { status: 'Completed' }, completedBy);
+  }
+
   saveProcurementRequests(current);
   serverPatch('/api/procurement-requests', id, current[idx]);
   logAuditEvent('PROCUREMENT_REQUEST_COMPLETED', completedBy, `Marked the procurement request from ${current[idx].requesterName} as completed`);

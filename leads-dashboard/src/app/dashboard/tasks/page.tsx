@@ -32,6 +32,7 @@ import {
   Download,
   ExternalLink,
   Mail,
+  Package,
 } from 'lucide-react';
 import {
   getTasks,
@@ -1196,6 +1197,11 @@ export default function TasksPage() {
                   {task.taskCategory === 'design' && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent/15 border border-accent/30 text-accent text-[10px] font-bold rounded-full">
                       <Palette className="h-3 w-3" /> Design Task
+                    </span>
+                  )}
+                  {(task.workflowType === 'procurement' || task.isProcurement || task.procurementId) && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/15 border border-blue-500/30 text-blue-400 text-[10px] font-bold rounded-full">
+                      <Package className="h-3 w-3" /> Procurement (Not Subject to Rating)
                     </span>
                   )}
                   <h3 className="font-bold text-sm text-theme-text-primary leading-snug">{task.title}</h3>

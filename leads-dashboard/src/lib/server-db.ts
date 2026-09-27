@@ -758,8 +758,20 @@ function ensureHolidaysAndRatingsCleaned(): Promise<void> {
             if (/prof\.|professor|faculty/i.test(r.targetName || '')) return false;
 
             const t = taskMap.get(r.taskId);
-            if (t && isSocialMediaPostTask(t)) {
-              if (!m || !isSocialMediaTeamMember(m)) return false;
+            if (t) {
+              if (
+                t.workflowType === 'holiday_social_approval' ||
+                t.workflowType === 'procurement' ||
+                t.isProcurement ||
+                t.procurementId ||
+                /\[procurement\]|procure items/i.test(t.title || '') ||
+                /\[procurement\]|procure items/i.test(r.taskTitle || '')
+              ) {
+                return false;
+              }
+              if (isSocialMediaPostTask(t)) {
+                if (!m || !isSocialMediaTeamMember(m)) return false;
+              }
             }
             return true;
           });

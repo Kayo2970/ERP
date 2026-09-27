@@ -109,6 +109,22 @@ export async function PATCH(
       }
     }
 
+    // Bi-directional completion: if a procurement task is marked Completed, mark the corresponding procurement request Completed
+    if (result && updates.status === 'Completed' && (result.workflowType === 'procurement' || result.procurementId || result.isProcurement)) {
+      const procId = result.procurementId || result.id.replace(/^task_procurement_/, '');
+      try {
+        await mutateCollection('procurementRequests', (current) =>
+          (current || []).map((r: any) =>
+            (r.id === procId || r.procurementTaskId === result.id) && r.status !== 'Completed'
+              ? { ...r, status: 'Completed', completedBy: actor.name, completedAt: new Date().toISOString() }
+              : r
+          )
+        );
+      } catch (procErr) {
+        console.error('[tasks-api] Failed to sync procurement request completion:', procErr);
+      }
+    }
+
     return NextResponse.json(result);
   } catch (err: any) {
     return apiError(err, 'tasks-id-api-patch', 400);
@@ -125,6 +141,7 @@ const AUTO_RECREATED_WORKFLOWS = new Set([
   'event_poster_request',
   'event_report_request',
   'event_report_assignment',
+  'procurement',
 ]);
 
 export async function DELETE(

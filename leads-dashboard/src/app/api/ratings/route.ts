@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { requireSession, requirePermission } from '@/lib/session';
-import { canEvaluateEventStudent, getAccessLevelSettingsServer, isFaculty, isSocialMediaTeamMember, isSocialMediaPostTask } from '@/lib/permissions-server';
+import { canEvaluateEventStudent, getAccessLevelSettingsServer, isFaculty, isSocialMediaTeamMember, isSocialMediaPostTask, isTaskRatable } from '@/lib/permissions-server';
 import { apiError } from '@/lib/api-error';
 
 export async function GET(request: Request) {
@@ -35,6 +35,10 @@ export async function POST(request: Request) {
     const task = tasks.find((t: any) => t.id === item.taskId);
     if (!task) {
       return NextResponse.json({ error: 'Direct correlation check failed: no corresponding task found for this rating.' }, { status: 400 });
+    }
+
+    if (!isTaskRatable(task)) {
+      return NextResponse.json({ error: 'Procurement tasks are administrative operations and are not subject to performance ratings or review.' }, { status: 400 });
     }
 
     const members = await readCollection<any>('members');

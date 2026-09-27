@@ -170,6 +170,7 @@ export default function ProcurementPage() {
       }, user.name);
       triggerSuccess('Procurement request resubmitted for approval.');
     } else {
+      const isAutoApprover = canDecideProcurementRequest(user) || user.tier === 1;
       addProcurementRequest({
         requesterId: user.id,
         requesterName: user.name,
@@ -180,8 +181,12 @@ export default function ProcurementPage() {
         taskTitle: linkType === 'task' ? selectedTask?.title : undefined,
         items: cleanLines,
         justification: justification.trim() || undefined,
-      });
-      triggerSuccess('Procurement request submitted! The Centre Head and Advisor have been notified for approval.');
+      }, user);
+      if (isAutoApprover) {
+        triggerSuccess('Procurement request auto-approved and added to tasks for the Centre Head to procure!');
+      } else {
+        triggerSuccess('Procurement request submitted! The Centre Head and Advisor have been notified for approval.');
+      }
     }
 
     setIsModalOpen(false);
@@ -236,7 +241,7 @@ export default function ProcurementPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-theme-text-primary">Procurement Requests</h1>
-          <p className="text-xs text-theme-text-secondary">Request materials for an event or task — approved requests are visible to everyone once cleared by the Centre Head or Advisor.</p>
+          <p className="text-xs text-theme-text-secondary">Request materials for an event or task. Centre Head, Advisor, and Super User requests are auto-approved into Centre Head procurement tasks. All procurement operations are administrative and excluded from ratings &amp; reviews.</p>
         </div>
         <button
           onClick={handleOpenCreate}
@@ -321,12 +326,17 @@ export default function ProcurementPage() {
                 )}
 
                 {req.status === 'Approved' && (
-                  <div className="flex items-center gap-2 p-2.5 bg-emerald-500/10 border border-emerald-500/25 rounded-xl text-[11px] text-emerald-400">
-                    <CheckCircle className="h-4 w-4 shrink-0 text-emerald-400" />
-                    <span>
-                      <strong>Approved</strong> by <strong className="text-emerald-300">{req.decidedBy}</strong>
-                      {req.decidedAt && ` on ${new Date(req.decidedAt).toLocaleDateString()}`}
-                      {req.decisionNotes && ` — "${req.decisionNotes}"`}
+                  <div className="flex flex-col gap-1.5 p-2.5 bg-emerald-500/10 border border-emerald-500/25 rounded-xl text-[11px] text-emerald-400">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 shrink-0 text-emerald-400" />
+                      <span>
+                        <strong>Approved</strong> by <strong className="text-emerald-300">{req.decidedBy}</strong>
+                        {req.decidedAt && ` on ${new Date(req.decidedAt).toLocaleDateString()}`}
+                        {req.decisionNotes && ` — "${req.decisionNotes}"`}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-theme-text-secondary pl-6">
+                      Assigned to Centre Head to procure. Procurement tasks are administrative operations and not subject to ratings or reviews.
                     </span>
                   </div>
                 )}

@@ -31,7 +31,7 @@ import {
   EventItem
 } from '@/lib/local-data';
 import { getRatingColor } from '@/lib/design-tokens';
-import { canViewRating, canEvaluateEventStudent, canEditRating, resolveRatingReviewerRole, isFaculty, isSocialMediaTeamMember, isSocialMediaPostTask } from '@/lib/permissions';
+import { canViewRating, canEvaluateEventStudent, canEditRating, resolveRatingReviewerRole, isFaculty, isSocialMediaTeamMember, isSocialMediaPostTask, isTaskRatable } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { PeriodFilter } from '@/components/period-filter';
 import { SearchableSelect } from '@/components/searchable-select';
@@ -174,6 +174,12 @@ export default function RatingsPage() {
   };
 
   const openEvaluationForTask = (task: TaskItem) => {
+    if (!isTaskRatable(task)) {
+      setAlertMsg(`Procurement tasks are administrative operations and not subject to ratings or reviews.`);
+      setTimeout(() => setAlertMsg(''), 5000);
+      return;
+    }
+
     const linkedEvent = events.find(ev => ev.id === task.eventId || ev.title === task.event);
     const eventCampus = linkedEvent?.campus || task.eventCampus || 'GG Campus';
 
@@ -217,6 +223,10 @@ export default function RatingsPage() {
     if (!user) return;
 
     if (selectedTask) {
+      if (!isTaskRatable(selectedTask)) {
+        setFormError('Evaluation Access Denied: Procurement tasks are administrative operations and not subject to ratings or reviews.');
+        return;
+      }
       const assigneeMember = members.find(m => m.name.toLowerCase() === selectedTask.assignee.toLowerCase() || m.id === selectedTask.assigneeId);
       if ((assigneeMember && isFaculty(assigneeMember)) || /prof\.|professor|faculty/i.test(selectedTask.assignee)) {
         setFormError('Evaluation Access Denied: Professors and faculty members cannot receive performance ratings.');
@@ -243,6 +253,10 @@ export default function RatingsPage() {
       const correlatedTask = tasks.find(t => t.id === editingRating.taskId);
       if (!correlatedTask) {
         setFormError('Direct correlation check failed: the task associated with this rating no longer exists.');
+        return;
+      }
+      if (!isTaskRatable(correlatedTask)) {
+        setFormError('Evaluation Access Denied: Procurement tasks are administrative operations and not subject to ratings or reviews.');
         return;
       }
       updateRating(editingRating.id, {
@@ -354,6 +368,7 @@ export default function RatingsPage() {
   const completedTasks = tasks.filter(t => {
     if (t.status !== 'Completed') return false;
     if (t.workflowType === 'holiday_social_approval') return false;
+    if (!isTaskRatable(t)) return false;
     const assigneeMember = members.find(m => m.id === t.assigneeId || m.name.toLowerCase() === t.assignee.toLowerCase());
     if (assigneeMember && isFaculty(assigneeMember)) return false;
     if (/prof\.|professor|faculty/i.test(t.assignee)) return false;
@@ -446,6 +461,8 @@ export default function RatingsPage() {
 
     // For social media tasks: only student members of the social media team
     const matchedTask = tasks.find(t => t.id === r.taskId || t.title === r.taskTitle);
+    if (matchedTask && !isTaskRatable(matchedTask)) return false;
+    if (/\[procurement\]|procure items/i.test(r.taskTitle)) return false;
     if ((matchedTask && isSocialMediaPostTask(matchedTask)) || /\[social media posting\]|social media post/i.test(r.taskTitle)) {
       if (!targetMember || !isSocialMediaTeamMember(targetMember)) return false;
     }

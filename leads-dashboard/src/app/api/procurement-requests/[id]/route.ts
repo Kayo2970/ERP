@@ -59,6 +59,86 @@ export async function PATCH(
         console.error('[procurement-requests-api] Approval cascade-close failed:', approvalErr);
       }
 
+      // If approved, create the task for the Centre Head to procure the items
+      if (justApproved) {
+        try {
+          const taskId = `task_procurement_${id}`;
+          const [members, events, tasks] = await Promise.all([
+            readCollection<any>('members'),
+            readCollection<any>('events'),
+            readCollection<any>('tasks'),
+          ]);
+
+          const active = (members || []).filter((m: any) => m.status !== 'Terminated' && m.email);
+          const centreHead = active.find((m: any) => {
+            const role = (m.role || '').toLowerCase();
+            return role.includes('centre head') || role.includes('center head');
+          }) || active.find((m: any) => m.tier === 1) || active[0];
+
+          const itemsSummary = summarizeItems(mergedRecord?.items || []);
+          const title = `Procure items for ${mergedRecord?.eventName || mergedRecord?.taskTitle || 'Centre'}: ${itemsSummary}`;
+
+          let dueDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+          if (mergedRecord?.eventId) {
+            const ev = events.find((e: any) => e.id === mergedRecord.eventId);
+            if (ev?.startDate && !ev.datesTBD) dueDate = ev.startDate;
+          } else if (mergedRecord?.taskId) {
+            const t = tasks.find((tk: any) => tk.id === mergedRecord.taskId);
+            if (t?.dueDate) dueDate = t.dueDate;
+          }
+
+          const itemsDetail = (mergedRecord?.items || [])
+            .map((i: any) => `• ${i.quantity} ${i.unit || ''} ${i.name}${i.notes ? ` (${i.notes})` : ''}`)
+            .join('\n');
+
+          const briefDescription = `This is for the Centre Head to procure:\n${itemsDetail}\n\nRequested by: ${mergedRecord?.requesterName || 'A member'}${mergedRecord?.justification ? `\nJustification: ${mergedRecord.justification}` : ''}\n\nNote: Procurement tasks are administrative operations and not subject to ratings or reviews.`;
+
+          const procurementTask = {
+            id: taskId,
+            title,
+            event: mergedRecord?.eventName,
+            eventId: mergedRecord?.eventId,
+            assignee: centreHead ? centreHead.name : 'Centre Head',
+            assigneeId: centreHead?.id,
+            assigneeEmail: centreHead?.email,
+            assigneeType: 'individual',
+            dueDate,
+            status: 'Assigned',
+            creatorName: mergedRecord?.requesterName || actor.name,
+            workflowType: 'procurement',
+            isProcurement: true,
+            procurementId: id,
+            briefDescription,
+          };
+
+          await mutateCollection('tasks', (current) => {
+            const idx = current.findIndex((t: any) => t.id === taskId);
+            if (idx >= 0) return current;
+            return [procurementTask, ...current];
+          });
+
+          const withTask = await mutateCollection('procurementRequests', (current) =>
+            (current || []).map((r: any) => (r.id === id ? { ...r, procurementTaskId: taskId } : r))
+          );
+          mergedRecord = withTask.find((r: any) => r.id === id) || mergedRecord;
+
+          if (centreHead?.email) {
+            const { enqueueTaskEmailNotification } = await import('@/lib/task-email-queue');
+            await enqueueTaskEmailNotification({
+              id: taskId,
+              title,
+              event: mergedRecord?.eventName || 'LEADS Operations',
+              dueDate,
+              creatorName: mergedRecord?.requesterName || actor.name,
+              assigneeEmail: centreHead.email,
+              assigneeName: centreHead.name,
+            });
+          }
+        } catch (taskErr) {
+          console.error('[procurement-requests-api] Failed to create procurement task on approval:', taskErr);
+        }
+      }
+
       if (mergedRecord?.requesterEmail) {
         try {
           const { dispatchEmail, generateProcurementDecisionEmailTemplate } = await import('@/lib/email-service');
@@ -88,6 +168,21 @@ export async function PATCH(
           ));
           mergedRecord = withEmail.find((r: any) => r.id === id) || mergedRecord;
         }
+      }
+    }
+
+    if (body.status === 'Completed') {
+      try {
+        await mutateCollection('tasks', (current) =>
+          (current || []).map((t: any) => {
+            if (t.id === `task_procurement_${id}` || t.procurementId === id || t.id === mergedRecord?.procurementTaskId) {
+              return { ...t, status: 'Completed', decidedBy: actor.name, decidedAt: new Date().toISOString() };
+            }
+            return t;
+          })
+        );
+      } catch (completeErr) {
+        console.error('[procurement-requests-api] Failed to sync task completion:', completeErr);
       }
     }
 
@@ -138,6 +233,9 @@ export async function DELETE(
     }
     const updated = await mutateCollection('procurementRequests', (current) =>
       current.filter((r: any) => r.id !== id)
+    );
+    await mutateCollection('tasks', (current) =>
+      current.filter((t: any) => t.id !== `task_procurement_${id}` && t.procurementId !== id && t.id !== existing?.procurementTaskId)
     );
     await deleteLinkedApprovalRequests('procurement', id);
     return NextResponse.json({ success: true, count: updated.length });

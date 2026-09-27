@@ -310,6 +310,18 @@ export function canEvaluateEventStudent(user: SessionUser, eventCampus?: string,
   return isSuperUser(user) || isAdvisor(user) || isCentreHead(user) || isEventsHeadGgCampus(user) || user.tier === 2.5 || hasCapability(user, 'CREATE_RATING');
 }
 
+/**
+ * Checks whether a task is eligible for ratings & evaluation.
+ * Procurement tasks and administrative approval requests are strictly excluded
+ * from ratings and reviews.
+ */
+export function isTaskRatable(task: { workflowType?: string; isProcurement?: boolean; procurementId?: string; title?: string } | null | undefined): boolean {
+  if (!task) return false;
+  if (task.workflowType === 'holiday_social_approval' || task.workflowType === 'procurement' || task.isProcurement || task.procurementId) return false;
+  if (typeof task.title === 'string' && /procure items|procurement/i.test(task.title)) return false;
+  return true;
+}
+
 /** The fixed reviewer slots a rating submission fills. */
 export type RatingReviewerRole = 'SUPER_USER' | 'CENTRE_HEAD' | 'ADVISOR' | 'GG_HEAD' | 'DESIGN_HEAD';
 
