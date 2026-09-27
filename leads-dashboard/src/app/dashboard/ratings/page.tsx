@@ -92,13 +92,17 @@ export default function RatingsPage() {
   const [historySearchQuery, setHistorySearchQuery] = useState('');
   const [periodFilter, setPeriodFilter] = useState<PeriodFilterValue>({ mode: 'ALL' });
   const [historyStudentFilter, setHistoryStudentFilter] = useState('ALL');
+  const [historyEventFilter, setHistoryEventFilter] = useState('ALL');
+  const [historyTaskFilter, setHistoryTaskFilter] = useState('ALL');
   // Score-range filter + sort for the Scorecard History table below — lets an
   // editor quickly isolate outlier scores (e.g. every 5.0, or everything
   // under 3.0) and sort them together, so a batch of scores that need
   // correcting can be reviewed and edited one after another instead of
   // hunting through the whole list in date order.
   const [historyScoreBand, setHistoryScoreBand] = useState<'ALL' | '5' | '4-4.9' | '3-3.9' | '2-2.9' | '0-1.9'>('ALL');
-  const [historySortBy, setHistorySortBy] = useState<'newest' | 'oldest' | 'scoreHigh' | 'scoreLow' | 'nameAsc'>('newest');
+  const [historySortBy, setHistorySortBy] = useState<
+    'newest' | 'oldest' | 'scoreHigh' | 'scoreLow' | 'nameAsc' | 'nameDesc' | 'taskAsc' | 'taskDesc' | 'eventAsc' | 'eventDesc' | 'evalCountHigh' | 'evalCountLow'
+  >('newest');
 
   // Task Evaluation Queue — student/event filters, sort, and event grouping
   const [queueStudentFilter, setQueueStudentFilter] = useState('ALL');
@@ -423,8 +427,8 @@ export default function RatingsPage() {
     setTaskSearchQuery('');
   };
 
-  // Filtered ratings history
-  const filteredRatingsHistory = ratings.filter(r => {
+  // Accessible ratings history baseline (faculty excluded, direct task correlation check enforced, period filter applied)
+  const accessibleRatingsHistory = ratings.filter(r => {
     // Direct correlation check: if there is not any task, then it makes no sense that there would be a rating for said task!
     if (!r.taskId || !tasks.some(t => t.id === r.taskId)) return false;
 
@@ -446,6 +450,32 @@ export default function RatingsPage() {
       if (!targetMember || !isSocialMediaTeamMember(targetMember)) return false;
     }
 
+    return isWithinPeriod(r.createdAt, periodFilter);
+  });
+
+  // Filter options derived from all accessible history in this period
+  const historyStudentOptions = Array.from(
+    new Set(accessibleRatingsHistory.map(r => r.targetName))
+  ).sort((a, b) => a.localeCompare(b));
+
+  const historyEventOptions = Array.from(
+    new Set(accessibleRatingsHistory.map(r => r.eventName || tasks.find(t => t.id === r.taskId)?.event || 'Standalone Deliverable'))
+  ).sort((a, b) => a.localeCompare(b));
+
+  const historyTaskOptions = Array.from(
+    new Set(accessibleRatingsHistory.map(r => r.taskTitle || tasks.find(t => t.id === r.taskId)?.title || 'Deliverable'))
+  ).sort((a, b) => a.localeCompare(b));
+
+  // Filtered ratings history
+  const filteredRatingsHistory = accessibleRatingsHistory.filter(r => {
+    if (historyStudentFilter !== 'ALL' && r.targetName !== historyStudentFilter) return false;
+
+    const evName = r.eventName || tasks.find(t => t.id === r.taskId)?.event || 'Standalone Deliverable';
+    if (historyEventFilter !== 'ALL' && evName !== historyEventFilter) return false;
+
+    const tTitle = r.taskTitle || tasks.find(t => t.id === r.taskId)?.title || '';
+    if (historyTaskFilter !== 'ALL' && tTitle !== historyTaskFilter) return false;
+
     const matchesSearch =
       r.targetName.toLowerCase().includes(historySearchQuery.toLowerCase()) ||
       r.taskTitle.toLowerCase().includes(historySearchQuery.toLowerCase()) ||
@@ -453,16 +483,8 @@ export default function RatingsPage() {
       r.raterName.toLowerCase().includes(historySearchQuery.toLowerCase()) ||
       (r.notes && r.notes.toLowerCase().includes(historySearchQuery.toLowerCase()));
 
-    if (historyStudentFilter !== 'ALL' && r.targetName !== historyStudentFilter) return false;
-
-    return matchesSearch && isWithinPeriod(r.createdAt, periodFilter);
+    return matchesSearch;
   });
-
-  // Student options for the Scorecard History filter below — placeholder
-  // rows, faculty, and ineligible members excluded.
-  const historyStudentOptions = Array.from(
-    new Set(filteredRatingsHistory.map(r => r.targetName))
-  ).sort((a, b) => a.localeCompare(b));
 
   // Group scorecards by evaluated deliverable (taskId + targetId or taskTitle + targetName)
   interface ScorecardGroup {
@@ -483,12 +505,13 @@ export default function RatingsPage() {
     const key = `${r.taskId || r.taskTitle}_${r.targetId || r.targetName}`;
     let group = scorecardGroups.find(g => g.key === key);
     if (!group) {
+      const task = tasks.find(t => t.id === r.taskId);
       group = {
         key,
         taskId: r.taskId,
-        taskTitle: r.taskTitle,
-        eventId: r.eventId,
-        eventName: r.eventName,
+        taskTitle: r.taskTitle || task?.title || 'Deliverable',
+        eventId: r.eventId || task?.eventId,
+        eventName: r.eventName || task?.event || 'Standalone Deliverable',
         targetId: r.targetId,
         targetName: r.targetName,
         ratings: [],
@@ -530,10 +553,34 @@ export default function RatingsPage() {
       case 'scoreHigh': return b.aggregateScore - a.aggregateScore;
       case 'scoreLow': return a.aggregateScore - b.aggregateScore;
       case 'nameAsc': return a.targetName.localeCompare(b.targetName);
+      case 'nameDesc': return b.targetName.localeCompare(a.targetName);
+      case 'taskAsc': return a.taskTitle.localeCompare(b.taskTitle);
+      case 'taskDesc': return b.taskTitle.localeCompare(a.taskTitle);
+      case 'eventAsc': return (a.eventName || 'Standalone Deliverable').localeCompare(b.eventName || 'Standalone Deliverable');
+      case 'eventDesc': return (b.eventName || 'Standalone Deliverable').localeCompare(a.eventName || 'Standalone Deliverable');
+      case 'evalCountHigh': return b.ratings.length - a.ratings.length;
+      case 'evalCountLow': return a.ratings.length - b.ratings.length;
       case 'newest':
       default: return b.latestCreatedAt.localeCompare(a.latestCreatedAt);
     }
   });
+
+  const hasActiveHistoryFilters =
+    historyStudentFilter !== 'ALL' ||
+    historyEventFilter !== 'ALL' ||
+    historyTaskFilter !== 'ALL' ||
+    historyScoreBand !== 'ALL' ||
+    historySearchQuery !== '' ||
+    periodFilter.mode !== 'ALL';
+
+  const clearHistoryFilters = () => {
+    setHistoryStudentFilter('ALL');
+    setHistoryEventFilter('ALL');
+    setHistoryTaskFilter('ALL');
+    setHistoryScoreBand('ALL');
+    setHistorySearchQuery('');
+    setPeriodFilter({ mode: 'ALL' });
+  };
 
   const availableRatingMonths = extractAvailableMonths(ratings.map(r => r.createdAt));
 
@@ -868,6 +915,28 @@ export default function RatingsPage() {
                 options={historyStudentOptions.map(name => ({ value: name, label: name }))}
               />
 
+              {/* Filter by Event */}
+              <SearchableSelect
+                value={historyEventFilter}
+                onChange={setHistoryEventFilter}
+                allLabel="All Events"
+                allValue="ALL"
+                placeholder="Search events..."
+                compact
+                options={historyEventOptions.map(name => ({ value: name, label: name }))}
+              />
+
+              {/* Filter by Task Deliverable */}
+              <SearchableSelect
+                value={historyTaskFilter}
+                onChange={setHistoryTaskFilter}
+                allLabel="All Tasks"
+                allValue="ALL"
+                placeholder="Search tasks..."
+                compact
+                options={historyTaskOptions.map(title => ({ value: title, label: title }))}
+              />
+
               {/* Period Filter: month or custom date range */}
               <PeriodFilter
                 value={periodFilter}
@@ -902,6 +971,13 @@ export default function RatingsPage() {
                 <option value="scoreHigh">Score: High to Low</option>
                 <option value="scoreLow">Score: Low to High</option>
                 <option value="nameAsc">Student Name (A-Z)</option>
+                <option value="nameDesc">Student Name (Z-A)</option>
+                <option value="taskAsc">Task Title (A-Z)</option>
+                <option value="taskDesc">Task Title (Z-A)</option>
+                <option value="eventAsc">Event Name (A-Z)</option>
+                <option value="eventDesc">Event Name (Z-A)</option>
+                <option value="evalCountHigh">Most Evaluations</option>
+                <option value="evalCountLow">Fewest Evaluations</option>
               </select>
 
               {/* Search filter */}
@@ -915,13 +991,33 @@ export default function RatingsPage() {
                   className="w-44 pl-8 pr-3 py-1.5 bg-theme-background/30 border border-theme-border/40 rounded-xl text-xs text-theme-text-primary placeholder-theme-text-secondary focus:outline-none focus:border-accent"
                 />
               </div>
+
+              {/* Clear filters button */}
+              {hasActiveHistoryFilters && (
+                <button
+                  type="button"
+                  onClick={clearHistoryFilters}
+                  className="px-2.5 py-1.5 text-xs text-accent hover:text-accent/80 font-medium transition-colors"
+                >
+                  Clear Filters
+                </button>
+              )}
             </div>
           </div>
 
           <div className="overflow-x-auto flex-1">
             {scoreFilteredGroups.length === 0 ? (
-              <div className="text-center py-12 text-theme-text-secondary text-xs">
-                No evaluated task scorecards found matching the selected filter.
+              <div className="text-center py-12 text-theme-text-secondary text-xs space-y-2">
+                <div>No evaluated task scorecards found matching the selected filter.</div>
+                {hasActiveHistoryFilters && (
+                  <button
+                    type="button"
+                    onClick={clearHistoryFilters}
+                    className="text-xs text-accent hover:underline font-medium"
+                  >
+                    Reset all filters
+                  </button>
+                )}
               </div>
             ) : (
               <table className="min-w-full text-xs text-left">
