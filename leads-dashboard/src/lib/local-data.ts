@@ -396,7 +396,12 @@ export interface TaskItem {
     // Administrative task created when a procurement request is approved —
     // assigned to the Centre Head to procure materials. Strictly excluded
     // from ratings and reviews.
-    | 'procurement';
+    | 'procurement'
+    // Auto-created after an event ends for an event committee that was never
+    // given any task (see committee-review-scheduler.ts) — arrives already
+    // Completed so reviewers rate the committee's overall performance in the
+    // Ratings queue, fanning out to every member like any committee task.
+    | 'committee_performance_review';
   procurementId?: string;
   isProcurement?: boolean;
   // Only set on workflowType 'design_social_posting' tasks — distinguishes
