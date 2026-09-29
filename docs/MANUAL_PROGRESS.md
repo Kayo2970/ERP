@@ -1,7 +1,7 @@
 # LEADS ERP — User Manual Progress & Revision Audit Ledger
 
 > **Document Version:** 2.0.0  
-> **Baseline Commit:** `7ff0cf1d4a6a3b6a64416839714c7ae8dcb448a4`  
+> **Baseline Commit:** `055496db781cf4278a2e12a4a9ea2ffef7ceb153`  
 > **Repository:** `Kayo2970/ERP`  
 > **Last Updated:** 2026-09-30T00:22:00+05:30  
 > **Target Outputs:** 
@@ -33,7 +33,7 @@ This document serves as the master tracking registry for the LEADS ERP User Oper
 | **1.4** | First-Time Account Activation & Password Setup | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-29T23:54:04+05:30 | `7ff0cf1` | Single-use activation token, 8-char password rules | Complete |
 | **1.5** | Mobile PWA Installation (iOS & Android) | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-29T23:54:04+05:30 | `7ff0cf1` | Safari / Chrome Add to Home Screen PWA setup | Complete |
 | **2.0** | Role Privileges & 7-Tier Access Matrix (Tiers 1–7) | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T00:10:00+05:30 | `7ff0cf1` | Complete RBAC breakdown from Public to Super User | Complete |
-| **2.2** | Master Designation x Module Privileges Matrix (24 Modules x 12 Roles) | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T00:38:00+05:30 | Working Tree | Comprehensive privilege matrix across all roles and modules | Complete |
+| **2.2** | Master Designation x Module Privileges Matrix (24 Modules x 12 Roles) | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T00:38:00+05:30 | 055496d | Comprehensive privilege matrix across all roles and modules | Complete |
 | **3.1** | Module: Home Dashboard & Widget Customization | `docs/screenshots/02_dashboard_home.png` | 2026-09-30T00:15:00+05:30 | `7ff0cf1` | Live capture: Active events, tasks, timeline | Complete |
 | **3.2** | Module: Events Management & Scheduling | `docs/screenshots/03_events_management.png` | 2026-09-30T00:15:00+05:30 | `7ff0cf1` | Live capture: Conclaves, capacity, committee tags | Complete |
 | **3.3** | Module: Event Passes & Gate Turnstile Scanner | `docs/screenshots/04_event_passes.png` | 2026-09-30T00:15:00+05:30 | `7ff0cf1` | Live capture: On-the-spot pass studio, 3D luxury | Complete |
@@ -59,16 +59,16 @@ This document serves as the master tracking registry for the LEADS ERP User Oper
 | **3.23** | Module: Email Engine & Postfix Queue Logs | `docs/screenshots/23_email_management.png` | 2026-09-30T00:45:00+05:30 | `7ff0cf1` | Live capture: Outbound SMTP logs, bounce diagnostics | Complete |
 | **3.24** | Module: Encrypted Backup & Disaster Recovery | `docs/screenshots/24_backup_restore.png` | 2026-09-30T00:45:00+05:30 | `7ff0cf1` | Live capture: AES-256 snapshot download & restore | Complete |
 | **3.25** | Module: System Settings & Security Controls | `docs/screenshots/25_system_settings.png` | 2026-09-30T00:45:00+05:30 | `7ff0cf1` | Live capture: Session timeouts, branding, keys | Complete |
-| **4.0** | Role-by-Role Step-by-Step Operator Playbooks | `docs/manual.html`, `docs/USER_MANUAL.md` | 2026-09-30T00:40:00+05:30 | Working Tree | Illustrated Playbooks with 24 live step-by-step action screenshots | Complete |
-| **4.1** | Tier 1: Super User Administration Playbook | `docs/screenshots/steps/01_super_user/` | 2026-09-30T00:36:00+05:30 | Working Tree | Live action captures: Quick switch, provisioning, policies, backup | Complete |
-| **4.2** | Tier 2: Centre Head & Advisor Playbook | `docs/screenshots/steps/02_centre_head/` | 2026-09-30T00:36:00+05:30 | Working Tree | Live action captures: Approvals queue, event proposals, Gate 3 settlement | Complete |
-| **4.3** | Tier 3: Dept Heads & Finance Head Playbook | `docs/screenshots/steps/03_dept_heads/` | 2026-09-30T00:36:00+05:30 | Working Tree | Live action captures: Gate 2 audit, task creation, Gantt timeline | Complete |
-| **4.4** | Tier 5: Core Committee & Gen Sec Playbook | `docs/screenshots/steps/04_core_committee/` | 2026-09-30T00:36:00+05:30 | Working Tree | Live action captures: Event studio, pass studio, turnstile scanner, forms | Complete |
-| **4.5** | Tier 6: Training Associates & Students Playbook | `docs/screenshots/steps/05_training_associate/` | 2026-09-30T00:36:00+05:30 | Working Tree | Live action captures: Task checklist, claim submission, 3D keycard | Complete |
-| **4.6** | Tier 4 & 7: Chief Advisor & Alumni Playbook | `docs/screenshots/steps/06_chief_advisor/` | 2026-09-30T00:36:00+05:30 | Working Tree | Live action capture: Consultative view-only dashboard | Complete |
+| **4.0** | Role-by-Role Step-by-Step Operator Playbooks | `docs/manual.html`, `docs/USER_MANUAL.md` | 2026-09-30T00:40:00+05:30 | 055496d | Illustrated Playbooks with 24 live step-by-step action screenshots | Complete |
+| **4.1** | Tier 1: Super User Administration Playbook | `docs/screenshots/steps/01_super_user/` | 2026-09-30T00:36:00+05:30 | 055496d | Live action captures: Quick switch, provisioning, policies, backup | Complete |
+| **4.2** | Tier 2: Centre Head & Advisor Playbook | `docs/screenshots/steps/02_centre_head/` | 2026-09-30T00:36:00+05:30 | 055496d | Live action captures: Approvals queue, event proposals, Gate 3 settlement | Complete |
+| **4.3** | Tier 3: Dept Heads & Finance Head Playbook | `docs/screenshots/steps/03_dept_heads/` | 2026-09-30T00:36:00+05:30 | 055496d | Live action captures: Gate 2 audit, task creation, Gantt timeline | Complete |
+| **4.4** | Tier 5: Core Committee & Gen Sec Playbook | `docs/screenshots/steps/04_core_committee/` | 2026-09-30T00:36:00+05:30 | 055496d | Live action captures: Event studio, pass studio, turnstile scanner, forms | Complete |
+| **4.5** | Tier 6: Training Associates & Students Playbook | `docs/screenshots/steps/05_training_associate/` | 2026-09-30T00:36:00+05:30 | 055496d | Live action captures: Task checklist, claim submission, 3D keycard | Complete |
+| **4.6** | Tier 4 & 7: Chief Advisor & Alumni Playbook | `docs/screenshots/steps/06_chief_advisor/` | 2026-09-30T00:36:00+05:30 | 055496d | Live action capture: Consultative view-only dashboard | Complete |
 | **5.0** | Deployment Stage: VPS Production Bootstrap (`vps-setup.sh`) | `docs/manual.html`, `docs/USER_MANUAL.md` | 2026-09-30T00:55:00+05:30 | `7ff0cf1` | Automated Ubuntu server setup, Nginx, Certbot | Complete |
 | **5.1** | Deployment Stage: Continuous Pipeline (`deploy.sh`) | `docs/manual.html`, `docs/USER_MANUAL.md` | 2026-09-30T00:55:00+05:30 | `7ff0cf1` | Zero-downtime PM2 restarts, git pulls, build | Complete |
-| **6.0** | Compiled Official PDF Manual | `docs/LEADS_ERP_User_Manual.pdf` | 2026-09-30T00:39:48+05:30 | Working Tree | High-resolution 64.39 MB printable PDF output with action screenshots | Complete |
+| **6.0** | Compiled Official PDF Manual | `docs/LEADS_ERP_User_Manual.pdf` | 2026-09-30T00:39:48+05:30 | 055496d | High-resolution 64.39 MB printable PDF output with action screenshots | Complete |
 
 ---
 
