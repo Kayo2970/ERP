@@ -499,41 +499,194 @@ const manualHtmlContent = `<!DOCTYPE html>
 
     <!-- SECTION 0: SETUP STAGE & VPS DEPLOYMENT -->
     <section id="setup-stage">
-      <h2>1. Prerequisites &amp; Environment Configuration</h2>
-      <p>The LEADS ERP runs locally or on institutional servers with zero external database dependencies. Ensure the runtime environment satisfies:</p>
+      <h2>1. Architecture &amp; File System Locations</h2>
+      <p>The LEADS ERP features a <strong>Zero-Cloud Local Database Architecture</strong>. Instead of transmitting institutional student records, bank accounts, UPI IDs, and receipts to external clouds, all data is encrypted at rest using <strong>AES-256-GCM</strong> (Authenticated Galois/Counter Mode) directly on the local server disk.</p>
+
+      <h4>Where Files Live (&quot;The Place&quot;):</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>Directory / File Path</th>
+            <th>Purpose &amp; Storage Classification</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>leads-dashboard/.env</code></td>
+            <td><strong>Environment Configuration File:</strong> Contains the master encryption key, session secret, and institutional SMTP configurations. This file is git-ignored and never committed to version control.</td>
+          </tr>
+          <tr>
+            <td><code>leads-dashboard/.env.example</code></td>
+            <td><strong>Template:</strong> Reference configuration schema showing all permissible environment keys.</td>
+          </tr>
+          <tr>
+            <td><code>leads-dashboard/data/</code></td>
+            <td><strong>Encrypted Data Directory:</strong> Houses all encrypted collections: <code>members.json</code>, <code>events.json</code>, <code>tasks.json</code>, <code>reimbursements.json</code>, <code>sessions.json</code>, and <code>systemSettings.json</code>.</td>
+          </tr>
+          <tr>
+            <td><code>leads-dashboard/scripts/setup-superuser.js</code></td>
+            <td><strong>Bootstrap Script:</strong> Zero-dependency interactive provisioning CLI executed via <code>npm run setup</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>The Master Encryption Key (DATA_ENCRYPTION_KEY)</h3>
+      <p>The security of the entire ERP rests upon the <code>DATA_ENCRYPTION_KEY</code>:</p>
       <ul>
-        <li><strong>Node.js:</strong> Version 22 LTS or newer (<code>node -v</code>)</li>
-        <li><strong>Package Manager:</strong> npm 10+ (<code>npm -v</code>)</li>
-        <li><strong>Encryption Key:</strong> 64-character hex master key for AES-256-GCM file encryption.</li>
+        <li><strong>Format:</strong> A 64-character hexadecimal string representing 32 bytes (256 bits) of cryptographic entropy.</li>
+        <li><strong>Runtime Key Derivation (PBKDF2):</strong> The application derives the active cipher key using <code>crypto.pbkdf2Sync(MASTER_KEY, 'LEADS_NEXT_GEN_CENTRE_MSRUAS_SALT_2026', 100000, 32, 'sha256')</code>. 100,000 hash iterations prevent GPU-accelerated brute-force attacks.</li>
+        <li><strong>On-Disk Record Schema:</strong> Every file in <code>data/</code> stores a payload formatted as <code>{ _encrypted: true, algorithm: &quot;aes-256-gcm&quot;, iv: &quot;&lt;12-byte-hex&gt;&quot;, authTag: &quot;&lt;16-byte-hex&gt;&quot;, ciphertext: &quot;&lt;hex&gt;&quot; }</code>.</li>
       </ul>
 
-      <div class="code-box">
-# 1. Clone repository
-git clone https://github.com/Kayo2970/ERP.git
-cd ERP/leads-dashboard
-
-# 2. Configure environment file
-cp .env.example .env
+      <div class="callout warning">
+        <p><strong>⚠️ Critical Security Notice:</strong> If the <code>DATA_ENCRYPTION_KEY</code> in <code>.env</code> is lost or mismatched, the database <strong>cannot be decrypted by anyone</strong>. Store an offline backup of this 64-character key in an institutional security vault.</p>
       </div>
     </section>
 
     <section id="superuser-seeding">
-      <h2>2. Interactive Super User Seeding (setup-superuser.js)</h2>
-      <p>Before launching the server for the first time, execute the interactive superuser provisioning utility:</p>
+      <h2>2. Interactive Super User Seeding (npm run setup)</h2>
+      <p>To initialize a fresh instance without default passwords or hardcoded test accounts, execute the interactive setup CLI from the <code>leads-dashboard</code> directory:</p>
+
       <div class="code-box">npm run setup</div>
-      <p>This script prompts for Administrator Name, Institutional Email, and Password. It seeds the master Super User account (<code>m1</code>), establishes <code>DATA_ENCRYPTION_KEY</code> in <code>.env</code>, and prepares initial data collections.</p>
+
+      <p>The utility prompts for the founding administrator credentials step by step:</p>
+
+      <!-- Prompt 1 -->
+      <div class="step-box">
+        <div class="step-header">
+          <span class="step-title">Prompt 1: Full Name</span>
+          <span class="step-badge">Field: name</span>
+        </div>
+        <div class="code-box">Full name: &lt;Administrator Full Name&gt;</div>
+        <p><strong>What to enter:</strong> The formal administrative name of the founding Super User (e.g. <em>System Administrator</em> or the faculty director's name). Cannot be left blank.</p>
+      </div>
+
+      <!-- Prompt 2 -->
+      <div class="step-box">
+        <div class="step-header">
+          <span class="step-title">Prompt 2: Institutional Email Address</span>
+          <span class="step-badge">Field: email</span>
+        </div>
+        <div class="code-box">Email address: &lt;admin@institution.edu&gt;</div>
+        <p><strong>What to enter:</strong> The primary login identifier. Validated against RFC 5322 email patterns. Automatically normalized to lowercase.</p>
+      </div>
+
+      <!-- Prompt 3 & 4 -->
+      <div class="step-box">
+        <div class="step-header">
+          <span class="step-title">Prompts 3 &amp; 4: Master Password &amp; Confirmation</span>
+          <span class="step-badge">Field: passwordHash</span>
+        </div>
+        <div class="code-box">Password (min 8 characters): ••••••••••••
+Confirm password: ••••••••••••</div>
+        <p><strong>Security Features:</strong> The terminal enters raw mode (<code>process.stdin.setRawMode(true)</code>). Input is completely masked and never echoed to the screen.</p>
+        <p><strong>Validation:</strong> Enforces minimum 8 characters. You are provided up to 3 attempts to confirm matching passwords.</p>
+        <p><strong>Storage:</strong> The password is never stored plaintext; it is hashed using <code>crypto.scryptSync(plain, salt, 64)</code> with a unique 16-byte cryptographic salt.</p>
+      </div>
+
+      <!-- Prompt 5 -->
+      <div class="step-box">
+        <div class="step-header">
+          <span class="step-title">Prompt 5: Master Encryption Key (DATA_ENCRYPTION_KEY)</span>
+          <span class="step-badge">Field: DATA_ENCRYPTION_KEY</span>
+        </div>
+        <div class="code-box">--- Data encryption key ---
+No DATA_ENCRYPTION_KEY is set yet. This is the key that encrypts every record this
+app stores on disk — leaving it unset falls back to a key published in this project's
+own source code, which is NOT safe for real data.
+
+Press Enter to generate a strong random key (recommended), or paste your own:</div>
+        <p><strong>Option A (Press Enter):</strong> The CLI automatically generates 32 cryptographically secure random bytes (<code>crypto.randomBytes(32).toString('hex')</code>) yielding a pristine 64-character hex key.</p>
+        <p><strong>Option B (Paste Custom Key):</strong> Paste an existing enterprise AES-256 hex key.</p>
+        <p><strong>Outcome:</strong> Writes <code>DATA_ENCRYPTION_KEY=&lt;key&gt;</code> into <code>leads-dashboard/.env</code>, encrypts the Super User record (<code>id: &quot;m1&quot;</code>, <code>role: &quot;Super User&quot;</code>, <code>tier: 1</code>), and saves it to <code>data/members.json</code>.</p>
+      </div>
+    </section>
+
+    <section id="env-reference">
+      <h2>3. Environment Configuration File (.env) Reference</h2>
+      <p>The <code>leads-dashboard/.env</code> file controls the server runtime, security tokens, and email transports:</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Environment Variable Key</th>
+            <th>Default / Example Value</th>
+            <th>Description &amp; Operational Function</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>DATA_ENCRYPTION_KEY</code></td>
+            <td><code>&lt;64_hex_chars&gt;</code></td>
+            <td><strong>Mandatory:</strong> Master AES-256-GCM encryption key used to encrypt all local data files in <code>data/</code>.</td>
+          </tr>
+          <tr>
+            <td><code>SESSION_SECRET</code></td>
+            <td><code>&lt;random_hex_string&gt;</code></td>
+            <td>Session token signing secret for bearer authentication tokens.</td>
+          </tr>
+          <tr>
+            <td><code>PORT</code></td>
+            <td><code>3030</code></td>
+            <td>Local HTTP listening port for the Next.js production/dev application.</td>
+          </tr>
+          <tr>
+            <td><code>NODE_ENV</code></td>
+            <td><code>production</code> / <code>development</code></td>
+            <td>Controls Turbopack caching, error verbosity, and security cookies.</td>
+          </tr>
+          <tr>
+            <td><code>APP_URL</code></td>
+            <td><code>http://localhost:3030</code></td>
+            <td>Canonical public URL used when compiling QR codes and activation email links.</td>
+          </tr>
+          <tr>
+            <td><code>SMTP_HOST</code></td>
+            <td><code>smtp.gmail.com</code> / <code>mail.msruas.ac.in</code></td>
+            <td>Outbound institutional mail server hostname.</td>
+          </tr>
+          <tr>
+            <td><code>SMTP_PORT</code></td>
+            <td><code>587</code> (STARTTLS) or <code>465</code> (SSL)</td>
+            <td>SMTP transmission port.</td>
+          </tr>
+          <tr>
+            <td><code>SMTP_USER</code></td>
+            <td><code>notifications@msruas.ac.in</code></td>
+            <td>Authentication username for outgoing mail delivery.</td>
+          </tr>
+          <tr>
+            <td><code>SMTP_PASS</code></td>
+            <td><code>&lt;app_specific_password&gt;</code></td>
+            <td>16-character Google Workspace or institutional mail application password.</td>
+          </tr>
+          <tr>
+            <td><code>SMTP_FROM</code></td>
+            <td><code>&quot;LEADS Centre&quot; &lt;notifications@msruas.ac.in&gt;</code></td>
+            <td>Sender address displayed on user invitations and pass emails.</td>
+          </tr>
+        </tbody>
+      </table>
     </section>
 
     <section id="vps-deployment">
-      <h2>3. Production VPS Setup (vps-setup.sh)</h2>
-      <p>For Ubuntu 22.04 / 24.04 VPS deployments, execute the automated bootstrap script as root:</p>
+      <h2>4. Production VPS Setup (vps-setup.sh)</h2>
+      <p>For clean Ubuntu 22.04 / 24.04 VPS server environments, execute the automated bootstrap script as root:</p>
       <div class="code-box">sudo bash /ERP/docs/vps-setup.sh</div>
+      <p>This script installs Node.js 22 LTS, PM2 Process Manager, Git, Nginx reverse proxy, Certbot SSL, configures systemd auto-restart on boot, and runs <code>npm run setup</code>.</p>
     </section>
 
     <section id="deploy-script">
-      <h2>4. Continuous Pipeline (deploy.sh)</h2>
-      <p>Trigger automated builds and zero-downtime PM2 process restarts:</p>
+      <h2>5. Continuous Deployment Pipeline (deploy.sh)</h2>
+      <p>Whenever updates are pushed to Git, trigger a zero-downtime deployment:</p>
       <div class="code-box">bash deploy.sh</div>
+      <p><strong>Script Execution Pipeline:</strong></p>
+      <ol>
+        <li><code>git pull origin main</code>: Pulls verified production commits.</li>
+        <li><code>npm install</code>: Synchronizes dependencies.</li>
+        <li><code>npm run build</code>: Compiles the Next.js production build with optimizations.</li>
+        <li><code>pm2 reload leads-dashboard</code>: Executes zero-downtime reload.</li>
+      </ol>
     </section>
 
     <!-- SECTION 1: ROLES & PRIVILEGES MATRIX -->
@@ -1371,13 +1524,137 @@ cp .env.example .env
     </section>
 
     <section id="mod-email">
-      <h2>3.22 Email Engine &amp; Queue Logs</h2>
-      <p>SMTP delivery queue logs, bounce diagnostics, and automated schedule triggers.</p>
+      <h2>3.22 Email Engine &amp; SMTP Mailroom Portal</h2>
+      <p>The <strong>Mailroom Audit Portal</strong> (<code>/dashboard/email</code>) is the central nerve centre for institutional outbound communications. It controls global SMTP relay parameters, automated system dispatches (activation tokens, password reset OTPs, task deadline alerts, event passes with QR attachments, birthday greetings), and mass announcement broadcasts.</p>
+
+      <div class="callout">
+        <p><strong>🔒 Access Restriction:</strong> Governed strictly by Tier 1 (Super User) and Tier 2 (Centre Head). Unauthorized tiers attempting to access this route are redirected to the Home Dashboard.</p>
+      </div>
+
       <div class="screenshot-card">
         <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — /dashboard/email</span></div>
         <img src="screenshots/23_email_management.png" alt="Email Management">
         <div class="screenshot-caption">Figure 3.22: Outbound email delivery queue and diagnostic logs.</div>
       </div>
+
+      <h3>1. Mail Relay Provider Matrix</h3>
+      <p>Configure the transport provider matching your institutional IT policies:</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Provider Option</th>
+            <th>Default Server &amp; Port</th>
+            <th>Authentication &amp; Provisioning Requirements</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Gmail / Google Workspace</strong></td>
+            <td><code>smtp.gmail.com:587</code> (STARTTLS)</td>
+            <td>Requires 2-Factor Authentication enabled on the institutional Google account and a 16-character <strong>Google App Password</strong>.</td>
+          </tr>
+          <tr>
+            <td><strong>Outlook 365</strong></td>
+            <td><code>smtp.office365.com:587</code> (STARTTLS)</td>
+            <td>Microsoft disables SMTP AUTH by default. Tenant administrator must enable Authenticated SMTP in M365 Admin Center for this specific mailbox.</td>
+          </tr>
+          <tr>
+            <td><strong>Custom SMTP</strong></td>
+            <td>User-defined (e.g. <code>mail.msruas.ac.in:587</code>)</td>
+            <td>Enterprise on-premise relay supporting standard STARTTLS or TLS/SSL wrapping.</td>
+          </tr>
+          <tr>
+            <td><strong>Local Postfix</strong></td>
+            <td><code>localhost:25</code></td>
+            <td>Zero-credential local mail transfer agent daemon installed directly on the Ubuntu server.</td>
+          </tr>
+          <tr>
+            <td><strong>Direct Send (Built-in)</strong></td>
+            <td>MX Direct (Port 25)</td>
+            <td>Zero relay needed. The app queries DNS MX records for each recipient directly. Requires valid reverse-DNS (PTR) on the VPS IP address.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>2. Step-by-Step Form Input Guide (&quot;What to Enter &amp; Where&quot;)</h3>
+
+      <div class="step-box">
+        <div class="step-header">
+          <span class="step-title">Field 1: SMTP Host *</span>
+          <span class="step-badge">Required</span>
+        </div>
+        <div class="code-box">Placeholder: e.g. smtp.gmail.com</div>
+        <p><strong>Where to enter:</strong> Top-left input box under SMTP Mail Relay Credentials.</p>
+        <p><strong>What to enter:</strong> The FQDN of the outbound relay server (e.g. <code>smtp.gmail.com</code>, <code>smtp.office365.com</code>, or your university mail host).</p>
+      </div>
+
+      <div class="step-box">
+        <div class="step-header">
+          <span class="step-title">Field 2: SMTP Port *</span>
+          <span class="step-badge">Required</span>
+        </div>
+        <div class="code-box">Placeholder: 587</div>
+        <p><strong>Where to enter:</strong> Top-right input box beside SMTP Host.</p>
+        <p><strong>What to enter:</strong> <code>587</code> for standard STARTTLS opportunistic encryption; <code>465</code> for SSL/TLS encrypted wrapper; <code>25</code> for local Postfix.</p>
+      </div>
+
+      <div class="step-box">
+        <div class="step-header">
+          <span class="step-title">Field 3: Auth Username / Email</span>
+          <span class="step-badge">Conditional</span>
+        </div>
+        <div class="code-box">Placeholder: &lt;notifications@institution.edu&gt;</div>
+        <p><strong>Where to enter:</strong> First box in the second input row.</p>
+        <p><strong>What to enter:</strong> The full email address used to authenticate with the SMTP relay service account.</p>
+      </div>
+
+      <div class="step-box">
+        <div class="step-header">
+          <span class="step-title">Field 4: App Password / Auth Secret</span>
+          <span class="step-badge">Password Masked</span>
+        </div>
+        <div class="code-box">Placeholder: ••••••••••••••••</div>
+        <p><strong>Where to enter:</strong> Second box in the second row. Includes an eye toggle to inspect plaintext characters.</p>
+        <p><strong>What to enter:</strong> The 16-character dedicated application password. Never enter your institutional single-sign-on or personal password.</p>
+      </div>
+
+      <div class="step-box">
+        <div class="step-header">
+          <span class="step-title">Fields 5 &amp; 6: Sender Display Name &amp; Sender Email Address *</span>
+          <span class="step-badge">Required</span>
+        </div>
+        <div class="code-box">Display Name: LEADS Next Gen Centre
+Sender Email: &lt;notifications@institution.edu&gt;</div>
+        <p><strong>What to enter:</strong> The institutional sender identity displayed in recipients' mail clients. The Sender Email Address must match the SPF record for the domain.</p>
+      </div>
+
+      <div class="step-box">
+        <div class="step-header">
+          <span class="step-title">Advanced: DKIM Signing (Collapsible)</span>
+          <span class="step-badge">Optional</span>
+        </div>
+        <p><strong>Parameters:</strong> <code>DKIM Domain</code>, <code>DKIM Selector</code> (e.g. <code>leads</code>), and <code>DKIM Private Key</code> (PEM RSA private key).</p>
+        <p><strong>What happens:</strong> Nodemailer cryptographically signs the RFC 5322 header before transmission, achieving near 100% inbox placement without spam folder quarantine.</p>
+      </div>
+
+      <h3>3. Saving &amp; Testing Connection Workflow</h3>
+      <ol>
+        <li>Click <strong>Save SMTP Credentials</strong>. Credentials are encrypted on disk under AES-256-GCM in <code>data/systemSettings.json</code>.</li>
+        <li>In the <strong>Connection Diagnostics &amp; Test</strong> card, enter a test recipient email (e.g. <code>&lt;admin-test@institution.edu&gt;</code>).</li>
+        <li>Click <strong>Test Connection &amp; Send Email</strong>.</li>
+        <li><strong>Verification Response:</strong>
+          <ul>
+            <li><span class="badge success">SMTP Handshake Verified</span>: Green confirmation box displays server handshake code (<code>250 OK</code>).</li>
+            <li><span class="badge danger">SMTP Handshake Error</span>: Red error box shows the precise socket rejection code and remediation steps.</li>
+          </ul>
+        </li>
+      </ol>
+
+      <h3>4. Broadcast Dispatching &amp; Delivery Audit Logs</h3>
+      <ul>
+        <li><strong>Compose Broadcast:</strong> Select target scope (All Members, Faculty, Core Committee, Training Associates), write subject &amp; body, attach files (max 25MB), and dispatch.</li>
+        <li><strong>Audit Log Queue:</strong> Real-time table displaying Delivery Timestamp, Recipient, Category (Activation, Pass, Alert), and Status (<code>DELIVERED</code>, <code>QUEUED</code>, <code>BOUNCED</code>).</li>
+      </ul>
     </section>
 
     <section id="mod-backup">

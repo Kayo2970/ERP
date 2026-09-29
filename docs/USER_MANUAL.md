@@ -10,10 +10,15 @@
 ## Table of Contents
 
 1. [Welcome & Getting Started](#1-welcome--getting-started)
-   - [Platform Overview](#11-platform-overview)
-   - [First-Time Account Activation & Password Setup](#12-first-time-account-activation--password-setup)
-   - [Mobile / PWA Installation (iOS & Android)](#13-mobile--pwa-installation-ios--android)
-   - [Interface Layout & Navigation Shell](#14-interface-layout--navigation-shell)
+   - [1.1 Platform Overview](#11-platform-overview)
+   - [1.2 Architecture & File System Locations](#12-architecture--file-system-locations)
+   - [1.3 The Master Encryption Key (DATA_ENCRYPTION_KEY)](#13-the-master-encryption-key-data_encryption_key)
+   - [1.4 Interactive Super User Seeding (npm run setup)](#14-interactive-super-user-seeding-npm-run-setup)
+   - [1.5 Environment Configuration File (.env) Reference](#15-environment-configuration-file-env-reference)
+   - [1.6 Production VPS Deployment & Continuous Pipeline](#16-production-vps-deployment--continuous-pipeline)
+   - [1.7 First-Time Account Activation & Password Setup](#17-first-time-account-activation--password-setup)
+   - [1.8 Mobile / PWA Installation (iOS & Android)](#18-mobile--pwa-installation-ios--android)
+   - [1.9 Interface Layout & Navigation Shell](#19-interface-layout--navigation-shell)
 2. [Role Privileges & Access Hierarchy](#2-role-privileges--access-hierarchy)
    - [Understanding Tiers 1 through 7](#21-understanding-tiers-1-through-7)
    - [Role Matrix Summary](#22-role-matrix-summary)
@@ -63,51 +68,131 @@ Key architectural benefits:
 
 ---
 
-### 1.2 Local Setup Stage & Environment Initialization
-The application requires Node.js 22 LTS or newer and uses local file-based storage encrypted under AES-256-GCM:
+### 1.2 Architecture & File System Locations
+The LEADS ERP runs entirely on local, sovereign server storage without third-party cloud database subscriptions. All student records, bank accounts, UPI IDs, event financials, and receipts are encrypted on disk.
 
-1. **Clone & Configure Environment**:
-   ```bash
-   git clone https://github.com/Kayo2970/ERP.git
-   cd ERP/leads-dashboard
-   cp .env.example .env
-   ```
-2. **Configure Master Encryption Key**:
-   Set `DATA_ENCRYPTION_KEY` in `.env` (or let the setup script auto-generate it).
-3. **Run Interactive Super User Seeding**:
-   ```bash
-   npm run setup
-   ```
-   This interactive script prompts for the administrator's name, email, password, and ensures `DATA_ENCRYPTION_KEY` is configured.
-4. **Launch Local Server**:
-   ```bash
-   npm run dev -p 3030
-   ```
-   Navigate to `http://localhost:3030/` to log in.
-
-![Authentication & Login Screen](screenshots/01_login_portal.png)
-*Figure 1.1: Live captured landing and authentication screen.*
+#### File & Directory Reference ("Where Files Live"):
+| Directory / File Path | Purpose & Storage Classification |
+|---|---|
+| `leads-dashboard/.env` | **Environment Configuration File:** Holds the master encryption key, session secret, port, and institutional SMTP credentials. Git-ignored and strictly confidential. |
+| `leads-dashboard/.env.example` | **Template Schema:** Reference blueprint containing all permissible environment variables. |
+| `leads-dashboard/data/` | **Encrypted Data Directory:** Houses all encrypted JSON collections: `members.json`, `events.json`, `tasks.json`, `reimbursements.json`, `sessions.json`, and `systemSettings.json`. |
+| `leads-dashboard/scripts/setup-superuser.js` | **Interactive Provisioning CLI:** Bootstrap utility executed via `npm run setup` to create the initial founding administrator. |
+| `docs/vps-setup.sh` | **Automated Server Bootstrap:** Installs Node 22 LTS, PM2, Git, Nginx, Certbot SSL on a clean Ubuntu VPS. |
+| `deploy.sh` | **Zero-Downtime Continuous Deployment:** Automates Git sync, dependency checks, production compilation, and PM2 reload. |
 
 ---
 
-### 1.3 Production VPS Deployment (vps-setup.sh & deploy.sh)
-1. **Initial Server Bootstrap**:
-   On a clean Ubuntu 22.04/24.04 VPS, run the automated setup script as root:
-   ```bash
-   sudo bash /ERP/docs/vps-setup.sh
-   ```
-   This installs Node 22, PM2, Git, Nginx, Certbot SSL, and sets up systemd auto-restart.
+### 1.3 The Master Encryption Key (DATA_ENCRYPTION_KEY)
+Every sensitive record committed to disk is ciphered using **AES-256-GCM** (Galois/Counter Mode) authenticated encryption:
+- **Entropy Format:** A 64-character hexadecimal string representing 32 bytes (256 bits) of cryptographic entropy.
+- **Key Derivation Function (PBKDF2):** At runtime, the server derives the active cipher key using:
+  ```javascript
+  crypto.pbkdf2Sync(MASTER_KEY, 'LEADS_NEXT_GEN_CENTRE_MSRUAS_SALT_2026', 100000, 32, 'sha256')
+  ```
+  The 100,000 iterations ensure resilience against GPU-accelerated dictionary and rainbow table attacks.
+- **Payload Schema:** Every database file in `data/` contains:
+  ```json
+  {
+    "_encrypted": true,
+    "algorithm": "aes-256-gcm",
+    "iv": "<12-byte hex IV>",
+    "authTag": "<16-byte hex authentication tag>",
+    "ciphertext": "<hex-encoded encrypted payload>"
+  }
+  ```
 
-2. **Continuous Deployment with `deploy.sh`**:
-   Whenever new code is pushed to `origin/main`, trigger an automated build and zero-downtime PM2 reload:
-   ```bash
-   bash deploy.sh
-   ```
-
+> **⚠️ Critical Security Warning:** If `DATA_ENCRYPTION_KEY` in `.env` is deleted or corrupted, existing database files **cannot be decrypted by anyone**. Always maintain an offline physical backup of this 64-character string in an institutional security vault.
 
 ---
 
-### 1.2 First-Time Account Activation & Password Setup
+### 1.4 Interactive Super User Seeding (npm run setup)
+To initialize a fresh instance without default passwords or hardcoded test accounts, execute the interactive setup CLI from the `leads-dashboard` directory:
+
+```bash
+cd leads-dashboard
+npm run setup
+```
+
+The CLI steps through the initial administrator provisioning prompts:
+
+#### Prompt 1: Administrator Full Name
+- **Console Prompt:** `Full name:`
+- **What to enter:** The formal administrative name of the founding Super User (e.g. `<Administrator Full Name>` or institutional title).
+- **Validation:** Cannot be empty. Trims whitespace automatically.
+
+#### Prompt 2: Institutional Email Address
+- **Console Prompt:** `Email address:`
+- **What to enter:** The primary administrative login email (e.g. `<admin@institution.edu>`).
+- **Validation:** Normalized to lowercase; strictly validated against RFC 5322 email syntax.
+
+#### Prompts 3 & 4: Master Password & Confirmation
+- **Console Prompt:** `Password (min 8 characters):` followed by `Confirm password:`
+- **Input Security:** The terminal switches to raw mode (`process.stdin.setRawMode(true)`). Keypresses are completely hidden and never echoed to the terminal.
+- **Validation:** Must be at least 8 characters. You are provided 3 attempts to confirm matching credentials.
+- **Hashing Algorithm:** Passwords are never stored plaintext; they are hashed via `crypto.scryptSync(plain, salt, 64)` using an individual 16-byte cryptographic salt.
+
+#### Prompt 5: Master Encryption Key (DATA_ENCRYPTION_KEY)
+- **Console Prompt:**
+  ```text
+  --- Data encryption key ---
+  No DATA_ENCRYPTION_KEY is set yet. This is the key that encrypts every record this
+  app stores on disk.
+  Press Enter to generate a strong random key (recommended), or paste your own:
+  ```
+- **Option A (Recommended - Press Enter):** Automatically generates 32 cryptographically secure random bytes via `crypto.randomBytes(32).toString('hex')` yielding a 64-character hex key.
+- **Option B (Paste Custom Key):** Paste a pre-existing 64-character hex key from your institutional key vault.
+- **Outcome:** The utility writes `DATA_ENCRYPTION_KEY=<key>` into `leads-dashboard/.env`, provisions the root administrator (`id: "m1"`, `role: "Super User"`, `tier: 1`), and writes the encrypted payload to `data/members.json`.
+
+---
+
+### 1.5 Environment Configuration File (.env) Reference
+The runtime environment is configured via `leads-dashboard/.env`:
+
+| Environment Variable | Default / Example Value | Description & Purpose |
+|---|---|---|
+| `DATA_ENCRYPTION_KEY` | `<64_hex_characters>` | **Mandatory:** Master 256-bit AES-GCM encryption key for local collections. |
+| `SESSION_SECRET` | `<random_hex_string>` | Secret key used for signing HMAC authentication session tokens. |
+| `PORT` | `3030` | Local HTTP port bound by the Next.js server. |
+| `NODE_ENV` | `production` / `development` | Toggles production optimizations, caching, and secure HTTP-only cookies. |
+| `APP_URL` | `http://localhost:3030` | Base public URL used when generating pass QR codes and activation email links. |
+| `SMTP_HOST` | `smtp.gmail.com` | Outbound institutional SMTP relay host. |
+| `SMTP_PORT` | `587` (STARTTLS) or `465` (SSL) | SMTP communication port. |
+| `SMTP_USER` | `<notifications@institution.edu>` | Outbound mail service authentication username. |
+| `SMTP_PASS` | `<16_char_app_password>` | Application-specific password from Google Workspace or Microsoft 365. |
+| `SMTP_FROM` | `"LEADS Centre" <notifications@institution.edu>` | Outbound sender name and email displayed in recipient inboxes. |
+
+---
+
+### 1.6 Production VPS Deployment & Continuous Pipeline
+
+#### 1. Automated VPS Server Bootstrap (`vps-setup.sh`)
+On a freshly provisioned Ubuntu 22.04 or 24.04 LTS server, run the automated setup script with root privileges:
+```bash
+sudo bash /ERP/docs/vps-setup.sh
+```
+This automated runbook:
+1. Updates package repositories (`apt update && apt upgrade`).
+2. Installs Node.js 22 LTS, PM2 Process Manager, Git, Nginx, and Certbot.
+3. Configures an Nginx reverse-proxy routing port `80`/`443` to local port `3030`.
+4. Provisions Let's Encrypt SSL/TLS certificates with auto-renewal.
+5. Launches `npm run setup` to seed the root administrator.
+6. Sets up systemd service auto-start on server boot.
+
+#### 2. Continuous Deployment Pipeline (`deploy.sh`)
+Whenever production code updates are pushed to GitHub, run the zero-downtime deployment script:
+```bash
+bash deploy.sh
+```
+**Pipeline Execution Steps:**
+1. `git pull origin main`: Synchronizes verified code updates.
+2. `npm install`: Updates npm package dependencies.
+3. `npm run build`: Compiles optimized Next.js server and client bundles.
+4. `pm2 reload leads-dashboard`: Triggers a zero-downtime hot reload of the Node.js process.
+
+---
+
+### 1.7 First-Time Account Activation & Password Setup
 Accounts are provisioned by the Administrator or Department Head through the **Members Directory**. Users do not self-register from a public signup form.
 
 1. **Receive Activation Email**: When your profile is created, you receive an automated email containing your unique, single-use activation link.
@@ -122,7 +207,7 @@ Accounts are provisioned by the Administrator or Department Head through the **M
 
 ---
 
-### 1.3 Mobile / PWA Installation (iOS & Android)
+### 1.8 Mobile / PWA Installation (iOS & Android)
 LEADS ERP is an installable Progressive Web Application (PWA). You can install it directly onto your phone's home screen for a full-screen, native app feel:
 
 - **Apple iOS (Safari)**:
@@ -138,7 +223,7 @@ LEADS ERP is an installable Progressive Web Application (PWA). You can install i
 
 ---
 
-### 1.4 Interface Layout & Navigation Shell
+### 1.9 Interface Layout & Navigation Shell
 Once logged in, the application interface provides:
 
 1. **Collapsible Sidebar (Left)**: Houses navigation links to all modules permitted for your tier. Clicking the collapse button tucks the sidebar into compact icon mode.
@@ -519,14 +604,127 @@ Provides fine-grained security customization without code changes:
 
 ---
 
-### 3.20 Email Delivery Engine & Queue Logs
-Monitor system-wide communication health:
-- View live transmission status of task reminders, birthday greetings, pass deliveries, and broadcasts.
-- Filter by Delivered, Bounced, or Queued.
-- Send one-off administrative test emails to verify SMTP connectivity.
+### 3.20 Email Delivery Engine & SMTP Mailroom Portal
+The **Mailroom Audit Portal** (`/dashboard/email`) provides institutional email relay controls, automated system dispatches (account activation tokens, OTPs, task notifications, pass deliveries, birthday greetings), scoped announcements, and delivery audit logs.
+
+> **Access Permission:** Restricted strictly to **Tier 1 (Super User)** and **Tier 2 (Centre Head)**.
 
 ![Live Email Engine Screenshot](screenshots/23_email_management.png)
 *Figure 3.19: Outbound SMTP transmission queue and delivery logs.*
+
+---
+
+#### Step 1: Navigating to SMTP Mail Relay Configuration
+1. In the sidebar, select **Email Engine** (`/dashboard/email`).
+2. Click the **SMTP Configuration** tab in the top navigation toggle.
+3. The configuration panel displays the provider selection matrix and credential input forms.
+
+---
+
+#### Step 2: Selecting Mail Relay Provider
+Select the service provider matching your institution's email infrastructure:
+
+| Provider Card | Default Endpoint | Security / Authentication Requirements |
+|---|---|---|
+| **Gmail / Workspace** | `smtp.gmail.com:587` | Requires Google Workspace account with 2-Factor Authentication enabled and a 16-character **Google App Password**. |
+| **Outlook 365** | `smtp.office365.com:587` | Requires Microsoft 365 mailbox with **SMTP AUTH enabled** in M365 Admin Center (`Users → Active Users → [Mailbox] → Mail → Manage email apps → check Authenticated SMTP`). |
+| **Custom SMTP** | User-defined | Any on-premise institutional SMTP relay (e.g. `mail.institution.edu`) supporting STARTTLS or SSL. |
+| **Local Postfix** | `localhost:25` | Zero-credential local relay daemon running directly on the Linux VPS. |
+| **Direct Send (Built-in)** | MX Direct (Port 25) | Built-in direct dispatch. The ERP resolves recipient domain MX records via DNS and connects directly without intermediary relays. Requires configured reverse-DNS (PTR). |
+
+---
+
+#### Step 3: Input Field Reference ("What to Enter and Where")
+
+##### A. Standard SMTP Relays (Gmail, Outlook, Custom SMTP, Postfix)
+- **SMTP Host \***:
+  - *Where to enter:* First input in the server parameters grid.
+  - *What to enter:* The fully qualified hostname of your outgoing mail server (e.g. `smtp.gmail.com`, `smtp.office365.com`, or `mail.institution.edu`).
+- **SMTP Port \***:
+  - *Where to enter:* Second input in the server parameters grid.
+  - *What to enter:* `587` for STARTTLS (recommended), `465` for TLS/SSL wrapper, or `25` for local unauthenticated Postfix.
+- **Auth Username / Email**:
+  - *Where to enter:* Under "Auth Username / Email".
+  - *What to enter:* The institutional service account address (e.g. `<system-notifications@institution.edu>`). Leave empty if using local unauthenticated Postfix.
+- **App Password / Auth Secret**:
+  - *Where to enter:* Under "App Password / Auth Secret". Click the eye icon to toggle visibility.
+  - *What to enter:* The 16-character application-specific password. Never enter your personal account password.
+- **Sender Display Name \***:
+  - *Where to enter:* Under "Sender Display Name".
+  - *What to enter:* The formal institutional sender name appearing in recipients' inboxes (e.g. `LEADS Next Gen Centre`).
+- **Sender Email Address \***:
+  - *Where to enter:* Under "Sender Email Address".
+  - *What to enter:* The RFC 5322 "From" address (e.g. `<notifications@institution.edu>`). Must match the authenticated mailbox domain to pass SPF/DMARC checks.
+
+##### B. Built-in Direct Send Mode (No Relay)
+When **Direct Send (Built-in)** is selected:
+- **HELO Hostname \***:
+  - *Where to enter:* Direct Send parameters box.
+  - *What to enter:* The fully qualified domain name (FQDN) assigned to your VPS outbound IP (e.g. `mail.institution.edu`).
+  - *Requirement:* Must match the PTR (reverse-DNS) record on your VPS IP address; receiving mail servers (Gmail, Microsoft) reject connections without valid reverse DNS.
+
+##### C. Advanced DKIM Cryptographic Signing (Optional)
+Click **DKIM Signing (Advanced)** to expand the cryptographic key fields:
+- **DKIM Domain**: The domain signing the outbound messages (e.g. `institution.edu`).
+- **DKIM Selector**: The DNS selector prefix (e.g. `leads`), matching the public DNS TXT record at `<selector>._domainkey.<domain>`.
+- **DKIM Private Key**: Paste the PEM-formatted RSA private key (`-----BEGIN RSA PRIVATE KEY-----...-----END RSA PRIVATE KEY-----`).
+
+---
+
+#### Step 4: Saving Credentials & Encryption At Rest
+1. Review all entered fields for accuracy.
+2. Click **Save SMTP Credentials**.
+3. **What Happens:**
+   - Field validations trigger. If any mandatory field is missing, the form scrolls automatically to the invalid field with an alert toast.
+   - The server encrypts sensitive credentials using the master `DATA_ENCRYPTION_KEY` and persists them in `leads-dashboard/data/systemSettings.json`.
+   - A green toast appears: *"Email server credentials and SMTP settings updated successfully."*
+   - The "Last updated" timestamp refreshes.
+
+---
+
+#### Step 5: Connection Diagnostics & Sending a Test Email
+1. In the right-hand panel under **Connection Diagnostics & Test**, locate the **Test Recipient Email** box.
+2. Enter a verified destination inbox (e.g. `<admin-test@institution.edu>`).
+3. Click **Test Connection & Send Email**.
+4. **Diagnostic Execution Flow:**
+   - The button switches to a spinning status: *"Verifying SMTP Server..."*
+   - The server establishes a socket connection to the configured host and port.
+   - Negotiates TLS handshake and submits authentication credentials.
+   - Sends a formatted HTML diagnostic message.
+5. **Evaluating Test Results:**
+   - **Success (Green Box):** Displays **"SMTP Handshake Verified"** along with the server response code (e.g. `250 2.0.0 OK: message queued`). Check the test inbox to confirm email delivery.
+   - **Failure (Red Box):** Displays **"SMTP Handshake Error"** with raw diagnostic details:
+     - `535 5.7.8 Authentication credentials invalid`: Check username and verify the App Password.
+     - `ETIMEDOUT` / `ECONNREFUSED`: Firewall or ISP blocking port 587/465.
+     - `535 5.7.139 Authentication unsuccessful (M365)`: SMTP AUTH is disabled on the Microsoft 365 mailbox; an administrator must enable it in the Microsoft 365 Admin Center.
+
+---
+
+#### Step 6: Composing & Dispatching Broadcast Emails
+1. Click the **Compose Broadcast** tab.
+2. Select the **Target Audience Scope**:
+   - `All Members`: Entire university roster.
+   - `Faculty / Dept Heads`: Tier 2 through 4 faculty leadership.
+   - `Core Committee`: Tier 5 student organizers.
+   - `Training Associates`: Tier 6 general student workforce.
+   - `Custom List`: Enter comma-separated recipient addresses.
+3. Enter the **Email Subject Line** and compose message body in Markdown or Rich Text.
+4. Attach optional files (enforces max 25MB total attachment limit per SMTP standards).
+5. Click **Dispatch Broadcast**. A security confirmation modal displays the recipient count and target scope. Confirm to initiate delivery.
+
+---
+
+#### Step 7: Sent Outbox History & Delivery Audit Logs
+1. Click the **Sent Outbox & Audit Logs** tab.
+2. Inspect the real-time operational metrics:
+   - **Total Sent Emails**: Cumulative dispatches since system initialization.
+   - **Successful Handshakes**: Messages accepted by receiving mail transfer agents (MTAs).
+   - **Failed Dispatches**: Messages rejected, bounced, or timed out.
+3. The live log table shows:
+   - **Timestamp**: Exact delivery attempt date and time.
+   - **Recipient & Category**: Member email and dispatch type (`Activation Token`, `Pass Delivery`, `Task Digest`, `Announcement`).
+   - **Status Badge**: `DELIVERED` (Green), `QUEUED` (Amber), or `BOUNCED` (Red).
+   - **Action**: Click **Inspect Diagnostics** to view the full SMTP handshake transcript and error codes.
 
 ---
 
