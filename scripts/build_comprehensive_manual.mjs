@@ -2191,17 +2191,207 @@ sudo certbot --nginx -d leads.institution.edu</div>
 
     <section id="mod-directory">
       <h2>3.20 Members Directory &amp; RBAC Governance</h2>
-      <p>Institutional user lifecycle management, provisioning, and access governance:</p>
-      <ul>
-        <li><strong>Provision New Member:</strong> Enter Name, Email, Division, and Role Designation. The system generates a single-use cryptographically signed activation token and dispatches it via email.</li>
-        <li><strong>Role Promotions:</strong> Change institutional designations (e.g. promoting a Training Associate to Core Committee Lead) with immediate capability inheritance.</li>
-        <li><strong>Security Controls:</strong> Trigger <strong>Force Password Reset</strong> upon next login, or click <strong>Deactivate Account</strong> to immediately revoke active sessions and block access.</li>
-      </ul>
+      <p>The <strong>Members Directory</strong> (<code>/dashboard/directory</code>) is the central administrative hub for managing the institutional workforce, leadership appointments, user provisioning, access credentials, and student performance dossiers across the LEADS Next Gen Centre.</p>
+
+      <div class="callout">
+        <p><strong>🔒 Access Permissions &amp; Scoping:</strong><br>
+        • <strong>Full Management &amp; Provisioning:</strong> Tier 1 (Super User), Tier 2 (Centre Head / Advisor), Tier 3 (Department Heads), and Tier 5 (Core Committee Leads).<br>
+        • <strong>Student View (Tier 6 Training Associates):</strong> When logged in, student volunteers are presented with their personal <em>Student Profile Dossier</em> showing their tasks, performance ratings, and committee appointments.</p>
+      </div>
+
       <div class="screenshot-card">
         <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — /dashboard/directory</span></div>
-        <img src="screenshots/21_members_directory.png" alt="Members Directory">
-        <div class="screenshot-caption">Figure 3.20: Member roster management and activation tracker.</div>
+        <img src="screenshots/steps/01_members_directory/01_directory_main_view.png" alt="Members Directory Main View">
+        <div class="screenshot-caption">Figure 3.20.1: Live Members Directory interface showing division filters, search bar, batch tools, and active member roster.</div>
       </div>
+
+      <h3>1. Primary Directory Controls &amp; Anatomy</h3>
+      <ul>
+        <li><strong>Division Filter Tabs:</strong> Quick-filter the roster by organizational branch: <code>ALL</code>, <code>Core Committee</code>, <code>Faculty</code>, <code>Training Associate</code>, <code>Advisory Board</code>, or <code>Alumni</code>.</li>
+        <li><strong>Live Search Engine:</strong> Real-time filtering across member names, institutional email addresses, roles, departments, academic degrees, and graduation batches.</li>
+        <li><strong>Batch Action Tools:</strong>
+          <ul>
+            <li><code>Download CSV Template</code>: Exports a pre-formatted CSV schema with all valid headers.</li>
+            <li><code>Import CSV</code>: Opens drag-and-drop file ingestion zone for bulk onboarding.</li>
+            <li><code>+ Add Member</code>: Opens the visual onboarding modal for individual member provisioning.</li>
+          </ul>
+        </li>
+      </ul>
+
+      <div class="step-box">
+        <h4>Step 1: Onboarding an Individual Member</h4>
+        <ol>
+          <li>Click the <strong>+ Add Member</strong> button in the top-right toolbar.</li>
+          <li>The <strong>Add New Member</strong> modal opens with dark-glass styling.</li>
+          <li>Enter the member's personal, institutional, and academic details according to the field reference table below.</li>
+        </ol>
+      </div>
+
+      <h3>2. Input Field Reference (&quot;What Information Goes Where&quot;)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Field Label</th>
+            <th>Input Type</th>
+            <th>Where to Enter</th>
+            <th>Allowed Format / Values</th>
+            <th>Description &amp; System Behavior</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Full Name *</strong></td>
+            <td>Text Input</td>
+            <td>First input box in modal</td>
+            <td>Full alphabetic name (e.g. <code>Ananya Sharma</code>)</td>
+            <td>Official institutional name. Used across event badges, digital keycards, certificates, and post-event executive reports.</td>
+          </tr>
+          <tr>
+            <td><strong>Email Address *</strong></td>
+            <td>Email Input</td>
+            <td>Second input box in modal</td>
+            <td>Valid email (e.g. <code>ananya.sharma@msruas.ac.in</code>)</td>
+            <td>Primary unique account identifier. The system verifies uniqueness to prevent duplicate registrations. Used for login authentication, password reset links, and automated dispatches.</td>
+          </tr>
+          <tr>
+            <td><strong>Division *</strong></td>
+            <td>Select Dropdown</td>
+            <td>Left column dropdown</td>
+            <td><code>Core Committee</code>, <code>Faculty</code>, <code>Training Associate</code>, <code>Advisory Board</code>, <code>Alumni</code></td>
+            <td>Defines the organizational grouping, baseline access tier, and dynamically determines the available choices in the Position dropdown.</td>
+          </tr>
+          <tr>
+            <td><strong>Position / Designation *</strong></td>
+            <td>Select Dropdown</td>
+            <td>Right column dropdown (Dynamic)</td>
+            <td>Contextual based on selected Division (e.g. <code>President</code>, <code>General Secretary</code>, <code>Department Head</code>, <code>Associate</code>, etc.)</td>
+            <td>Defines operational leadership standing and determines the exact permissions granted across the ERP.</td>
+          </tr>
+          <tr>
+            <td><strong>Department</strong></td>
+            <td>Select Dropdown</td>
+            <td>Appears conditionally when <em>Department Head</em> or <em>Member</em> is chosen</td>
+            <td><code>Leadership &amp; Development</code>, <code>Research &amp; Development</code>, <code>Design &amp; Social Media</code>, <code>Sustainability &amp; Innovation</code>, <code>Finance &amp; Sponsorships</code>, <code>Marketing &amp; Branding</code>, <code>Operations &amp; Logistics</code></td>
+            <td>Associates the member with a specialized committee department for task delegation, budget tracking, and material requisitions.</td>
+          </tr>
+          <tr>
+            <td><strong>Degree / Program</strong></td>
+            <td>Text Input</td>
+            <td>Student Information section</td>
+            <td>Academic title (e.g. <code>B.Tech Computer Science &amp; Engineering</code>)</td>
+            <td>Enrolled university degree. Displayed in student profile dossiers and digital keycards.</td>
+          </tr>
+          <tr>
+            <td><strong>Graduation Batch</strong></td>
+            <td>Text Input</td>
+            <td>Student Information section</td>
+            <td>Year range (e.g. <code>2023 - 2027</code>)</td>
+            <td>Academic cohort years. Used for cohort analytics and automated alumni migration upon graduation.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>3. Dynamic Role Derivation (&quot;Computed Role Preview&quot;)</h3>
+      <p>The LEADS ERP enforces zero-configuration role derivation. Rather than requiring administrators to manually configure dozens of security checkboxes, the platform computes the exact <strong>Access Tier (1 through 7)</strong> and system capability flags in real-time based on the combination of <strong>Division</strong> and <strong>Position</strong>.</p>
+      <p>As you modify dropdown selections, the blue <strong>Computed Role Preview</strong> box updates dynamically to show the exact administrative tier before saving:</p>
+      <ul>
+        <li><code>Core Committee</code> + <code>Department Head</code> &rarr; <strong>Tier 5: Core Committee Lead (Full Department Oversight)</strong></li>
+        <li><code>Faculty</code> + <code>Events Head</code> &rarr; <strong>Tier 2.5: Faculty Head of Events</strong></li>
+        <li><code>Training Associate</code> + <code>Associate</code> &rarr; <strong>Tier 6: Student Workforce (Assigned Tasks &amp; Personal Profile Only)</strong></li>
+      </ul>
+
+      <div class="screenshot-card">
+        <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — Add Member Modal</span></div>
+        <img src="screenshots/steps/01_members_directory/02_add_member_modal_filled.png" alt="Add Member Modal Filled">
+        <div class="screenshot-caption">Figure 3.20.2: Completed Add Member modal for Core Committee Department Head, illustrating live dynamic Computed Role Preview (Tier 5).</div>
+      </div>
+
+      <div class="step-box">
+        <h4>Step 2: Division-Specific Sub-Selections &amp; Campus Jurisdictions</h4>
+        <ol>
+          <li>When <strong>Faculty</strong> is selected as the Division, the Position dropdown adapts to present academic leadership roles: <code>Centre Head</code>, <code>Events Head</code>, <code>Finance Head</code>, <code>Industrial Connects</code>, <code>Advisor</code>, and <code>Chief Advisor</code>.</li>
+          <li>Selecting <strong>Events Head</strong> dynamically reveals a secondary <strong>Campus Designation</strong> sub-selection.</li>
+          <li>Choose between <code>GG Campus</code> (Gnanagangothri Campus) and <code>RTC Campus</code> (Ramaiah Technology Centre).</li>
+          <li>The Computed Role Preview immediately adjusts to reflect campus-specific event governance (e.g. <em>Tier 2.5 — Head of Events - GG Campus</em>).</li>
+          <li>Click <strong>Save Member</strong> to commit the record to encrypted storage.</li>
+        </ol>
+      </div>
+
+      <div class="screenshot-card">
+        <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — Faculty Campus Sub-Selection</span></div>
+        <img src="screenshots/steps/01_members_directory/03_faculty_campus_subselection.png" alt="Faculty Campus Sub-Selection">
+        <div class="screenshot-caption">Figure 3.20.3: Faculty sub-selection interface showing Events Head paired with GG Campus designation and dynamic Tier 2.5 derivation.</div>
+      </div>
+
+      <div class="step-box">
+        <h4>Step 3: Direct Password Administration (Super User Override)</h4>
+        <p>While standard provisioning dispatches an automated email containing a 48-hour activation token, administrators frequently require immediate credential provisioning (e.g. for offline testing, emergency access recovery, or service accounts).</p>
+        <ol>
+          <li>Locate the target member in the directory table (e.g. <code>Aarav Sharma</code>).</li>
+          <li>In the Actions column on the right, click the <strong>Set Password Directly (Lock icon)</strong> button.</li>
+          <li>The <strong>Set Password Directly</strong> modal appears with an administrative override warning.</li>
+          <li>Enter the new password in the input field (minimum 4 characters). Use the eye icon toggle to verify plaintext entry if required.</li>
+          <li>Click <strong>Set Password</strong>.</li>
+          <li><strong>What Happens on Click:</strong>
+            <ul>
+              <li>The password is sent over TLS to the server API (<code>/api/members/set-password</code>).</li>
+              <li>The server generates a unique cryptographic salt and hashes the credentials using high-work-factor <strong>scrypt</strong>.</li>
+              <li>The encrypted hash is stored in <code>data/members.json</code>, replacing any previous credentials.</li>
+              <li>The member's <code>hasPassword</code> flag flips to <code>true</code>, and any pending reset requirement is resolved. The user can log in immediately without OTP verification.</li>
+            </ul>
+          </li>
+        </ol>
+      </div>
+
+      <div class="screenshot-card">
+        <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — Direct Password Override</span></div>
+        <img src="screenshots/steps/01_members_directory/04_set_password_modal.png" alt="Set Password Directly Modal">
+        <div class="screenshot-caption">Figure 3.20.4: Super User direct password override modal enabling instant credential assignment with secure scrypt hashing.</div>
+      </div>
+
+      <div class="step-box">
+        <h4>Step 4: Inspecting Student Profile Dossiers &amp; Outcomes</h4>
+        <p>The LEADS ERP provides a longitudinal dossier for every student member, collating deliverables, committee evaluations, and performance ratings across their university career.</p>
+        <ol>
+          <li>In the directory roster, find any student member (e.g. <code>Aarav Sharma</code>).</li>
+          <li>Click the <strong>Profile (Eye icon)</strong> button in their row.</li>
+          <li>The <strong>Student Profile Dossier</strong> modal opens in high-contrast dark-glass presentation.</li>
+          <li>Inspect the 4 high-level KPI cards:
+            <ul>
+              <li><strong>Rating:</strong> Cumulative peer and faculty evaluation score (out of 5.0 stars).</li>
+              <li><strong>Tasks Completed:</strong> Ratio of completed deliverables to assigned work (e.g. <code>0 / 0 total</code>, 100% completion rate).</li>
+              <li><strong>Committees:</strong> Total number of active sub-committee appointments held across university events.</li>
+              <li><strong>Quality Index:</strong> Automated rubric deliverable quality assessment score.</li>
+            </ul>
+          </li>
+          <li>Explore the three tabbed outcome sections:
+            <ul>
+              <li><strong>Deliverables &amp; Tasks Tab:</strong> Lists historical tasks, deadline compliance, and submitted project deliverables.</li>
+              <li><strong>Event Sub-Committees Tab:</strong> Highlights organizing committee appointments and leadership roles across institutional festivals.</li>
+              <li><strong>Evaluation Scorecards Tab:</strong> Presents qualitative commentary and rubric evaluations logged by Faculty Advisors and Department Heads.</li>
+            </ul>
+          </li>
+        </ol>
+      </div>
+
+      <div class="screenshot-card">
+        <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — Student Profile Dossier</span></div>
+        <img src="screenshots/steps/01_members_directory/05_member_profile_dossier.png" alt="Student Profile Dossier">
+        <div class="screenshot-caption">Figure 3.20.5: Comprehensive Student Profile Dossier displaying performance scores, task completion analytics, and committee outcomes.</div>
+      </div>
+
+      <h3>4. Bulk Operations &amp; Batch Data Management</h3>
+      <ul>
+        <li><strong>Downloading CSV Schema:</strong> Click <strong>Download CSV Template</strong> to obtain <code>leads_members_template.csv</code> pre-populated with required headers: <code>Name,Email,Division,Position,Department,Program,Batch,Phone</code>.</li>
+        <li><strong>Batch CSV Ingestion:</strong> Click <strong>Import CSV</strong> or drag a <code>.csv</code> file directly onto the roster table. The ingestion engine validates email formats, prevents duplicate entries, and stages valid rows for single-click database insertion.</li>
+        <li><strong>Multi-Select Toolbar:</strong> Check the boxes next to individual member rows (or click the table header checkbox to select all filtered members). A floating glass toolbar appears at the bottom of the screen:
+          <ul>
+            <li><strong>Export Selected:</strong> Generates an instant CSV extract of the selected cohort.</li>
+            <li><strong>Bulk Remove:</strong> Triggers a safe confirmation modal requiring explicit approval before removing multiple accounts.</li>
+            <li><strong>Resend Welcome Email:</strong> Dispatches fresh 48-hour activation tokens to all unactivated accounts in the selection.</li>
+          </ul>
+        </li>
+      </ul>
     </section>
 
     <section id="mod-policies">

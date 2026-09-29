@@ -40,8 +40,8 @@ This document serves as the master tracking registry for the LEADS ERP User Oper
 | **1.10** | Mobile / PWA Installation (iOS & Android) | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T01:10:00+05:30 | Working Tree | Safari / Chrome Add to Home Screen PWA setup | Complete |
 | **1.11** | Interface Layout & Navigation Shell | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T01:10:00+05:30 | Working Tree | Sidebar rail, period filter, persona quick switch | Complete |
 | **3.1-3.24**| Enriched Module Operating Instructions | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T01:10:00+05:30 | Working Tree | Detailed input fields, lifecycles, buttons, and approvals | Complete |
-| **3.22** | Email Engine & SMTP Mailroom Portal | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T01:10:00+05:30 | Working Tree | Granular field-by-field input guide, provider setup, diagnostics | Complete |
-| **6.0** | Compiled Official PDF Manual | `docs/LEADS_ERP_User_Manual.pdf` | 2026-09-30T01:14:00+05:30 | Working Tree | High-resolution 70.56 MB printable PDF output with action screenshots | Complete |
+| **3.20** | Members Directory & Account Provisioning | `docs/USER_MANUAL.md`, `docs/manual.html`, `docs/LEADS_ERP_User_Manual.pdf` | 2026-09-30T01:45:00+05:30 | Working Tree | Comprehensive step-by-step onboarding, 5 live action screenshots, input field reference table, dynamic Computed Role Preview, Faculty campus sub-selection, direct password scrypt override, student profile dossiers & outcomes, bulk CSV ingestion | Complete |
+| **6.0** | Compiled Official PDF Manual | `docs/LEADS_ERP_User_Manual.pdf` | 2026-09-30T01:45:00+05:30 | Working Tree | High-resolution 71.45 MB printable PDF output with action screenshots | Complete |
 | **6.1** | Collapsible Interactive Navigation Sidebar | `docs/manual.html`, `leads-dashboard/public/manual.html` | 2026-09-30T01:12:00+05:30 | Working Tree | Smooth animated collapse, floating re-open button, Ctrl+B shortcut, localStorage persistence | Complete |
 
 ---
