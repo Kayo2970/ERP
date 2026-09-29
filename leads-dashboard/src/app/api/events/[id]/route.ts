@@ -4,6 +4,7 @@ import { fanOutAutoApproval, cascadeCloseAutoApprovals, deleteLinkedApprovalRequ
 import { requireSession, requirePermission, ForbiddenError } from '@/lib/session';
 import { canDeleteEvent, canApprovePendingEvent, getAccessLevelSettingsServer } from '@/lib/permissions-server';
 import { apiError } from '@/lib/api-error';
+import { dispatchCommitteeRosterEmails } from '@/lib/committee-roster-email';
 
 const PENDING_APPROVAL_MESSAGE: Record<string, string> = {
   pending_create: 'This event was created and needs sign-off from the Centre Head, Advisor, or GG Campus Events Head before it goes live.',
@@ -89,6 +90,14 @@ export async function PATCH(
         } catch (approvalErr) {
           console.error('[events-api] Approval cascade-close failed:', approvalErr);
         }
+      }
+
+      // Email members newly appointed to a committee (direct assignment or an
+      // approved roster update).
+      try {
+        await dispatchCommitteeRosterEmails(previous, result);
+      } catch (emailErr) {
+        console.error('[events-api] Committee roster email dispatch failed:', emailErr);
       }
 
       const prevCommittees: any[] = previous?.committees || [];

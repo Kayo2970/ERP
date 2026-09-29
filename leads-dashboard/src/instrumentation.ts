@@ -20,5 +20,8 @@ export async function register() {
 
     const { startTaskDeadlineScheduler } = await import('./lib/task-deadline-scheduler');
     startTaskDeadlineScheduler();
+
+    const { startCommitteeReviewScheduler } = await import('./lib/committee-review-scheduler');
+    startCommitteeReviewScheduler();
   }
 }
