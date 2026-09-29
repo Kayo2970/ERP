@@ -14,7 +14,7 @@ import { readCollection, mutateCollection } from './server-db';
 import { dispatchEmail, wrapInMasterEmailTemplate, findApprovalRecipients } from './email-service';
 import type { ApprovalRequest } from './local-data';
 
-type AutoApprovalEntityType = 'event' | 'task' | 'design' | 'event-report' | 'announcement' | 'procurement' | 'form';
+type AutoApprovalEntityType = 'event' | 'task' | 'design' | 'event-report' | 'announcement' | 'procurement' | 'form' | 'committee';
 
 const ENTITY_LABELS: Record<AutoApprovalEntityType, string> = {
   event: 'Event',
@@ -24,6 +24,7 @@ const ENTITY_LABELS: Record<AutoApprovalEntityType, string> = {
   announcement: 'Announcement',
   procurement: 'Procurement Request',
   form: 'Form',
+  committee: 'Event Committee',
 };
 
 export interface ApprovalPanelMember {
@@ -201,6 +202,7 @@ export async function fanOutAutoApproval(opts: FanOutOptions): Promise<ApprovalR
       else if (opts.entityType === 'event-report') targetLink = `${baseUrl}/dashboard/event-reports?highlight=${opts.entityId}`;
       else if (opts.entityType === 'procurement') targetLink = `${baseUrl}/dashboard/procurement?highlight=${opts.entityId}`;
       else if (opts.entityType === 'form') targetLink = `${baseUrl}/dashboard/forms?highlight=${opts.entityId}`;
+      else if (opts.entityType === 'committee' && opts.eventId) targetLink = `${baseUrl}/dashboard/events/${opts.eventId}`;
 
       const bodyHtml = `
         <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello <strong>${row.targetMemberName || 'there'}</strong>,</p>

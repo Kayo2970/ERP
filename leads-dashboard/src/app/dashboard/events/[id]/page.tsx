@@ -526,6 +526,9 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                       <div className="flex items-center gap-1.5 text-[11px] font-semibold text-warning">
                         <Clock className="h-3 w-3" />
                         Awaiting approval from Centre Head / Advisor / GG Campus Head of Events
+                        {committee.submittedBy && (
+                          <span className="font-normal text-theme-text-secondary">&middot; Requested by {committee.submittedBy}</span>
+                        )}
                       </div>
                     ) : (
                       <>
@@ -555,6 +558,9 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                               <Clock className="h-3 w-3" />
                               Roster update awaiting approval ({pendingStudents.length} student{pendingStudents.length === 1 ? '' : 's'} proposed)
                             </div>
+                            {committee.submittedBy && (
+                              <p className="text-[10px] text-theme-text-secondary pl-4">Requested by {committee.submittedBy}</p>
+                            )}
                           </div>
                         )}
 
