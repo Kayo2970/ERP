@@ -1,5 +1,5 @@
 ---
-updated: 2026-09-29T23:41:40+05:30
+updated: 2026-09-29T23:53:35+05:30
 ---
 
 # Project State
@@ -7,33 +7,31 @@ updated: 2026-09-29T23:41:40+05:30
 ## Current Position
 
 **Milestone:** Milestone 1 — Core Stabilization & Baseline
-**Phase:** 0 - Codebase Mapping
-**Status:** mapped
-**Plan:** None (Ready for /plan or /new-project)
+**Phase:** 1 - Comprehensive User Manual & Operations Guide
+**Status:** complete
+**Plan:** None (Phase 1 complete)
 
 ## Last Action
 
-Codebase mapping complete via `/map`.
-- 217 source files analyzed (~76,200 lines across `leads-dashboard/src`)
-- 28 encrypted database collections mapped (`data/*.json`)
-- 81 API routes and 23 dashboard modules cataloged
-- 23 production dependencies & 10 development dependencies audited
-- Architecture documentation written to `.gsd/ARCHITECTURE.md`
-- Technology stack documented in `.gsd/STACK.md`
+Comprehensive 23-module User Manual completed:
+- Written master documentation to `docs/USER_MANUAL.md` (Markdown)
+- Created interactive, searchable, printable HTML manual with role filter at `docs/manual.html`
+- Updated and executed `scripts/generate_manual_docx.py` generating `docs/LEADS_ERP_User_Manual.docx`
+- All 7 roles (Tiers 1-7), approval pipelines, wallet passes, procurement, and FAQs documented
 
 ## Next Steps
 
-1. Run `/plan` or `/new-project` to establish formal requirements / milestones.
+1. Review and distribute `docs/LEADS_ERP_User_Manual.docx` to institutional stakeholders.
 2. Address identified technical debt items (in-process scheduler clustering, test runner setup).
-3. Continue feature development with GSD atomic phase execution.
+3. Proceed with further feature development or milestone planning via GSD.
 
 ## Active Decisions
 
 | Decision | Choice | Made | Affects |
 |----------|--------|------|---------|
+| User Manual Deliverables | Markdown, Standalone Searchable HTML, Formatted DOCX | 2026-09-29 | Documentation & User Onboarding |
 | Database Layer | Flat-file JSON (`server-db.ts`) with AES-GCM & per-collection mutex | Pre-existing | All data persistence |
 | Auth & Permissions | 7-tier RBAC (`permissions*.ts`) + SHA-256 session hashing | Pre-existing | All routes & modules |
-| Test Validation Gate | `npx tsc --noEmit` & `npm run build` | Pre-existing | Pre-push verification |
 
 ## Blockers
 
@@ -41,5 +39,4 @@ Codebase mapping complete via `/map`.
 
 ## Concerns
 
-- **Scheduler clustering:** Background email & birthday schedulers run inside the Next.js process (`instrumentation.ts`). Multiple worker instances must rely on DB idempotency guards (`birthdayEmailLog`) to avoid duplicate sends.
-- **Collection memory footprint:** Flat JSON reads load entire collections into memory; adequate for current volume, monitor growth over time.
+- Background schedulers run in-process (`instrumentation.ts`); keep multi-worker instances aware of DB idempotency guards (`birthdayEmailLog`).
