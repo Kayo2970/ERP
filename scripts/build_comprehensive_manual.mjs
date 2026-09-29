@@ -437,14 +437,18 @@ const manualHtmlContent = `<!DOCTYPE html>
 
     <nav class="toc">
       <div class="toc-section">0. Setup &amp; Deployment</div>
-      <a href="#setup-stage">1. Prerequisites &amp; Node 22</a>
-      <a href="#superuser-seeding">2. Super User Seeding</a>
-      <a href="#vps-deployment">3. Production VPS Setup</a>
-      <a href="#deploy-script">4. Continuous Pipeline</a>
+      <a href="#setup-stage">1. Architecture &amp; File Locations</a>
+      <a href="#superuser-seeding">2. Super User Seeding (CLI)</a>
+      <a href="#env-reference">3. Environment Variables (.env)</a>
+      <a href="#vps-deployment">4. Production VPS Setup</a>
+      <a href="#deploy-script">5. Continuous Deployment</a>
+      <a href="#account-activation">6. Account Activation Flow</a>
+      <a href="#mobile-pwa">7. Mobile PWA Installation</a>
+      <a href="#interface-layout">8. Navigation &amp; Shell Layout</a>
 
       <div class="toc-section">1. Roles &amp; Master Matrix</div>
-      <a href="#rbac-hierarchy">5. 7-Tier Access Matrix</a>
-      <a href="#master-privileges-matrix">6. Designation x Module Matrix</a>
+      <a href="#rbac-hierarchy">9. 7-Tier Access Matrix</a>
+      <a href="#master-privileges-matrix">10. Designation x Module Matrix</a>
 
       <div class="toc-section">2. Role-by-Role Playbooks</div>
       <a href="#playbook-tier1">Tier 1: Super User Administration</a>
@@ -689,9 +693,84 @@ Press Enter to generate a strong random key (recommended), or paste your own:</d
       </ol>
     </section>
 
+    <section id="account-activation">
+      <h2>6. First-Time Account Activation &amp; Password Setup</h2>
+      <p>Institutional user accounts are provisioned exclusively by administrators through the <strong>Members Directory</strong> (<code>/dashboard/directory</code>). Public self-registration is permanently disabled for institutional security.</p>
+      
+      <ol>
+        <li><strong>Receive Activation Dispatch:</strong> When an account is created, the system dispatches an automated email containing a single-use cryptographically signed activation token (e.g. <code>https://leads.msruas.ac.in/activate?token=...</code>).</li>
+        <li><strong>Open Activation Gateway:</strong> Navigating to the link verifies token authenticity and ensures the token has not expired or been previously consumed.</li>
+        <li><strong>Set Secure Password:</strong>
+          <ul>
+            <li>Enforces a strict minimum of <strong>8 characters</strong>.</li>
+            <li>Recommended complexity: Mixed uppercase, lowercase, numbers, and symbols.</li>
+            <li>Commit: The browser submits the plaintext password over TLS; the server salts and hashes it via <code>crypto.scryptSync(plain, salt, 64)</code> before writing to <code>data/members.json</code>.</li>
+          </ul>
+        </li>
+        <li><strong>Confirm Profile Details:</strong> The user verifies their Department, Assigned Role, and Phone Number before being redirected to the authenticated workspace.</li>
+      </ol>
+
+      <div class="callout">
+        <p><strong>💡 Token Expiry &amp; Resend:</strong> If an activation token expires, the Super User or Department Head can click <strong>Resend Activation Link</strong> from the member's profile card in the Directory to generate a fresh token.</p>
+      </div>
+    </section>
+
+    <section id="mobile-pwa">
+      <h2>7. Mobile / PWA Installation (iOS &amp; Android)</h2>
+      <p>LEADS ERP is engineered as a fully compliant <strong>Progressive Web Application (PWA)</strong> with an offline-capable service worker, app manifest, and responsive touch gestures:</p>
+
+      <div class="step-box">
+        <div class="step-header">
+          <span class="step-title">Apple iOS (Safari)</span>
+          <span class="step-badge">iOS 16.4+</span>
+        </div>
+        <ol>
+          <li>Open Safari and navigate to the ERP URL.</li>
+          <li>Tap the <strong>Share</strong> button (the box with an upward-pointing arrow in the bottom navigation bar).</li>
+          <li>Scroll down the action sheet and tap <strong>Add to Home Screen</strong>.</li>
+          <li>Confirm by tapping <strong>Add</strong> in the top-right corner. The LEADS ERP icon will appear on your device home screen as a standalone application without Safari browser chrome.</li>
+        </ol>
+      </div>
+
+      <div class="step-box">
+        <div class="step-header">
+          <span class="step-title">Android (Google Chrome)</span>
+          <span class="step-badge">Android 10+</span>
+        </div>
+        <ol>
+          <li>Open Google Chrome and navigate to the ERP portal.</li>
+          <li>Tap the three vertical dots menu in the top-right corner.</li>
+          <li>Tap <strong>Install app</strong> or <strong>Add to Home screen</strong>.</li>
+          <li>Confirm the installation prompt. The application launches in dedicated standalone WebApp windowing mode.</li>
+        </ol>
+      </div>
+    </section>
+
+    <section id="interface-layout">
+      <h2>8. Interface Layout &amp; Navigation Shell</h2>
+      <p>The workspace is framed by a persistent, high-efficiency application shell:</p>
+      <ul>
+        <li><strong>Collapsible Sidebar (Left):</strong> Quick-navigation hub displaying permitted module routes. Can be collapsed into an icon-only rail to maximize screen real estate during complex event coordination or spreadsheet auditing.</li>
+        <li><strong>Top Application Bar:</strong>
+          <ul>
+            <li><strong>Page Title &amp; Breadcrumb:</strong> Active operational view and contextual status badges.</li>
+            <li><strong>Period Filter:</strong> Global timeline filter (All Time, Current Month, Last 90 Days, Academic Year 2025–26) that reactively filters all event lists, financial summaries, and task boards.</li>
+            <li><strong>Quick Switcher (Super User Tier 1):</strong> Instant persona switcher dropdown allowing administrators to view and test the ERP through the eyes of any registered faculty or student account.</li>
+            <li><strong>User Profile Menu:</strong> Shows user avatar, division badge, role title, theme toggle, and Sign Out button.</li>
+          </ul>
+        </li>
+      </ul>
+
+      <div class="screenshot-card">
+        <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — Authentication Gateway</span></div>
+        <img src="screenshots/01_login_portal.png" alt="Login Portal">
+        <div class="screenshot-caption">Figure 1.1: Live captured authentication gateway and login screen.</div>
+      </div>
+    </section>
+
     <!-- SECTION 1: ROLES & PRIVILEGES MATRIX -->
     <section id="rbac-hierarchy">
-      <h2>5. 7-Tier Access Matrix &amp; Institutional Designations</h2>
+      <h2>9. 7-Tier Access Matrix &amp; Institutional Designations</h2>
       <p>Access privileges in LEADS ERP are governed by a combination of <strong>Access Tier (1–7)</strong>, <strong>Division</strong>, and <strong>Designation</strong>:</p>
 
       <table>
@@ -758,7 +837,7 @@ Press Enter to generate a strong random key (recommended), or paste your own:</d
 
     <!-- MASTER DESIGNATION X MODULE PRIVILEGES MATRIX -->
     <section id="master-privileges-matrix">
-      <h2>6. Master Designation x Module Privileges Matrix</h2>
+      <h2>10. Master Designation x Module Privileges Matrix</h2>
       <p>The exhaustive matrix below illustrates the precise authority of every key designation across all 24 workspace modules:</p>
 
       <div style="overflow-x: auto; margin-bottom: 2rem;">
@@ -1315,7 +1394,13 @@ Press Enter to generate a strong random key (recommended), or paste your own:</d
     <!-- SECTION 3: WORKSPACE MODULES GALLERY -->
     <section id="mod-dashboard">
       <h2>3.1 Home Dashboard</h2>
-      <p>Unified executive landing page featuring real-time stat rollups, period filtering, and urgent action alerts.</p>
+      <p>The unified executive landing page provides real-time situational awareness across all active centre operations:</p>
+      <ul>
+        <li><strong>KPI Stat Cards:</strong> Live metric totals for Active Events, Pending Tasks, Completed Tasks, and Total Budget vs. Expenditure.</li>
+        <li><strong>Action Required Inbox:</strong> Contextual queue highlighting items awaiting your specific authorization (reimbursements to audit, tasks to sign off, event proposals to sanction).</li>
+        <li><strong>Upcoming Deadlines:</strong> Chronological delivery timeline flagging imminent event rehearsals and task milestones.</li>
+        <li><strong>Recent Activity Feed:</strong> Immutable audit trail of recent member logins, status transitions, and document exports.</li>
+      </ul>
       <div class="screenshot-card">
         <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — /dashboard/home</span></div>
         <img src="screenshots/02_dashboard_home.png" alt="Home Dashboard">
@@ -1325,7 +1410,24 @@ Press Enter to generate a strong random key (recommended), or paste your own:</d
 
     <section id="mod-events">
       <h2>3.2 Events Management</h2>
-      <p>Manage the full lifecycle of university conclaves, symposiums, hackathons, and cultural festivals.</p>
+      <p>Events form the operational anchor of LEADS ERP. Organizers create proposals that progress through institutional review:</p>
+      
+      <div class="step-box">
+        <div class="step-header">
+          <span class="step-title">Creating an Event Proposal</span>
+          <span class="step-badge">Requires Tier 3/5+</span>
+        </div>
+        <ol>
+          <li>Click <strong>+ Create Event</strong> in the top action bar.</li>
+          <li><strong>Fill Core Details:</strong> Enter Event Title, unique Event Code (e.g. <code>TECHFEST-2026</code>), Date/Time range, and Venue/Campus (RTC vs GG Campus).</li>
+          <li><strong>Set Financial Ceiling &amp; Attendance:</strong> Enter Projected Budget and Target Attendance capacity.</li>
+          <li><strong>Allocate Sub-Committees:</strong> Form specialized sub-committees (Stage, Logistics, Hospitality, Media) and designate Committee Leads.</li>
+          <li><strong>Submit Proposal:</strong> Transitions record to <code>Pending Approval</code> until sanctioned by Faculty Leadership (Tier 2/3).</li>
+        </ol>
+      </div>
+
+      <p><strong>Lifecycle Progression:</strong> <code>Draft</code> → <code>Pending Approval</code> → <code>Approved / Active</code> → <code>Completed</code> → <code>Archived</code>.</p>
+
       <div class="screenshot-card">
         <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — /dashboard/events</span></div>
         <img src="screenshots/03_events_management.png" alt="Events Management">
@@ -1335,7 +1437,12 @@ Press Enter to generate a strong random key (recommended), or paste your own:</d
 
     <section id="mod-passes">
       <h2>3.3 Event Passes &amp; Gate Turnstile Scanner</h2>
-      <p>On-the-spot pass studio, Apple/Google Wallet sync, and full-screen camera QR turnstile scanner.</p>
+      <p>Issue personalized digital access passes and operate physical check-in turnstiles:</p>
+      <ul>
+        <li><strong>Pass Studio:</strong> Design tier-specific badges (VIP, Delegate, Faculty, Student) with unique HMAC-signed QR tokens.</li>
+        <li><strong>Digital Wallet Integration:</strong> Attendees can save passes directly to <strong>Apple Wallet</strong> (<code>.pkpass</code>) or <strong>Google Wallet</strong>. Passes support dynamic lockscreen push updates if venues change.</li>
+        <li><strong>Turnstile Scanner Kiosk:</strong> Full-screen high-frequency camera scanner that validates passes in under 300ms, displaying green admittance or red duplicate-entry warning.</li>
+      </ul>
       <div class="screenshot-card">
         <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — /dashboard/event-passes</span></div>
         <img src="screenshots/04_event_passes.png" alt="Event Passes">
@@ -1345,7 +1452,13 @@ Press Enter to generate a strong random key (recommended), or paste your own:</d
 
     <section id="mod-tasks">
       <h2>3.4 Tasks Management &amp; Gantt Timeline</h2>
-      <p>Kanban deliverable tracking, subtask checklists, and interactive Gantt scheduling engine.</p>
+      <p>Deliverable tracking engine built for cross-functional student and faculty committees:</p>
+      <ul>
+        <li><strong>Kanban Board:</strong> Swimlanes for <code>To Do</code>, <code>In Progress</code>, <code>Under Review</code>, and <code>Completed</code>.</li>
+        <li><strong>Subtask Checklists:</strong> Add atomic checklist steps. Completed tasks auto-calculate percentage completion.</li>
+        <li><strong>Gantt Timeline:</strong> Interactive timeline visualizing task dependencies and milestone delivery windows.</li>
+        <li><strong>Auto-Dismissal Protocol:</strong> Completed tasks remain visible for 48 hours for review before archiving into history.</li>
+      </ul>
       <div class="screenshot-card">
         <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — /dashboard/tasks</span></div>
         <img src="screenshots/05_tasks_gantt.png" alt="Tasks &amp; Gantt">
@@ -1355,7 +1468,11 @@ Press Enter to generate a strong random key (recommended), or paste your own:</d
 
     <section id="mod-ratings">
       <h2>3.5 Performance Ratings &amp; Evaluations</h2>
-      <p>Multi-criteria performance scoring (1–5 stars) across leadership, execution, and collaboration.</p>
+      <p>Evaluate committee members objectively following event completion:</p>
+      <ul>
+        <li><strong>Multi-Criteria Scoring:</strong> 1-to-5 star evaluation across Leadership, Execution Reliability, and Peer Collaboration.</li>
+        <li><strong>Blind Submission:</strong> Peer reviews remain confidential; aggregate score reflects on student performance transcripts.</li>
+      </ul>
       <div class="screenshot-card">
         <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — /dashboard/ratings</span></div>
         <img src="screenshots/06_performance_ratings.png" alt="Performance Ratings">
@@ -1365,7 +1482,11 @@ Press Enter to generate a strong random key (recommended), or paste your own:</d
 
     <section id="mod-procurement">
       <h2>3.6 Procurement &amp; Requisitions</h2>
-      <p>Material requisitions with quotation attachments and automated order tracking.</p>
+      <p>Request and track physical assets, stage hardware, and consumable materials:</p>
+      <ul>
+        <li><strong>Itemized Requisition:</strong> Enter item descriptions, quantities, vendor estimates, and upload quote PDFs.</li>
+        <li><strong>Approval Routing:</strong> Requisitions automatically route to Department Heads and Finance for sanction before purchase orders are issued.</li>
+      </ul>
       <div class="screenshot-card">
         <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — /dashboard/procurement</span></div>
         <img src="screenshots/07_procurement.png" alt="Procurement">
@@ -1375,7 +1496,35 @@ Press Enter to generate a strong random key (recommended), or paste your own:</d
 
     <section id="mod-reimbursements">
       <h2>3.7 Financial Reimbursements &amp; 3-Gate Audit</h2>
-      <p>Rigorous 3-gate financial audit: Gate 1 (Sector Head) → Gate 2 (Finance Head) → Gate 3 (Centre Head Settlement).</p>
+      <p>Guarantees financial integrity across student and institutional expenditures via a 3-Gate verification protocol:</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Gate Stage</th>
+            <th>Reviewing Authority</th>
+            <th>Verification Criteria &amp; Outcome</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Gate 1</strong></td>
+            <td>Sector / Dept Head (Tier 3)</td>
+            <td>Operational sign-off verifying the expenditure was necessary and authorized for the event.</td>
+          </tr>
+          <tr>
+            <td><strong>Gate 2</strong></td>
+            <td>Finance Head (Tier 3)</td>
+            <td>GST compliance audit verifying valid tax invoices, correct merchant details, and budget allocations.</td>
+          </tr>
+          <tr>
+            <td><strong>Gate 3</strong></td>
+            <td>Centre Head (Tier 2)</td>
+            <td>Final executive settlement releasing bank disbursement and stamping payment reference into audit ledger.</td>
+          </tr>
+        </tbody>
+      </table>
+
       <div class="screenshot-card">
         <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — /dashboard/reimbursements</span></div>
         <img src="screenshots/08_reimbursements.png" alt="Reimbursements">
@@ -1385,7 +1534,12 @@ Press Enter to generate a strong random key (recommended), or paste your own:</d
 
     <section id="mod-budget">
       <h2>3.8 Budgeting, P&amp;L &amp; Funds</h2>
-      <p>Master budget allocations, sponsorship revenue tracking, and actual vs projected expenditure.</p>
+      <p>Institutional financial ledger tracking allocations, sponsorships, and real-time variance:</p>
+      <ul>
+        <li><strong>Budget Ceilings:</strong> Assign hard spending limits per event and department.</li>
+        <li><strong>Sponsorship Tracking:</strong> Record external sponsor commitments, invoicing stages, and received payments.</li>
+        <li><strong>Variance Analytics:</strong> Live comparison between projected budget vs. actual settled disbursements.</li>
+      </ul>
       <div class="screenshot-card">
         <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — /dashboard/budget</span></div>
         <img src="screenshots/09_budgeting_funds.png" alt="Budgeting">
@@ -1395,7 +1549,12 @@ Press Enter to generate a strong random key (recommended), or paste your own:</d
 
     <section id="mod-designs">
       <h2>3.9 Design Portal &amp; AI OCR Spellcheck</h2>
-      <p>Poster upload portal with Tesseract OCR optical inspection, faculty proofreading, and caption generation.</p>
+      <p>Creative asset management with automated optical proofreading before public release:</p>
+      <ul>
+        <li><strong>Poster Upload:</strong> Upload banner graphics, Instagram posts, and flyers (PNG, JPG, WebP).</li>
+        <li><strong>Tesseract AI OCR Engine:</strong> Automatically extracts embedded typography from graphic assets and verifies dates, times, guest speaker names, and English grammar against institutional dictionaries.</li>
+        <li><strong>Faculty Clearance:</strong> Media Faculty approve creatives. Approved posters receive a green <code>Ready for Publishing</code> badge.</li>
+      </ul>
       <div class="screenshot-card">
         <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — /dashboard/designs</span></div>
         <img src="screenshots/10_design_portal.png" alt="Design Portal">
@@ -1405,7 +1564,12 @@ Press Enter to generate a strong random key (recommended), or paste your own:</d
 
     <section id="mod-forms">
       <h2>3.10 Dynamic Form Builder</h2>
-      <p>Drag-and-drop form designer with instant public URL and submission dataset exports.</p>
+      <p>Construct online surveys, registrations, and feedback forms without external cloud dependencies:</p>
+      <ul>
+        <li><strong>Drag-and-Drop Builder:</strong> Add Text inputs, Email, Dropdowns, Checkboxes, Rating Stars, and File Uploads.</li>
+        <li><strong>Public URL &amp; QR:</strong> Instantly generates public sharing slugs and printable high-res QR codes.</li>
+        <li><strong>Export Analytics:</strong> Export collected attendee datasets directly to Microsoft Word (<code>.docx</code>) and CSV.</li>
+      </ul>
       <div class="screenshot-card">
         <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — /dashboard/forms</span></div>
         <img src="screenshots/11_dynamic_forms.png" alt="Forms">
@@ -1415,7 +1579,12 @@ Press Enter to generate a strong random key (recommended), or paste your own:</d
 
     <section id="mod-visiting-card">
       <h2>3.11 Digital Visiting Cards &amp; 3D Keycard</h2>
-      <p>Interactive 3D WebGL rotating keycard with vCard export and personal portfolio links.</p>
+      <p>Every active member receives an interactive digital profile card:</p>
+      <ul>
+        <li><strong>3D WebGL Holographic Badge:</strong> Responds interactively to mouse hover, touch gestures, and smartphone gyroscopic tilt.</li>
+        <li><strong>vCard Download:</strong> Instant "Save Contact" button importing name, designation, phone, and email into device contacts.</li>
+        <li><strong>Wallet Pass:</strong> Downloadable identity pass for Apple Wallet and Google Wallet.</li>
+      </ul>
       <div class="screenshot-card">
         <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — /dashboard/visiting-card</span></div>
         <img src="screenshots/12_visiting_card.png" alt="Visiting Card">
@@ -1425,7 +1594,11 @@ Press Enter to generate a strong random key (recommended), or paste your own:</d
 
     <section id="mod-guest-directory">
       <h2>3.12 Guest Directory &amp; VIP Protocols</h2>
-      <p>VIP dignitary roster with physical visiting card OCR scanner and protocol guidelines.</p>
+      <p>Institutional registry of VIP dignitaries, keynote speakers, and academic guests:</p>
+      <ul>
+        <li><strong>Business Card OCR:</strong> Photograph physical visiting cards to auto-extract guest name, designation, and phone.</li>
+        <li><strong>VIP Protocols:</strong> Track dietary preferences, accommodation requirements, and security clearance notes.</li>
+      </ul>
       <div class="screenshot-card">
         <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — /dashboard/guest-directory</span></div>
         <img src="screenshots/13_guest_directory.png" alt="Guest Directory">
@@ -1435,7 +1608,11 @@ Press Enter to generate a strong random key (recommended), or paste your own:</d
 
     <section id="mod-guest-invites">
       <h2>3.13 VIP Mail Merge &amp; Invitations</h2>
-      <p>Personalized tokenized batch email invitations with live delivery progress tracking.</p>
+      <p>Batch dispatch formal invitations with personalized tokens and RSVP response tracking:</p>
+      <ul>
+        <li><strong>Personalized Templates:</strong> Tokenized merge fields for Dignitary Name, Salutation, and Session Title.</li>
+        <li><strong>RSVP Buttons:</strong> Embedded one-click response buttons recording attendance status directly in the database.</li>
+      </ul>
       <div class="screenshot-card">
         <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — /dashboard/guest-invites</span></div>
         <img src="screenshots/14_mail_merge_invites.png" alt="Mail Merge">
@@ -1445,7 +1622,11 @@ Press Enter to generate a strong random key (recommended), or paste your own:</d
 
     <section id="mod-announcements">
       <h2>3.14 Announcements Engine</h2>
-      <p>Scoped broadcasts delivering targeted notifications to specific departments or committees.</p>
+      <p>Scoped institutional broadcasts delivering targeted notices to specific divisions:</p>
+      <ul>
+        <li><strong>Scope Filters:</strong> <code>All Members</code>, <code>Faculty Only</code>, or <code>Core Committee Only</code>.</li>
+        <li><strong>Dashboard Alert:</strong> High-priority notices pin to the top of member dashboards and trigger email dispatches.</li>
+      </ul>
       <div class="screenshot-card">
         <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — /dashboard/announcements</span></div>
         <img src="screenshots/15_announcements.png" alt="Announcements">
@@ -1474,18 +1655,27 @@ Press Enter to generate a strong random key (recommended), or paste your own:</d
     </section>
 
     <section id="mod-event-reports">
-      <h2>3.17 Executive Event Reports &amp; Exports</h2>
-      <p>Structured post-event reports with attendance metrics, expenses, and formal PDF/DOCX generation.</p>
+      <h2>3.17 Executive Event Reports &amp; Formal Exports</h2>
+      <p>Following event completion, organizers and the General Secretary compile formal post-event documentation:</p>
+      <ul>
+        <li><strong>Automated Data Rollup:</strong> System aggregates final attendance numbers, check-in timestamps, and financial balance sheets.</li>
+        <li><strong>Narrative Sections:</strong> Organizers document Executive Summaries, Key Accomplishments, Feedback Highlights, and Committee Member ratings.</li>
+        <li><strong>Formal Exports:</strong> Generate university-standard <strong>Executive Report (PDF)</strong> or editable <strong>Word Document (.docx)</strong> for submission to the Vice Chancellor and Advisory Board.</li>
+      </ul>
       <div class="screenshot-card">
         <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — /dashboard/event-reports</span></div>
         <img src="screenshots/18_event_reports.png" alt="Event Reports">
-        <div class="screenshot-caption">Figure 3.17: Post-event executive report editor.</div>
+        <div class="screenshot-caption">Figure 3.17: Post-event executive report editor and document exporter.</div>
       </div>
     </section>
 
     <section id="mod-reports">
-      <h2>3.18 Operational Analytics</h2>
-      <p>Consolidated data charts with participation trends and budget utilization metrics.</p>
+      <h2>3.18 Operational Analytics &amp; High-Contrast Charts</h2>
+      <p>Institutional intelligence hub providing high-level operational trends:</p>
+      <ul>
+        <li><strong>Cross-Department Analytics:</strong> Compares task completion velocities, committee ratings, and budget burn-rates across quarters.</li>
+        <li><strong>Attendance Demographics:</strong> Analyzes student delegate participation across RTC and GG Campuses.</li>
+      </ul>
       <div class="screenshot-card">
         <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — /dashboard/reports</span></div>
         <img src="screenshots/19_reports_analytics.png" alt="Reports &amp; Analytics">
@@ -1495,7 +1685,12 @@ Press Enter to generate a strong random key (recommended), or paste your own:</d
 
     <section id="mod-approvals">
       <h2>3.19 Unified Approvals Inbox</h2>
-      <p>Single cross-module queue for all pending event, budget, task, and reimbursement requests.</p>
+      <p>Centralized sign-off command centre for Tier 2 and Tier 3 decision-makers:</p>
+      <ul>
+        <li><strong>Cross-Module Queue:</strong> Aggregates pending Event Proposals, Material Requisitions, Multi-Gate Reimbursements, Budget Overrides, and Dynamic Forms into a single prioritized queue.</li>
+        <li><strong>Inline Action Controls:</strong> Click <strong>Approve (Checkmark)</strong> for immediate clearance, or click <strong>Reject (Cross)</strong> and provide mandatory audit notes explaining remediation steps.</li>
+        <li><strong>Instant Sync:</strong> Decisions propagate reactively across all connected client browsers within 7 seconds.</li>
+      </ul>
       <div class="screenshot-card">
         <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — /dashboard/approvals</span></div>
         <img src="screenshots/20_approvals_inbox.png" alt="Approvals Inbox">
@@ -1505,7 +1700,12 @@ Press Enter to generate a strong random key (recommended), or paste your own:</d
 
     <section id="mod-directory">
       <h2>3.20 Members Directory &amp; RBAC Governance</h2>
-      <p>Institutional user provisioning, activation token generation, and role transitions.</p>
+      <p>Institutional user lifecycle management, provisioning, and access governance:</p>
+      <ul>
+        <li><strong>Provision New Member:</strong> Enter Name, Email, Division, and Role Designation. The system generates a single-use cryptographically signed activation token and dispatches it via email.</li>
+        <li><strong>Role Promotions:</strong> Change institutional designations (e.g. promoting a Training Associate to Core Committee Lead) with immediate capability inheritance.</li>
+        <li><strong>Security Controls:</strong> Trigger <strong>Force Password Reset</strong> upon next login, or click <strong>Deactivate Account</strong> to immediately revoke active sessions and block access.</li>
+      </ul>
       <div class="screenshot-card">
         <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — /dashboard/directory</span></div>
         <img src="screenshots/21_members_directory.png" alt="Members Directory">
@@ -1515,7 +1715,11 @@ Press Enter to generate a strong random key (recommended), or paste your own:</d
 
     <section id="mod-policies">
       <h2>3.21 Custom Group Policies</h2>
-      <p>Dynamic permission override rules and cross-functional committee capability matrix.</p>
+      <p>Granular capability override builder allowing fine-grained authorization rules without code modifications:</p>
+      <ul>
+        <li><strong>Module Overrides:</strong> Grant specific student members read or write capabilities to elevated modules (e.g. granting a student treasurer access to the Budgeting module).</li>
+        <li><strong>Tier Thresholds:</strong> Customize minimum tier access levels for individual workspace features.</li>
+      </ul>
       <div class="screenshot-card">
         <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — /dashboard/policies</span></div>
         <img src="screenshots/22_group_policies.png" alt="Group Policies">
@@ -1658,8 +1862,15 @@ Sender Email: &lt;notifications@institution.edu&gt;</div>
     </section>
 
     <section id="mod-backup">
-      <h2>3.23 Encrypted Backup &amp; Restore</h2>
-      <p>AES-256-GCM point-in-time disaster recovery snapshots with offline decryption tools.</p>
+      <h2>3.23 Encrypted Backup &amp; Disaster Recovery</h2>
+      <p>Guarantees institutional data sovereignty with point-in-time disaster recovery snapshots:</p>
+      <ul>
+        <li><strong>AES-256-GCM Snapshot:</strong> Dumps all local JSON collections, compresses the dataset, and encrypts the archive using <code>DATA_ENCRYPTION_KEY</code> into a downloadable <code>.leads.enc</code> backup.</li>
+        <li><strong>UI Restoration:</strong> Drag and drop any <code>.leads.enc</code> archive into the restore dropzone to roll back the system state.</li>
+        <li><strong>Offline CLI Tool:</strong> In severe server failure scenarios, backups can be decrypted offline on any machine using:
+          <div class="code-box">node scripts/decrypt-backup.js &lt;backup_file.leads.enc&gt; &lt;DATA_ENCRYPTION_KEY&gt;</div>
+        </li>
+      </ul>
       <div class="screenshot-card">
         <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — /dashboard/backup</span></div>
         <img src="screenshots/24_backup_restore.png" alt="Backup and Restore">
@@ -1669,7 +1880,12 @@ Sender Email: &lt;notifications@institution.edu&gt;</div>
 
     <section id="mod-settings">
       <h2>3.24 System Settings &amp; Security Controls</h2>
-      <p>Session timeout controls, institutional branding, maintenance mode toggles, and master key security.</p>
+      <p>Master portal configurations governed exclusively by Tier 1 Super Users:</p>
+      <ul>
+        <li><strong>Institutional Branding:</strong> Update Centre Name, official university logo, and institutional contact email.</li>
+        <li><strong>Session Security:</strong> Configure idle session timeouts (default: 4 hours) and force re-authentication intervals.</li>
+        <li><strong>Emergency Maintenance Mode:</strong> Toggle maintenance mode to lock out all non-administrator users during major system migrations.</li>
+      </ul>
       <div class="screenshot-card">
         <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — /dashboard/settings</span></div>
         <img src="screenshots/25_system_settings.png" alt="System Settings">

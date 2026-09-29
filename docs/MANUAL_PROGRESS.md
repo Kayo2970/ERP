@@ -32,8 +32,12 @@ This document serves as the master tracking registry for the LEADS ERP User Oper
 | **1.3** | Interactive Super User Seeding (`npm run setup`) | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T00:50:00+05:30 | Working Tree | Prompt-by-prompt walkthrough with non-personal placeholders | Complete |
 | **1.4** | Environment Configuration File (`.env`) Reference Table | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T00:50:00+05:30 | Working Tree | Complete variable reference (PORT, NODE_ENV, SMTP, KEYS) | Complete |
 | **1.5** | Production VPS Deployment (`vps-setup.sh`) & CD Pipeline | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T00:50:00+05:30 | Working Tree | Automated Ubuntu bootstrap, Nginx reverse proxy, PM2 reload | Complete |
+| **1.6** | First-Time Account Activation & Password Setup | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T00:54:00+05:30 | Working Tree | Single-use activation token, 8-char password rules | Complete |
+| **1.7** | Mobile / PWA Installation (iOS & Android) | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T00:54:00+05:30 | Working Tree | Safari / Chrome Add to Home Screen PWA setup | Complete |
+| **1.8** | Interface Layout & Navigation Shell | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T00:54:00+05:30 | Working Tree | Sidebar rail, period filter, persona quick switch | Complete |
+| **3.1-3.24**| Enriched Module Operating Instructions | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T00:55:00+05:30 | Working Tree | Detailed input fields, lifecycles, buttons, and approvals | Complete |
 | **3.22** | Email Engine & SMTP Mailroom Portal | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T00:50:00+05:30 | Working Tree | Granular field-by-field input guide, provider setup, diagnostics | Complete |
-| **6.0** | Compiled Official PDF Manual | `docs/LEADS_ERP_User_Manual.pdf` | 2026-09-30T00:51:21+05:30 | Working Tree | High-resolution 64.65 MB printable PDF output with action screenshots | Complete |
+| **6.0** | Compiled Official PDF Manual | `docs/LEADS_ERP_User_Manual.pdf` | 2026-09-30T00:55:56+05:30 | Working Tree | High-resolution 67.07 MB printable PDF output with action screenshots | Complete |
 
 ---
 
