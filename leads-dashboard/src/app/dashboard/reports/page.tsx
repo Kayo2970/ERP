@@ -461,11 +461,14 @@ export default function ReportsPage() {
                   <Radar name="Performance" dataKey="A" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.4} />
                   <Tooltip 
                     contentStyle={{ 
-                      backgroundColor: 'rgba(15, 23, 42, 0.9)', 
-                      borderColor: 'rgba(255,255,255,0.1)', 
+                      backgroundColor: 'rgba(15, 23, 42, 0.95)', 
+                      borderColor: 'rgba(255,255,255,0.15)', 
                       borderRadius: '12px',
-                      fontSize: '11px' 
+                      fontSize: '11px',
+                      color: '#f8fafc',
                     }} 
+                    itemStyle={{ color: '#38bdf8', fontWeight: 600 }}
+                    labelStyle={{ color: '#f8fafc', fontWeight: 700 }}
                   />
                 </RadarChart>
               </ResponsiveContainer>
@@ -505,18 +508,27 @@ export default function ReportsPage() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={barData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                  <XAxis dataKey="name" tick={{ fill: 'currentColor', fontSize: 10 }} interval={0} angle={-25} textAnchor="end" />
+                  <XAxis dataKey="name" tick={{ fill: 'currentColor', fontSize: 10 }} interval={0} angle={-25} textAnchor="end" height={45} />
                   <YAxis domain={[0, 5]} tick={{ fill: 'currentColor', fontSize: 10 }} />
                   <Tooltip
-                    formatter={(value: any, _name: any, props: any) => [
-                      `${value} / 5.0 — ${props?.payload?.detail || ''}`,
-                      'Score',
-                    ]}
-                    contentStyle={{
-                      backgroundColor: 'rgba(15, 23, 42, 0.9)',
-                      borderColor: 'rgba(255,255,255,0.1)',
-                      borderRadius: '12px',
-                      fontSize: '11px'
+                    content={({ active, payload, label }: any) => {
+                      if (!active || !payload || !payload.length) return null;
+                      const item = payload[0];
+                      const data = item?.payload;
+                      const scoreVal = typeof item?.value === 'number' ? item.value.toFixed(1) : item?.value;
+                      return (
+                        <div className="bg-slate-900/95 border border-white/15 rounded-xl p-3 shadow-2xl backdrop-blur-md text-xs pointer-events-none">
+                          <p className="font-bold text-slate-100 text-xs mb-1.5">{label || data?.name}</p>
+                          <div className="flex items-center gap-1.5 text-slate-200">
+                            <span className="font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded text-[11px]">
+                              Score: {scoreVal} / 5.0
+                            </span>
+                            {data?.detail && (
+                              <span className="text-slate-300 font-medium text-[11px]">— {data.detail}</span>
+                            )}
+                          </div>
+                        </div>
+                      );
                     }}
                   />
                   <Bar dataKey="score" radius={[6, 6, 0, 0]}>
@@ -551,9 +563,16 @@ export default function ReportsPage() {
             <tbody className="divide-y divide-theme-border/20">
               {filteredRatings.map((rating) => {
                 const colorTokens = getRatingColor(rating.overallScore);
+                const targetMember = members.find(m => m.id === rating.targetId || m.name.toLowerCase() === rating.targetName.toLowerCase());
+                const deptOrDiv = targetMember?.department || targetMember?.division;
                 return (
                   <tr key={rating.id} className="hover:bg-theme-border/10 transition-all text-xs">
-                    <td className="py-3 pr-2 font-bold text-theme-text-primary">{rating.targetName}</td>
+                    <td className="py-3 pr-2">
+                      <div className="font-bold text-theme-text-primary">{rating.targetName}</div>
+                      {deptOrDiv && (
+                        <div className="text-[10px] text-theme-text-secondary font-normal mt-0.5">{deptOrDiv}</div>
+                      )}
+                    </td>
                     <td className="py-3 pr-2 text-theme-text-secondary font-medium">{rating.taskTitle}</td>
                     <td className="py-3 pr-2 text-theme-text-secondary">{rating.eventName || '—'}</td>
                     <td className="py-3 pr-2 text-theme-text-secondary">{rating.raterName}</td>

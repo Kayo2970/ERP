@@ -246,8 +246,9 @@ export function isHeadOfEvents(user: SessionUser): boolean {
 /** Check if user is Events Head for GG Campus or holds Tier 2.5 leadership. */
 export function isEventsHeadGgCampus(user: SessionUser): boolean {
   if (!user) return false;
-  if (user.tier === 2.5) return true;
   const role = ((user as any)?.role || '').toLowerCase();
+  if (role.includes('finance')) return false;
+  if (user.tier === 2.5) return true;
   const committee = ((user as any)?.committee || '').toLowerCase();
   return (role.includes('events head') && role.includes('gg')) || 
          (role.includes('head of events') && role.includes('gg')) ||

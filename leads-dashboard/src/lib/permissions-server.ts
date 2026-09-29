@@ -169,8 +169,9 @@ export function isCentreHead(user: ServerUser, settings: AccessLevelSettings): b
 
 export function isEventsHeadGgCampus(user: ServerUser): boolean {
   if (!user) return false;
-  if (user.tier === 2.5) return true;
   const role = (user.role || '').toLowerCase();
+  if (role.includes('finance')) return false;
+  if (user.tier === 2.5) return true;
   return (role.includes('events head') && role.includes('gg')) || (role.includes('head of events') && role.includes('gg')) || (role.includes('events') && role.includes('gg campus'));
 }
 

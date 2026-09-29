@@ -945,6 +945,7 @@ export function findApprovalRecipients(members: Array<{ id?: string; name: strin
 
   const eventsHeadGg = active.find(m => {
     const role = (m.role || '').toLowerCase();
+    if (role.includes('finance')) return false;
     return m.tier === 2.5 || (role.includes('events head') && role.includes('gg')) || (role.includes('head of events') && role.includes('gg'));
   });
 

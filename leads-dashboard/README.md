@@ -69,6 +69,7 @@ pm2 restart leads-dashboard
 - **In-Card Rich Overview Previews**: Each card includes an immediate preview snippet (announcement scope & message body, task brief & due date, event dates & venue, design thumbnail & category, report file specs).
 - **Interactive Deep Overview Modal**: One-click modal inspection showing un-truncated content bodies, attachments, requester messages, and embedded **Approve / Reject** buttons with optional decision notes.
 - **Multi-Panel Auto-Sync**: Sibling requests for Centre Head, Advisor, and GG Events Head automatically resolve when any panel member decides.
+- **Role-Gated Approver Resolution**: Approver discovery explicitly excludes financial roles (`Finance Head`) from `eventsHeadGg` resolution, ensuring institutional event, report, and design approval emails reach only authorized event leadership.
 
 #### 7. Design Portal (`/dashboard/designs`)
 - **Asset Review Desk**: Dedicated portal for Design and Social Media department asset requests, proofreading, and approval workflows.
@@ -116,6 +117,8 @@ pm2 restart leads-dashboard
 #### 13. Analytics & Reports (`/dashboard/reports`)
 - **Executive Report Generator**: Styled PDF report generation and CSV data exports for scorecards, event post-mortems, and financial audits.
 - **Evaluator Attribution**: The bar chart tooltip and the PDF's Event-wise Breakdown table both show who submitted each score, not just the score itself.
+- **High-Contrast Chart Tooltips**: Deliverable Performance Distribution and radar charts feature dedicated dark-mode high-contrast tooltips ensuring full readability of scores, task averages, and evaluator breakdowns.
+- **Audited Performance Context**: The Audited Performance Logs table displays each student's department context beneath their name, and chart X-axis labels are padded to eliminate clipping.
 
 #### 14. Announcements Engine (`/dashboard/announcements`)
 - **Targeted Broadcasting**: Multi-scope broadcasting (`ALL_MEMBERS`, `CORE_COMMITTEE`, `DEPARTMENTS`, `INDIVIDUAL`).

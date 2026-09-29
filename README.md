@@ -53,6 +53,10 @@ This platform replaces a scattered mix of WhatsApp groups, spreadsheets, and ema
 
 Everything that's changed since this README was last updated (2026-09-15). Full detail is in the git history (`git log`); this is the summary.
 
+### 2026-09-29
+- **Governance & Approvals / Email Routing**: Hardened `eventsHeadGg` approver resolution in `findApprovalRecipients()` and `isEventsHeadGgCampus()` so that members holding financial roles (`Finance Head`) can never be mistakenly treated as the GG Campus Events Head or receive institutional event/report/design approval emails, even if their tier was misconfigured.
+- **Analytics & Reports (`/dashboard/reports`)**: Fixed Deliverable Performance Distribution bar chart tooltip contrast on dark mode with a high-contrast custom tooltip component, guaranteed X-axis student names are never clipped, and enhanced the Audited Performance Logs table to surface each student's department context beneath their name.
+
 ### 2026-09-26
 - **Ratings**: Faculty division members can no longer be selected as an individual, group, or committee task assignee — Faculty are evaluators, never rating targets, but the assignee pickers previously let them through, so a Faculty member could end up looking "rated" in Ratings/Reports (#152).
 - **Ratings**: new evaluation score sliders now default to `3` (Satisfactory) instead of `5` (the maximum) — a reviewer who opened the evaluation modal and submitted without touching a slider was silently handing out a perfect 5/5 score to someone who was never actually evaluated (#152).

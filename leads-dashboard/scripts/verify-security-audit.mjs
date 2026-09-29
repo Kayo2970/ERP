@@ -102,5 +102,18 @@ mockRatings = mockRatings.filter(r => r.taskId !== deletingTaskId);
 assert.strictEqual(mockRatings.length, 1);
 assert.strictEqual(mockRatings[0].taskId, 'task_102');
 
+// 7. Logic check: Finance Head never matched as GG Events Head
+function isEventsHeadGgCampusCheck(user) {
+  if (!user) return false;
+  const role = (user.role || '').toLowerCase();
+  if (role.includes('finance')) return false;
+  if (user.tier === 2.5) return true;
+  return (role.includes('events head') && role.includes('gg')) || (role.includes('head of events') && role.includes('gg'));
+}
+
+assert.strictEqual(isEventsHeadGgCampusCheck({ role: 'Finance Head', tier: 2.5 }), false, 'Finance Head must not be matched as GG Events Head even if tier is 2.5');
+assert.strictEqual(isEventsHeadGgCampusCheck({ role: 'Head of Events (GG Campus)', tier: 2.5 }), true, 'GG Events Head must be matched');
+assert.strictEqual(isEventsHeadGgCampusCheck({ role: 'Head of Events (RTC Campus)', tier: 3 }), false, 'RTC Events Head must not be matched as GG Events Head');
+
 console.log('All security audit and direct correlation checks passed successfully!');
 

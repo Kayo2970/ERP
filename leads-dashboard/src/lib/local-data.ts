@@ -3400,6 +3400,7 @@ function spawnEventReportRequestTask(eventId: string, eventTitle: string | undef
   const advisor = members.find(m => /\badvisor\b/.test((m.role || '').toLowerCase()));
   const eventsHeadGg = members.find(m => {
     const role = (m.role || '').toLowerCase();
+    if (role.includes('finance')) return false;
     return m.tier === 2.5 || (role.includes('events head') && role.includes('gg')) || (role.includes('head of events') && role.includes('gg'));
   });
 
