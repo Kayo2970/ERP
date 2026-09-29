@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 650" width="100%" height="100%">
+  <defs>
+    <linearGradient id="ganttBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b0f19" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+  </defs>
+
+  <rect width="1100" height="650" rx="12" fill="url(#ganttBg)"/>
+
+  <!-- Module Header -->
+  <rect x="0" y="0" width="1100" height="60" fill="#1e293b"/>
+  <text x="30" y="38" fill="#38bdf8" font-family="-apple-system, sans-serif" font-weight="800" font-size="18">Task Delegation &amp; Gantt Schedule Engine</text>
+  
+  <rect x="750" y="15" width="150" height="30" rx="6" fill="#334155"/>
+  <text x="825" y="35" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="12" font-weight="600" text-anchor="middle">View: Gantt Timeline</text>
+  
+  <rect x="915" y="15" width="150" height="30" rx="6" fill="#38bdf8"/>
+  <text x="990" y="35" fill="#0f172a" font-family="-apple-system, sans-serif" font-size="12" font-weight="bold" text-anchor="middle">+ Assign New Task</text>
+
+  <!-- Auto-Dismissal Notice Banner -->
+  <rect x="30" y="75" width="1040" height="42" rx="8" fill="rgba(56, 189, 248, 0.1)" stroke="#38bdf8" stroke-width="1"/>
+  <text x="50" y="101" fill="#38bdf8" font-family="-apple-system, sans-serif" font-size="13" font-weight="600">⚡ Automated Event-Bound Task Dismissal Active:</text>
+  <text x="390" y="101" fill="#cbd5e1" font-family="-apple-system, sans-serif" font-size="13">When an event concludes, associated operational tasks automatically archive within 48h to prevent backlog bloat.</text>
+
+  <!-- Gantt Chart Container -->
+  <rect x="30" y="135" width="1040" height="480" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+
+  <!-- Table Header Left vs Timeline Columns Right -->
+  <rect x="30" y="135" width="380" height="45" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+  <text x="50" y="163" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="13" font-weight="bold">TASK &amp; ASSIGNEE</text>
+
+  <!-- Timeline Days Header -->
+  <rect x="410" y="135" width="660" height="45" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+  <g font-family="-apple-system, sans-serif" font-size="12" font-weight="600" fill="#94a3b8">
+    <text x="440" y="163">Oct 01</text>
+    <text x="530" y="163">Oct 05</text>
+    <text x="620" y="163">Oct 10</text>
+    <text x="710" y="163">Oct 15 (Conclave)</text>
+    <text x="840" y="163">Oct 20</text>
+    <text x="960" y="163">Oct 25</text>
+  </g>
+
+  <!-- Vertical Grid Guidelines -->
+  <g stroke="#334155" stroke-dasharray="4 4" stroke-width="1">
+    <line x1="460" y1="180" x2="460" y2="615"/>
+    <line x1="550" y1="180" x2="550" y2="615"/>
+    <line x1="640" y1="180" x2="640" y2="615"/>
+    <line x1="770" y1="180" x2="770" y2="615"/>
+    <line x1="880" y1="180" x2="880" y2="615"/>
+    <line x1="990" y1="180" x2="990" y2="615"/>
+  </g>
+
+  <!-- Task Row 1: Finalize Keynote Speakers -->
+  <line x1="30" y1="240" x2="1070" y2="240" stroke="#334155"/>
+  <text x="50" y="210" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="13" font-weight="600">Finalize Keynote Speakers</text>
+  <text x="50" y="230" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="11">Assignee: Ananya Sen (Events Lead) • High Priority</text>
+  <!-- Bar 1 (Completed) -->
+  <rect x="430" y="198" width="190" height="28" rx="6" fill="#10b981"/>
+  <text x="525" y="217" fill="#fff" font-family="-apple-system, sans-serif" font-size="11" font-weight="bold" text-anchor="middle">100% Completed</text>
+
+  <!-- Task Row 2: Stage & AV Equipment Procurement -->
+  <line x1="30" y1="310" x2="1070" y2="310" stroke="#334155"/>
+  <text x="50" y="275" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="13" font-weight="600">Stage &amp; AV Equipment Requisition</text>
+  <text x="50" y="295" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="11">Assignee: Karthik V. (Logistics Lead) • In Audit</text>
+  <!-- Bar 2 (In Progress) -->
+  <rect x="520" y="265" width="220" height="28" rx="6" fill="#38bdf8"/>
+  <text x="630" y="284" fill="#0f172a" font-family="-apple-system, sans-serif" font-size="11" font-weight="bold" text-anchor="middle">75% In Progress</text>
+
+  <!-- Task Row 3: Design Banner Proofreading & OCR Scan -->
+  <line x1="30" y1="380" x2="1070" y2="380" stroke="#334155"/>
+  <text x="50" y="345" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="13" font-weight="600">Banner Proofreading &amp; Printing</text>
+  <text x="50" y="365" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="11">Assignee: Meera Nair (Design Associate)</text>
+  <!-- Bar 3 (Active) -->
+  <rect x="620" y="335" width="140" height="28" rx="6" fill="#6366f1"/>
+  <text x="690" y="354" fill="#fff" font-family="-apple-system, sans-serif" font-size="11" font-weight="bold" text-anchor="middle">Proofing OCR</text>
+
+  <!-- Task Row 4: Event Day Scanner Kiosk Operations -->
+  <line x1="30" y1="450" x2="1070" y2="450" stroke="#334155"/>
+  <text x="50" y="415" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="13" font-weight="600">Auditorium West QR Check-In Desk</text>
+  <text x="50" y="435" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="11">Assignee: Student Volunteers (Tier 6)</text>
+  <!-- Bar 4 (Scheduled Day-Of) -->
+  <rect x="750" y="405" width="40" height="28" rx="6" fill="#f59e0b"/>
+  <text x="770" y="424" fill="#0f172a" font-family="-apple-system, sans-serif" font-size="11" font-weight="bold" text-anchor="middle">Live</text>
+
+  <!-- Task Row 5: Post-Event Settlement & Expense Audit -->
+  <text x="50" y="485" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="13" font-weight="600">Financial Reimbursement Claims &amp; Audit</text>
+  <text x="50" y="505" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="11">Assignee: Finance Head &amp; Dept Approver</text>
+  <!-- Bar 5 (Post-Event Window) -->
+  <rect x="790" y="475" width="160" height="28" rx="6" fill="#475569"/>
+  <text x="870" y="494" fill="#cbd5e1" font-family="-apple-system, sans-serif" font-size="11" font-weight="bold" text-anchor="middle">Auto-Schedule</text>
+</svg>

@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1150 680" width="100%" height="100%">
+  <defs>
+    <linearGradient id="finBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b0f19" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+  </defs>
+
+  <rect width="1150" height="680" rx="12" fill="url(#finBg)"/>
+
+  <!-- Header -->
+  <rect x="0" y="0" width="1150" height="60" fill="#1e293b"/>
+  <text x="30" y="38" fill="#38bdf8" font-family="-apple-system, sans-serif" font-weight="800" font-size="18">Financial Reimbursements &amp; 3-Gate Audit Pipeline</text>
+  
+  <rect x="970" y="15" width="150" height="30" rx="6" fill="#10b981"/>
+  <text x="1045" y="35" fill="#fff" font-family="-apple-system, sans-serif" font-size="12" font-weight="bold" text-anchor="middle">+ Submit Expense</text>
+
+  <!-- 3-Gate Architecture Diagram (Visual Infographic) -->
+  <rect x="30" y="80" width="1090" height="135" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+  <text x="50" y="105" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="13" font-weight="700">MANDATORY 3-GATE INSTITUTIONAL AUDIT PROGRESSION</text>
+
+  <!-- Gate 1 -->
+  <g transform="translate(50, 120)">
+    <rect width="310" height="75" rx="8" fill="#0f172a" stroke="#10b981" stroke-width="1.5"/>
+    <circle cx="25" cy="25" r="12" fill="#10b981"/>
+    <text x="25" y="30" fill="#fff" font-family="-apple-system, sans-serif" font-size="12" font-weight="bold" text-anchor="middle">1</text>
+    <text x="48" y="24" fill="#10b981" font-family="-apple-system, sans-serif" font-size="12" font-weight="bold">GATE 1: EVENT HEAD</text>
+    <text x="48" y="42" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="12">Receipt &amp; Line-Item Verification</text>
+    <text x="48" y="58" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="10">Verifies GST bill validity and budget allocation.</text>
+  </g>
+
+  <!-- Arrow 1 -->
+  <text x="380" y="165" fill="#38bdf8" font-size="20" font-weight="bold">→</text>
+
+  <!-- Gate 2 -->
+  <g transform="translate(415, 120)">
+    <rect width="310" height="75" rx="8" fill="#0f172a" stroke="#38bdf8" stroke-width="1.5"/>
+    <circle cx="25" cy="25" r="12" fill="#38bdf8"/>
+    <text x="25" y="30" fill="#0f172a" font-family="-apple-system, sans-serif" font-size="12" font-weight="bold" text-anchor="middle">2</text>
+    <text x="48" y="24" fill="#38bdf8" font-family="-apple-system, sans-serif" font-size="12" font-weight="bold">GATE 2: FINANCE HEAD</text>
+    <text x="48" y="42" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="12">Treasury &amp; Policy Compliance</text>
+    <text x="48" y="58" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="10">Cross-checks central bank ledger &amp; expense caps.</text>
+  </g>
+
+  <!-- Arrow 2 -->
+  <text x="745" y="165" fill="#38bdf8" font-size="20" font-weight="bold">→</text>
+
+  <!-- Gate 3 -->
+  <g transform="translate(780, 120)">
+    <rect width="320" height="75" rx="8" fill="#0f172a" stroke="#6366f1" stroke-width="1.5"/>
+    <circle cx="25" cy="25" r="12" fill="#6366f1"/>
+    <text x="25" y="30" fill="#fff" font-family="-apple-system, sans-serif" font-size="12" font-weight="bold" text-anchor="middle">3</text>
+    <text x="48" y="24" fill="#818cf8" font-family="-apple-system, sans-serif" font-size="12" font-weight="bold">GATE 3: DIRECTOR / SUPER USER</text>
+    <text x="48" y="42" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="12">Executive Sanction &amp; Payout Release</text>
+    <text x="48" y="58" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="10">Final disbursement authorization &amp; NEFT ref log.</text>
+  </g>
+
+  <!-- Claims Table -->
+  <rect x="30" y="235" width="1090" height="415" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+  
+  <!-- Table Header -->
+  <rect x="30" y="235" width="1090" height="42" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+  <g font-family="-apple-system, sans-serif" font-size="12" font-weight="bold" fill="#94a3b8">
+    <text x="50" y="261">CLAIM ID</text>
+    <text x="160" y="261">EVENT NAME</text>
+    <text x="360" y="261">CLAIMANT</text>
+    <text x="520" y="261">AMOUNT</text>
+    <text x="640" y="261">AUDIT STAGE</text>
+    <text x="830" y="261">RECEIPT / GST</text>
+    <text x="980" y="261">ACTION</text>
+  </g>
+
+  <!-- Row 1 -->
+  <line x1="30" y1="330" x2="1120" y2="330" stroke="#334155"/>
+  <text x="50" y="305" fill="#38bdf8" font-family="monospace" font-size="12" font-weight="bold">#RB-9021</text>
+  <text x="160" y="300" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="13" font-weight="600">AI Innovators Conclave</text>
+  <text x="160" y="318" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="11">Catering &amp; Refreshments</text>
+  <text x="360" y="305" fill="#cbd5e1" font-family="-apple-system, sans-serif" font-size="13">Rahul Sharma</text>
+  <text x="520" y="305" fill="#10b981" font-family="-apple-system, sans-serif" font-size="14" font-weight="bold">₹14,200</text>
+  
+  <rect x="640" y="290" width="150" height="24" rx="4" fill="rgba(245, 158, 11, 0.15)" stroke="#f59e0b"/>
+  <text x="715" y="306" fill="#f59e0b" font-family="-apple-system, sans-serif" font-size="11" font-weight="bold" text-anchor="middle">Pending: Finance Head</text>
+
+  <text x="830" y="305" fill="#38bdf8" font-family="-apple-system, sans-serif" font-size="12">📄 invoice_9021.pdf</text>
+  
+  <rect x="975" y="290" width="70" height="24" rx="4" fill="#10b981"/>
+  <text x="1010" y="306" fill="#fff" font-family="-apple-system, sans-serif" font-size="11" font-weight="bold" text-anchor="middle">Review</text>
+
+  <!-- Row 2 -->
+  <line x1="30" y1="385" x2="1120" y2="385" stroke="#334155"/>
+  <text x="50" y="360" fill="#38bdf8" font-family="monospace" font-size="12" font-weight="bold">#RB-9018</text>
+  <text x="160" y="355" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="13" font-weight="600">RoboLEADS Workshop</text>
+  <text x="160" y="373" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="11">Sensors &amp; Soldering Kits</text>
+  <text x="360" y="360" fill="#cbd5e1" font-family="-apple-system, sans-serif" font-size="13">Aditya Joshi</text>
+  <text x="520" y="360" fill="#10b981" font-family="-apple-system, sans-serif" font-size="14" font-weight="bold">₹8,750</text>
+
+  <rect x="640" y="345" width="150" height="24" rx="4" fill="rgba(99, 102, 241, 0.15)" stroke="#6366f1"/>
+  <text x="715" y="361" fill="#818cf8" font-family="-apple-system, sans-serif" font-size="11" font-weight="bold" text-anchor="middle">Pending: Director</text>
+
+  <text x="830" y="360" fill="#38bdf8" font-family="-apple-system, sans-serif" font-size="12">📄 robo_bill_88.jpg</text>
+  
+  <rect x="975" y="345" width="70" height="24" rx="4" fill="#6366f1"/>
+  <text x="1010" y="361" fill="#fff" font-family="-apple-system, sans-serif" font-size="11" font-weight="bold" text-anchor="middle">Sanction</text>
+
+  <!-- Row 3 (Disbursed) -->
+  <line x1="30" y1="440" x2="1120" y2="440" stroke="#334155"/>
+  <text x="50" y="415" fill="#38bdf8" font-family="monospace" font-size="12" font-weight="bold">#RB-8994</text>
+  <text x="160" y="410" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="13" font-weight="600">Faculty Induction 2026</text>
+  <text x="160" y="428" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="11">Stationery &amp; Badges</text>
+  <text x="360" y="415" fill="#cbd5e1" font-family="-apple-system, sans-serif" font-size="13">Sunita Rao</text>
+  <text x="520" y="415" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="14" font-weight="bold">₹3,450</text>
+
+  <rect x="640" y="400" width="150" height="24" rx="4" fill="rgba(16, 185, 129, 0.15)" stroke="#10b981"/>
+  <text x="715" y="416" fill="#10b981" font-family="-apple-system, sans-serif" font-size="11" font-weight="bold" text-anchor="middle">PAID (UTR #881920)</text>
+
+  <text x="830" y="415" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="12">📄 stationery_rec.pdf</text>
+  <text x="980" y="415" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="11">Settled</text>
+</svg>

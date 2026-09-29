@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 650" width="100%" height="100%">
+  <defs>
+    <linearGradient id="memBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b0f19" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+  </defs>
+
+  <rect width="1100" height="650" rx="12" fill="url(#memBg)"/>
+
+  <!-- Top Header -->
+  <rect x="0" y="0" width="1100" height="60" fill="#1e293b"/>
+  <text x="30" y="38" fill="#38bdf8" font-family="-apple-system, sans-serif" font-weight="800" font-size="18">Members Directory &amp; RBAC Access Governance</text>
+  
+  <rect x="740" y="15" width="160" height="30" rx="6" fill="#334155"/>
+  <text x="820" y="35" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="12" font-weight="600" text-anchor="middle">🔍 Search Members...</text>
+
+  <rect x="915" y="15" width="155" height="30" rx="6" fill="#38bdf8"/>
+  <text x="992" y="35" fill="#0f172a" font-family="-apple-system, sans-serif" font-size="12" font-weight="bold" text-anchor="middle">+ Provision User</text>
+
+  <!-- Table Container -->
+  <rect x="30" y="80" width="1040" height="540" rx="10" fill="#1e293b" stroke="#334155"/>
+  
+  <!-- Table Header -->
+  <rect x="30" y="80" width="1040" height="42" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+  <g font-family="-apple-system, sans-serif" font-size="12" font-weight="bold" fill="#94a3b8">
+    <text x="50" y="106">NAME &amp; EMAIL</text>
+    <text x="310" y="106">DEPARTMENT</text>
+    <text x="470" y="106">ROLE &amp; TIER</text>
+    <text x="660" y="106">ACTIVATION STATUS</text>
+    <text x="840" y="106">LAST ACTIVE</text>
+    <text x="970" y="106">ACTIONS</text>
+  </g>
+
+  <!-- Row 1: Super User -->
+  <line x1="30" y1="180" x2="1070" y2="180" stroke="#334155"/>
+  <text x="50" y="145" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="13" font-weight="bold">Dr. System Administrator</text>
+  <text x="50" y="163" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="11">admin.leads@msruas.ac.in</text>
+  <text x="310" y="155" fill="#cbd5e1" font-family="-apple-system, sans-serif" font-size="12">Next-Gen Centre</text>
+  <rect x="470" y="140" width="130" height="24" rx="4" fill="rgba(99, 102, 241, 0.2)" stroke="#6366f1"/>
+  <text x="535" y="156" fill="#818cf8" font-family="-apple-system, sans-serif" font-size="11" font-weight="bold" text-anchor="middle">Tier 1 • Super User</text>
+  <text x="660" y="155" fill="#10b981" font-family="-apple-system, sans-serif" font-size="12" font-weight="600">● Active (2FA Keyed)</text>
+  <text x="840" y="155" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="12">Just now</text>
+  <text x="970" y="155" fill="#38bdf8" font-family="-apple-system, sans-serif" font-size="12">Edit • Logs</text>
+
+  <!-- Row 2: Centre Head -->
+  <line x1="30" y1="240" x2="1070" y2="240" stroke="#334155"/>
+  <text x="50" y="205" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="13" font-weight="bold">Prof. K. Venkatesh</text>
+  <text x="50" y="223" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="11">head.leads@msruas.ac.in</text>
+  <text x="310" y="215" fill="#cbd5e1" font-family="-apple-system, sans-serif" font-size="12">Executive Office</text>
+  <rect x="470" y="200" width="140" height="24" rx="4" fill="rgba(56, 189, 248, 0.2)" stroke="#38bdf8"/>
+  <text x="540" y="216" fill="#38bdf8" font-family="-apple-system, sans-serif" font-size="11" font-weight="bold" text-anchor="middle">Tier 2 • Centre Head</text>
+  <text x="660" y="215" fill="#10b981" font-family="-apple-system, sans-serif" font-size="12" font-weight="600">● Active</text>
+  <text x="840" y="215" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="12">2 hours ago</text>
+  <text x="970" y="215" fill="#38bdf8" font-family="-apple-system, sans-serif" font-size="12">Edit • Impersonate</text>
+
+  <!-- Row 3: Events Head -->
+  <line x1="30" y1="300" x2="1070" y2="300" stroke="#334155"/>
+  <text x="50" y="265" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="13" font-weight="bold">Ananya Sen</text>
+  <text x="50" y="283" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="11">ananya.events@msruas.ac.in</text>
+  <text x="310" y="275" fill="#cbd5e1" font-family="-apple-system, sans-serif" font-size="12">Events Directorate</text>
+  <rect x="470" y="260" width="130" height="24" rx="4" fill="rgba(16, 185, 129, 0.2)" stroke="#10b981"/>
+  <text x="535" y="276" fill="#10b981" font-family="-apple-system, sans-serif" font-size="11" font-weight="bold" text-anchor="middle">Tier 3 • Events Head</text>
+  <text x="660" y="275" fill="#10b981" font-family="-apple-system, sans-serif" font-size="12" font-weight="600">● Active</text>
+  <text x="840" y="275" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="12">Yesterday</text>
+  <text x="970" y="275" fill="#38bdf8" font-family="-apple-system, sans-serif" font-size="12">Edit • Re-invite</text>
+
+  <!-- Row 4: Pending Activation Student Associate -->
+  <line x1="30" y1="360" x2="1070" y2="360" stroke="#334155"/>
+  <text x="50" y="325" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="13" font-weight="bold">Karan Malhotra</text>
+  <text x="50" y="343" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="11">karan.m.ug23@msruas.ac.in</text>
+  <text x="310" y="335" fill="#cbd5e1" font-family="-apple-system, sans-serif" font-size="12">Design &amp; Media</text>
+  <rect x="470" y="320" width="160" height="24" rx="4" fill="rgba(245, 158, 11, 0.2)" stroke="#f59e0b"/>
+  <text x="550" y="336" fill="#f59e0b" font-family="-apple-system, sans-serif" font-size="11" font-weight="bold" text-anchor="middle">Tier 6 • Training Associate</text>
+  
+  <rect x="660" y="322" width="140" height="22" rx="4" fill="rgba(245, 158, 11, 0.15)"/>
+  <text x="730" y="337" fill="#f59e0b" font-family="-apple-system, sans-serif" font-size="11" font-weight="bold" text-anchor="middle">Invited (Token Pending)</text>
+  
+  <text x="840" y="335" fill="#64748b" font-family="-apple-system, sans-serif" font-size="12">Never logged in</text>
+  <text x="970" y="335" fill="#f59e0b" font-family="-apple-system, sans-serif" font-size="12">Resend Link</text>
+</svg>

@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 580" width="100%" height="100%">
+  <defs>
+    <linearGradient id="termGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+
+  <rect width="1000" height="580" rx="16" fill="url(#termGrad)"/>
+  
+  <!-- Terminal Header Window Controls -->
+  <rect x="0" y="0" width="1000" height="44" rx="16" fill="#1e293b"/>
+  <rect x="0" y="32" width="1000" height="12" fill="#1e293b"/>
+  <circle cx="28" cy="22" r="7" fill="#ef4444"/>
+  <circle cx="50" cy="22" r="7" fill="#f59e0b"/>
+  <circle cx="72" cy="22" r="7" fill="#10b981"/>
+  <text x="500" y="27" fill="#94a3b8" font-family="monospace" font-size="13" font-weight="600" text-anchor="middle">LEADS ERP Setup Terminal — node scripts/setup-superuser.js</text>
+
+  <!-- Terminal Content -->
+  <g font-family="'Fira Code', 'Cascadia Code', Consolas, monospace" font-size="14" fill="#f8fafc">
+    <!-- Prompt 1 -->
+    <text x="32" y="80" fill="#38bdf8" font-weight="bold">administrator@leads-vps:/ERP/leads-dashboard$</text>
+    <text x="440" y="80" fill="#f1f5f9">node scripts/setup-superuser.js</text>
+    
+    <!-- Banner -->
+    <text x="32" y="115" fill="#6366f1" font-weight="bold">╔════════════════════════════════════════════════════════════════╗</text>
+    <text x="32" y="135" fill="#6366f1" font-weight="bold">║           LEADS ERP — First-Time Super User &amp; Key Setup       ║</text>
+    <text x="32" y="155" fill="#6366f1" font-weight="bold">╚════════════════════════════════════════════════════════════════╝</text>
+
+    <!-- Super User Details -->
+    <text x="32" y="190" fill="#10b981">✔ Checking existing members database...</text>
+    <text x="32" y="210" fill="#94a3b8">  No accounts found. Initializing instance Super User (Tier 1 Super Admin).</text>
+
+    <text x="32" y="240" fill="#e2e8f0">? Enter Super User Full Name: <tspan fill="#38bdf8" font-weight="bold">Dr. System Administrator</tspan></text>
+    <text x="32" y="265" fill="#e2e8f0">? Enter Official Institutional Email: <tspan fill="#38bdf8" font-weight="bold">admin.leads@msruas.ac.in</tspan></text>
+    <text x="32" y="290" fill="#e2e8f0">? Choose a Strong Password: <tspan fill="#64748b">••••••••••••••••••••</tspan></text>
+    <text x="32" y="315" fill="#e2e8f0">? Confirm Password: <tspan fill="#64748b">••••••••••••••••••••</tspan></text>
+
+    <!-- Encryption Key -->
+    <text x="32" y="355" fill="#f59e0b">🔑 DATA_ENCRYPTION_KEY Status:</text>
+    <text x="32" y="375" fill="#94a3b8">   No active encryption key detected in .env or system environment.</text>
+    <text x="32" y="395" fill="#e2e8f0">? Press &lt;Enter&gt; to auto-generate a cryptographically secure AES-256 key:</text>
+    <text x="32" y="420" fill="#10b981">✔ Generated 256-bit AES-GCM Key:</text>
+    <text x="50" y="440" fill="#a855f7" font-weight="bold">7f3b89a291f0c438d2e8b0932a10e82c49b01c38fa2e0d37e908b1a45f928e1d</text>
+    <text x="32" y="465" fill="#94a3b8">  (Safely appended DATA_ENCRYPTION_KEY to .env and verified permissions)</text>
+
+    <!-- Success Output -->
+    <rect x="32" y="490" width="936" height="55" rx="8" fill="rgba(16, 185, 129, 0.1)" stroke="#10b981" stroke-width="1"/>
+    <text x="48" y="522" fill="#10b981" font-weight="bold">✨ Super User created successfully! Initial role: Tier 1 Super User</text>
+    <text x="48" y="538" fill="#cbd5e1" font-size="12">You may now start the application using 'npm run dev' or proceed with 'deploy.sh'.</text>
+  </g>
+</svg>
