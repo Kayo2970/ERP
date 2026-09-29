@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
-import { dispatchEmail, generateEventRosterEmailTemplate } from '@/lib/email-service';
+import { dispatchCommitteeRosterEmails } from '@/lib/committee-roster-email';
 import { fanOutAutoApproval, resolveCustomApprovalPanel } from '@/lib/approval-sync';
 import { requireSession } from '@/lib/session';
 import { apiError } from '@/lib/api-error';
@@ -66,9 +66,11 @@ export async function POST(request: Request) {
     // "must be a real signed-in member," not a hard canCreateEvent check.
     await requireSession(request);
     const item = await request.json();
+    let previous: any = null;
     const updated = await mutateCollection('events', (current) => {
       const idx = current.findIndex((e: any) => e.id === item.id);
       if (idx >= 0) {
+        previous = current[idx];
         const copy = [...current];
         copy[idx] = item;
         return copy;
@@ -106,32 +108,11 @@ export async function POST(request: Request) {
       }
     }
 
-    // Automated Email Dispatch for Event Committee Roster
-    if (created && Array.isArray(created.committees)) {
+    // Automated email to newly appointed committee members (diffed against the
+    // previous record so an upsert doesn't re-email existing members).
+    if (created) {
       try {
-        const members = await readCollection('members');
-
-        for (const committee of created.committees) {
-          const memberIds = committee.memberIds || [];
-          for (const mId of memberIds) {
-            const member = members.find((m: any) => m.id === mId);
-            if (member && member.email) {
-              const template = generateEventRosterEmailTemplate(
-                member.name,
-                created.title,
-                committee.name,
-                created.startDate
-              );
-              await dispatchEmail({
-                to: member.email,
-                subject: template.subject,
-                bodyText: template.bodyText,
-                bodyHtml: template.bodyHtml,
-                category: 'EVENT_ROSTER',
-              });
-            }
-          }
-        }
+        await dispatchCommitteeRosterEmails(previous, created);
       } catch (emailErr) {
         console.error('[events-api] Email dispatch failed:', emailErr);
       }
