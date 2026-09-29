@@ -13,12 +13,14 @@
    - [1.1 Platform Overview](#11-platform-overview)
    - [1.2 Architecture & File System Locations](#12-architecture--file-system-locations)
    - [1.3 The Master Encryption Key (DATA_ENCRYPTION_KEY)](#13-the-master-encryption-key-data_encryption_key)
-   - [1.4 Interactive Super User Seeding (npm run setup)](#14-interactive-super-user-seeding-npm-run-setup)
-   - [1.5 Environment Configuration File (.env) Reference](#15-environment-configuration-file-env-reference)
-   - [1.6 Production VPS Deployment & Continuous Pipeline](#16-production-vps-deployment--continuous-pipeline)
-   - [1.7 First-Time Account Activation & Password Setup](#17-first-time-account-activation--password-setup)
-   - [1.8 Mobile / PWA Installation (iOS & Android)](#18-mobile--pwa-installation-ios--android)
-   - [1.9 Interface Layout & Navigation Shell](#19-interface-layout--navigation-shell)
+   - [1.4 Initial Web GUI Setup Wizard (/setup)](#14-initial-web-gui-setup-wizard-setup)
+   - [1.5 Headless CLI Seeding (npm run setup)](#15-headless-cli-seeding-npm-run-setup)
+   - [1.6 Environment Configuration File (.env) Reference](#16-environment-configuration-file-env-reference)
+   - [1.7 AWS Enterprise Cloud Infrastructure & Production Deployment](#17-aws-enterprise-cloud-infrastructure--production-deployment)
+   - [1.8 Super User Financial Setup & Payment Initiation](#18-super-user-financial-setup--payment-initiation)
+   - [1.9 First-Time Account Activation & Password Setup](#19-first-time-account-activation--password-setup)
+   - [1.10 Mobile / PWA Installation (iOS & Android)](#110-mobile--pwa-installation-ios--android)
+   - [1.11 Interface Layout & Navigation Shell](#111-interface-layout--navigation-shell)
 2. [Role Privileges & Access Hierarchy](#2-role-privileges--access-hierarchy)
    - [Understanding Tiers 1 through 7](#21-understanding-tiers-1-through-7)
    - [Role Matrix Summary](#22-role-matrix-summary)
@@ -77,8 +79,8 @@ The LEADS ERP runs entirely on local, sovereign server storage without third-par
 | `leads-dashboard/.env` | **Environment Configuration File:** Holds the master encryption key, session secret, port, and institutional SMTP credentials. Git-ignored and strictly confidential. |
 | `leads-dashboard/.env.example` | **Template Schema:** Reference blueprint containing all permissible environment variables. |
 | `leads-dashboard/data/` | **Encrypted Data Directory:** Houses all encrypted JSON collections: `members.json`, `events.json`, `tasks.json`, `reimbursements.json`, `sessions.json`, and `systemSettings.json`. |
-| `leads-dashboard/scripts/setup-superuser.js` | **Interactive Provisioning CLI:** Bootstrap utility executed via `npm run setup` to create the initial founding administrator. |
-| `docs/vps-setup.sh` | **Automated Server Bootstrap:** Installs Node 22 LTS, PM2, Git, Nginx, Certbot SSL on a clean Ubuntu VPS. |
+| `leads-dashboard/src/app/setup/` | **Web GUI Provisioning Wizard:** Visual browser onboarding portal accessed at `/setup` on initial installation. |
+| `leads-dashboard/scripts/setup-superuser.js` | **Interactive Provisioning CLI:** Headless bootstrap utility executed via `npm run setup` to create the initial founding administrator. |
 | `deploy.sh` | **Zero-Downtime Continuous Deployment:** Automates Git sync, dependency checks, production compilation, and PM2 reload. |
 
 ---
@@ -106,47 +108,56 @@ Every sensitive record committed to disk is ciphered using **AES-256-GCM** (Galo
 
 ---
 
-### 1.4 Interactive Super User Seeding (npm run setup)
-To initialize a fresh instance without default passwords or hardcoded test accounts, execute the interactive setup CLI from the `leads-dashboard` directory:
+### 1.4 Initial Web GUI Setup Wizard (/setup)
+When the application is first launched without an existing database, visiting the root URL automatically redirects administrators to the visual **Database Provisioning Wizard** (`/setup`):
+
+#### Step 1: Super User Account Provisioning
+The browser presents the initial administrator registration card:
+
+1. **Super User Full Name:** Enter the formal administrative name of the founding Super User (e.g. `<Administrator Full Name>`).
+2. **Super User Email Address:** Enter the institutional email address (e.g. `<admin@institution.edu>`).
+3. **Master Password (Min 8 Characters):** Create a secure administrator password. Includes an eye toggle to inspect hidden characters.
+4. **Confirm Password:** Re-enter the identical password.
+5. Click **Proceed to Step 2: Database Security →**.
+
+![Setup Wizard Step 1](screenshots/steps/00_setup/01_setup_gui_step1_account.png)
+*Figure 1.1: Live captured Initial GUI Setup Wizard — Step 1: Super User Provisioning.*
+
+---
+
+#### Step 2: Database Encryption Key Configuration
+The wizard transitions to the cryptographic key setup screen:
+
+1. **Key Mode Selection:**
+   - **Generate 256-bit Key (Default):** The browser creates a cryptographically secure 64-character hexadecimal string with 256 bits of cryptographic entropy. Click **Regenerate** to cycle keys if required.
+   - **Custom Passphrase:** Allows pasting an existing enterprise AES-256 master key from an institutional vault.
+2. **Copy Master Key:** Click the **Copy** button to save the 64-character key string directly to your clipboard.
+3. **Security Confirmation Mandate:** You must check the mandatory confirmation box:
+   - *"I have securely copied and saved this encryption key"*
+4. **Complete Setup & Launch:** Click the button. The application derives the PBKDF2 salt, initializes `data/members.json` with the new Super User profile (`tier: 1`), writes `DATA_ENCRYPTION_KEY` to `.env`, and routes directly into the executive dashboard.
+
+![Setup Wizard Step 2](screenshots/steps/00_setup/02_setup_gui_step2_encryption.png)
+*Figure 1.2: Live captured Initial GUI Setup Wizard — Step 2: Database Encryption Key.*
+
+---
+
+### 1.5 Headless CLI Seeding (npm run setup)
+For headless server environments where no web browser is available during bootstrapping, the exact same provisioning workflow can be executed directly in the terminal:
 
 ```bash
 cd leads-dashboard
 npm run setup
 ```
 
-The CLI steps through the initial administrator provisioning prompts:
-
-#### Prompt 1: Administrator Full Name
-- **Console Prompt:** `Full name:`
-- **What to enter:** The formal administrative name of the founding Super User (e.g. `<Administrator Full Name>` or institutional title).
-- **Validation:** Cannot be empty. Trims whitespace automatically.
-
-#### Prompt 2: Institutional Email Address
-- **Console Prompt:** `Email address:`
-- **What to enter:** The primary administrative login email (e.g. `<admin@institution.edu>`).
-- **Validation:** Normalized to lowercase; strictly validated against RFC 5322 email syntax.
-
-#### Prompts 3 & 4: Master Password & Confirmation
-- **Console Prompt:** `Password (min 8 characters):` followed by `Confirm password:`
-- **Input Security:** The terminal switches to raw mode (`process.stdin.setRawMode(true)`). Keypresses are completely hidden and never echoed to the terminal.
-- **Validation:** Must be at least 8 characters. You are provided 3 attempts to confirm matching credentials.
-- **Hashing Algorithm:** Passwords are never stored plaintext; they are hashed via `crypto.scryptSync(plain, salt, 64)` using an individual 16-byte cryptographic salt.
-
-#### Prompt 5: Master Encryption Key (DATA_ENCRYPTION_KEY)
-- **Console Prompt:**
-  ```text
-  --- Data encryption key ---
-  No DATA_ENCRYPTION_KEY is set yet. This is the key that encrypts every record this
-  app stores on disk.
-  Press Enter to generate a strong random key (recommended), or paste your own:
-  ```
-- **Option A (Recommended - Press Enter):** Automatically generates 32 cryptographically secure random bytes via `crypto.randomBytes(32).toString('hex')` yielding a 64-character hex key.
-- **Option B (Paste Custom Key):** Paste a pre-existing 64-character hex key from your institutional key vault.
-- **Outcome:** The utility writes `DATA_ENCRYPTION_KEY=<key>` into `leads-dashboard/.env`, provisions the root administrator (`id: "m1"`, `role: "Super User"`, `tier: 1`), and writes the encrypted payload to `data/members.json`.
+The CLI steps through the 5 interactive prompts:
+- **Prompt 1 (`name`):** Full name of the administrator.
+- **Prompt 2 (`email`):** RFC 5322 institutional email address.
+- **Prompts 3 & 4 (`passwordHash`):** Hidden stdin raw mode entry (masked input), 8-character minimum, hashed with `crypto.scryptSync`.
+- **Prompt 5 (`DATA_ENCRYPTION_KEY`):** Press Enter to auto-generate a 64-character hex key, or paste a custom key.
 
 ---
 
-### 1.5 Environment Configuration File (.env) Reference
+### 1.6 Environment Configuration File (.env) Reference
 The runtime environment is configured via `leads-dashboard/.env`:
 
 | Environment Variable | Default / Example Value | Description & Purpose |
@@ -164,35 +175,216 @@ The runtime environment is configured via `leads-dashboard/.env`:
 
 ---
 
-### 1.6 Production VPS Deployment & Continuous Pipeline
+### 1.7 AWS Enterprise Cloud Infrastructure & Production Deployment
 
-#### 1. Automated VPS Server Bootstrap (`vps-setup.sh`)
-On a freshly provisioned Ubuntu 22.04 or 24.04 LTS server, run the automated setup script with root privileges:
-```bash
-sudo bash /ERP/docs/vps-setup.sh
-```
-This automated runbook:
-1. Updates package repositories (`apt update && apt upgrade`).
-2. Installs Node.js 22 LTS, PM2 Process Manager, Git, Nginx, and Certbot.
-3. Configures an Nginx reverse-proxy routing port `80`/`443` to local port `3030`.
-4. Provisions Let's Encrypt SSL/TLS certificates with auto-renewal.
-5. Launches `npm run setup` to seed the root administrator.
-6. Sets up systemd service auto-start on server boot.
+#### Why AWS is Superior to a Generic VPS
+Running mission-critical university ERP operations on Amazon Web Services (AWS) provides substantial architectural, security, and compliance advantages over unmanaged generic Virtual Private Servers (VPS):
 
-#### 2. Continuous Deployment Pipeline (`deploy.sh`)
-Whenever production code updates are pushed to GitHub, run the zero-downtime deployment script:
-```bash
-bash deploy.sh
 ```
-**Pipeline Execution Steps:**
-1. `git pull origin main`: Synchronizes verified code updates.
-2. `npm install`: Updates npm package dependencies.
-3. `npm run build`: Compiles optimized Next.js server and client bundles.
-4. `pm2 reload leads-dashboard`: Triggers a zero-downtime hot reload of the Node.js process.
++-----------------------------------------------------------------------------------+
+|                            AWS CLOUD ARCHITECTURE                                 |
+|                                                                                   |
+|  [ University Route 53 DNS ] ---> [ Elastic IP (Clean PTR / Anti-Spam Rep) ]      |
+|                                                     |                             |
+|                                                     v                             |
+|  +-----------------------------------------------------------------------------+  |
+|  | AWS Security Group (Stateful Hypervisor Firewall: Inbound 80, 443; SSH IP)  |  |
+|  |                                                                             |  |
+|  |   +---------------------------------------------------------------------+   |  |
+|  |   | EC2 Instance (Ubuntu 24.04 LTS - t4g.small / t3.medium)             |   |  |
+|  |   |                                                                     |   |  |
+|  |   |   [ Nginx Reverse Proxy (SSL / HTTP/2) ]                            |   |  |
+|  |   |                     |                                               |   |  |
+|  |   |                     v (Internal Port 3030 - Never Publicly Exposed) |   |  |
+|  |   |   [ Next.js Node.js 22 Runtime managed by PM2 Cluster ]             |   |  |
+|  |   |                     |                                               |   |  |
+|  |   |                     v (AES-256-GCM Application Encryption)          |   |  |
+|  |   |   +-------------------------------------------------------------+   |  |
+|  |   |   | Encrypted EBS Volume (AWS KMS Hardware-Enforced Encryption) |   |  |
+|  |   |   | - data/members.json                                         |   |  |
+|  |   |   | - data/events.json                                          |   |  |
+|  |   |   | - data/reimbursements.json                                  |   |  |
+|  |   |   +-------------------------------------------------------------+   |  |
+|  |   +---------------------------------------------------------------------+   |  |
+|  +-----------------------------------------------------------------------------+  |
+|                                     |                                             |
+|  [ AWS Data Lifecycle Manager (DLM) ] ---> Automated Multi-AZ Point-in-Time Snapshots |
++-----------------------------------------------------------------------------------+
+```
+
+| Security / Operational Vector | Generic Unmanaged VPS | AWS Enterprise Cloud Architecture |
+|---|---|---|
+| **Storage Encryption** | Host-level software encryption often missing; raw hypervisor disk snapshots can expose plaintext files if compromised. | **Dual-Layer Zero-Trust Security:** EBS hardware volume encryption enforced via AWS KMS (FIPS 140-3 Level 3 HSM) on top of the ERP's application-level AES-256-GCM cipher. |
+| **Network & Firewall Protection** | Relies on software `ufw`/`iptables` within the guest OS. If the OS kernel is breached, the firewall collapses. | **Hypervisor-Level Security Groups:** Stateful virtual firewalls operating outside the VM. Unused ports (like 3030) are blocked at the AWS network fabric before ever hitting the server. |
+| **Email Deliverability & IP Reputation** | Generic VPS IP pools are frequently blacklisted due to spam neighbor abuse; reverse-DNS (PTR) is difficult or impossible to configure. | **Dedicated Elastic IP with Clean PTR:** Guaranteed IP allocation with customized reverse-DNS configured directly in the AWS console, achieving flawless inbox delivery for OTPs and invitations. |
+| **Hardware Failure & High Availability** | If physical VPS host hardware dies, server is offline for hours until manual support intervention. | **Auto-Recovery & Instant Resizing:** EC2 automatically migrates the instance to healthy hardware within 60 seconds if hardware degrades. Volume storage can be expanded dynamically with zero downtime. |
+| **Disaster Recovery Snapshots** | Manual or uncoordinated full-disk dumps requiring downtime. | **Amazon Data Lifecycle Manager (DLM):** Automated, application-consistent point-in-time EBS volume snapshots replicated across multiple availability zones. |
+| **Credential Management** | Plaintext `.env` credentials remain on disk indefinitely. | **AWS Systems Manager Parameter Store / Secrets Manager:** Secrets can be injected dynamically into the runtime via IAM Instance Profiles without storing plain credentials in static files. |
 
 ---
 
-### 1.7 First-Time Account Activation & Password Setup
+#### Step-by-Step AWS Deployment Runbook
+
+##### Step 1: EC2 Instance Provisioning
+1. Log in to the **AWS Management Console** and navigate to **EC2** → **Launch Instance**.
+2. **Name:** `LEADS-ERP-Production`.
+3. **Application and OS Image (AMI):** Select **Ubuntu Server 24.04 LTS (HVM)**, SSD Volume Type.
+4. **Architecture:** `64-bit (Arm)` (for AWS Graviton) or `64-bit (x86)`.
+5. **Instance Type:**
+   - *Recommended (Arm):* `t4g.small` (2 vCPU, 2 GiB RAM) — 20% lower cost and higher compute efficiency.
+   - *Alternative (x86):* `t3.medium` (2 vCPU, 4 GiB RAM).
+6. **Key Pair:** Create a new key pair `leads-erp-key` (format: `.pem` for OpenSSH) and download it to a secure administrative workstation.
+
+##### Step 2: Storage Configuration & AWS KMS Encryption
+1. In the **Configure Storage** section, set primary root volume:
+   - **Size:** `30 GiB` minimum.
+   - **Volume Type:** `gp3` (General Purpose SSD, baseline 3,000 IOPS, 125 MB/s throughput).
+2. Expand **Advanced Storage Details**:
+   - Check **Encrypted**.
+   - **KMS Key:** Select `(default) aws/ebs` or select your institutional customer-managed key (CMK).
+
+##### Step 3: Security Group Rules Configuration
+Create a dedicated Security Group named `leads-erp-sg`:
+
+| Rule Type | Protocol | Port Range | Source | Justification |
+|---|---|---|---|---|
+| **HTTPS** | TCP | `443` | `0.0.0.0/0` & `::/0` | Public encrypted web access for students, faculty, and attendees. |
+| **HTTP** | TCP | `80` | `0.0.0.0/0` & `::/0` | Required for Let's Encrypt automated ACME HTTP-01 SSL issuance and auto-renewal. |
+| **SSH** | TCP | `22` | `<Admin-Workstation-IP>/32` | **Strict Whitelist:** Restrict administrative SSH exclusively to your static institutional IP address. |
+
+> **Security Note:** Port `3030` is **NOT** included in the Security Group. The Next.js application runs strictly locally on `localhost:3030`, accessible only through the local Nginx reverse proxy.
+
+##### Step 4: Elastic IP Allocation & Route 53 DNS Mapping
+1. Under **Network & Security**, click **Elastic IPs** → **Allocate Elastic IP address**.
+2. Select the allocated IP, click **Actions** → **Associate Elastic IP address**, and attach it to your running EC2 instance.
+3. In **Amazon Route 53** (or your institutional DNS registrar):
+   - Create an `A` record pointing `leads.institution.edu` to the Elastic IP.
+   - In the EC2 Elastic IP console, configure the **Reverse DNS (PTR)** record to match `leads.institution.edu`.
+
+##### Step 5: Connecting to EC2 & Server Initialization
+Connect to the server from your workstation:
+```bash
+chmod 400 leads-erp-key.pem
+ssh -i leads-erp-key.pem ubuntu@<Elastic-IP>
+```
+
+Execute the automated system setup:
+```bash
+# 1. Update OS packages
+sudo apt update && sudo apt upgrade -y
+
+# 2. Install Node.js 22 LTS
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs nginx certbot python3-certbot-nginx git
+
+# 3. Install PM2 Process Manager globally
+sudo npm install -g pm2
+```
+
+##### Step 6: Deploying the Application & Nginx Configuration
+```bash
+# 1. Clone repository to server
+cd /var/www
+sudo git clone https://github.com/Kayo2970/ERP.git
+sudo chown -R ubuntu:ubuntu /var/www/ERP
+cd /var/www/ERP/leads-dashboard
+
+# 2. Install dependencies & compile production bundle
+npm install
+npm run build
+
+# 3. Start daemon under PM2
+pm2 start npm --name "leads-dashboard" -- start
+pm2 save
+pm2 startup
+```
+
+Configure Nginx reverse proxy at `/etc/nginx/sites-available/leads-erp`:
+```nginx
+server {
+    server_name leads.institution.edu;
+
+    location / {
+        proxy_pass http://127.0.0.1:3030;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Enable the configuration and obtain SSL:
+```bash
+sudo ln -s /etc/nginx/sites-available/leads-erp /etc/nginx/sites-enabled/
+sudo rm /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx -d leads.institution.edu
+```
+
+Navigate to `https://leads.institution.edu/setup` in your browser to complete the **Initial Web GUI Setup Wizard**!
+
+---
+
+### 1.8 Super User Financial Setup & Payment Initiation
+
+The Super User and Centre Head oversee the financial disbursement pipeline, starting with configuring institutional settlement coordinates and processing expense claims:
+
+#### Phase 1: Configuring Default Settlement Bank Coordinates
+1. Navigate to **System Settings** (`/dashboard/settings`).
+2. Scroll to the **Default Reimbursement Bank Settlement Coordinates** section.
+3. **What to Enter:**
+   - **Bank Name:** The official banking institution (e.g. `State Bank of India` or `HDFC Bank`).
+   - **Account Number:** The institutional or personal settlement bank account number.
+   - **IFSC Code:** The 11-character Indian Financial System Code (e.g. `SBIN0001234`).
+4. Click **Save Profile & Bank Details**.
+5. **What Happens:** Coordinates are saved into your profile record. Whenever you submit an expense reimbursement, these details automatically pre-fill into the claim voucher.
+
+![Super User Bank Coordinates Setup](screenshots/steps/00_setup/03_super_user_bank_payment_setup.png)
+*Figure 1.3: Live captured default reimbursement bank settlement coordinates in Settings.*
+
+---
+
+#### Phase 2: Initiating a Payment / Reimbursement Claim
+1. Navigate to **Reimbursements** (`/dashboard/reimbursements`).
+2. Locate the **Submit Expense Claim** form on the left workspace panel.
+3. **What to Enter:**
+   - **Associated Event (Optional):** Select the target conclave, festival, or choose *General Operations / Non-Event Expense*.
+   - **Expense Category:** Select the budget classification (`Stage & AV`, `Logistics & Transport`, `Printing & Stationary`, `Hospitality & Food`, `Miscellaneous`).
+   - **Claim Amount (₹) \*:** The exact financial amount in Indian Rupees (e.g. `12500`).
+   - **Expense Description & Justification \*:** Detailed operational reason for the purchase.
+   - **Bills & Supporting Docs (Up to 3 files):** Drag and drop GST invoices, merchant tax bills, or payment receipts.
+   - **Bank Settlement Coordinates:** Verified auto-populated Bank Name, Account Number, and IFSC Code.
+4. Click **Submit Reimbursement Claim**.
+5. **What Happens:** The claim enters the **Claims in Verification Pipeline** in real time across all client screens.
+
+![Payment Claim Initiation](screenshots/steps/00_setup/04_payment_claim_initiation.png)
+*Figure 1.4: Live captured reimbursement claim initiation and expense submission form.*
+
+---
+
+#### Phase 3: The 3-Gate Payment Approval & Disbursement Lifecycle
+Every submitted claim is audited through 3 distinct checkpoints:
+
+1. **Gate 1: Sector / Department Head Verification**
+   - The Event Sector Head reviews the claim against the approved event plan.
+   - Checks operational necessity and clicks **Approve Gate 1**.
+2. **Gate 2: Finance Head GST Compliance Audit**
+   - The Finance Head opens the attached tax vouchers.
+   - Verifies the merchant's GSTIN, invoice date, and matching bank coordinates.
+   - Clicks **Verify Gate 2 (GST Audit Cleared)**.
+3. **Gate 3: Centre Head Executive Settlement & Disbursement**
+   - The Centre Head or Super User opens the cleared claim.
+   - Inspects the claimant's bank account number and IFSC code.
+   - Initiates bank NEFT/RTGS/UPI transfer and clicks **Disburse / Settle Gate 3**.
+   - **Outcome:** The claim badge transitions to green (`Settled`), the transaction timestamp is stamped into the immutable audit ledger, and the event's actual expenditure figure updates automatically.
+
+---
+
+### 1.9 First-Time Account Activation & Password Setup
 Accounts are provisioned by the Administrator or Department Head through the **Members Directory**. Users do not self-register from a public signup form.
 
 1. **Receive Activation Email**: When your profile is created, you receive an automated email containing your unique, single-use activation link.
@@ -207,7 +399,7 @@ Accounts are provisioned by the Administrator or Department Head through the **M
 
 ---
 
-### 1.8 Mobile / PWA Installation (iOS & Android)
+### 1.10 Mobile / PWA Installation (iOS & Android)
 LEADS ERP is an installable Progressive Web Application (PWA). You can install it directly onto your phone's home screen for a full-screen, native app feel:
 
 - **Apple iOS (Safari)**:
@@ -223,7 +415,7 @@ LEADS ERP is an installable Progressive Web Application (PWA). You can install i
 
 ---
 
-### 1.9 Interface Layout & Navigation Shell
+### 1.11 Interface Layout & Navigation Shell
 Once logged in, the application interface provides:
 
 1. **Collapsible Sidebar (Left)**: Houses navigation links to all modules permitted for your tier. Clicking the collapse button tucks the sidebar into compact icon mode.

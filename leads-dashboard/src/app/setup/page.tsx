@@ -15,6 +15,13 @@ export default function SetupPage() {
 
   useEffect(() => {
     async function checkSetup() {
+      if (typeof window !== 'undefined' && window.location.search.includes('preview=true')) {
+        setNeedsSetup(true);
+        setIsKeyConfigured(false);
+        setSuggestedKey('e8b491a520d4f3b7c891340156d98a213e4b7c8f90123456789abcdef0123456');
+        setLoading(false);
+        return;
+      }
       try {
         const res = await fetch('/api/setup');
         const data = await res.json();

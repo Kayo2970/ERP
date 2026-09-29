@@ -25,19 +25,22 @@ This document serves as the master tracking registry for the LEADS ERP User Oper
 
 | Section # | Section / Module Title | Target Deliverable | Date Added / Updated | Git Reference | Commit / Milestone Note | Status |
 |---|---|---|---|---|---|---|
-| **0.0** | Manual Progress Ledger | `docs/MANUAL_PROGRESS.md` | 2026-09-30T00:05:00+05:30 | `7ff0cf1` | Initial baseline commit for comprehensive documentation | Complete |
-| **1.0** | Platform Overview & Architecture | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-29T23:54:04+05:30 | `7ff0cf1` | Zero-cloud DB, AES-GCM at rest, 7s reactive sync | Complete |
-| **1.1** | Architecture & File Locations (`leads-dashboard/.env`, `data/`) | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T00:50:00+05:30 | Working Tree | Zero-cloud local DB layout, AES-256-GCM scheme, PBKDF2 salt | Complete |
-| **1.2** | Master Cryptographic Key (`DATA_ENCRYPTION_KEY`) | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T00:50:00+05:30 | Working Tree | 64-char hex key generation, offline vault backup protocols | Complete |
-| **1.3** | Interactive Super User Seeding (`npm run setup`) | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T00:50:00+05:30 | Working Tree | Prompt-by-prompt walkthrough with non-personal placeholders | Complete |
-| **1.4** | Environment Configuration File (`.env`) Reference Table | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T00:50:00+05:30 | Working Tree | Complete variable reference (PORT, NODE_ENV, SMTP, KEYS) | Complete |
-| **1.5** | Production VPS Deployment (`vps-setup.sh`) & CD Pipeline | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T00:50:00+05:30 | Working Tree | Automated Ubuntu bootstrap, Nginx reverse proxy, PM2 reload | Complete |
-| **1.6** | First-Time Account Activation & Password Setup | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T00:54:00+05:30 | Working Tree | Single-use activation token, 8-char password rules | Complete |
-| **1.7** | Mobile / PWA Installation (iOS & Android) | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T00:54:00+05:30 | Working Tree | Safari / Chrome Add to Home Screen PWA setup | Complete |
-| **1.8** | Interface Layout & Navigation Shell | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T00:54:00+05:30 | Working Tree | Sidebar rail, period filter, persona quick switch | Complete |
-| **3.1-3.24**| Enriched Module Operating Instructions | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T00:55:00+05:30 | Working Tree | Detailed input fields, lifecycles, buttons, and approvals | Complete |
-| **3.22** | Email Engine & SMTP Mailroom Portal | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T00:50:00+05:30 | Working Tree | Granular field-by-field input guide, provider setup, diagnostics | Complete |
-| **6.0** | Compiled Official PDF Manual | `docs/LEADS_ERP_User_Manual.pdf` | 2026-09-30T00:55:56+05:30 | Working Tree | High-resolution 67.07 MB printable PDF output with action screenshots | Complete |
+| **0.0** | Manual Progress Ledger | `docs/MANUAL_PROGRESS.md` | 2026-09-30T01:10:00+05:30 | `8a58acb` | Initial baseline commit for comprehensive documentation | Complete |
+| **1.0** | Platform Overview & Architecture | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T01:10:00+05:30 | Working Tree | Zero-cloud DB, AES-GCM at rest, 7s reactive sync | Complete |
+| **1.1** | Architecture & File Locations (`leads-dashboard/.env`, `data/`) | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T01:10:00+05:30 | Working Tree | Zero-cloud local DB layout, AES-256-GCM scheme, PBKDF2 salt | Complete |
+| **1.2** | Master Cryptographic Key (`DATA_ENCRYPTION_KEY`) | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T01:10:00+05:30 | Working Tree | 64-char hex key generation, offline vault backup protocols | Complete |
+| **1.3** | Web GUI Setup Wizard (`/setup`) Onboarding Flow | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T01:10:00+05:30 | Working Tree | Live screenshots & step-by-step fields for Super User Provisioning & 256-bit Key generation | Complete |
+| **1.4** | Headless CLI Seeding (`npm run setup`) | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T01:10:00+05:30 | Working Tree | Terminal bootstrap utility walkthrough with non-personal placeholders | Complete |
+| **1.5** | Environment Configuration File (`.env`) Reference Table | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T01:10:00+05:30 | Working Tree | Complete variable reference (PORT, NODE_ENV, SMTP, KEYS) | Complete |
+| **1.6** | AWS Enterprise Cloud Infrastructure & Production Deployment | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T01:10:00+05:30 | Working Tree | Detailed comparison why AWS > VPS, ASCII architecture, EC2/EBS KMS/Security Group runbook | Complete |
+| **1.7** | Super User Financial Setup & Payment Initiation | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T01:10:00+05:30 | Working Tree | Default clearing bank coordinates, claim submission form, bills upload, 3-gate approval | Complete |
+| **1.8** | Continuous Deployment Pipeline (`deploy.sh`) | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T01:10:00+05:30 | Working Tree | Git pull, npm install, Next.js build, PM2 cluster zero-downtime reload | Complete |
+| **1.9** | First-Time Account Activation & Password Setup | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T01:10:00+05:30 | Working Tree | Single-use activation token, 8-char password rules | Complete |
+| **1.10** | Mobile / PWA Installation (iOS & Android) | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T01:10:00+05:30 | Working Tree | Safari / Chrome Add to Home Screen PWA setup | Complete |
+| **1.11** | Interface Layout & Navigation Shell | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T01:10:00+05:30 | Working Tree | Sidebar rail, period filter, persona quick switch | Complete |
+| **3.1-3.24**| Enriched Module Operating Instructions | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T01:10:00+05:30 | Working Tree | Detailed input fields, lifecycles, buttons, and approvals | Complete |
+| **3.22** | Email Engine & SMTP Mailroom Portal | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T01:10:00+05:30 | Working Tree | Granular field-by-field input guide, provider setup, diagnostics | Complete |
+| **6.0** | Compiled Official PDF Manual | `docs/LEADS_ERP_User_Manual.pdf` | 2026-09-30T01:10:00+05:30 | Working Tree | High-resolution 69.70 MB printable PDF output with action screenshots | Complete |
 
 ---
 

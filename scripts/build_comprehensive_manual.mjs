@@ -438,13 +438,15 @@ const manualHtmlContent = `<!DOCTYPE html>
     <nav class="toc">
       <div class="toc-section">0. Setup &amp; Deployment</div>
       <a href="#setup-stage">1. Architecture &amp; File Locations</a>
-      <a href="#superuser-seeding">2. Super User Seeding (CLI)</a>
-      <a href="#env-reference">3. Environment Variables (.env)</a>
-      <a href="#vps-deployment">4. Production VPS Setup</a>
-      <a href="#deploy-script">5. Continuous Deployment</a>
-      <a href="#account-activation">6. Account Activation Flow</a>
-      <a href="#mobile-pwa">7. Mobile PWA Installation</a>
-      <a href="#interface-layout">8. Navigation &amp; Shell Layout</a>
+      <a href="#setup-gui">2. Web GUI Setup Wizard (/setup)</a>
+      <a href="#superuser-seeding">3. Headless CLI Seeding (npm run setup)</a>
+      <a href="#env-reference">4. Environment Variables (.env)</a>
+      <a href="#aws-deployment">5. AWS Enterprise Cloud Infrastructure</a>
+      <a href="#superuser-finance">6. Super User Financial Setup &amp; Payments</a>
+      <a href="#deploy-script">7. Continuous Deployment (deploy.sh)</a>
+      <a href="#account-activation">8. Account Activation Flow</a>
+      <a href="#mobile-pwa">9. Mobile PWA Installation</a>
+      <a href="#interface-layout">10. Navigation &amp; Shell Layout</a>
 
       <div class="toc-section">1. Roles &amp; Master Matrix</div>
       <a href="#rbac-hierarchy">9. 7-Tier Access Matrix</a>
@@ -501,7 +503,7 @@ const manualHtmlContent = `<!DOCTYPE html>
       </div>
     </header>
 
-    <!-- SECTION 0: SETUP STAGE & VPS DEPLOYMENT -->
+    <!-- SECTION 0: SETUP STAGE & AWS CLOUD DEPLOYMENT -->
     <section id="setup-stage">
       <h2>1. Architecture &amp; File System Locations</h2>
       <p>The LEADS ERP features a <strong>Zero-Cloud Local Database Architecture</strong>. Instead of transmitting institutional student records, bank accounts, UPI IDs, and receipts to external clouds, all data is encrypted at rest using <strong>AES-256-GCM</strong> (Authenticated Galois/Counter Mode) directly on the local server disk.</p>
@@ -528,8 +530,12 @@ const manualHtmlContent = `<!DOCTYPE html>
             <td><strong>Encrypted Data Directory:</strong> Houses all encrypted collections: <code>members.json</code>, <code>events.json</code>, <code>tasks.json</code>, <code>reimbursements.json</code>, <code>sessions.json</code>, and <code>systemSettings.json</code>.</td>
           </tr>
           <tr>
+            <td><code>leads-dashboard/src/app/setup/page.tsx</code></td>
+            <td><strong>Web GUI Setup Wizard:</strong> Zero-dependency browser onboarding flow available at <code>/setup</code> when the system has no registered Super User.</td>
+          </tr>
+          <tr>
             <td><code>leads-dashboard/scripts/setup-superuser.js</code></td>
-            <td><strong>Bootstrap Script:</strong> Zero-dependency interactive provisioning CLI executed via <code>npm run setup</code>.</td>
+            <td><strong>Headless CLI Seeding Script:</strong> Terminal bootstrap utility executed via <code>npm run setup</code>.</td>
           </tr>
         </tbody>
       </table>
@@ -547,25 +553,74 @@ const manualHtmlContent = `<!DOCTYPE html>
       </div>
     </section>
 
+    <!-- 2. INITIAL WEB GUI SETUP WIZARD (/setup) -->
+    <section id="setup-gui">
+      <h2>2. Initial Web GUI Setup Wizard (/setup)</h2>
+      <p>When LEADS ERP is launched for the first time without an initialized database, navigating to <code>/setup</code> renders the interactive visual setup wizard. The wizard is divided into two distinct cryptographic initialization stages:</p>
+
+      <h3>Step 1: Super User Provisioning Account Card</h3>
+      <p>The first screen provisions the root administrative identity. This identity is granted <strong>Tier 1 Super User</strong> authority across all system modules.</p>
+
+      <div class="screenshot-card">
+        <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — Web GUI Setup Wizard: Step 1</span></div>
+        <img src="screenshots/steps/00_setup/01_setup_gui_step1_account.png" alt="Web GUI Setup Wizard Step 1">
+        <div class="screenshot-caption">Figure 1.1: Web GUI Setup Wizard Step 1 — Super User Account Provisioning.</div>
+      </div>
+
+      <div class="step-box">
+        <div class="step-header">
+          <span class="step-title">Form Input Specifications (Step 1)</span>
+          <span class="step-badge">Route: /setup</span>
+        </div>
+        <ul>
+          <li><strong>Full Name:</strong> Enter the administrator's official academic or administrative name (e.g., <code>&lt;Administrator Full Name&gt;</code>). This name appears in official audit logs, approval signatures, and transaction records.</li>
+          <li><strong>Institutional Email:</strong> Enter the institutional address (e.g., <code>&lt;admin@institution.edu&gt;</code>). This address serves as the permanent primary login identifier and receipt recipient.</li>
+          <li><strong>Master Password:</strong> Enter a high-entropy password (minimum 8 characters). Enforce a combination of uppercase letters, lowercase letters, numbers, and symbols.</li>
+          <li><strong>Confirm Password:</strong> Re-enter the identical password. The client verifies parity in real time before enabling the &quot;Next: Encryption Key&quot; button.</li>
+        </ul>
+      </div>
+
+      <h3>Step 2: Database Encryption Key Setup Card</h3>
+      <p>Once the administrator credentials pass validation, Step 2 configures the application-level encryption key used to seal the database files.</p>
+
+      <div class="screenshot-card">
+        <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — Web GUI Setup Wizard: Step 2</span></div>
+        <img src="screenshots/steps/00_setup/02_setup_gui_step2_encryption.png" alt="Web GUI Setup Wizard Step 2">
+        <div class="screenshot-caption">Figure 1.2: Web GUI Setup Wizard Step 2 — 256-bit Database Encryption Key Generation.</div>
+      </div>
+
+      <div class="step-box">
+        <div class="step-header">
+          <span class="step-title">Cryptographic Key Operations (Step 2)</span>
+          <span class="step-badge">Cipher: AES-256-GCM</span>
+        </div>
+        <ul>
+          <li><strong>Generate 256-bit Key vs Custom Passphrase:</strong> The system offers two key generation modes. Selecting <em>Generate 256-bit Key (Recommended)</em> utilizes browser cryptographic entropy (<code>crypto.getRandomValues</code>) to generate an unpredictable 64-character hexadecimal key.</li>
+          <li><strong>Key Field &amp; Copy Action:</strong> The generated key is displayed in a monospace input with a dedicated <strong>Copy</strong> button. Click Copy to place the key on the system clipboard.</li>
+          <li><strong>Mandatory Backup Checkbox:</strong> The administrator must explicitly check the confirmation: <em>&quot;I have saved this key offline. I understand data cannot be recovered without it.&quot;</em> The submission button remains locked until this acknowledgement is toggled.</li>
+          <li><strong>Complete Setup &amp; Launch:</strong> Submitting dispatches a <code>POST /api/setup</code> payload. The backend creates <code>leads-dashboard/.env</code> with the <code>DATA_ENCRYPTION_KEY</code> and seeds the Super User into <code>data/members.json</code> with <code>scrypt</code> password hashing.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 3. HEADLESS CLI SEEDING -->
     <section id="superuser-seeding">
-      <h2>2. Interactive Super User Seeding (npm run setup)</h2>
-      <p>To initialize a fresh instance without default passwords or hardcoded test accounts, execute the interactive setup CLI from the <code>leads-dashboard</code> directory:</p>
+      <h2>3. Headless CLI Seeding (npm run setup)</h2>
+      <p>For terminal-only or headless server environments where no web browser is available, execute the interactive setup CLI from the <code>leads-dashboard</code> directory:</p>
 
       <div class="code-box">npm run setup</div>
 
       <p>The utility prompts for the founding administrator credentials step by step:</p>
 
-      <!-- Prompt 1 -->
       <div class="step-box">
         <div class="step-header">
           <span class="step-title">Prompt 1: Full Name</span>
           <span class="step-badge">Field: name</span>
         </div>
         <div class="code-box">Full name: &lt;Administrator Full Name&gt;</div>
-        <p><strong>What to enter:</strong> The formal administrative name of the founding Super User (e.g. <em>System Administrator</em> or the faculty director's name). Cannot be left blank.</p>
+        <p><strong>What to enter:</strong> The formal administrative name of the founding Super User. Cannot be left blank.</p>
       </div>
 
-      <!-- Prompt 2 -->
       <div class="step-box">
         <div class="step-header">
           <span class="step-title">Prompt 2: Institutional Email Address</span>
@@ -575,7 +630,6 @@ const manualHtmlContent = `<!DOCTYPE html>
         <p><strong>What to enter:</strong> The primary login identifier. Validated against RFC 5322 email patterns. Automatically normalized to lowercase.</p>
       </div>
 
-      <!-- Prompt 3 & 4 -->
       <div class="step-box">
         <div class="step-header">
           <span class="step-title">Prompts 3 &amp; 4: Master Password &amp; Confirmation</span>
@@ -583,31 +637,26 @@ const manualHtmlContent = `<!DOCTYPE html>
         </div>
         <div class="code-box">Password (min 8 characters): ••••••••••••
 Confirm password: ••••••••••••</div>
-        <p><strong>Security Features:</strong> The terminal enters raw mode (<code>process.stdin.setRawMode(true)</code>). Input is completely masked and never echoed to the screen.</p>
-        <p><strong>Validation:</strong> Enforces minimum 8 characters. You are provided up to 3 attempts to confirm matching passwords.</p>
-        <p><strong>Storage:</strong> The password is never stored plaintext; it is hashed using <code>crypto.scryptSync(plain, salt, 64)</code> with a unique 16-byte cryptographic salt.</p>
+        <p><strong>Security Features:</strong> The terminal enters raw mode. Input is masked and never echoed to the screen. The password is hashed using <code>crypto.scryptSync(plain, salt, 64)</code> with a unique 16-byte cryptographic salt.</p>
       </div>
 
-      <!-- Prompt 5 -->
       <div class="step-box">
         <div class="step-header">
           <span class="step-title">Prompt 5: Master Encryption Key (DATA_ENCRYPTION_KEY)</span>
           <span class="step-badge">Field: DATA_ENCRYPTION_KEY</span>
         </div>
         <div class="code-box">--- Data encryption key ---
-No DATA_ENCRYPTION_KEY is set yet. This is the key that encrypts every record this
-app stores on disk — leaving it unset falls back to a key published in this project's
-own source code, which is NOT safe for real data.
-
+No DATA_ENCRYPTION_KEY is set yet.
 Press Enter to generate a strong random key (recommended), or paste your own:</div>
-        <p><strong>Option A (Press Enter):</strong> The CLI automatically generates 32 cryptographically secure random bytes (<code>crypto.randomBytes(32).toString('hex')</code>) yielding a pristine 64-character hex key.</p>
+        <p><strong>Option A (Press Enter):</strong> Generates 32 cryptographically secure random bytes (64-character hex key).</p>
         <p><strong>Option B (Paste Custom Key):</strong> Paste an existing enterprise AES-256 hex key.</p>
         <p><strong>Outcome:</strong> Writes <code>DATA_ENCRYPTION_KEY=&lt;key&gt;</code> into <code>leads-dashboard/.env</code>, encrypts the Super User record (<code>id: &quot;m1&quot;</code>, <code>role: &quot;Super User&quot;</code>, <code>tier: 1</code>), and saves it to <code>data/members.json</code>.</p>
       </div>
     </section>
 
+    <!-- 4. ENVIRONMENT REFERENCE -->
     <section id="env-reference">
-      <h2>3. Environment Configuration File (.env) Reference</h2>
+      <h2>4. Environment Configuration File (.env) Reference</h2>
       <p>The <code>leads-dashboard/.env</code> file controls the server runtime, security tokens, and email transports:</p>
 
       <table>
@@ -673,15 +722,271 @@ Press Enter to generate a strong random key (recommended), or paste your own:</d
       </table>
     </section>
 
-    <section id="vps-deployment">
-      <h2>4. Production VPS Setup (vps-setup.sh)</h2>
-      <p>For clean Ubuntu 22.04 / 24.04 VPS server environments, execute the automated bootstrap script as root:</p>
-      <div class="code-box">sudo bash /ERP/docs/vps-setup.sh</div>
-      <p>This script installs Node.js 22 LTS, PM2 Process Manager, Git, Nginx reverse proxy, Certbot SSL, configures systemd auto-restart on boot, and runs <code>npm run setup</code>.</p>
+    <!-- 5. AWS ENTERPRISE CLOUD INFRASTRUCTURE -->
+    <section id="aws-deployment">
+      <h2>5. AWS Enterprise Cloud Infrastructure &amp; Production Deployment</h2>
+      <p>For institutional enterprise production deployments, LEADS ERP is engineered to run on <strong>Amazon Web Services (AWS)</strong> rather than commodity generic virtual private servers. AWS provides hardware-grade isolation, automated cryptographic compliance, and carrier-grade networking essential for sensitive university administrative operations.</p>
+
+      <h3>Why AWS Enterprise Cloud is Superior to a Generic VPS</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Security &amp; Operational Dimension</th>
+            <th>Generic VPS Provider</th>
+            <th>Amazon Web Services (AWS Enterprise)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Storage Encryption at Rest</strong></td>
+            <td>Software-only or shared disk encryption with unknown key management.</td>
+            <td><strong>AWS KMS Hardware-Encrypted EBS Volumes:</strong> FIPS 140-3 Level 3 hardware security modules enforce envelope encryption beneath LEADS's application AES-256-GCM cipher.</td>
+          </tr>
+          <tr>
+            <td><strong>Network Isolation &amp; Firewalls</strong></td>
+            <td>Host-level <code>iptables</code> or basic external firewall prone to misconfiguration.</td>
+            <td><strong>Stateful Hypervisor Security Groups + Private VPC Subnets:</strong> Traffic is filtered at the AWS Nitro hypervisor boundary before reaching the operating system kernel.</td>
+          </tr>
+          <tr>
+            <td><strong>IP Reputation &amp; Email Delivery</strong></td>
+            <td>High risk of blacklisted IP ranges from neighboring abusive tenants.</td>
+            <td><strong>Clean Elastic IPs + AWS SES / Dedicated PTR:</strong> Amazon maintains strict anti-abuse policies, ensuring 99.9% inbox delivery for student activation tokens and event QR passes.</td>
+          </tr>
+          <tr>
+            <td><strong>Automated Disaster Recovery</strong></td>
+            <td>Manual disk imaging or scheduled cron scripts that consume server I/O.</td>
+            <td><strong>Amazon Data Lifecycle Manager (DLM):</strong> Crash-consistent, point-in-time EBS volume snapshots replicated across multiple availability zones automatically.</td>
+          </tr>
+          <tr>
+            <td><strong>High Availability &amp; Scaling</strong></td>
+            <td>Vertical resizing requires manual server shutoff and downtime.</td>
+            <td><strong>Zero-Downtime Elastic Compute:</strong> Seamless resizing between general-purpose (<code>t4g.small</code>) and compute-optimized (<code>c7g.xlarge</code>) instances without IP changes.</td>
+          </tr>
+          <tr>
+            <td><strong>Compliance &amp; Auditability</strong></td>
+            <td>No tamper-proof infrastructure audit trail.</td>
+            <td><strong>AWS CloudTrail &amp; VPC Flow Logs:</strong> Every API call, SSH session attempt, and network packet is immutably logged for institutional regulatory audits.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>AWS Production Architecture Diagram</h3>
+      <div class="code-box">                                 [ PUBLIC INTERNET ]
+                                          |
+                                    HTTPS (Port 443)
+                                          v
+                           [ AWS Route 53 DNS &amp; CloudFront ]
+                                          |
+                                          v
+                         [ AWS Elastic IP (Static IPv4) ]
+                                          |
+               +--------------------------v--------------------------+
+               | AWS VPC Security Group (Nitro Hypervisor Firewall)  |
+               |   - Allow Inbound 443 (HTTPS) &amp; 80 (HTTP)           |
+               |   - Allow Inbound 22 (SSH via Institutional Bastion)|
+               |   - DENY ALL OTHER INBOUND TRAFFIC                  |
+               +--------------------------+--------------------------+
+                                          |
+                                          v
+                         +---------------------------------+
+                         | AWS EC2 Instance (t4g.small/med)|
+                         | Ubuntu 24.04 LTS (ARM64 Nitro)  |
+                         |   - Nginx (Reverse Proxy + SSL) |
+                         |   - PM2 Cluster (Node.js 22 LTS)|
+                         |   - LEADS ERP Port 3030 (NextJS)|
+                         +----------------+----------------+
+                                          |
+                                          v
+                         +---------------------------------+
+                         | AWS KMS-Encrypted EBS Volume    |
+                         | (AES-256 Hardware Encryption)   |
+                         |   - /leads-dashboard/data/      |
+                         |     (Zero-Cloud Local DB)       |
+                         |     (Application AES-256-GCM)   |
+                         +----------------+----------------+
+                                          |
+                                          v
+                           [ AWS DLM Automated Snapshots ]
+                            (Multi-AZ Daily Backup Policy)</div>
+
+      <h3>Step-by-Step AWS Enterprise Deployment Runbook</h3>
+
+      <div class="step-box action-gold">
+        <div class="step-header">
+          <span class="step-title">Step 1: Provision EC2 Instance &amp; KMS-Encrypted EBS Storage</span>
+          <span class="step-badge">AWS Console / CLI</span>
+        </div>
+        <p>Deploy an instance using the AWS CLI or EC2 Launch Wizard:</p>
+        <ul>
+          <li><strong>AMI:</strong> Ubuntu Server 24.04 LTS (ARM64 or x86_64).</li>
+          <li><strong>Instance Type:</strong> <code>t4g.small</code> (2 vCPU, 2 GB RAM Graviton3 — optimal price/performance) or <code>t4g.medium</code> for campuses with &gt; 1,000 active students.</li>
+          <li><strong>Storage:</strong> 30 GB GP3 EBS volume. <em>Check: &quot;Encrypt this volume&quot;</em> and select the default <code>aws/ebs</code> KMS key or an institutional custom KMS key.</li>
+        </ul>
+      </div>
+
+      <div class="step-box">
+        <div class="step-header">
+          <span class="step-title">Step 2: Configure VPC Security Groups</span>
+          <span class="step-badge">Network Firewall</span>
+        </div>
+        <p>Attach a dedicated Security Group (e.g. <code>leads-erp-prod-sg</code>) with strictly defined inbound rules:</p>
+        <table>
+          <thead>
+            <tr><th>Type</th><th>Protocol</th><th>Port Range</th><th>Source</th><th>Purpose</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>HTTPS</td><td>TCP</td><td>443</td><td><code>0.0.0.0/0</code></td><td>Public encrypted browser traffic</td></tr>
+            <tr><td>HTTP</td><td>TCP</td><td>80</td><td><code>0.0.0.0/0</code></td><td>ACME Let's Encrypt renewal &amp; HTTPS redirect</td></tr>
+            <tr><td>SSH</td><td>TCP</td><td>22</td><td><code>&lt;Campus-IP&gt;/32</code></td><td>Administrative access restricted to campus network</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="step-box">
+        <div class="step-header">
+          <span class="step-title">Step 3: Allocate Elastic IP &amp; Route 53 DNS Record</span>
+          <span class="step-badge">Networking</span>
+        </div>
+        <ol>
+          <li>Allocate an <strong>Elastic IP address</strong> in the EC2 Console and associate it with the provisioned instance. This guarantees the public IPv4 address remains permanent across reboots.</li>
+          <li>In <strong>AWS Route 53</strong>, create an <code>A</code> record pointing your institutional subdomain (e.g. <code>leads.institution.edu</code>) to the Elastic IP address.</li>
+        </ol>
+      </div>
+
+      <div class="step-box action-green">
+        <div class="step-header">
+          <span class="step-title">Step 4: System Dependencies &amp; Environment Setup</span>
+          <span class="step-badge">SSH Terminal</span>
+        </div>
+        <p>Connect to the instance via SSH and run the production environment provisioning script:</p>
+        <div class="code-box"># Update package index and install build dependencies
+sudo apt update &amp;&amp; sudo apt upgrade -y
+sudo apt install -y curl git nginx certbot python3-certbot-nginx
+
+# Install Node.js 22 LTS
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+sudo npm install -g pm2
+
+# Clone ERP repository
+git clone &lt;institutional-repo-url&gt; /var/www/leads-erp
+cd /var/www/leads-erp/leads-dashboard
+
+# Install production dependencies
+npm install
+
+# Run Super User Seeding
+npm run setup</div>
+      </div>
+
+      <div class="step-box">
+        <div class="step-header">
+          <span class="step-title">Step 5: Nginx Reverse Proxy &amp; SSL Certificates</span>
+          <span class="step-badge">Web Server</span>
+        </div>
+        <p>Configure Nginx to proxy traffic from port 443 to the local Next.js daemon on port 3030 with HTTP/2 and WebSocket support:</p>
+        <div class="code-box">sudo nano /etc/nginx/sites-available/leads-erp</div>
+        <p>Add the server configuration:</p>
+        <div class="code-box">server {
+    server_name leads.institution.edu;
+
+    location / {
+        proxy_pass http://127.0.0.1:3030;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}</div>
+        <p>Enable the site and obtain an automated SSL certificate:</p>
+        <div class="code-box">sudo ln -s /etc/nginx/sites-available/leads-erp /etc/nginx/sites-enabled/
+sudo nginx -t &amp;&amp; sudo systemctl restart nginx
+sudo certbot --nginx -d leads.institution.edu</div>
+      </div>
+
+      <div class="step-box">
+        <div class="step-header">
+          <span class="step-title">Step 6: Automated Snapshots via AWS Data Lifecycle Manager (DLM)</span>
+          <span class="step-badge">Disaster Recovery</span>
+        </div>
+        <p>In the AWS Console under <strong>EC2 &gt; Lifecycle Manager</strong>, create a snapshot lifecycle policy:</p>
+        <ul>
+          <li><strong>Target resource tags:</strong> <code>Project = LEADS-ERP</code></li>
+          <li><strong>Schedule:</strong> Daily at 02:00 UTC (during low campus activity).</li>
+          <li><strong>Retention:</strong> Retain the last 14 daily snapshots and copy snapshots across a second AWS region for catastrophic disaster recovery.</li>
+        </ul>
+      </div>
     </section>
 
+    <!-- 6. SUPER USER FINANCIAL SETUP & PAYMENTS -->
+    <section id="superuser-finance">
+      <h2>6. Super User Financial Setup &amp; Payment Initiation</h2>
+      <p>Following initial server and account provisioning, the Super User must establish the institutional financial parameters before processing claims or initiating disbursements.</p>
+
+      <h3>Phase 1: Default Reimbursement Settlement Bank Coordinates</h3>
+      <p>The ERP maintains an institutional disbursement clearing account. To configure default settlement coordinates, navigate to <strong>Settings</strong> (<code>/dashboard/settings</code>) and locate the <strong>Reimbursement &amp; Payment Settings</strong> card:</p>
+
+      <div class="screenshot-card">
+        <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — Super User Default Bank Coordinates Setup</span></div>
+        <img src="screenshots/steps/00_setup/03_super_user_bank_payment_setup.png" alt="Super User Bank Payment Setup">
+        <div class="screenshot-caption">Figure 1.3: Super User Bank Coordinates Setup — Configuring institutional settlement accounts.</div>
+      </div>
+
+      <div class="step-box">
+        <div class="step-header">
+          <span class="step-title">Banking Parameter Specifications</span>
+          <span class="step-badge">Route: /dashboard/settings</span>
+        </div>
+        <ul>
+          <li><strong>Bank Name:</strong> Official financial institution name (e.g., <code>State Bank of India</code>, <code>HDFC Bank</code>, <code>Canara Bank</code>).</li>
+          <li><strong>Account Number:</strong> Institutional clearing account number. Encrypted at rest using AES-256-GCM.</li>
+          <li><strong>IFSC Code:</strong> 11-character Indian Financial System Code (e.g., <code>SBIN0040843</code>) for NEFT/RTGS automated routing.</li>
+          <li><strong>Save Action:</strong> Clicking <strong>Save Changes</strong> seals the bank configuration into <code>data/systemSettings.json</code>.</li>
+        </ul>
+      </div>
+
+      <h3>Phase 2: Payment &amp; Expense Claim Initiation</h3>
+      <p>When student coordinators, event organizers, or faculty incur approved expenditures, claims are submitted via the <strong>Financial Reimbursements</strong> portal (<code>/dashboard/reimbursements</code>):</p>
+
+      <div class="screenshot-card">
+        <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — Payment &amp; Reimbursement Claim Initiation</span></div>
+        <img src="screenshots/steps/00_setup/04_payment_claim_initiation.png" alt="Payment Claim Initiation">
+        <div class="screenshot-caption">Figure 1.4: Payment &amp; Reimbursement Claim Initiation — Submitting itemized claims with attached proof of payment.</div>
+      </div>
+
+      <div class="step-box action-gold">
+        <div class="step-header">
+          <span class="step-title">Claim Submission Form Protocol</span>
+          <span class="step-badge">Route: /dashboard/reimbursements</span>
+        </div>
+        <ol>
+          <li><strong>Click &quot;New Reimbursement&quot;:</strong> Opens the financial reimbursement modal.</li>
+          <li><strong>Select Associated Event:</strong> Tag the claim to an approved institutional event (e.g. <em>Orientation 2026</em>, <em>Annual Tech Fest</em>) to ensure expenditure debits the correct departmental budget line.</li>
+          <li><strong>Expense Category:</strong> Select from <em>Food &amp; Refreshments</em>, <em>Logistics &amp; Travel</em>, <em>Printing &amp; Banners</em>, <em>Equipment &amp; Hardware</em>, or <em>Miscellaneous</em>.</li>
+          <li><strong>Amount (₹):</strong> Enter the exact expenditure amount in INR matching the tax invoices.</li>
+          <li><strong>Justification / Purpose:</strong> Detail the specific administrative rationale for the purchase.</li>
+          <li><strong>Upload Bills / Receipts:</strong> Dropzone accepts PDF invoices, JPEG/PNG receipts, and UPI transaction screenshots up to 10MB. Files are verified, hashed, and stored in encrypted local storage.</li>
+          <li><strong>Reimbursement Bank Coordinates:</strong> Enter the claimant's personal Bank Name, Account Number, and IFSC Code to receive electronic fund transfer.</li>
+          <li><strong>Submit Claim:</strong> Finalizes submission and places the request into the automated <strong>3-Gate Approval Pipeline</strong>.</li>
+        </ol>
+      </div>
+
+      <h3>Phase 3: The 3-Gate Approval &amp; Settlement Lifecycle</h3>
+      <p>Every submitted claim advances through three cryptographic verification gates before funds are disbursed:</p>
+      <ul>
+        <li><strong>Gate 1 (Lead Organizer / Tier 5):</strong> Validates that goods or services were delivered as ordered.</li>
+        <li><strong>Gate 2 (Head of Finance / Tier 3):</strong> Verifies tax invoices, GSTIN validity, and budget line availability.</li>
+        <li><strong>Gate 3 (Centre Head &amp; Director / Tier 2):</strong> Authorizes final treasury payout and generates the downloadable settlement voucher.</li>
+      </ul>
+    </section>
+
+    <!-- 7. CONTINUOUS DEPLOYMENT -->
     <section id="deploy-script">
-      <h2>5. Continuous Deployment Pipeline (deploy.sh)</h2>
+      <h2>7. Continuous Deployment Pipeline (deploy.sh)</h2>
       <p>Whenever updates are pushed to Git, trigger a zero-downtime deployment:</p>
       <div class="code-box">bash deploy.sh</div>
       <p><strong>Script Execution Pipeline:</strong></p>
@@ -693,12 +998,13 @@ Press Enter to generate a strong random key (recommended), or paste your own:</d
       </ol>
     </section>
 
+    <!-- 8. ACCOUNT ACTIVATION -->
     <section id="account-activation">
-      <h2>6. First-Time Account Activation &amp; Password Setup</h2>
+      <h2>8. First-Time Account Activation &amp; Password Setup</h2>
       <p>Institutional user accounts are provisioned exclusively by administrators through the <strong>Members Directory</strong> (<code>/dashboard/directory</code>). Public self-registration is permanently disabled for institutional security.</p>
       
       <ol>
-        <li><strong>Receive Activation Dispatch:</strong> When an account is created, the system dispatches an automated email containing a single-use cryptographically signed activation token (e.g. <code>https://leads.msruas.ac.in/activate?token=...</code>).</li>
+        <li><strong>Receive Activation Dispatch:</strong> When an account is created, the system dispatches an automated email containing a single-use cryptographically signed activation token (e.g. <code>https://leads.institution.edu/activate?token=...</code>).</li>
         <li><strong>Open Activation Gateway:</strong> Navigating to the link verifies token authenticity and ensures the token has not expired or been previously consumed.</li>
         <li><strong>Set Secure Password:</strong>
           <ul>
@@ -715,8 +1021,9 @@ Press Enter to generate a strong random key (recommended), or paste your own:</d
       </div>
     </section>
 
+    <!-- 9. MOBILE PWA -->
     <section id="mobile-pwa">
-      <h2>7. Mobile / PWA Installation (iOS &amp; Android)</h2>
+      <h2>9. Mobile / PWA Installation (iOS &amp; Android)</h2>
       <p>LEADS ERP is engineered as a fully compliant <strong>Progressive Web Application (PWA)</strong> with an offline-capable service worker, app manifest, and responsive touch gestures:</p>
 
       <div class="step-box">
@@ -746,8 +1053,9 @@ Press Enter to generate a strong random key (recommended), or paste your own:</d
       </div>
     </section>
 
+    <!-- 10. INTERFACE LAYOUT -->
     <section id="interface-layout">
-      <h2>8. Interface Layout &amp; Navigation Shell</h2>
+      <h2>10. Interface Layout &amp; Navigation Shell</h2>
       <p>The workspace is framed by a persistent, high-efficiency application shell:</p>
       <ul>
         <li><strong>Collapsible Sidebar (Left):</strong> Quick-navigation hub displaying permitted module routes. Can be collapsed into an icon-only rail to maximize screen real estate during complex event coordination or spreadsheet auditing.</li>
@@ -764,7 +1072,7 @@ Press Enter to generate a strong random key (recommended), or paste your own:</d
       <div class="screenshot-card">
         <div class="screenshot-header"><div class="dot-group"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div><span>Screenshot — Authentication Gateway</span></div>
         <img src="screenshots/01_login_portal.png" alt="Login Portal">
-        <div class="screenshot-caption">Figure 1.1: Live captured authentication gateway and login screen.</div>
+        <div class="screenshot-caption">Figure 1.5: Live captured authentication gateway and login screen.</div>
       </div>
     </section>
 
