@@ -177,6 +177,38 @@ The runtime environment is configured via `leads-dashboard/.env`:
 
 ### 1.7 AWS Enterprise Cloud Infrastructure & Production Deployment
 
+#### Baseline IT Infrastructure Specification (As on 10/09/2026)
+As established in the formal institutional IT infrastructure requisition for the deployment and operation of the Leads Next Gen Centre Portal:
+
+> **Institutional IT Communication — Infrastructure Requisition (Date: 10/09/2026):**
+> 
+> *“Dear Sir,*  
+> *As discussed earlier, we require the following IT infrastructure and configurations for the deployment and smooth operation of the Leads Next Gen Centre Portal:*
+> 
+> 1. **AWS EC2 – T3 Small Instance:** Provisioning of an AWS EC2 T3 Small instance for hosting and running the portal application.
+> 2. **Two Subdomains with DNS Configuration:** We require two subdomains under the University domain `msruas.ac.in`, with the following proposed structure:
+>    - **External Website (`leads.msruas.ac.in`):** Used for the public-facing showcase and communications website of the Leads Next Gen Centre.
+>    - **ERP Portal (`portal.leads.msruas.ac.in`):** Used for hosting and accessing the ERP portal developed for the Centre's internal operations and management.
+>    - *Action requested:* Necessary DNS configuration and routing for both subdomains.
+> 3. **University-Issued Email ID for ERP Portal:** Dedicated official email ID under the `@msruas.ac.in` domain:
+>    - **Address:** `noreply.leads@msruas.ac.in`
+>    - *Purpose:* System-generated and portal-related communications, including OTPs, password resets, registrations, notifications, confirmations, and other automated emails.
+> 4. **Amazon SES Configuration:** Provisioning and configuration of Amazon Simple Email Service (SES) to enable high-reputation system-generated and transactional emails from the ERP portal using `noreply.leads@msruas.ac.in`.
+> 5. **Amazon S3 Storage:** Provisioning of Amazon S3 storage for securely storing application-related documents, scanned invoices/bills, event media, encrypted backups, and required assets.
+> 6. **Provision for Future Scalability:** While the above infrastructure is based on our current requirements, the setup is provisioned with the ability to scale up as requirements increase — including computing resources, storage capacity, bandwidth, database resources, or other components based on growth in users, data, traffic, and operational volume, without requiring major restructuring of the underlying infrastructure.”*
+
+| Infrastructure Component | Specification / Allocation | Functional Role in LEADS Platform |
+|---|---|---|
+| **Compute Instance** | AWS EC2 `t3.small` (2 vCPU, 2 GiB RAM, Nitro Hypervisor) | Hosts Next.js App, Node.js 22 LTS, PM2 Process Manager, and local encrypted data store. |
+| **Public Subdomain** | `leads.msruas.ac.in` | Public-facing portal for external university community, announcements, and events showcase. |
+| **Enterprise ERP Subdomain** | `portal.leads.msruas.ac.in` | Secure institutional ERP gateway for authenticated internal operations, approvals, and financials. |
+| **Official Portal Mailbox** | `noreply.leads@msruas.ac.in` | Dedicated university identity for password resets, activation tokens, and event passes. |
+| **Email Transport Engine** | Amazon Simple Email Service (Amazon SES) | High-deliverability transactional relay configured with DKIM, SPF, and DMARC on `msruas.ac.in`. |
+| **Object & Media Vault** | Amazon Simple Storage Service (Amazon S3) | Scalable encrypted object storage for reimbursement bills, proof attachments, and system snapshots. |
+| **Scalability Provision** | Elastic Vertical & Horizontal Scaling | Zero-downtime upgrades for compute, storage capacity, and bandwidth as user volume grows. |
+
+---
+
 #### Why AWS is Superior to a Generic VPS
 Running mission-critical university ERP operations on Amazon Web Services (AWS) provides substantial architectural, security, and compliance advantages over unmanaged generic Virtual Private Servers (VPS):
 
