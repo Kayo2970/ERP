@@ -185,7 +185,7 @@ As established in the formal institutional IT infrastructure requisition for the
 > *“Dear Sir,*  
 > *As discussed earlier, we require the following IT infrastructure and configurations for the deployment and smooth operation of the Leads Next Gen Centre Portal:*
 > 
-> 1. **AWS EC2 – T3 Small Instance:** Provisioning of an AWS EC2 T3 Small instance for hosting and running the portal application.
+> 1. **AWS EC2 – T3 Medium Instance:** Provisioning of an AWS EC2 T3 Medium instance for hosting and running the portal application.
 > 2. **Two Subdomains with DNS Configuration:** We require two subdomains under the University domain `msruas.ac.in`, with the following proposed structure:
 >    - **External Website (`leads.msruas.ac.in`):** Used for the public-facing showcase and communications website of the Leads Next Gen Centre.
 >    - **ERP Portal (`portal.leads.msruas.ac.in`):** Used for hosting and accessing the ERP portal developed for the Centre's internal operations and management.
@@ -199,7 +199,7 @@ As established in the formal institutional IT infrastructure requisition for the
 
 | Infrastructure Component | Specification / Allocation | Functional Role in LEADS Platform |
 |---|---|---|
-| **Compute Instance** | AWS EC2 `t3.small` (2 vCPU, 2 GiB RAM, Nitro Hypervisor) | Hosts Next.js App, Node.js 22 LTS, PM2 Process Manager, and local encrypted data store. |
+| **Compute Instance** | AWS EC2 `t3.medium` (2 vCPU, 4 GiB RAM, Nitro Hypervisor) | Hosts Next.js App, Node.js 22 LTS, PM2 Process Manager, and local encrypted data store. |
 | **Public Subdomain** | `leads.msruas.ac.in` | Public-facing portal for external university community, announcements, and events showcase. |
 | **Enterprise ERP Subdomain** | `portal.leads.msruas.ac.in` | Secure institutional ERP gateway for authenticated internal operations, approvals, and financials. |
 | **Official Portal Mailbox** | `noreply.leads@msruas.ac.in` | Dedicated university identity for password resets, activation tokens, and event passes. |
