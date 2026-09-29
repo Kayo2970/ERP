@@ -40,7 +40,8 @@ This document serves as the master tracking registry for the LEADS ERP User Oper
 | **1.11** | Interface Layout & Navigation Shell | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T01:10:00+05:30 | Working Tree | Sidebar rail, period filter, persona quick switch | Complete |
 | **3.1-3.24**| Enriched Module Operating Instructions | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T01:10:00+05:30 | Working Tree | Detailed input fields, lifecycles, buttons, and approvals | Complete |
 | **3.22** | Email Engine & SMTP Mailroom Portal | `docs/USER_MANUAL.md`, `docs/manual.html` | 2026-09-30T01:10:00+05:30 | Working Tree | Granular field-by-field input guide, provider setup, diagnostics | Complete |
-| **6.0** | Compiled Official PDF Manual | `docs/LEADS_ERP_User_Manual.pdf` | 2026-09-30T01:10:00+05:30 | Working Tree | High-resolution 69.70 MB printable PDF output with action screenshots | Complete |
+| **6.0** | Compiled Official PDF Manual | `docs/LEADS_ERP_User_Manual.pdf` | 2026-09-30T01:10:00+05:30 | Working Tree | High-resolution 70.49 MB printable PDF output with action screenshots | Complete |
+| **6.1** | Collapsible Interactive Navigation Sidebar | `docs/manual.html`, `leads-dashboard/public/manual.html` | 2026-09-30T01:12:00+05:30 | Working Tree | Smooth animated collapse, floating re-open button, Ctrl+B shortcut, localStorage persistence | Complete |
 
 ---
 
