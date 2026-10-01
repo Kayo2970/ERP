@@ -1,0 +1,3 @@
+## 2024-09-03 - Add focus-visible states to standard interactive elements
+**Learning:** Found that many interactive elements (primarily the main `Button` component) across the app lacked visual focus states for keyboard navigation. This prevents keyboard-only users and screen-reader users who rely on visible focus indicators from knowing where their focus currently is, negatively impacting keyboard accessibility.
+**Action:** Adding `focus-visible` styles with a high contrast ring using `ring-accent/50` to the base `Button` component ensures a consistent, accessible focus state globally without relying on custom CSS. This pattern should be standard for all interactive elements to meet basic a11y requirements.
