@@ -1,0 +1,3 @@
+## 2024-09-09 - Keyboard Accessibility with focus-visible
+**Learning:** Custom UI buttons built with standard `<button>` tags often lose their native focus ring when styling resets are applied, making keyboard navigation difficult for visually impaired or power users.
+**Action:** Always ensure `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent` (or similar depending on the component context) is explicitly added to interactive elements (`<button>`, `<a>`, `<input>`) within custom UI components to guarantee a clear visual indicator for keyboard focus without negatively impacting mouse click aesthetics.

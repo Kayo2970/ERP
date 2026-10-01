@@ -148,7 +148,7 @@ export function Button({
     <button
       disabled={disabled || isLoading}
       onClick={handleClick}
-      className={`relative inline-flex items-center justify-center font-medium select-none overflow-hidden transition-all duration-150 active:scale-[0.97] cursor-pointer disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed ${colorStyle} ${sizeStyle} ${
+      className={`relative inline-flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 items-center justify-center font-medium select-none overflow-hidden transition-all duration-150 active:scale-[0.97] cursor-pointer disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed ${colorStyle} ${sizeStyle} ${
         fullWidth ? 'w-full' : ''
       } ${className}`}
       {...props}
