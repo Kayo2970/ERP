@@ -839,8 +839,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     <div className="relative inline-flex items-center justify-center shrink-0" ref={wrapperRef}>
       <button
         onClick={handleToggleNotifications}
-        className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-xl hover:bg-theme-border/20 transition-all cursor-pointer relative shrink-0"
+        className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-xl hover:bg-theme-border/20 focus-visible:ring-2 focus-visible:ring-accent transition-all cursor-pointer relative shrink-0"
         title="Notifications"
+        aria-label="Toggle notifications"
       >
         <Bell className="h-4.5 w-4.5" />
         {unseenActionCount > 0 && (
@@ -878,8 +879,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                 {notifications.some(n => !n.read) && (
                   <button
                     onClick={markAllNotificationsAsRead}
-                    className="text-[10px] text-accent hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+                    className="text-[10px] text-accent hover:underline font-semibold flex items-center gap-1 cursor-pointer focus-visible:ring-2 focus-visible:ring-accent rounded-sm"
                     title="Mark all notifications as read"
+                    aria-label="Mark all notifications as read"
                   >
                     <Check className="h-3 w-3" />
                     Mark read
@@ -889,8 +891,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                 {notifications.length > 0 && (
                   <button
                     onClick={clearAllNotifications}
-                    className="text-[10px] text-danger hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+                    className="text-[10px] text-danger hover:underline font-semibold flex items-center gap-1 cursor-pointer focus-visible:ring-2 focus-visible:ring-danger rounded-sm"
                     title="Clear all received notifications"
+                    aria-label="Clear all received notifications"
                   >
                     <Trash2 className="h-3 w-3" />
                     Clear all
@@ -925,8 +928,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                     <button
                       type="button"
                       onClick={(e) => handleDismissNotification(notif.id, e)}
-                      className="opacity-0 group-hover:opacity-100 p-1 text-theme-text-secondary hover:text-danger hover:bg-danger/10 rounded-lg transition-all cursor-pointer shrink-0"
+                      className="opacity-0 group-hover:opacity-100 p-1 text-theme-text-secondary hover:text-danger hover:bg-danger/10 focus-visible:ring-2 focus-visible:ring-danger rounded-lg transition-all cursor-pointer shrink-0"
                       title="Clear this notification"
+                      aria-label="Dismiss notification"
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -953,8 +957,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           setAllMembers(getMembers());
           setIsQuickSwitchOpen(!isQuickSwitchOpen);
         }}
-        className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-xl hover:bg-theme-border/20 transition-all cursor-pointer"
+        className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-xl hover:bg-theme-border/20 focus-visible:ring-2 focus-visible:ring-accent transition-all cursor-pointer"
         title="Quick Switch: view as any account (Super User only)"
+        aria-label="Quick Switch: view as any account (Super User only)"
       >
         <UserCog className="h-4.5 w-4.5" />
       </button>
@@ -981,7 +986,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             </div>
             <button
               onClick={() => setIsQuickSwitchOpen(false)}
-              className="text-theme-text-secondary hover:text-theme-text-primary p-1 rounded-lg hover:bg-white/10 transition-all cursor-pointer text-xs"
+              className="text-theme-text-secondary hover:text-theme-text-primary p-1 rounded-lg hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-accent transition-all cursor-pointer text-xs"
+              aria-label="Close Quick Switch"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -1002,7 +1008,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
               {quickSwitchSearch && (
                 <button
                   onClick={() => setQuickSwitchSearch('')}
-                  className="text-theme-text-secondary hover:text-theme-text-primary text-[10px] p-0.5 rounded cursor-pointer"
+                  className="text-theme-text-secondary hover:text-theme-text-primary text-[10px] p-0.5 rounded focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
+                  aria-label="Clear search"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -1295,7 +1302,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         <button
           onClick={toggleSidebarCollapsed}
           title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className="absolute top-20 -right-3 h-6 w-6 flex items-center justify-center rounded-full bg-theme-sidebar border border-theme-sidebar-border shadow-md text-theme-text-secondary hover:text-theme-text-primary hover:bg-theme-border/30 transition-all z-50 cursor-pointer"
+          aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          className="absolute top-20 -right-3 h-6 w-6 flex items-center justify-center rounded-full bg-theme-sidebar border border-theme-sidebar-border shadow-md text-theme-text-secondary hover:text-theme-text-primary hover:bg-theme-border/30 focus-visible:ring-2 focus-visible:ring-accent transition-all z-50 cursor-pointer"
         >
           {isSidebarCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
         </button>
@@ -1321,8 +1329,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             onClick={toggleTheme}
-            className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-lg hover:bg-theme-border/20 transition-all cursor-pointer"
+            className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-lg hover:bg-theme-border/20 focus-visible:ring-2 focus-visible:ring-accent transition-all cursor-pointer"
             title="Toggle Theme"
+            aria-label="Toggle Theme"
           >
             {isDarkTheme ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </button>
@@ -1331,7 +1340,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-lg hover:bg-theme-border/20 transition-all cursor-pointer"
+            className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-lg hover:bg-theme-border/20 focus-visible:ring-2 focus-visible:ring-accent transition-all cursor-pointer"
+            aria-label="Toggle Mobile Menu"
           >
             {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
@@ -1448,8 +1458,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             {/* Theme switcher */}
             <button
               onClick={toggleTheme}
-              className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-xl hover:bg-theme-border/20 transition-all cursor-pointer shrink-0"
+              className="h-9 w-9 flex items-center justify-center text-theme-text-secondary hover:text-theme-text-primary rounded-xl hover:bg-theme-border/20 focus-visible:ring-2 focus-visible:ring-accent transition-all cursor-pointer shrink-0"
               title="Toggle Light/Dark Theme"
+              aria-label="Toggle Light/Dark Theme"
             >
               {isDarkTheme ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
             </button>
@@ -1476,7 +1487,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             <div className="relative shrink-0" ref={userMenuRef}>
               <button
                 onClick={() => setIsUserMenuOpen(v => !v)}
-                className="flex items-center gap-3 min-w-0 rounded-xl px-1.5 py-1 hover:bg-theme-border/20 transition-all cursor-pointer"
+                className="flex items-center gap-3 min-w-0 rounded-xl px-1.5 py-1 hover:bg-theme-border/20 focus-visible:ring-2 focus-visible:ring-accent transition-all cursor-pointer"
+                aria-label="Toggle user menu"
               >
                 <div className="text-right min-w-0 max-w-[110px] lg:max-w-[180px]">
                   <h4 className="font-bold text-xs text-theme-text-primary truncate" title={user.name}>{user.name}</h4>
