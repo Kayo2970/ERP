@@ -8,7 +8,7 @@ export async function GET(request: Request) {
   try {
     const actor = await requireSession(request);
     const settings = await getAccessLevelSettingsServer();
-    if (!canBuildForms(actor, settings)) throw new ForbiddenError();
+    if (!(await canBuildForms(actor, settings))) throw new ForbiddenError();
     const items = await readCollection('formTemplates');
     return NextResponse.json(items);
   } catch (err: any) {
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   try {
     const actor = await requireSession(request);
     const settings = await getAccessLevelSettingsServer();
-    if (!canBuildForms(actor, settings)) throw new ForbiddenError();
+    if (!(await canBuildForms(actor, settings))) throw new ForbiddenError();
     const item = await request.json();
     const updated = await mutateCollection('formTemplates', (current) => [item, ...current]);
     const created = updated.find((t: any) => t.id === item.id);
