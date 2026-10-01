@@ -368,7 +368,7 @@ export interface TaskItem {
   // relying on a fragile title-string match.
   isDesignDeliverable?: boolean;
   isSocialMediaPost?: boolean;
-  workflowType?: 'design_caption_draft' | 'design_caption_review' | 'design_social_posting'
+  workflowType?: 'design_social_posting'
     | 'holiday_social_approval' | 'holiday_design_social'
     // Auto-created the day an event's dates lapse (see event-social-scheduler.ts) —
     // assigned to the senior Head of Design + Core Committee, asking for social
@@ -405,15 +405,11 @@ export interface TaskItem {
   procurementId?: string;
   isProcurement?: boolean;
   // Only set on workflowType 'design_social_posting' tasks — distinguishes
-  // the two separate posting tasks (one per platform) created once captions
-  // are approved, so each can be assigned, viewed, and marked complete
+  // the two separate posting tasks (one per platform) created for legacy
+  // designs whose captions were approved, so each can be assigned, viewed, and marked complete
   // independently of the other.
   platform?: 'instagram' | 'linkedin';
   designId?: string;
-  draftInstagramCaption?: string;
-  draftLinkedinCaption?: string;
-  approvedInstagramCaption?: string;
-  approvedLinkedinCaption?: string;
   // Group Policy approval workflow — mirrors EventItem's fields. Set only when
   // the creator/editor's grant is not one of Tasks' built-in trusted roles
   // (Base Leadership, any Head role, GG Campus tier) or came from an
@@ -942,26 +938,6 @@ export interface DesignSubmissionItem {
   // syncDesignTask() completes THIS same task on approval instead of
   // spawning a new standalone "Design Approved: ..." task.
   sourceTaskId?: string;
-  workflowStage?: 'caption_required' | 'caption_approval' | 'posting_required' | 'completed';
-  captionTaskId?: string;
-  captionApprovalTaskId?: string;
-  postingInstagramTaskId?: string;
-  postingLinkedinTaskId?: string;
-  postingInstagramDone?: boolean;
-  postingLinkedinDone?: boolean;
-  draftInstagramCaption?: string;
-  draftLinkedinCaption?: string;
-  approvedInstagramCaption?: string;
-  approvedLinkedinCaption?: string;
-  captionStatus?: 'pending_submission' | 'pending_approval' | 'approved' | 'changes_requested';
-  // Whether the "Captions Approved" email (design asset + approved caption
-  // text) to the Centre Head / Advisor / GG Campus Head of Events actually
-  // went out — set by /api/designs/[id]'s PATCH handler the moment
-  // captionStatus first becomes 'approved'. Mirrors styleApprovalEmailSent/
-  // styleApprovalEmailError above.
-  captionApprovalEmailSent?: boolean;
-  captionApprovalEmailError?: string;
-  captionReviewComments?: string;
   isSample?: boolean;
   // Optional automated OCR + spell-check pass run client-side at upload time
   // (see /api/designs/ocr-scan). Purely advisory — never validated or
@@ -5500,17 +5476,6 @@ export function resolveDesignReviewer(): { id: string; name: string; email: stri
 }
 
 /**
- * The fixed leadership group that Instagram/LinkedIn posting tasks are
- * always assigned to once captions are approved (see reviewDesignCaptions
- * below) — Design Head, Social Media Head, and Senior Head roles, same
- * "role string contains X" matching respondToHolidayApproval already uses
- * for its own design/social-media fan-out. This is a fixed routing rule,
- * not tied to who submitted or designed the asset — posting is always the
- * group's job, never the designer's. Falls back to tier <= 2 leadership if
- * the roster currently holds none of those titles, so the task is never
- * left orphaned with no one able to see it.
- */
-/**
  * Resolves the member pool assigned to social-media posting tasks.
  * Strictly limited to student members of the Social Media team.
  * Non-social-media members and Professors/Faculty are strictly excluded.
@@ -5621,8 +5586,8 @@ export async function addDesign(design: Omit<DesignSubmissionItem, 'id' | 'submi
  *
  * Once finalized, it automatically creates or completes a Task (linked to an Event
  * if present, or as a standalone deliverable if not), entering the Task Evaluation Queue
- * on the Ratings page, and kicks off Stage 1 of the caption/social-posting workflow
- * (see submitDesignCaptions / reviewDesignCaptions / completeDesignPosting below).
+ * on the Ratings page. No further tasks are spawned: the designer uploads, the
+ * design is approved or rejected, and that is the whole workflow.
  */
 function syncDesignTask(item: DesignSubmissionItem, reviewerName: string): DesignSubmissionItem {
   const isFullyFinalized = !item.proofreadRequested || item.review?.status === 'Proofread Approved';
@@ -5649,31 +5614,6 @@ function syncDesignTask(item: DesignSubmissionItem, reviewerName: string): Desig
       updatedItem.linkedTaskId = task.id;
     }
 
-    // Stage 1: Initiate Caption Requirement Task for Designer
-    if (!updatedItem.workflowStage || updatedItem.workflowStage === 'caption_required') {
-      if (!updatedItem.captionTaskId) {
-        const dueDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-        const task1 = addTask({
-          title: `[Caption Required] Draft Captions: ${updatedItem.title}`,
-          event: updatedItem.eventName || undefined,
-          eventId: updatedItem.eventId || undefined,
-          assignee: updatedItem.designerName,
-          assigneeId: updatedItem.designerId,
-          assigneeEmail: updatedItem.designerEmail,
-          assigneeType: 'individual',
-          dueDate,
-          status: 'In Progress',
-          creatorName: reviewerName,
-          isDesignDeliverable: true,
-          workflowType: 'design_caption_draft',
-          designId: updatedItem.id,
-        });
-        updatedItem.workflowStage = 'caption_required';
-        updatedItem.captionTaskId = task1.id;
-        updatedItem.captionStatus = 'pending_submission';
-      }
-    }
-
     return updatedItem;
   } else if (updatedItem.linkedTaskId) {
     // If a previously approved design is no longer finalized (e.g. the proofreader
@@ -5686,247 +5626,6 @@ function syncDesignTask(item: DesignSubmissionItem, reviewerName: string): Desig
   }
 
   return updatedItem;
-}
-
-export function submitDesignCaptions(designId: string, instaCaption: string, linkedinCaption: string, actorName: string): DesignSubmissionItem | null {
-  const designs = getDesigns();
-  const idx = designs.findIndex(d => d.id === designId);
-  if (idx === -1) return null;
-
-  const design = designs[idx];
-
-  // Complete Stage 1 task
-  if (design.captionTaskId) {
-    updateTaskStatus(design.captionTaskId, 'Completed', actorName);
-  }
-
-  const dueDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-  // Captions go back to whoever did the ORIGINAL proofread — not a separate
-  // "Design Head" lookup, which could resolve to no one at all if the roster
-  // has no tier-2/"design head" member. Falls back to re-resolving a Centre
-  // Head/GG Events Head only if this design predates mandatory routing and
-  // has no assigned proofreader on record.
-  const captionReviewer = (design.assignedProofreaderId && design.assignedProofreaderName && design.assignedProofreaderEmail)
-    ? { id: design.assignedProofreaderId, name: design.assignedProofreaderName, email: design.assignedProofreaderEmail }
-    : resolveDesignReviewer();
-
-  const task2 = addTask({
-    title: `[Caption Approval] Review Captions: ${design.title}`,
-    event: design.eventName || undefined,
-    eventId: design.eventId || undefined,
-    assignee: captionReviewer ? captionReviewer.name : 'Centre Head',
-    assigneeId: captionReviewer?.id,
-    assigneeEmail: captionReviewer?.email,
-    assigneeType: 'individual',
-    dueDate,
-    status: 'In Progress',
-    creatorName: actorName,
-    isDesignDeliverable: true,
-    workflowType: 'design_caption_review',
-    designId: design.id,
-    draftInstagramCaption: instaCaption,
-    draftLinkedinCaption: linkedinCaption,
-  });
-
-  design.draftInstagramCaption = instaCaption;
-  design.draftLinkedinCaption = linkedinCaption;
-  design.workflowStage = 'caption_approval';
-  design.captionApprovalTaskId = task2.id;
-  design.captionStatus = 'pending_approval';
-
-  designs[idx] = design;
-  saveDesigns(designs);
-  serverPatch('/api/designs', design.id, design);
-  logAuditEvent('DESIGN_CAPTIONS_SUBMITTED', actorName, `Submitted draft captions for design "${design.title}"`);
-  return design;
-}
-
-export function reviewDesignCaptions(designId: string, approved: boolean, comments: string, actorName: string): DesignSubmissionItem | null {
-  const designs = getDesigns();
-  const idx = designs.findIndex(d => d.id === designId);
-  if (idx === -1) return null;
-
-  const design = designs[idx];
-
-  // Complete Stage 2 task
-  if (design.captionApprovalTaskId) {
-    updateTaskStatus(design.captionApprovalTaskId, 'Completed', actorName);
-  }
-
-  if (approved) {
-    const dueDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-    // Posting is strictly routed to the Social Media team pool.
-    // Non-team members and Faculty are strictly excluded.
-    const postingPool = resolveSocialPostingAssignees();
-    const postingAssignee = {
-      assignee: postingPool.map(m => m.name).join(', ') || 'Social Media Team (Unassigned)',
-      assigneeType: 'group' as const,
-      assigneeIds: postingPool.map(m => m.id),
-    };
-
-    // Idempotent: check if platform posting tasks already exist for this design
-    const existingTasks = getTasks();
-    const existingInsta = existingTasks.find(t =>
-      (design.postingInstagramTaskId && t.id === design.postingInstagramTaskId) ||
-      (t.designId === design.id && t.workflowType === 'design_social_posting' && t.platform === 'instagram')
-    );
-    const existingLinkedin = existingTasks.find(t =>
-      (design.postingLinkedinTaskId && t.id === design.postingLinkedinTaskId) ||
-      (t.designId === design.id && t.workflowType === 'design_social_posting' && t.platform === 'linkedin')
-    );
-
-    const instaTask = existingInsta
-      ? (updateTask(existingInsta.id, {
-          status: 'In Progress',
-          dueDate,
-          ...postingAssignee,
-          approvedInstagramCaption: design.draftInstagramCaption,
-        }, actorName) || existingInsta)
-      : addTask({
-          title: `[Social Media Posting] Post on Instagram: ${design.title}`,
-          event: design.eventName || undefined,
-          eventId: design.eventId || undefined,
-          ...postingAssignee,
-          dueDate,
-          status: 'In Progress',
-          creatorName: actorName,
-          isDesignDeliverable: true,
-          isSocialMediaPost: true,
-          workflowType: 'design_social_posting',
-          platform: 'instagram',
-          designId: design.id,
-          approvedInstagramCaption: design.draftInstagramCaption,
-        });
-
-    const linkedinTask = existingLinkedin
-      ? (updateTask(existingLinkedin.id, {
-          status: 'In Progress',
-          dueDate,
-          ...postingAssignee,
-          approvedLinkedinCaption: design.draftLinkedinCaption,
-        }, actorName) || existingLinkedin)
-      : addTask({
-          title: `[Social Media Posting] Post on LinkedIn: ${design.title}`,
-          event: design.eventName || undefined,
-          eventId: design.eventId || undefined,
-          ...postingAssignee,
-          dueDate,
-          status: 'In Progress',
-          creatorName: actorName,
-          isDesignDeliverable: true,
-          isSocialMediaPost: true,
-          workflowType: 'design_social_posting',
-          platform: 'linkedin',
-          designId: design.id,
-          approvedLinkedinCaption: design.draftLinkedinCaption,
-        });
-
-    design.approvedInstagramCaption = design.draftInstagramCaption;
-    design.approvedLinkedinCaption = design.draftLinkedinCaption;
-    design.workflowStage = 'posting_required';
-    design.postingInstagramTaskId = instaTask.id;
-    design.postingLinkedinTaskId = linkedinTask.id;
-    design.postingInstagramDone = false;
-    design.postingLinkedinDone = false;
-    design.captionStatus = 'approved';
-    design.captionReviewComments = comments;
-  } else {
-    // Rejected -> re-open Stage 1 task for designer
-    const dueDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const task1 = addTask({
-      title: `[Caption Revision] Draft Captions: ${design.title}`,
-      event: design.eventName || undefined,
-      eventId: design.eventId || undefined,
-      assignee: design.designerName,
-      assigneeId: design.designerId,
-      assigneeEmail: design.designerEmail,
-      assigneeType: 'individual',
-      dueDate,
-      status: 'In Progress',
-      creatorName: actorName,
-      isDesignDeliverable: true,
-      workflowType: 'design_caption_draft',
-      designId: design.id,
-    });
-
-    design.workflowStage = 'caption_required';
-    design.captionTaskId = task1.id;
-    design.captionStatus = 'changes_requested';
-    design.captionReviewComments = comments;
-  }
-
-  designs[idx] = design;
-  saveDesigns(designs);
-  serverPatch('/api/designs', design.id, design);
-  logAuditEvent('DESIGN_CAPTIONS_REVIEWED', actorName, `${approved ? 'Approved' : 'Requested changes for'} captions on design "${design.title}"`);
-  return design;
-}
-
-/**
- * Marks ONE of the two posting tasks (Instagram or LinkedIn) done. The
- * design's workflowStage only flips to 'completed' once BOTH platforms have
- * been marked — posting to just one is not the end of the workflow.
- */
-export function completeDesignPosting(designId: string, platform: 'instagram' | 'linkedin', actorName: string): DesignSubmissionItem | null {
-  const designs = getDesigns();
-  const idx = designs.findIndex(d => d.id === designId);
-  if (idx === -1) return null;
-
-  const design = designs[idx];
-  const taskId = platform === 'instagram' ? design.postingInstagramTaskId : design.postingLinkedinTaskId;
-  if (taskId) {
-    updateTaskStatus(taskId, 'Completed', actorName);
-  }
-
-  if (platform === 'instagram') {
-    design.postingInstagramDone = true;
-  } else {
-    design.postingLinkedinDone = true;
-  }
-
-  if (design.postingInstagramDone && design.postingLinkedinDone) {
-    design.workflowStage = 'completed';
-  }
-
-  designs[idx] = design;
-  saveDesigns(designs);
-  serverPatch('/api/designs', design.id, design);
-  logAuditEvent('DESIGN_POSTING_COMPLETED', actorName, `Marked ${platform === 'instagram' ? 'Instagram' : 'LinkedIn'} posting complete for design "${design.title}"`);
-  return design;
-}
-
-/**
- * Lets whoever's on a "[Social Media Posting] Post on Instagram/LinkedIn"
- * task change and resubmit the approved caption text — e.g. a typo spotted
- * right before (or after) publishing — without re-running the full
- * draft/approval cycle in submitDesignCaptions/reviewDesignCaptions. Editable
- * regardless of whether that platform's post is already marked done, since a
- * correction can still be needed after the fact.
- */
-export function updateApprovedCaption(
-  designId: string,
-  platform: 'instagram' | 'linkedin',
-  newCaption: string,
-  actorName: string
-): DesignSubmissionItem | null {
-  const designs = getDesigns();
-  const idx = designs.findIndex(d => d.id === designId);
-  if (idx === -1) return null;
-
-  const design = { ...designs[idx] };
-  if (platform === 'instagram') {
-    design.approvedInstagramCaption = newCaption;
-  } else {
-    design.approvedLinkedinCaption = newCaption;
-  }
-
-  designs[idx] = design;
-  saveDesigns(designs);
-  serverPatch('/api/designs', design.id, design);
-  logAuditEvent('DESIGN_CAPTION_EDITED', actorName, `Edited the ${platform === 'linkedin' ? 'LinkedIn' : 'Instagram'} caption for design "${design.title}"`);
-  return design;
 }
 
 export function updateDesignReview(
