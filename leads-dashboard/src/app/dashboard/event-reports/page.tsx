@@ -60,6 +60,9 @@ export default function EventReportsPage() {
 
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectionReasonInput, setRejectionReasonInput] = useState('');
+  const [approvingTarget, setApprovingTarget] = useState<{ report: EventReportItem; as: 'centre_head' | 'gg_events_head' } | null>(null);
+  const [approvalCommentsInput, setApprovalCommentsInput] = useState('');
+  const [isApproving, setIsApproving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const [scoringId, setScoringId] = useState<string | null>(null);
@@ -257,13 +260,24 @@ export default function EventReportsPage() {
     }
   };
 
-  const handleApprove = async (report: EventReportItem, as: 'centre_head' | 'gg_events_head') => {
-    const result = await approveEventReport(report.id, as, user?.name || 'Reviewer');
-    if (!result) { triggerError('Failed to record approval.'); return; }
-    setReports(getEventReports());
-    triggerSuccess(result.status === 'approved'
-      ? (result.emailSent ? 'Approved — the report has been accepted and emailed as an attachment.' : `Approved — the report has been accepted, but the email could not be sent${result.emailError ? `: ${result.emailError.split('\n')[0]}` : '.'}`)
-      : 'Approved your side.');
+  const handleConfirmApprove = async () => {
+    if (!approvingTarget) return;
+    const { report, as } = approvingTarget;
+    setIsApproving(true);
+    try {
+      const result = await approveEventReport(report.id, as, user?.name || 'Reviewer', approvalCommentsInput.trim() || undefined);
+      if (!result) { triggerError('Failed to record approval.'); return; }
+      setReports(getEventReports());
+      setApprovingTarget(null);
+      setApprovalCommentsInput('');
+      triggerSuccess(result.status === 'approved'
+        ? (result.emailSent ? 'Approved — the report has been accepted and emailed to leadership and the submitter.' : `Approved — accepted, but email delivery had an issue${result.emailError ? `: ${result.emailError.split('\n')[0]}` : '.'}`)
+        : 'Approved your side — comments recorded.');
+    } catch (err: any) {
+      triggerError(err.message || 'Failed to approve report.');
+    } finally {
+      setIsApproving(false);
+    }
   };
 
   const openScoring = (report: EventReportItem) => {
@@ -452,12 +466,12 @@ export default function EventReportsPage() {
                       </button>
                     )}
                     {viewerIsCentreHead && !report.centreHeadApproved && (
-                      <button onClick={() => handleApprove(report, 'centre_head')} className="flex-1 py-1.5 bg-success/15 hover:bg-success/25 text-success border border-success/30 text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5">
+                      <button onClick={() => { setApprovingTarget({ report, as: 'centre_head' }); setApprovalCommentsInput(''); }} className="flex-1 py-1.5 bg-success/15 hover:bg-success/25 text-success border border-success/30 text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5">
                         <Check className="h-3 w-3" /> Approve as Centre Head
                       </button>
                     )}
                     {viewerIsGgEventsHead && !report.eventsHeadGgApproved && (
-                      <button onClick={() => handleApprove(report, 'gg_events_head')} className="flex-1 py-1.5 bg-success/15 hover:bg-success/25 text-success border border-success/30 text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5">
+                      <button onClick={() => { setApprovingTarget({ report, as: 'gg_events_head' }); setApprovalCommentsInput(''); }} className="flex-1 py-1.5 bg-success/15 hover:bg-success/25 text-success border border-success/30 text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5">
                         <Check className="h-3 w-3" /> Approve as GG Events Head
                       </button>
                     )}
@@ -526,6 +540,12 @@ export default function EventReportsPage() {
                     {statusBadge(report)}
                   </div>
                   {approvalChecklist(report)}
+                  {(report.reviewerComments || report.centreHeadComments || report.eventsHeadGgComments) && (
+                    <div className="p-2.5 bg-success/10 border-l-2 border-success rounded-lg space-y-0.5 text-xs">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-success">Reviewer Feedback</p>
+                      <p className="text-theme-text-primary italic">"{report.reviewerComments || report.centreHeadComments || report.eventsHeadGgComments}"</p>
+                    </div>
+                  )}
                   {report.reportScore != null && (
                     <p className="text-[10px] font-semibold text-theme-text-secondary">
                       Report Writing score: <span className="text-theme-text-primary">{report.reportScore.toFixed(1)}/5.0</span> (by {report.scoredBy})
@@ -573,7 +593,16 @@ export default function EventReportsPage() {
                   </div>
                   {report.status !== 'approved' && approvalChecklist(report)}
                   {report.status === 'rejected' && report.rejectionReason && (
-                    <p className="text-[11px] text-danger bg-danger/10 border border-danger/20 rounded-lg p-2">{report.rejectionReason}</p>
+                    <div className="p-2.5 bg-danger/10 border-l-2 border-danger rounded-lg space-y-0.5 text-xs">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-danger">Reviewer Feedback</p>
+                      <p className="text-theme-text-primary italic">"{report.rejectionReason}"</p>
+                    </div>
+                  )}
+                  {report.status === 'approved' && (report.reviewerComments || report.centreHeadComments || report.eventsHeadGgComments) && (
+                    <div className="p-2.5 bg-success/10 border-l-2 border-success rounded-lg space-y-0.5 text-xs">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-success">Reviewer Feedback</p>
+                      <p className="text-theme-text-primary italic">"{report.reviewerComments || report.centreHeadComments || report.eventsHeadGgComments}"</p>
+                    </div>
                   )}
                   {report.status === 'approved' && report.emailSent === false && (
                     <p className="text-[11px] text-warning bg-warning/10 border border-warning/20 rounded-lg p-2 flex items-start gap-1.5">
@@ -651,18 +680,67 @@ export default function EventReportsPage() {
               </button>
             </div>
             <div className="space-y-1.5 text-xs">
-              <label className="block font-medium text-theme-text-secondary">Reason (optional)</label>
+              <label className="block font-medium text-theme-text-secondary">Feedback / Rejection Reason</label>
               <textarea
                 value={rejectionReasonInput}
                 onChange={(e) => setRejectionReasonInput(e.target.value)}
                 rows={3}
-                placeholder="Let the General Secretary know what needs fixing..."
+                placeholder="Let the General Secretary know what needs fixing (emailed to submitter)..."
                 className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent resize-none"
               />
+              <p className="text-[11px] text-theme-text-secondary">This feedback will be emailed directly to the submitter.</p>
             </div>
             <button onClick={handleConfirmReject} className="w-full py-3 bg-danger hover:bg-danger/90 text-white font-semibold text-xs rounded-xl transition-all shadow-md cursor-pointer">
               Confirm Rejection
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Approve Modal */}
+      {approvingTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="glass-panel w-full max-w-md rounded-3xl p-6 flex flex-col space-y-4 relative border border-white/15 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-theme-text-primary flex items-center gap-2">
+                <Check className="h-4.5 w-4.5 text-success" />
+                Approve Event Report
+              </h2>
+              <button onClick={() => { setApprovingTarget(null); setApprovalCommentsInput(''); }} className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-theme-border/30 text-theme-text-secondary hover:text-theme-text-primary transition-all cursor-pointer">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-1 text-xs bg-theme-border/10 p-3 rounded-xl border border-theme-border/20">
+              <p className="font-semibold text-theme-text-primary">{approvingTarget.report.eventTitle}</p>
+              <p className="text-theme-text-secondary">Submitted by {approvingTarget.report.submittedBy} {approvingTarget.report.submittedByEmail ? `(${approvingTarget.report.submittedByEmail})` : ''}</p>
+              <p className="text-[11px] font-semibold text-accent">Signing off as {approvingTarget.as === 'centre_head' ? 'Centre Head' : 'GG Campus Events Head'}</p>
+            </div>
+            <div className="space-y-1.5 text-xs">
+              <label className="block font-medium text-theme-text-secondary">Reviewer Comments / Feedback (optional)</label>
+              <textarea
+                value={approvalCommentsInput}
+                onChange={(e) => setApprovalCommentsInput(e.target.value)}
+                rows={3}
+                placeholder="Add comments or praise for the report writeup..."
+                className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent resize-none"
+              />
+              <p className="text-[11px] text-theme-text-secondary">Comments will be emailed to {approvingTarget.report.submittedByEmail || 'the submitter'}.</p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setApprovingTarget(null); setApprovalCommentsInput(''); }}
+                className="flex-1 py-2.5 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary font-semibold text-xs rounded-xl transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmApprove}
+                disabled={isApproving}
+                className="flex-1 py-2.5 bg-success hover:bg-success/90 text-white font-semibold text-xs rounded-xl transition-all shadow-md cursor-pointer disabled:opacity-50"
+              >
+                {isApproving ? 'Approving...' : 'Confirm Approval'}
+              </button>
+            </div>
           </div>
         </div>
       )}

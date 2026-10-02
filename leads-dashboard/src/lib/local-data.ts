@@ -552,6 +552,9 @@ export interface EventReportItem {
   rejectedBy?: string;
   rejectedAt?: string;
   rejectionReason?: string;
+  centreHeadComments?: string;
+  eventsHeadGgComments?: string;
+  reviewerComments?: string;
   // Whether the final approved-attachment email actually went out — set by
   // the server once both approvals land (see the honest-delivery-status
   // precedent in account-activation.ts). A false value with emailError set
@@ -2334,7 +2337,7 @@ export function submitEventEdit(
 /** Approve a pending event creation, edit, or deletion. For a pending edit, merges
  *  the staged pendingChange into the record; for a pending creation, simply marks
  *  it approved; for a pending deletion, actually removes the event now. */
-export function approveEvent(id: string, actorName: string): EventItem | null {
+export function approveEvent(id: string, actorName: string, note?: string): EventItem | null {
   const events = getEvents();
   const target = events.find(e => e.id === id);
   if (!target) return null;
@@ -2353,7 +2356,7 @@ export function approveEvent(id: string, actorName: string): EventItem | null {
     decidedBy: actorName,
     decidedAt: new Date().toISOString(),
   }, actorName);
-  markApprovalRequestsDecided('event', id, 'approved', actorName);
+  markApprovalRequestsDecided('event', id, 'approved', actorName, note);
   logAuditEvent('EVENT_APPROVED', actorName, `Approved ${isEdit ? 'an edit to' : 'the creation of'} event "${target.title}"`);
   return result;
 }
@@ -3042,10 +3045,10 @@ export async function resubmitEventReport(
 /** Approve a report as Centre Head or GG Campus Head of Events. Both are
  *  required before the server marks it fully approved and emails the
  *  attachment -- see /api/event-reports/[id]'s PATCH handler. */
-export async function approveEventReport(id: string, as: 'centre_head' | 'gg_events_head', actorName: string): Promise<EventReportItem | null> {
-  const patch = as === 'centre_head'
-    ? { centreHeadApproved: true, centreHeadApprovedBy: actorName, centreHeadApprovedAt: new Date().toISOString() }
-    : { eventsHeadGgApproved: true, eventsHeadGgApprovedBy: actorName, eventsHeadGgApprovedAt: new Date().toISOString() };
+export async function approveEventReport(id: string, as: 'centre_head' | 'gg_events_head', actorName: string, comments?: string): Promise<EventReportItem | null> {
+  const patch: any = as === 'centre_head'
+    ? { centreHeadApproved: true, centreHeadApprovedBy: actorName, centreHeadApprovedAt: new Date().toISOString(), centreHeadComments: comments, reviewerComments: comments }
+    : { eventsHeadGgApproved: true, eventsHeadGgApprovedBy: actorName, eventsHeadGgApprovedAt: new Date().toISOString(), eventsHeadGgComments: comments, reviewerComments: comments };
 
   const serverResult = await serverPatch('/api/event-reports', id, patch);
   if (!serverResult) return null;
@@ -3057,7 +3060,7 @@ export async function approveEventReport(id: string, as: 'centre_head' | 'gg_eve
     saveEventReports(current);
   }
   if (serverResult.status === 'approved' || serverResult.status === 'Approved') {
-    markApprovalRequestsDecided('event-report', id, 'approved', actorName);
+    markApprovalRequestsDecided('event-report', id, 'approved', actorName, comments);
   }
   logAuditEvent('EVENT_REPORT_APPROVED', actorName, `${as === 'centre_head' ? 'Centre Head' : 'GG Campus Head of Events'} approved event report "${serverResult.eventTitle || ''}"${serverResult.status === 'approved' ? ' -- now fully approved' : ''}`);
   return current[idx] || null;
@@ -3104,6 +3107,7 @@ export async function rejectEventReport(id: string, actorName: string, reason?: 
     current[idx] = { ...current[idx], ...serverResult };
     saveEventReports(current);
   }
+  markApprovalRequestsDecided('event-report', id, 'rejected', actorName, reason);
   logAuditEvent('EVENT_REPORT_REJECTED', actorName, `Rejected event report "${serverResult.eventTitle || ''}"${reason ? `: ${reason}` : ''}`);
   return current[idx] || null;
 }
@@ -3753,7 +3757,7 @@ export function submitTaskEdit(
 /** Approve a pending task creation or edit. For a pending edit, merges the
  *  staged pendingChange into the record; for a pending creation, simply marks
  *  it approved. */
-export function approveTask(id: string, actorName: string): TaskItem | null {
+export function approveTask(id: string, actorName: string, note?: string): TaskItem | null {
   const tasks = getTasks();
   const target = tasks.find(t => t.id === id);
   if (!target) return null;
@@ -3763,6 +3767,7 @@ export function approveTask(id: string, actorName: string): TaskItem | null {
     action: 'approved' as const,
     actorName,
     targetName: isEdit ? target.pendingChange?.assignee : undefined,
+    note,
     at: new Date().toISOString(),
   }];
   const result = updateTask(id, {
@@ -3773,7 +3778,7 @@ export function approveTask(id: string, actorName: string): TaskItem | null {
     decidedAt: new Date().toISOString(),
     delegationTrail: trail,
   }, actorName);
-  markApprovalRequestsDecided('task', id, 'approved', actorName);
+  markApprovalRequestsDecided('task', id, 'approved', actorName, note);
   logAuditEvent('TASK_APPROVED', actorName, `Approved ${isEdit ? 'an edit to' : 'the creation of'} task "${target.title}"`);
   return result;
 }
@@ -5066,7 +5071,7 @@ export function addAnnouncement(item: Omit<AnnouncementItem, 'id' | 'publishedAt
   return newAnn;
 }
 
-export function approveAnnouncement(id: string, approverName: string): AnnouncementItem | null {
+export function approveAnnouncement(id: string, approverName: string, note?: string): AnnouncementItem | null {
   const current = getAnnouncements();
   const idx = current.findIndex(a => a.id === id);
   if (idx === -1) return null;
@@ -5082,7 +5087,7 @@ export function approveAnnouncement(id: string, approverName: string): Announcem
   };
   saveAnnouncements(current);
   serverPatch('/api/announcements', id, current[idx]);
-  markApprovalRequestsDecided('announcement', id, 'approved', approverName);
+  markApprovalRequestsDecided('announcement', id, 'approved', approverName, note);
   logAuditEvent('ANNOUNCEMENT_APPROVED', approverName, `Approved and published announcement: "${current[idx].title}"`);
   return current[idx];
 }
@@ -5268,7 +5273,7 @@ export function submitFormDelete(
 }
 
 /** Approve a pending form creation, edit, or deletion. */
-export function approveForm(id: string, actorName: string): PublicFormItem | null {
+export function approveForm(id: string, actorName: string, note?: string): PublicFormItem | null {
   const current = getForms();
   const target = current.find(f => f.id === id);
   if (!target) return null;
@@ -5287,7 +5292,7 @@ export function approveForm(id: string, actorName: string): PublicFormItem | nul
     decidedBy: actorName,
     decidedAt: new Date().toISOString(),
   }, actorName);
-  markApprovalRequestsDecided('form', id, 'approved', actorName);
+  markApprovalRequestsDecided('form', id, 'approved', actorName, note);
   logAuditEvent('FORM_APPROVED', actorName, `Approved ${isEdit ? 'an edit to' : 'the creation of'} form "${target.title}" — its public link is now live`);
   return result;
 }

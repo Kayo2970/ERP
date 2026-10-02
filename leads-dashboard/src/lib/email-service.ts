@@ -1214,3 +1214,101 @@ export function generateDesignResubmittedEmailTemplate(
 
   return { subject, bodyText, bodyHtml };
 }
+
+/**
+ * Template Generator: Approval Request Decision (sent to the requester
+ * once their request is approved or rejected by a reviewer).
+ */
+export function generateApprovalDecisionEmailTemplate(
+  requesterName: string,
+  entityTitle: string,
+  entityType: string,
+  approved: boolean,
+  decidedByName: string,
+  comments?: string
+): { subject: string; bodyText: string; bodyHtml: string } {
+  const typeCapitalized = entityType ? (entityType.charAt(0).toUpperCase() + entityType.slice(1).replace('-', ' ')) : 'Request';
+  const outcome = approved ? 'Approved' : 'Rejected';
+  const subject = `Approval Request ${outcome}: ${entityTitle} (${typeCapitalized})`;
+
+  const bodyText = `Hello ${requesterName},\n\n` +
+    `Your approval request for ${typeCapitalized} "${entityTitle}" has been ${outcome.toLowerCase()} by ${decidedByName}.\n\n` +
+    `Decision: ${outcome}\n` +
+    (comments ? `Reviewer Comments:\n${comments}\n\n` : '\n') +
+    (approved
+      ? `Your request has been approved. No further action is required.\n\n`
+      : `Please review the comments above and make any necessary adjustments.\n\n`) +
+    `Regards,\nLEADS Next Gen Centre, MSRUAS`;
+
+  const badgeColor = approved ? '#15803d' : '#be123c';
+
+  const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
+    headerTitle: `${typeCapitalized} ${outcome}`,
+    headerSubtitle: entityTitle,
+    badgeText: outcome.toUpperCase(),
+    badgeColor,
+    bodyContentHtml: `
+      <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello <strong>${requesterName}</strong>,</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">Your approval request for <strong>${typeCapitalized}</strong> "<strong>${entityTitle}</strong>" has been reviewed and <strong>${outcome.toLowerCase()}</strong> by <strong>${decidedByName}</strong>.</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">Decision: <strong style="color: ${badgeColor};">${outcome}</strong></p>
+      ${comments ? `
+      <div style="background: #f8fafc; border-left: 3px solid ${badgeColor}; padding: 10px 14px; border-radius: 4px; margin: 10px 0;">
+        <p style="margin: 0 0 4px; color: #0f172a; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;">Reviewer Comments</p>
+        <p style="margin: 0; color: #334155; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${comments}</p>
+      </div>` : ''}
+      <p style="color: #64748b; font-size: 13px; line-height: 1.6;">${approved ? 'Your request has been approved. No further action is required.' : 'Please review the comments above and make any necessary adjustments.'}</p>
+    `
+  });
+
+  return { subject, bodyText, bodyHtml };
+}
+
+/**
+ * Template Generator: Event Report Decision (sent to the submitter/General Secretary
+ * once their event report is approved or rejected by the Centre Head or GG Events Head).
+ */
+export function generateEventReportDecisionEmailTemplate(
+  eventTitle: string,
+  submitterName: string,
+  approved: boolean,
+  decidedByName: string,
+  reviewerRole: string = 'Reviewer',
+  comments?: string
+): { subject: string; bodyText: string; bodyHtml: string } {
+  const outcome = approved ? 'Approved' : 'Changes Requested';
+  const subject = `Event Report ${outcome}: ${eventTitle}`;
+
+  const bodyText = `Hello ${submitterName},\n\n` +
+    `Your event report for "${eventTitle}" has been reviewed by ${decidedByName} (${reviewerRole}).\n\n` +
+    `Decision: ${outcome}\n` +
+    (comments ? `Reviewer Comments:\n${comments}\n\n` : '\n') +
+    (approved
+      ? `The event report has been accepted and finalized.\n\n`
+      : `Please review the feedback above and resubmit a corrected report file.\n\n`) +
+    `Regards,\nLEADS Next Gen Centre, MSRUAS`;
+
+  const badgeColor = approved ? '#15803d' : '#be123c';
+
+  const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
+    headerTitle: `Report ${outcome}`,
+    headerSubtitle: eventTitle,
+    badgeText: outcome.toUpperCase(),
+    badgeColor,
+    bodyContentHtml: `
+      <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello <strong>${submitterName}</strong>,</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">Your event report for <strong>${eventTitle}</strong> has been reviewed by <strong>${decidedByName}</strong> (${reviewerRole}).</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">Decision: <strong style="color: ${badgeColor};">${outcome}</strong></p>
+      ${comments ? `
+      <div style="background: #f8fafc; border-left: 3px solid ${badgeColor}; padding: 10px 14px; border-radius: 4px; margin: 10px 0;">
+        <p style="margin: 0 0 4px; color: #0f172a; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;">Reviewer Feedback</p>
+        <p style="margin: 0; color: #334155; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${comments}</p>
+      </div>` : ''}
+      <p style="color: #64748b; font-size: 13px; line-height: 1.6;">${approved ? 'The event report has been accepted and finalized.' : 'Please review the feedback above and resubmit a corrected report file.'}</p>
+    `
+  });
+
+  return { subject, bodyText, bodyHtml };
+}
+

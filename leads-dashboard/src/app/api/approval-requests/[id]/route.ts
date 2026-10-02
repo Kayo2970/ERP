@@ -21,8 +21,9 @@ export async function PATCH(
     // allowed to decide it, so that's what's checked here, against the
     // resolved session actor rather than anything client-supplied.
     const isDecideAction = updates.status === 'approved' || updates.status === 'rejected';
+    let existing: any = null;
     if (isDecideAction) {
-      const existing = (await readCollection<any>('approvalRequests')).find((r: any) => r.id === id);
+      existing = (await readCollection<any>('approvalRequests')).find((r: any) => r.id === id);
       const settings = await getAccessLevelSettingsServer();
       const isTargetMember = !!(
         existing &&
@@ -44,7 +45,48 @@ export async function PATCH(
       next[idx] = { ...next[idx], ...updates };
       return next;
     });
-    return NextResponse.json(updated.find((r: any) => r.id === id));
+
+    const updatedRecord = updated.find((r: any) => r.id === id);
+
+    if (isDecideAction && existing) {
+      try {
+        let requesterEmail = existing.requesterEmail || updatedRecord?.requesterEmail;
+        let requesterName = existing.requesterName || updatedRecord?.requesterName || 'Member';
+        if (!requesterEmail && existing.requesterId) {
+          const members = await readCollection<any>('members');
+          const mem = members.find((m: any) => m.id === existing.requesterId);
+          if (mem) {
+            requesterEmail = mem.email;
+            requesterName = mem.name || requesterName;
+          }
+        }
+
+        if (requesterEmail) {
+          const { dispatchEmail, generateApprovalDecisionEmailTemplate } = await import('@/lib/email-service');
+          const decidedByName = updates.decidedBy || actor.name || 'Reviewer';
+          const comments = updates.decisionNote || updates.decisionReason || updatedRecord?.decisionNote;
+          const template = generateApprovalDecisionEmailTemplate(
+            requesterName,
+            existing.entityTitle || 'Request',
+            existing.entityType || 'request',
+            updates.status === 'approved',
+            decidedByName,
+            comments
+          );
+          await dispatchEmail({
+            to: requesterEmail,
+            subject: template.subject,
+            bodyText: template.bodyText,
+            bodyHtml: template.bodyHtml,
+            category: 'APPROVAL_REQUEST',
+          });
+        }
+      } catch (emailErr) {
+        console.error('[approval-requests-api] Decision email notification failed:', emailErr);
+      }
+    }
+
+    return NextResponse.json(updatedRecord);
   } catch (err: any) {
     return apiError(err, 'approval-requests-id-api-patch', 400);
   }

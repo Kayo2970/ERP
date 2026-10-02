@@ -143,19 +143,23 @@ export async function PATCH(
         }
 
         if (mergedRecord?.submittedByEmail) {
-          const { wrapInMasterEmailTemplate } = await import('@/lib/email-service');
+          const { generateEventReportDecisionEmailTemplate } = await import('@/lib/email-service');
+          const reviewerName = mergedRecord.centreHeadApprovedBy || mergedRecord.eventsHeadGgApprovedBy || actor.name || 'Reviewer';
+          const reviewerRole = mergedRecord.centreHeadApproved ? 'Centre Head' : 'GG Campus Events Head';
+          const comments = mergedRecord.reviewerComments || mergedRecord.centreHeadComments || mergedRecord.eventsHeadGgComments || body.reviewerComments || body.centreHeadComments || body.eventsHeadGgComments;
+          const template = generateEventReportDecisionEmailTemplate(
+            mergedRecord.eventTitle || 'Event',
+            mergedRecord.submittedBy || 'General Secretary',
+            true,
+            reviewerName,
+            reviewerRole,
+            comments
+          );
           await dispatchEmail({
             to: mergedRecord.submittedByEmail,
-            subject: `Event Report Accepted: ${mergedRecord.eventTitle || 'Event'}`,
-            bodyText: `Hello ${mergedRecord.submittedBy || ''},\n\nThe report has been successfully submitted and accepted.\n\nRegards,\nLEADS Next Gen Centre, MSRUAS`,
-            bodyHtml: wrapInMasterEmailTemplate({
-              pageTitle: `Event Report Accepted`,
-              headerTitle: 'Report Accepted',
-              headerSubtitle: mergedRecord.eventTitle || 'Event',
-              badgeText: 'ACCEPTED',
-              badgeColor: '#15803d',
-              bodyContentHtml: `<p style="margin-top:0;color:#0f172a;font-size:14px;">Hello ${mergedRecord.submittedBy || ''},</p><p style="color:#334155;font-size:14px;line-height:1.6;">The report has been successfully submitted and accepted.</p>`,
-            }),
+            subject: template.subject,
+            bodyText: template.bodyText,
+            bodyHtml: template.bodyHtml,
             category: 'EVENT_REPORT_APPROVAL',
           });
         }
@@ -166,6 +170,31 @@ export async function PATCH(
           r.id === id ? { ...r, emailSent: false, emailError: message } : r
         ));
         mergedRecord = { ...mergedRecord, emailSent: false, emailError: message };
+      }
+    }
+
+    if (justRejected && mergedRecord?.submittedByEmail) {
+      try {
+        const { dispatchEmail, generateEventReportDecisionEmailTemplate } = await import('@/lib/email-service');
+        const decidedByName = mergedRecord.rejectedBy || actor.name || 'Reviewer';
+        const comments = mergedRecord.rejectionReason || body.rejectionReason;
+        const template = generateEventReportDecisionEmailTemplate(
+          mergedRecord.eventTitle || 'Event',
+          mergedRecord.submittedBy || 'General Secretary',
+          false,
+          decidedByName,
+          'Reviewer',
+          comments
+        );
+        await dispatchEmail({
+          to: mergedRecord.submittedByEmail,
+          subject: template.subject,
+          bodyText: template.bodyText,
+          bodyHtml: template.bodyHtml,
+          category: 'EVENT_REPORT_APPROVAL',
+        });
+      } catch (rejectEmailErr) {
+        console.error('[event-reports-api] Submitter rejection email failed:', rejectEmailErr);
       }
     }
 
