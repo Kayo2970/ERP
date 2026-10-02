@@ -36,17 +36,18 @@ export async function runEventLapseSocialTasks(): Promise<{ created: number }> {
   const dismissedSet = new Set<string>(systemSettingsList?.[0]?.dismissedAutoTaskIds || []);
   const today = todayDateString();
 
-  const lapsedEvents = events.filter((e: any) =>
-    !e.isHoliday &&
-    !e.datesTBD &&
-    !e.socialTaskDismissed &&
-    !e.dismissedAutoTaskTypes?.includes('event_social_post') &&
-    !dismissedSet.has(`task_event_social_${e.id}`) &&
-    !dismissedSet.has(`event_social_post_${e.id}`) &&
-    !dismissedSet.has(e.id) &&
-    typeof e.endDate === 'string' && e.endDate.length > 0 && e.endDate < today &&
-    e.approvalStatus !== 'pending_create' && e.approvalStatus !== 'rejected' && e.approvalStatus !== 'pending_delete'
-  );
+  const lapsedEvents = events.filter((e: any) => {
+    if (e.isHoliday || e.datesTBD) return false;
+    if (e.socialTaskDismissed) return false;
+    if (e.dismissedAutoTaskTypes?.includes('event_social_post')) return false;
+    if (dismissedSet.has(`task_event_social_${e.id}`) || dismissedSet.has(`event_social_post_${e.id}`) || dismissedSet.has(e.id)) return false;
+    if (e.approvalStatus === 'pending_create' || e.approvalStatus === 'rejected' || e.approvalStatus === 'pending_delete') return false;
+
+    // Auto-generated tasks are ONLY allowed after the day the event is done, never before it
+    const eventEnd = (typeof e.endDate === 'string' && e.endDate.trim()) || (typeof e.startDate === 'string' && e.startDate.trim());
+    if (!eventEnd) return false;
+    return eventEnd < today;
+  });
   if (lapsedEvents.length === 0) return { created: 0 };
 
   const tasks = await readCollection<any>('tasks');
@@ -67,9 +68,10 @@ export async function runEventLapseSocialTasks(): Promise<{ created: number }> {
     for (const e of toCreate) {
       const id = `task_event_social_${e.id}`;
       if (next.some((t: any) => t.id === id)) continue;
+      const eventEnd = e.endDate || e.startDate;
       next.unshift({
         id,
-        title: `Social media posts required for "${e.title}" (event concluded ${e.endDate})`,
+        title: `Social media posts required for "${e.title}" (event concluded ${eventEnd})`,
         event: e.title,
         eventId: e.id,
         assignee: pool.map((m: any) => m.name).join(', ') || 'Social Media Team (Unassigned)',
@@ -100,11 +102,12 @@ export async function runEventLapseSocialTasks(): Promise<{ created: number }> {
   // for every pool member on every newly-created event-lapse task, same as
   // a manually-assigned task would get.
   for (const e of toCreate) {
+    const eventEnd = e.endDate || e.startDate;
     for (const member of pool) {
       if (!member.email) continue;
       await enqueueTaskEmailNotification({
         id: `task_event_social_${e.id}`,
-        title: `Social media posts required for "${e.title}" (event concluded ${e.endDate})`,
+        title: `Social media posts required for "${e.title}" (event concluded ${eventEnd})`,
         event: e.title,
         dueDate: today,
         creatorName: 'Event Scheduler',
@@ -118,114 +121,11 @@ export async function runEventLapseSocialTasks(): Promise<{ created: number }> {
 }
 
 /**
- * For every approved, dated (non-TBD), non-holiday event that doesn't
- * already have one, creates a single INDIVIDUAL poster/social-media-assets
- * task — assigned to whoever currently holds the Head of Design / Social
- * Media Head role (falling back to a Senior Head, then any tier<=2 leader,
- * so it's never left orphaned). Deliberately an individual task, not a
- * group/committee one: unlike event_social_post (post-event recap,
- * assigned to a whole pool so anyone can pick it up), this is pre-event
- * prep work with one clear owner. Due the event's start date — poster work
- * needs to be done BEFORE the event, not once it's already underway.
- *
- * Every operation here is idempotent (a deterministic task id per event,
- * `task_event_poster_${event.id}`), so re-running this on every boot and
- * every day is always safe and never creates a duplicate. Skips events
- * still pending/rejected approval, already dismissed/deleted, or events
- * that already have a design asset created for them.
+ * Auto-generated tasks are ONLY allowed after the day the event is done, never before it.
+ * Pre-event poster auto-creation is deliberately disabled.
  */
 export async function runEventPosterTasks(): Promise<{ created: number }> {
-  const [events, systemSettingsList, designs] = await Promise.all([
-    readCollection<any>('events'),
-    readCollection<any>('systemSettings'),
-    readCollection<any>('designs'),
-  ]);
-
-  const dismissedSet = new Set<string>(systemSettingsList?.[0]?.dismissedAutoTaskIds || []);
-  const eventsWithDesigns = new Set((designs || []).filter((d: any) => d.eventId).map((d: any) => d.eventId));
-
-  const approvedDatedEvents = events.filter((e: any) =>
-    !e.isHoliday &&
-    !e.datesTBD &&
-    !e.posterTaskDismissed &&
-    !e.dismissedAutoTaskTypes?.includes('event_poster_request') &&
-    !dismissedSet.has(`task_event_poster_${e.id}`) &&
-    !dismissedSet.has(`event_poster_request_${e.id}`) &&
-    !dismissedSet.has(e.id) &&
-    !eventsWithDesigns.has(e.id) &&
-    typeof e.startDate === 'string' && e.startDate.length > 0 &&
-    e.approvalStatus !== 'pending_create' && e.approvalStatus !== 'rejected' && e.approvalStatus !== 'pending_delete'
-  );
-  if (approvedDatedEvents.length === 0) return { created: 0 };
-
-  const tasks = await readCollection<any>('tasks');
-  const alreadyCreated = new Set(
-    tasks.filter((t: any) => t.workflowType === 'event_poster_request').map((t: any) => t.eventId)
-  );
-  const toCreate = approvedDatedEvents.filter((e: any) => !alreadyCreated.has(e.id));
-  if (toCreate.length === 0) return { created: 0 };
-
-  const members = await readCollection<any>('members');
-  const activeMembers = members.filter((m: any) => m.status !== 'Terminated' && m.email);
-  // Same role-matching rule as resolveSocialPostingAssignees in local-data.ts,
-  // but this scheduler works off raw server collections rather than the
-  // client-side getMembers() that helper reads from, so it's re-expressed
-  // here — kept in sync by hand if that matching rule ever changes.
-  let pool = activeMembers.filter((m: any) => {
-    if (isFaculty(m)) return false;
-    const role = (m.role || '').toLowerCase();
-    const dept = (m.department || '').toLowerCase();
-    return role.includes('design') || role.includes('social media') || dept.includes('design') || dept.includes('social media');
-  });
-  if (pool.length === 0) return { created: 0 }; // no one in design/social media to assign to — nothing safe to create
-
-  // One individual owner, not a group — the first match is deterministic
-  // across repeated runs as long as the roster doesn't change in between.
-  const assignee = pool[0];
-
-  let created = 0;
-  await mutateCollection<any>('tasks', (current) => {
-    const next = [...current];
-    for (const e of toCreate) {
-      const id = `task_event_poster_${e.id}`;
-      if (next.some((t: any) => t.id === id)) continue;
-      next.unshift({
-        id,
-        title: `Design poster / social media assets for "${e.title}"`,
-        event: e.title,
-        eventId: e.id,
-        assignee: assignee.name,
-        assigneeId: assignee.id,
-        assigneeEmail: assignee.email,
-        assigneeType: 'individual',
-        dueDate: e.startDate,
-        status: 'Assigned',
-        creatorName: 'Event Scheduler',
-        workflowType: 'event_poster_request',
-        // Flags this as a real Design Task so it shows up in the Design
-        // Portal's "Design Task Requests" queue, same as event_social_post.
-        taskCategory: 'design',
-        briefDescription: `Create the poster and any other promotional/social media assets for "${e.title}". Submit the design asset here once ready.`,
-      });
-      created++;
-    }
-    return next;
-  });
-
-  for (const e of toCreate) {
-    if (!assignee.email) continue;
-    await enqueueTaskEmailNotification({
-      id: `task_event_poster_${e.id}`,
-      title: `Design poster / social media assets for "${e.title}"`,
-      event: e.title,
-      dueDate: e.startDate,
-      creatorName: 'Event Scheduler',
-      assigneeEmail: assignee.email,
-      assigneeName: assignee.name,
-    });
-  }
-
-  return { created };
+  return { created: 0 };
 }
 
 function msUntilNextMidnight(): number {
@@ -237,10 +137,8 @@ function msUntilNextMidnight(): number {
 
 /**
  * Starts the in-process daily event-lapse scheduler. Registered once from
- * instrumentation.ts at server boot, mirroring birthday-scheduler.ts's
- * pattern exactly: an immediate catch-up run (so a server restart doesn't
- * cost a missed day), then a timer aligned to the next midnight, repeating
- * every 24 hours after that.
+ * instrumentation.ts at server boot. Auto-generated tasks only run after the
+ * day an event concludes.
  */
 export function startEventSocialScheduler(): void {
   const g = globalThis as unknown as { __eventSocialSchedulerStarted?: boolean };
@@ -248,14 +146,11 @@ export function startEventSocialScheduler(): void {
   g.__eventSocialSchedulerStarted = true;
 
   runEventLapseSocialTasks().catch((err) => console.error('[event-social-scheduler] Startup catch-up check failed:', err));
-  runEventPosterTasks().catch((err) => console.error('[event-social-scheduler] Poster-task startup catch-up check failed:', err));
 
   setTimeout(() => {
     runEventLapseSocialTasks().catch((err) => console.error('[event-social-scheduler] Midnight check failed:', err));
-    runEventPosterTasks().catch((err) => console.error('[event-social-scheduler] Poster-task midnight check failed:', err));
     setInterval(() => {
       runEventLapseSocialTasks().catch((err) => console.error('[event-social-scheduler] Daily check failed:', err));
-      runEventPosterTasks().catch((err) => console.error('[event-social-scheduler] Poster-task daily check failed:', err));
     }, DAY_MS);
   }, msUntilNextMidnight());
 }

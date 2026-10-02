@@ -3279,7 +3279,29 @@ export function getTasks(): TaskItem[] {
   const saved = localStorage.getItem('leads_tasks');
   if (saved) {
     try {
-      return JSON.parse(saved);
+      const parsed: TaskItem[] = JSON.parse(saved);
+      // Auto-generated tasks must ONLY be created after the day the event is done, never before it.
+      // Filter out pre-event poster auto-tasks and auto-tasks for events that haven't concluded yet.
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const events = getEvents();
+      const filtered = parsed.filter(t => {
+        if (t.workflowType === 'event_poster_request' || (typeof t.id === 'string' && t.id.startsWith('task_event_poster_'))) {
+          return false;
+        }
+        if (t.workflowType === 'event_social_post' || (typeof t.id === 'string' && t.id.startsWith('task_event_social_'))) {
+          const ev = events.find(e => e.id === t.eventId);
+          if (ev) {
+            const evEnd = (ev.endDate && ev.endDate.trim()) || (ev.startDate && ev.startDate.trim());
+            if (!evEnd || evEnd >= todayStr || ev.datesTBD) return false;
+          }
+        }
+        return true;
+      });
+      if (filtered.length !== parsed.length) {
+        localStorage.setItem('leads_tasks', JSON.stringify(filtered));
+      }
+      return filtered;
     } catch (e) {
       console.error(e);
     }

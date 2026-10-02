@@ -745,6 +745,27 @@ function ensureHolidaysAndRatingsCleaned(): Promise<void> {
               continue;
             }
 
+            // Auto-generated tasks must ONLY exist after the day the event is done, never before it.
+            // 1. Purge all auto-generated poster request tasks (pre-event auto tasks must not exist).
+            if (t.workflowType === 'event_poster_request' || (typeof t.id === 'string' && t.id.startsWith('task_event_poster_'))) {
+              tasksChanged = true;
+              continue;
+            }
+
+            // 2. For auto-generated event social tasks, purge if the event has not completed yet.
+            if (t.workflowType === 'event_social_post' || (typeof t.id === 'string' && t.id.startsWith('task_event_social_'))) {
+              const event = events?.find((e: any) => e.id === t.eventId);
+              if (event) {
+                const now = new Date();
+                const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                const eventEnd = (typeof event.endDate === 'string' && event.endDate.trim()) || (typeof event.startDate === 'string' && event.startDate.trim());
+                if (!eventEnd || eventEnd >= todayStr || event.datesTBD) {
+                  tasksChanged = true;
+                  continue;
+                }
+              }
+            }
+
             const isApproval = t.workflowType === 'holiday_social_approval' || (t.title && t.title.toLowerCase().includes('holiday social media post approval'));
             if (isApproval) {
               const dateMatch = t.id?.match(/\d{4}-\d{2}-\d{2}/) || (t.deadline ? [t.deadline] : null);
