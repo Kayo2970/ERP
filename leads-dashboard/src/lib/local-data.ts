@@ -3914,6 +3914,109 @@ export function hasAcknowledgedTask(
   return Boolean(memberId && task.acknowledgedByIds?.includes(memberId));
 }
 
+export interface TaskAssigneeStatus {
+  id: string;
+  name: string;
+  email?: string;
+  acknowledged: boolean;
+}
+
+/**
+ * Returns the individual acknowledgment statuses for all members allotted
+ * to a task (individual, group, or committee). Each member's status is
+ * tracked independently so group assignments show clearly who has already
+ * acknowledged and who is still pending.
+ */
+export function getTaskAssigneeStatuses(
+  task: TaskItem,
+  allMembers?: Member[],
+  allEvents?: EventItem[]
+): TaskAssigneeStatus[] {
+  const members = allMembers || getMembers();
+  const events = allEvents || getEvents();
+  const activeMembers = members.filter(m => m.status !== 'Terminated');
+  const byId = new Map(activeMembers.map(m => [m.id, m]));
+  const ackIds = new Set(task.acknowledgedByIds || []);
+
+  const checkAck = (mId: string, mEmail?: string, mName?: string) => {
+    if (ackIds.has(mId)) return true;
+    if (task.acknowledged && (task.assigneeId === mId || (mEmail && task.assigneeEmail?.toLowerCase() === mEmail.toLowerCase()))) return true;
+    if (mEmail && task.acknowledgedByEmail && task.acknowledgedByEmail.toLowerCase() === mEmail.toLowerCase()) return true;
+    return false;
+  };
+
+  // Group task with explicit assigneeIds
+  if (task.assigneeType === 'group' && Array.isArray(task.assigneeIds) && task.assigneeIds.length > 0) {
+    return task.assigneeIds.map(id => {
+      const m = byId.get(id);
+      const name = m ? m.name : id;
+      return {
+        id,
+        name,
+        email: m?.email,
+        acknowledged: checkAck(id, m?.email, name),
+      };
+    });
+  }
+
+  // Committee task tied to an event
+  if (task.assigneeType === 'committee') {
+    const event = events.find(e => e.id === task.eventId || (task.event && e.title.toLowerCase() === task.event.toLowerCase()));
+    const committee = event?.committees?.find(c =>
+      (task.eventCommitteeId && c.id === task.eventCommitteeId) ||
+      c.name.toLowerCase() === (task.eventCommitteeName || task.assignee || '').toLowerCase()
+    );
+    if (committee) {
+      const cMemberIds = Array.from(new Set([...(committee.memberIds || []), committee.leadMemberId].filter(Boolean) as string[]));
+      if (cMemberIds.length > 0) {
+        return cMemberIds.map(id => {
+          const m = byId.get(id);
+          const isLead = id === committee.leadMemberId;
+          const baseName = m ? m.name : id;
+          const name = isLead ? `${baseName} (Lead)` : baseName;
+          return {
+            id,
+            name,
+            email: m?.email,
+            acknowledged: checkAck(id, m?.email, baseName),
+          };
+        });
+      }
+    }
+  }
+
+  // Fallback: If assignee string contains multiple names (e.g. "3 students: Alice, Bob, Charlie")
+  if (task.assigneeType === 'group' || (task.assignee && (task.assignee.includes(',') || task.assignee.includes('&')))) {
+    const cleaned = task.assignee.replace(/^(\d+\s+students?:\s*)/i, '');
+    const rawNames = cleaned.split(/,|&|\band\b/).map(s => s.trim()).filter(Boolean);
+    if (rawNames.length > 1) {
+      return rawNames.map(rawName => {
+        const m = activeMembers.find(mem => mem.name.toLowerCase() === rawName.toLowerCase());
+        const id = m?.id || rawName;
+        return {
+          id,
+          name: m?.name || rawName,
+          email: m?.email,
+          acknowledged: checkAck(id, m?.email, rawName),
+        };
+      });
+    }
+  }
+
+  // Individual task
+  const m = (task.assigneeId ? byId.get(task.assigneeId) : undefined) ||
+    (task.assigneeEmail ? activeMembers.find(mem => mem.email.toLowerCase() === task.assigneeEmail!.toLowerCase()) : undefined) ||
+    (task.assignee ? activeMembers.find(mem => mem.name.toLowerCase() === task.assignee.toLowerCase()) : undefined);
+  const id = m?.id || task.assigneeId || 'individual';
+  const name = m?.name || task.assignee || 'Assignee';
+  return [{
+    id,
+    name,
+    email: m?.email || task.assigneeEmail,
+    acknowledged: checkAck(id, m?.email, name),
+  }];
+}
+
 /**
  * Records the current user's own, personal acknowledgment of a task — never
  * a groupmate's, and never on a student's behalf by anyone else, leadership
