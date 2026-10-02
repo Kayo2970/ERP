@@ -3919,6 +3919,7 @@ export interface TaskAssigneeStatus {
   name: string;
   email?: string;
   acknowledged: boolean;
+  isFaculty?: boolean;
 }
 
 /**
@@ -3940,8 +3941,15 @@ export function getTaskAssigneeStatuses(
 
   const checkAck = (mId: string, mEmail?: string, mName?: string) => {
     if (ackIds.has(mId)) return true;
+    if (mEmail && (ackIds.has(mEmail) || ackIds.has(mEmail.toLowerCase()))) return true;
     if (task.acknowledged && (task.assigneeId === mId || (mEmail && task.assigneeEmail?.toLowerCase() === mEmail.toLowerCase()))) return true;
     if (mEmail && task.acknowledgedByEmail && task.acknowledgedByEmail.toLowerCase() === mEmail.toLowerCase()) return true;
+    return false;
+  };
+
+  const checkIsFaculty = (m?: Member, name?: string) => {
+    if (m && isFacultyMember(m)) return true;
+    if (name && /prof\.|professor|faculty/i.test(name)) return true;
     return false;
   };
 
@@ -3955,6 +3963,7 @@ export function getTaskAssigneeStatuses(
         name,
         email: m?.email,
         acknowledged: checkAck(id, m?.email, name),
+        isFaculty: checkIsFaculty(m, name),
       };
     });
   }
@@ -3979,6 +3988,7 @@ export function getTaskAssigneeStatuses(
             name,
             email: m?.email,
             acknowledged: checkAck(id, m?.email, baseName),
+            isFaculty: checkIsFaculty(m, baseName),
           };
         });
       }
@@ -3998,6 +4008,7 @@ export function getTaskAssigneeStatuses(
           name: m?.name || rawName,
           email: m?.email,
           acknowledged: checkAck(id, m?.email, rawName),
+          isFaculty: checkIsFaculty(m, rawName),
         };
       });
     }
@@ -4014,7 +4025,23 @@ export function getTaskAssigneeStatuses(
     name,
     email: m?.email || task.assigneeEmail,
     acknowledged: checkAck(id, m?.email, name),
+    isFaculty: checkIsFaculty(m, name),
   }];
+}
+
+/**
+ * Returns true if a task's assignees are Faculty or if it represents a
+ * Faculty Permission requirement (where permission from any 1 faculty is sufficient).
+ */
+export function isFacultyTaskAssignees(
+  task: TaskItem,
+  statuses?: TaskAssigneeStatus[]
+): boolean {
+  if (task.workflowType === 'holiday_social_approval') return false;
+  const list = statuses || getTaskAssigneeStatuses(task);
+  if (list.length > 0 && list.some(s => s.isFaculty)) return true;
+  const assigneeStr = (task.assignee || '').toLowerCase();
+  return /faculty|professor|prof\./.test(assigneeStr);
 }
 
 /**

@@ -61,6 +61,7 @@ import {
   hasAcknowledgedTask,
   acknowledgeTask,
   getTaskAssigneeStatuses,
+  isFacultyTaskAssignees,
   TaskAssigneeStatus,
   TaskItem,
   EventItem,
@@ -803,10 +804,17 @@ export default function TasksPage() {
     if (filterDueTo && task.dueDate > filterDueTo) return false;
     if (filterAckStatus !== 'ALL') {
       const statuses = getTaskAssigneeStatuses(task, members, events);
-      const allAck = statuses.length > 0 && statuses.every(s => s.acknowledged);
-      const anyPending = statuses.some(s => !s.acknowledged);
-      if (filterAckStatus === 'PENDING' && !anyPending) return false;
-      if (filterAckStatus === 'ACKNOWLEDGED' && !allAck) return false;
+      const isFacultyTask = isFacultyTaskAssignees(task, statuses);
+      if (isFacultyTask) {
+        const hasPermission = statuses.some(s => s.acknowledged);
+        if (filterAckStatus === 'PENDING' && hasPermission) return false;
+        if (filterAckStatus === 'ACKNOWLEDGED' && !hasPermission) return false;
+      } else {
+        const allAck = statuses.length > 0 && statuses.every(s => s.acknowledged);
+        const anyPending = statuses.some(s => !s.acknowledged);
+        if (filterAckStatus === 'PENDING' && !anyPending) return false;
+        if (filterAckStatus === 'ACKNOWLEDGED' && !allAck) return false;
+      }
     }
     return true;
   });
@@ -1274,12 +1282,80 @@ export default function TasksPage() {
                   )}
                 </div>
 
-                {/* Group / Committee Student Acknowledgment Breakdown */}
+                {/* Group / Committee Student Acknowledgment OR Faculty Permission Breakdown */}
                 {(() => {
+                  if (task.workflowType === 'holiday_social_approval') return null;
+
                   const statuses = getTaskAssigneeStatuses(task, members, events);
                   const isMulti = task.assigneeType === 'group' || task.assigneeType === 'committee' || statuses.length > 1;
                   if (!isMulti) return null;
 
+                  const isFacultyTask = isFacultyTaskAssignees(task, statuses);
+
+                  // Faculty Permission branch: only 1 faculty member has to give permission
+                  if (isFacultyTask) {
+                    const granter = statuses.find(s => s.acknowledged);
+                    const hasGivenPermission = Boolean(granter);
+
+                    return (
+                      <div className="p-3 bg-theme-background/40 border border-theme-border/40 rounded-xl space-y-2.5">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-1.5">
+                            <FileCheck2 className="h-3.5 w-3.5 text-accent" />
+                            <span className="text-[11px] font-bold text-theme-text-primary">
+                              Faculty Permission
+                            </span>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                            hasGivenPermission
+                              ? 'bg-success/15 border-success/30 text-success'
+                              : 'bg-warning/15 border-warning/30 text-warning'
+                          }`}>
+                            {hasGivenPermission ? 'Permission Granted' : `Awaiting Permission (1 of ${statuses.length} required)`}
+                          </span>
+                        </div>
+
+                        {hasGivenPermission ? (
+                          <div className="space-y-1.5">
+                            <div className="p-2.5 bg-success/10 border border-success/20 rounded-lg flex items-center justify-between gap-2 flex-wrap text-xs">
+                              <span className="text-success font-semibold flex items-center gap-1.5">
+                                <Check className="h-3.5 w-3.5 shrink-0" />
+                                Permission granted by <strong className="text-theme-text-primary">{granter!.name}</strong>
+                              </span>
+                              <span className="text-[10px] text-theme-text-secondary italic">
+                                1 of {statuses.length} required
+                              </span>
+                            </div>
+                            {statuses.length > 1 && (
+                              <p className="text-[10px] text-theme-text-secondary">
+                                Assigned Faculty: {statuses.map(s => s.id === granter!.id ? `${s.name} (Granted)` : s.name).join(', ')}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <span className="text-[10px] font-semibold text-warning uppercase tracking-wider flex items-center gap-1">
+                              <Clock className="h-3 w-3" /> Awaiting Permission From (Any 1 required)
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {statuses.map(s => (
+                                <span
+                                  key={s.id}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-warning/10 border border-warning/20 text-warning text-[11px] font-medium"
+                                  title={s.email ? `${s.name} (${s.email})` : s.name}
+                                >
+                                  <Clock className="h-3 w-3 shrink-0" />
+                                  <span>{s.name}</span>
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  // Student Acknowledgments branch: all allotted students acknowledge individually
                   const ackList = statuses.filter(s => s.acknowledged);
                   const pendingList = statuses.filter(s => !s.acknowledged);
                   const allDone = statuses.length > 0 && pendingList.length === 0;
@@ -1806,11 +1882,30 @@ export default function TasksPage() {
                         onClick={() => handleAcknowledgeTask(task.id)}
                         className="px-2.5 py-1 bg-accent hover:bg-primary-light text-white font-semibold rounded-lg transition-all text-[11px] cursor-pointer"
                       >
-                        Acknowledge
+                        {isFacultyTaskAssignees(task) ? 'Grant Permission' : 'Acknowledge'}
                       </button>
                     ) : (() => {
                       const statuses = getTaskAssigneeStatuses(task, members, events);
                       const isMulti = task.assigneeType === 'group' || task.assigneeType === 'committee' || statuses.length > 1;
+                      const isFacultyTask = isFacultyTaskAssignees(task, statuses);
+
+                      if (isFacultyTask) {
+                        const granter = statuses.find(s => s.acknowledged);
+                        if (granter) {
+                          return (
+                            <span className="text-[11px] text-success italic font-medium flex items-center gap-1">
+                              <Check className="h-3.5 w-3.5" /> Permission granted by {granter.name}
+                            </span>
+                          );
+                        }
+                        const pendingNames = statuses.map(p => p.name).join(', ');
+                        return (
+                          <span className="text-[11px] text-theme-text-secondary italic" title={pendingNames}>
+                            Awaiting faculty permission from: <span className="text-warning font-medium">{pendingNames}</span> (any 1)
+                          </span>
+                        );
+                      }
+
                       if (isMulti) {
                         const pending = statuses.filter(s => !s.acknowledged);
                         if (pending.length === 0) {
@@ -1868,12 +1963,13 @@ export default function TasksPage() {
                     task.approvalStatus !== 'pending_edit' &&
                     task.approvalStatus !== 'rejected' &&
                     isTaskAssignee(task, user) &&
-                    !hasAcknowledgedTask(task, user) && (
+                    !hasAcknowledgedTask(task, user) &&
+                    (!isFacultyTaskAssignees(task) || !getTaskAssigneeStatuses(task, members, events).some(s => s.acknowledged)) && (
                       <button
                         onClick={() => handleAcknowledgeTask(task.id)}
                         className="px-2.5 py-1 bg-accent hover:bg-primary-light text-white font-semibold rounded-lg transition-all text-[11px] cursor-pointer"
                       >
-                        Acknowledge (your part)
+                        {isFacultyTaskAssignees(task) ? 'Grant Permission' : 'Acknowledge (your part)'}
                       </button>
                     )}
                 </div>
