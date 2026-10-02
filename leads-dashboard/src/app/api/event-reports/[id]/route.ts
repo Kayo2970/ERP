@@ -107,20 +107,44 @@ export async function PATCH(
     }
 
     // Once approved, email the report file as an attachment to the Centre
-    // Head, Advisor, GG Campus Head of Events, and President, and separately
+    // Head, Advisor, Super User, GG Campus Head of Events, and President, and separately
     // let the submitter know their report was accepted.
-    if (justFullyApproved && mergedRecord?.storageKey) {
+    if (justFullyApproved) {
       try {
         const [members, { dispatchEmail, generateEventReportApprovedEmailTemplate, findApprovalRecipients }] = await Promise.all([
           readCollection('members'),
           import('@/lib/email-service'),
         ]);
         const recipients = findApprovalRecipients(members as any[]);
-        const to = [recipients.centreHead?.email, recipients.advisor?.email, recipients.eventsHeadGg?.email, recipients.president?.email].filter(Boolean) as string[];
+        const superUserEmails = (recipients.superUsers || []).map(s => s.email).filter(Boolean);
+        const to = Array.from(new Set([
+          recipients.centreHead?.email,
+          recipients.advisor?.email,
+          ...superUserEmails,
+          recipients.eventsHeadGg?.email,
+          recipients.president?.email,
+        ].filter(Boolean) as string[]));
 
         if (to.length > 0) {
-          const fileBuffer = await readStoredFile(mergedRecord.storageKey);
-          const template = generateEventReportApprovedEmailTemplate(mergedRecord.eventTitle || 'Event', mergedRecord.submittedBy || 'General Secretary');
+          let attachments: Array<{ filename: string; content: Buffer }> | undefined = undefined;
+          if (mergedRecord?.storageKey) {
+            try {
+              const fileBuffer = await readStoredFile(mergedRecord.storageKey);
+              attachments = [{ filename: mergedRecord.fileName || 'event-report', content: fileBuffer }];
+            } catch (fileErr) {
+              console.warn('[event-reports-api] Failed to read report file for email attachment:', fileErr);
+            }
+          }
+          const reviewerName = mergedRecord?.centreHeadApprovedBy || mergedRecord?.eventsHeadGgApprovedBy || actor.name || 'Reviewer';
+          const reviewerRole = mergedRecord?.centreHeadApproved ? 'Centre Head' : 'GG Campus Events Head';
+          const comments = mergedRecord?.reviewerComments || mergedRecord?.centreHeadComments || mergedRecord?.eventsHeadGgComments || body.reviewerComments || body.centreHeadComments || body.eventsHeadGgComments;
+          const template = generateEventReportApprovedEmailTemplate(
+            mergedRecord?.eventTitle || 'Event',
+            mergedRecord?.submittedBy || 'General Secretary',
+            reviewerName,
+            reviewerRole,
+            comments
+          );
 
           const log = await dispatchEmail({
             to: to.join(','),
@@ -128,7 +152,7 @@ export async function PATCH(
             bodyText: template.bodyText,
             bodyHtml: template.bodyHtml,
             category: 'EVENT_REPORT_APPROVAL',
-            attachments: [{ filename: mergedRecord.fileName || 'event-report', content: fileBuffer }],
+            attachments,
           });
 
           await mutateCollection('eventReports', (current) => (current || []).map((r: any) =>
@@ -137,9 +161,9 @@ export async function PATCH(
           mergedRecord = { ...mergedRecord, emailSent: log.status === 'SENT', emailError: log.errorMessage };
         } else {
           await mutateCollection('eventReports', (current) => (current || []).map((r: any) =>
-            r.id === id ? { ...r, emailSent: false, emailError: 'No Centre Head, Advisor, GG Campus Head of Events, or President found in the Directory to send the approved report to.' } : r
+            r.id === id ? { ...r, emailSent: false, emailError: 'No Centre Head, Advisor, Super User, GG Campus Head of Events, or President found in the Directory to send the approved report to.' } : r
           ));
-          mergedRecord = { ...mergedRecord, emailSent: false, emailError: 'No Centre Head, Advisor, GG Campus Head of Events, or President found in the Directory to send the approved report to.' };
+          mergedRecord = { ...mergedRecord, emailSent: false, emailError: 'No Centre Head, Advisor, Super User, GG Campus Head of Events, or President found in the Directory to send the approved report to.' };
         }
 
         if (mergedRecord?.submittedByEmail) {

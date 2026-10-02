@@ -924,6 +924,8 @@ export interface ApprovalRecipients {
   advisor?: { name: string; email: string };
   eventsHeadGg?: { name: string; email: string };
   president?: { name: string; email: string };
+  superUsers?: Array<{ name: string; email: string }>;
+  superUser?: { name: string; email: string };
 }
 
 export function findApprovalRecipients(members: Array<{ id?: string; name: string; email?: string; role?: string; tier?: number; status?: string }>): ApprovalRecipients {
@@ -954,23 +956,40 @@ export function findApprovalRecipients(members: Array<{ id?: string; name: strin
     return role.includes('president') && !role.includes('vice');
   });
 
+  const superUsers = active
+    .filter(m => m.tier === 1 || (m.role || '').toLowerCase().includes('super user') || (m.role || '').toLowerCase().includes('superuser'))
+    .map(m => ({ name: m.name, email: m.email! }));
+  const superUser = superUsers[0];
+
   return {
     centreHead: centreHead ? { name: centreHead.name, email: centreHead.email! } : undefined,
     advisor: advisor ? { name: advisor.name, email: advisor.email! } : undefined,
     eventsHeadGg: eventsHeadGg ? { name: eventsHeadGg.name, email: eventsHeadGg.email! } : undefined,
     president: president ? { name: president.name, email: president.email! } : undefined,
+    superUsers,
+    superUser,
   };
 }
 
 /**
  * Template Generator: Event Report Approved (sent with the report file
- * attached once BOTH the Centre Head and GG Campus Head of Events have
+ * attached to the Centre Head, Advisor, Super User, and leadership once
  * signed off).
  */
-export function generateEventReportApprovedEmailTemplate(eventTitle: string, submitterName: string): { subject: string; bodyText: string; bodyHtml: string } {
+export function generateEventReportApprovedEmailTemplate(
+  eventTitle: string,
+  submitterName: string,
+  reviewerName?: string,
+  reviewerRole?: string,
+  comments?: string
+): { subject: string; bodyText: string; bodyHtml: string } {
   const subject = `Event Report Approved: ${eventTitle}`;
+  const reviewerLine = reviewerName ? `Approved by: ${reviewerName}${reviewerRole ? ` (${reviewerRole})` : ''}\n` : '';
+  const commentsLine = comments ? `Reviewer Comments: "${comments}"\n\n` : '\n';
   const bodyText = `Hello,\n\n` +
-    `The event report for "${eventTitle}", submitted by ${submitterName}, has been approved by both the Centre Head and the GG Campus Head of Events.\n\n` +
+    `The event report for "${eventTitle}", submitted by ${submitterName}, has been approved.\n` +
+    reviewerLine +
+    commentsLine +
     `The full report is attached to this email.\n\n` +
     `Regards,\nLEADS Next Gen Centre, MSRUAS`;
 
@@ -982,8 +1001,10 @@ export function generateEventReportApprovedEmailTemplate(eventTitle: string, sub
     badgeColor: `#15803d`,
     bodyContentHtml: `
       <p style="margin-top: 0; color: #0f172a; font-size: 14px;">Hello,</p>
-      <p style="color: #334155; font-size: 14px; line-height: 1.6;">The event report for <strong>${eventTitle}</strong>, submitted by <strong>${submitterName}</strong>, has been approved by both the Centre Head and the GG Campus Head of Events.</p>
-      <p style="color: #334155; font-size: 14px; line-height: 1.6;">The full report is attached to this email.</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.6;">The event report for <strong>${eventTitle}</strong>, submitted by <strong>${submitterName}</strong>, has been approved.</p>
+      ${reviewerName ? `<p style="color: #334155; font-size: 13px; margin: 6px 0;"><strong>Approved by:</strong> ${reviewerName}${reviewerRole ? ` (${reviewerRole})` : ''}</p>` : ''}
+      ${comments ? `<div style="margin: 12px 0; padding: 12px; background-color: #f8fafc; border-left: 3px solid #15803d; border-radius: 4px; font-style: italic; color: #475569; font-size: 13px;">"${comments}"</div>` : ''}
+      <p style="color: #334155; font-size: 14px; line-height: 1.6; margin-top: 12px;">The full report is attached to this email.</p>
     `
   });
 

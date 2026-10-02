@@ -371,7 +371,7 @@ export default function EventReportsPage() {
         </div>
         <div>
           <h1 className="text-xl font-bold text-theme-text-primary">Event Reports</h1>
-          <p className="text-xs text-theme-text-secondary">Submit, review, and approve post-event reports — a tick from any one of the Centre Head, Advisor, or GG Campus Head of Events accepts a report, which is then emailed as an attachment to all of them plus the President.</p>
+          <p className="text-xs text-theme-text-secondary">Submit, review, and approve post-event reports — once approved, the report file is automatically emailed to the Centre Head, Advisor, Super User, and leadership.</p>
         </div>
       </div>
 
