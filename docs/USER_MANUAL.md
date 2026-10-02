@@ -843,45 +843,148 @@ The **Guest Directory** (`/dashboard/guest-directory`) manages institutional rec
 *Figure 3.13.2: Guest creation modal with automated visiting card image OCR recognition.*
 
 ### 3.14 Announcements & Scoped Broadcasts
-Broadcast urgent notices, circulars, and updates:
-- **Scoping**:
-  - `All Members`: Sent to all faculty and student accounts.
-  - `Core Committee Only`: Confidential operational notices.
-  - `Faculty Only`: Academic and administrative memos.
-- Pinned announcements appear prominently on the Home Dashboard and trigger automated email dispatches.
+The **Announcements & Circulars Engine** (`/dashboard/announcements`) empowers center leadership and committee heads to publish official advisories, emergency updates, meeting summons, and financial deadlines. The module features precision target scoping, multi-tier approval gates, and a real-time background email dispatch pipeline with live progress telemetry.
 
-![Live Announcements Screenshot](screenshots/15_announcements.png)
-*Figure 3.13: Scoped announcement composer and broadcast log.*
+> **Access Permission:** 
+> - **Direct Publication & Approval:** **Tier 1 (Super User)** and **Tier 2 (Centre Head / GG Campus Events Head)** can publish and circulate immediately.
+> - **Proposal & Submission:** **Tier 3 (Department Heads)** and **Tier 5 (Core Committee / Secretariat)** can draft announcements, which automatically route to the Centre Head for sanction before email distribution.
+> - **Read Access:** All registered members see announcements targeted to their scope on their personal dashboard feed.
+
+![Center Announcements Feed](screenshots/steps/13_announcements/01_announcements_feed_view.png)
+*Figure 3.14.1: Live captured Announcements board displaying active circulars, approval status badges, and scope tags.*
+
+---
+
+#### Step-by-Step Operating Workflow:
+
+##### Step 1: Open the Broadcast Composer
+1. Navigate to **Announcements** (`/dashboard/announcements`) in the left navigation sidebar.
+2. Click the **+ New Announcement** button in the upper-right header.
+3. The **Publish Center Announcement** modal dialog opens over the workspace.
+
+![New Announcement Modal](screenshots/steps/13_announcements/02_new_announcement_modal.png)
+*Figure 3.14.2: Live captured announcement composer modal with precision target scoping controls.*
+
+##### Step 2: Target Audience & Content Configuration ("What Information Goes Where")
+
+| Input Field Name | UI Component Type | Permissible Values / Format | Description & Architectural Impact |
+|---|---|---|---|
+| **Announcement Title \*** | Single-line Text Input | String (5–120 chars) | High-impact circular headline displayed in dashboard banners and used as the email subject line prefix (e.g. `[LEADS Notice] Mandatory Pre-Fest Stage Logistics Briefing`). |
+| **Target Audience / Category \*** | Dropdown Select | `All Members`<br>`Advisory Board`<br>`Core Committee`<br>`Training Associate`<br>`Faculty`<br>`Executive Council`<br>`Event Committee`<br>`Specific Members` | Determines the cryptographic recipient filter. Only members matching this designation receive the circular in their feed and email inbox. |
+| **Select Linked Event \*** | Searchable Dropdown | Approved Active Events | *Appears only when `Event Committee` is selected.* Associates the announcement with an active festival or event. |
+| **Select Committee \*** | Dropdown Select | Committee names from selected event | *Appears only when `Event Committee` is selected.* Targets a specific functional sub-unit (e.g. `Stage & Sound`, `Guest Hospitality`). |
+| **Specific Members Search \*** | Searchable Multiselect Checklist | Registered Member Roster | *Appears only when `Specific Members` is selected.* Allows individually selecting 1 or more specific colleagues by name and email. |
+| **Announcement Content \*** | Multiline Textarea | Rich Markdown / Plaintext (Min 10 chars) | Full circular text, instructions, venue details, agenda points, and operational requirements. Automatically rendered with clean typography and spacing. |
+
+##### Step 3: Submission & Multi-Tier Approval Gate
+1. Click **Publish Announcement** (or **Submit for Approval** if logged in as Tier 3 or 5).
+2. **What Happens Architectural Flow:**
+   - **Executive Submission (Centre Head / Super User):** The announcement is marked `Approved` immediately. The background email dispatcher fires asynchronously, and a floating status toast confirms circulation.
+   - **Student / Dept Head Submission:** The announcement is marked `Pending Approval (Centre Head / GG Campus Events Head)` with an amber pulse badge. It appears in the Centre Head's **Approvals Inbox** (`/dashboard/approvals`). No emails are sent until executive sign-off.
+   - **Executive Approval:** The Centre Head opens the announcement and clicks **Approve & Publish**. The badge turns green (`Approved & Published`), and the email queue begins transmitting.
+   - **Executive Rejection:** If rejected, the announcement displays a red `Rejected` badge with auditor remarks.
+
+##### Step 4: Real-Time Email Circulation Progress Monitor
+When an approved circular initiates email delivery:
+1. A persistent progress widget docks to the bottom-right corner of the screen:
+   - Displays real-time progress bar (e.g. `Sending email 14 of 48...`).
+   - Displays the exact recipient currently receiving transmission (e.g. `Dispatched to: rahul.sharma@institution.edu`).
+2. Users can click **Minimize** to collapse the widget into a compact pill while continuing other work without interrupting the socket relay.
 
 ---
 
 ### 3.15 Master Calendar & Festival Schedule
-Unified schedule view:
-- Displays all upcoming events, rehearsal dates, task milestones, and university academic holidays.
-- Filter by campus (Ramaiah Tech Campus vs. Gnanagangothri).
-- Export to iCal format to sync with Google Calendar or Apple Calendar.
+The **Master Calendar & Festival Schedule** (`/dashboard/calendar` and `/dashboard/festivals`) provides an enterprise-grade institutional timetable uniting all event production milestones, gate rehearsal schedules, task deliverables, and official university holidays into a synchronized operational calendar.
 
-![Live Master Calendar Screenshot](screenshots/16_master_calendar.png)
-*Figure 3.14: Master schedule with festival dates and conflict detection.*
+> **Access Permission:** Available to **All Tiers (1 through 7)**. Visibility of specific event cards adheres to individual Group Policies (`OWN` vs `ALL` scope) and publication approval status.
+
+![Master Calendar Month View](screenshots/steps/14_calendar_festivals/01_master_calendar_month_view.png)
+*Figure 3.15.1: Live captured Master Calendar month grid showing event milestones, task deadlines, and quick-filter controls.*
+
+---
+
+#### Features & Operations Breakdown:
+
+##### A. Master Calendar Grid Operations (`/dashboard/calendar`)
+1. **Month & Year Navigation:**
+   - Use the **<** (Previous Month) and **>** (Next Month) chevron buttons in the header to navigate across academic terms.
+   - Click any date cell (e.g. August 15) to isolate scheduled activities for that specific 24-hour cycle.
+2. **Color-Coded Status Markers:**
+   - **Purple Badges:** Active Event Milestones (e.g. *RoboTech 2026 Opening Ceremony*).
+   - **Amber Badges:** Planning Phase & Technical Rehearsals.
+   - **Emerald Badges:** Completed Events & Post-Event Audits.
+   - **Cyan Badges:** Individual Task Deliverable Deadlines linked to your committee.
+3. **Campus Segregation Filter:**
+   - Toggle between **All Campuses**, **Ramaiah Tech Campus (RTC)**, and **Gnanagangothri Campus (GG)** to resolve venue booking overlaps before finalizing dates.
+
+![University Festivals & Observance Portal](screenshots/steps/14_calendar_festivals/02_festivals_and_holidays_view.png)
+*Figure 3.15.2: Live captured Festivals & Observance directory with social media creative dispatch triggers.*
+
+##### B. University Festivals & Observance Portal (`/dashboard/festivals`)
+Institutions celebrate numerous national observances, cultural festivals, and university foundations throughout the academic year. The Festivals portal ensures no celebration is overlooked:
+1. **Time-Horizon Filtering:**
+   - Click the chip toggles: **This Week (Next 7 Days)**, **Upcoming 30 Days**, **All Year**, or **Past Observances**.
+2. **Automated Social Media Task Dispatch:**
+   - Committee Leads and Social Media Heads can click **+ Assign Social Creative** on any upcoming festival card.
+   - **What Happens:** The ERP automatically spawns a linked graphic design deliverable on the **Tasks Board** (`/dashboard/tasks`) and **Design Portal** (`/dashboard/designs`), assigned directly to the Media Committee with an automated due date 48 hours prior to the festival!
 
 ---
 
 ### 3.16 Executive Event Reports & PDF/Word Exports
-After an event concludes, generate professional post-event documentation:
-1. Navigate to **Event Reports**.
-2. Select the completed event.
-3. System aggregates:
-   - Executive Summary & Objectives.
-   - Attendance statistics and gate check-in graphs.
-   - Final Budget vs. Actual Financial Statement.
-   - Committee member contributions and ratings.
-   - Uploaded event photo gallery.
-4. Click **Download Executive Report (PDF)** or **Export Report (Word .docx)** for formal submission to university leadership.
+Comprehensive institutional governance demands thorough post-event documentation. The LEADS platform incorporates two synchronized reporting engines: the **Event Documentation & Rubrics Scoring Portal** (`/dashboard/event-reports`) and the **Executive Performance Analytics Engine** (`/dashboard/reports`).
 
-![Live Executive Event Reports Screenshot](screenshots/18_event_reports.png)
-*Figure 3.15: Post-event report generation and export tools.*
+> **Access Permission:**
+> - **Report Submission:** **Tier 1 (Super User)**, **Tier 2 (Centre Head)**, and **Tier 5 (General Secretary & Chief Coordinator)**.
+> - **Evaluation Rubrics Scoring & Approval:** **Tier 1 (Super User)** and **Tier 2 (Centre Head / Faculty Advisor)**.
+> - **Analytics & PDF Export:** **Tier 1 through Tier 4 (Faculty & Leadership)**.
+
+![Event Reports Rubric Portal](screenshots/steps/15_event_reports/01_event_reports_rubric_portal.png)
+*Figure 3.16.1: Live captured Event Reports portal showing submitted documentation, status workflows, and institutional rubrics scoring.*
 
 ---
+
+#### Sub-Portal A: Post-Event Documentation & Rubrics Scoring (`/dashboard/event-reports`)
+
+##### Step 1: Submitting a Formal Post-Event Report (General Secretary / Organizers)
+1. Navigate to **Event Reports** (`/dashboard/event-reports`).
+2. Under **Submit Event Report**:
+   - **Select Completed Event:** Pick from the list of approved events that have concluded.
+   - **Upload Event Dossier File:** Drag and drop the formal compiled report file (`.pdf`, `.docx`, or `.zip` up to 25 MB) into the upload dropzone.
+3. Click **Submit Event Report for Executive Review**.
+4. **What Happens:** The report enters `Pending Review` status. An audit notification routes to the Centre Head and Faculty Advisor.
+
+##### Step 2: The 5-Pillar Institutional Evaluation Rubric
+When reviewing a submitted report, the Centre Head or Faculty Advisor scores the event across five institutional excellence criteria:
+
+| Rubric Pillar | Weightage | Evaluation Criteria |
+|---|---|---|
+| **1. Operational Execution & Punctuality** | 20 Points | Stage flow adherence, technical setup promptness, speaker management, and crowd control. |
+| **2. Financial Discipline & Budget Adherence** | 20 Points | Variance between approved budget ceiling and actual expenditure; completeness of GST vouchers. |
+| **3. Delegate Engagement & Attendance Turnout** | 20 Points | Ratio of scanned turnstile check-ins against total passes issued; audience satisfaction metrics. |
+| **4. Media, Branding & Social Outreach** | 20 Points | Quality of promotional creatives, Instagram/LinkedIn reach, and university branding compliance. |
+| **5. Post-Event Documentation & Handover** | 20 Points | Timeliness of report submission, high-resolution photo archives, and inventory return reconciliations. |
+
+Once scored, the system calculates a composite score (e.g. `94/100 — Grade A+ Outstanding`), seals the audit ledger, and enables university leadership download.
+
+---
+
+#### Sub-Portal B: Executive Performance Analytics & PDF Compilation (`/dashboard/reports`)
+
+![Executive Analytics Charts & PDF Export](screenshots/steps/15_event_reports/02_executive_analytics_charts.png)
+*Figure 3.16.2: Live captured Executive Performance Analytics dashboard featuring radar competency metrics and one-click PDF generation.*
+
+1. **Radar Competency Visualizer:**
+   - Renders interactive SVG radar charts comparing student committee competencies across Leadership, Punctuality, Technical Skill, Financial Prudence, and Teamwork.
+2. **Bar Chart Aggregation Breakdown:**
+   - Toggle view modes: **By Student Average**, **By Event Aggregate**, or **By Individual Task Deliverable**.
+3. **Period & Division Filtering:**
+   - Filter metrics across academic terms or isolate specific divisions (*Core Committee*, *Training Associates*, *Faculty*).
+4. **One-Click Executive PDF Compilation:**
+   - Click the **Download Executive Report (PDF)** button in the header.
+   - **What Happens:** The system captures client-side SVG vector charts, merges them with institutional header typography and member evaluation tables, and streams a publication-ready `.pdf` directly to the browser downloads folder.
+
+---
+
 
 ### 3.17 Unified Approvals Inbox
 The **Approvals** module (`/dashboard/approvals`) is the centralized decision-making inbox for Tier 2 and Tier 3 heads.
@@ -1002,12 +1105,53 @@ The LEADS ERP provides a longitudinal dossier for every student member, collatin
 ---
 
 ### 3.19 Custom Group Policies & Access Thresholds
-Provides fine-grained security customization without code changes:
-- Create custom policies granting specific members access to restricted modules (e.g., granting a student treasurer access to Budgeting).
-- Configure Tier access thresholds across modules.
+The **Group Policies & Granular RBAC Engine** (`/dashboard/policies`) provides university administrators with total cryptographic control over dashboard permissions without altering a single line of application source code. Administrators can construct dynamic access policies, target them at specific academic divisions, tiers, designations, or individual colleagues, and grant elevated module capabilities or view/edit overrides on demand.
 
-![Live Custom Group Policies Screenshot](screenshots/22_group_policies.png)
-*Figure 3.18: Granular capability overrides and access control policies.*
+> **Access Permission:** Strictly restricted to **Tier 1 (Super User)**, **Tier 2 (Centre Head / GG Campus Events Head)**, and **Tier 4 (Faculty Advisor)**. All other members are barred by kernel-level routing guards.
+
+![Group Policies Management Matrix](screenshots/steps/16_group_policies/01_group_policies_matrix_view.png)
+*Figure 3.19.1: Live captured Group Policies matrix showing active capability tags, target scope filters, and module access grants.*
+
+---
+
+#### Architectural Security Model:
+1. **The Permanent Super User Safety Floor:**
+   - Tier 1 (Super User) retains unalterable, hardcoded access across every database collection and endpoint. Group policies can never strip the Super User's privileges, ensuring administrators can never accidentally lock themselves out of the system.
+2. **Capability Additive Inheritance:**
+   - If a member is a Training Associate (Tier 6) with default read-only restrictions, an administrator can assign them a policy tag (e.g. `STUDENT_TREASURER`) that grants `PROPOSE_BUDGET` and `MANAGE_PROCUREMENT`. The user immediately inherits those elevated privileges without altering their institutional rank.
+3. **Module Scope Overrides (`OWN` vs `ALL`):**
+   - By default, junior coordinators can only view and edit records belonging to their own committee (`OWN`). Group Policies allow granting `ALL` access across specific modules (e.g. allowing an auditor to view all campus requisitions across all departments).
+
+---
+
+#### Step-by-Step Operating Workflow:
+
+##### Step 1: Launch Policy Tag Builder
+1. Navigate to **Group Policies** (`/dashboard/policies`) in the navigation sidebar.
+2. Click the **+ New Policy Tag** button in the upper-right header.
+3. The **Create Access Policy Tag** modal dialog renders over the matrix.
+
+![Create Policy Tag Modal](screenshots/steps/16_group_policies/02_create_policy_modal.png)
+*Figure 3.19.2: Live captured Policy Tag Builder modal with granular capability checkboxes and module access toggles.*
+
+##### Step 2: Policy Tag Configuration ("What Information Goes Where")
+
+| Configuration Field | Component Type | Options / Syntax | Functional Purpose |
+|---|---|---|---|
+| **Policy Tag Name \*** | Text Input | Slugified uppercase string (e.g. `STAGE_TECH_SUPERVISOR`) | Unique cryptographic key identifying this policy across session tokens and capability resolvers. |
+| **Description** | Textarea | Plaintext description | Records administrative justification (e.g. *Grants elevated equipment procurement rights to stage crew leads*). |
+| **Target Divisions** | Multi-Checkbox Toggle | `Faculty`<br>`Core Committee`<br>`Training Associate`<br>`Advisory Board`<br>`Alumni` | Any member whose profile division matches any selected checkbox automatically inherits this policy. |
+| **Target Tiers** | Multi-Checkbox Toggle | `Tier 1` through `Tier 7` | Limits enforcement strictly to selected hierarchical ranks (e.g. only Tier 5 students). |
+| **Designation Keyword** | Text Input | Search string (e.g. `Treasurer`, `Media`, `Head`) | Matches any member whose institutional title contains this substring (case-insensitive). |
+| **Specific Members** | Searchable Select Dropdown | Member Roster | Directly attaches the policy to one or more individuals regardless of their division or rank. |
+| **Capability Grants** | Multi-Checkbox Matrix | `MANAGE_EVENT_PASSES`<br>`PROPOSE_BUDGET`<br>`AUDIT_REIMBURSEMENTS`<br>`PUBLISH_ANNOUNCEMENTS`<br>`EDIT_FORM_TEMPLATES`<br>`VIEW_ALL_EVENTS` | Explicit capability flags that unlock administrative action buttons on corresponding dashboard pages. |
+| **Module View / Edit Overrides** | Dual-Select Matrix per Module | `Events`: `[View: ALL / OWN]` `[Edit: ALL / OWN / NONE]`<br>`Tasks`: `[View: ALL / OWN]` `[Edit: ALL / OWN / NONE]`<br>`Procurement`: `[View: ALL / OWN]` `[Edit: ALL / OWN / NONE]` | Forces custom data visibility and editing bounds for targeted members on specific database collections. |
+| **Approval Sign-off Required** | Boolean Toggle Switch | `Enabled` / `Disabled` | When enabled, actions executed by policyholders must be countersigned in the Approvals Inbox by the Centre Head. |
+
+##### Step 3: Persistence & Reactive Hot-Reload
+1. Click **Create Policy Tag**.
+2. **What Happens:** The policy is cryptographically serialized into `data/policies.json`.
+3. Within 7 seconds, all active client browsers synchronize the new policy matrix. Targeted members will see newly unlocked navigation buttons and permissions appear instantly without needing to log out.
 
 ---
 
@@ -1016,8 +1160,11 @@ The **Mailroom Audit Portal** (`/dashboard/email`) provides institutional email 
 
 > **Access Permission:** Restricted strictly to **Tier 1 (Super User)** and **Tier 2 (Centre Head)**.
 
-![Live Email Engine Screenshot](screenshots/23_email_management.png)
-*Figure 3.19: Outbound SMTP transmission queue and delivery logs.*
+![SMTP Server Configuration](screenshots/steps/17_email_engine/01_email_engine_smtp_config.png)
+*Figure 3.20.1: Live captured SMTP configuration panel showing mail relay credentials, TLS security toggles, and socket diagnostics.*
+
+![Outbound Transmission Logs](screenshots/steps/17_email_engine/02_email_outbox_queue_logs.png)
+*Figure 3.20.2: Live captured Outbound Transmission queue and delivery audit logs with real-time status badges.*
 
 ---
 
@@ -1136,25 +1283,99 @@ Click **DKIM Signing (Advanced)** to expand the cryptographic key fields:
 ---
 
 ### 3.21 System & Security Settings
-Administrative configuration panel:
-- **Branding**: Update centre logo, institutional title, and portal contact info.
-- **SMTP Gateway**: Configure primary email relay (Google Workspace, Microsoft 365, or Local Direct Postfix).
-- **Wallet Pass Certificates**: Manage Apple PassKit signing certificates and Google Wallet service account credentials.
+The **System & Security Settings** suite (`/dashboard/settings`) manages personal identity, encrypted banking credentials for reimbursement payouts, visual role inspection, and the immutable university security audit trail.
 
-![Live System Settings Screenshot](screenshots/25_system_settings.png)
-*Figure 3.20: System security settings and encryption controls.*
+> **Access Permission:** 
+> - **Personal Identity & Banking Tabs:** Open to **All Registered Users (Tiers 1 through 7)** for updating their personal credentials and reimbursement bank accounts.
+> - **Audit Trail & System Controls:** Strictly accessible to **Tier 1 (Super User)** and **Tier 2 (Centre Head)**.
+
+![System Account & Security Settings](screenshots/steps/18_settings/01_system_account_security_view.png)
+*Figure 3.21.1: Live captured System Settings showing account profile, password entropy bar, and reimbursement banking inputs.*
+
+---
+
+#### Operating Tabs & Field Reference ("What Information Goes Where"):
+
+##### Tab 1: Account Profile & Security Credentials (`/dashboard/settings?tab=account`)
+
+| Field Name | Component Type | Format / Constraints | Operational Purpose |
+|---|---|---|---|
+| **Display Name \*** | Text Input | Full Name (2–80 chars) | Formal name displayed on passes, committee rosters, and email circular signatures. |
+| **Official Email Address** | Text Input + Button | Institutional Email | Click **Request Email Change**. Initiates a two-step cryptographic verification requiring approval tokens from both old and new addresses to thwart unauthorized takeovers. |
+| **Date of Birth** | Date Picker | YYYY-MM-DD | Used for birthday greetings automation and age verification for official university tours. |
+| **Profile Avatar Photo** | File Upload + Canvas Cropper | PNG, JPG, WebP (Max 2 MB) | Includes interactive rectangular and circular aspect ratio cropping tools before saving to server storage. |
+| **Current Password \*** | Password Input (with eye toggle) | Existing secret | Required verification before the server accepts any credential change. |
+| **New Master Password** | Password Input (with eye toggle) | Minimum 8 characters | Features a real-time entropy meter evaluating uppercase, lowercase, numbers, and symbols. |
+| **Confirm New Password \*** | Password Input | Identical string | Prevents typographical lockout. |
+
+##### Tab 2: Financial Reimbursement Banking Profile (`/dashboard/settings?tab=reimbursement`)
+To receive automated expense reimbursements from the University Finance Department, every member must keep their banking details current:
+- **Account Holder Name \***: Name as registered in the bank passbook.
+- **Bank Name \***: Scheduled commercial bank (e.g. *State Bank of India*, *HDFC Bank*).
+- **Bank Account Number \***: Numeric bank account identifier (encrypted on disk using AES-256).
+- **IFSC Code \***: 11-character Indian Financial System Code (e.g. `SBIN0040582`).
+- **UPI Virtual Payment Address (VPA)**: Direct UPI handle (e.g. `rahul@okhdfcbank`) for instant digital payouts.
+
+![System Audit Trail](screenshots/steps/18_settings/02_system_audit_trail_view.png)
+*Figure 3.21.2: Live captured Immutable System Audit Trail capturing security logs, IP addresses, and export utilities.*
+
+##### Tab 3: Immutable System Security Audit Trail (`/dashboard/settings?tab=audit`)
+1. **Search & Period Filters:** Filter events by member name, keyword (e.g. `PASSWORD_RESET`, `CLAIM_SETTLED`), or academic quarter.
+2. **Recorded Telemetry Points:** Every administrative modification permanently stamps:
+   - Action Timestamp (UTC + IST)
+   - Initiating Member Name & Institutional Email
+   - Remote Client IP Address and User Agent
+   - Target Entity ID and Delta Payload
+3. **CSV Audit Export:** Click **Download CSV Audit Log** to export compliance records for institutional governance audits.
 
 ---
 
 ### 3.22 Encrypted Backup & Restore
-Guarantees institutional data sovereignty and disaster recovery:
-1. Super User navigates to **Backup**.
-2. Click **Create Encrypted Snapshot**.
-3. Downloads a full JSON archive encrypted under AES-256-GCM.
-4. Backups can be restored in the UI or decrypted offline using `node scripts/decrypt-backup.js`.
+The **Disaster Recovery & Encrypted Snapshot Engine** (`/dashboard/backup`) ensures total institutional data sovereignty, disaster resilience, and offline portability without relying on third-party cloud database providers.
 
-![Live Encrypted Backup Screenshot](screenshots/24_backup_restore.png)
-*Figure 3.21: Encrypted backup and point-in-time disaster recovery.*
+> **Access Permission:** Strictly restricted to **Tier 1 (Super User)**. All other tiers are immediately redirected.
+
+![Encrypted Backup & Disaster Recovery Portal](screenshots/steps/19_backup_restore/01_encrypted_backup_dr_view.png)
+*Figure 3.22.1: Live captured AES-256 Encrypted Backup and Point-in-Time Disaster Recovery interface.*
+
+---
+
+#### Step-by-Step Operating Procedures:
+
+##### Step 1: Generating an AES-256 Encrypted Backup Snapshot
+1. Navigate to **Backup & Restore** (`/dashboard/backup`).
+2. Under **Create Encrypted Backup**:
+   - **Custom Passphrase (Optional):** Enter a custom secret passphrase to encrypt the snapshot. If left empty, the server automatically ciphers the archive using the master server key `DATA_ENCRYPTION_KEY`.
+   - **Confirm Passphrase:** Retype the identical passphrase.
+3. Click **Download Encrypted Snapshot (.leads.enc)**.
+4. **What Happens Architectural Flow:**
+   - The server traverses all SQLite relational tables and encrypted JSON collections (`members`, `events`, `tasks`, `reimbursements`, `budgets`, `forms`, `settings`).
+   - Compresses the dataset into an atomic payload.
+   - Encrypts the archive using **AES-256-GCM** with a newly generated 12-byte initialization vector (IV) and 16-byte authentication tag.
+   - Downloads a `.leads.enc` file (e.g. `leads_backup_2026-10-02_18-59.leads.enc`) directly to your administrative device.
+
+##### Step 2: Emergency System Lockdown Mode
+In the event of an active cyber incident or during major university infrastructure maintenance:
+1. Locate the **Emergency Maintenance Lockdown** card in the upper panel.
+2. Toggle the switch to **Active**.
+3. **What Happens:** All active non-Super User client sessions across the campus are immediately paused with a polite modal: *"System Under Scheduled Maintenance. Database writes temporarily frozen."* The Super User can safely perform maintenance operations without race conditions.
+
+##### Step 3: Point-in-Time Database Restoration
+1. Under **Point-in-Time Restoration**:
+   - Drag and drop your `.leads.enc` snapshot file into the **Restore File Dropzone**.
+   - Enter the **Decryption Passphrase** used when creating the snapshot.
+   - For security, type the exact confirmation word: `RESTORE`.
+2. Click **Execute Point-in-Time Restoration**.
+3. **What Happens:**
+   - The server verifies the cryptographic authentication tag (`authTag`). If the file has been tampered with or corrupted, restoration aborts immediately without touching active data.
+   - Once verified, the database replaces current records, re-indexes relations, and emits a websocket broadcast triggering an automatic page reload across all campus browsers within 7 seconds.
+
+##### Step 4: Air-Gapped Offline Decryption CLI
+If the server hardware suffers catastrophic failure and the web dashboard cannot be accessed, administrators can decrypt `.leads.enc` files offline on any machine with Node.js installed:
+```bash
+node scripts/decrypt-backup.js path/to/leads_backup.leads.enc "YourPassphrase"
+```
+The script outputs standard unencrypted JSON files into a target directory for immediate forensic inspection or manual database recovery.
 
 ---
 
