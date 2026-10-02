@@ -347,7 +347,7 @@ export function isDesignHead(user: SessionUser): boolean {
   if (isCentreHead(user)) return true; // Super User, Centre Head, and Advisor all have design review authority
   const role = ((user as any)?.role || '').toLowerCase();
   const dept = (user.department || resolveMember(user)?.department || '').toLowerCase();
-  const isDesign = role.includes('design') || dept.includes('design');
+  const isDesign = role.includes('design') || dept.includes('design') || role.includes('social media') || dept.includes('social media');
   return isHeadRole(user) && isDesign;
 }
 
@@ -1082,12 +1082,14 @@ export function canDelegateAutoTask(task: TaskItem, user: SessionUser): boolean 
   if (!user) return false;
   if (
     task.workflowType !== 'event_social_post' &&
+    task.workflowType !== 'holiday_design_social' &&
     task.workflowType !== 'event_report_assignment' &&
     task.workflowType !== 'event_report_request'
   ) return false;
   if (task.approvalStatus === 'pending_edit' || task.approvalStatus === 'pending_create') return false;
   const member = resolveMember(user);
   if (!member) return false;
+  if (isSocialMediaPostTask(task) && isSocialMediaHeadOrSrHead(user)) return true;
   if (task.assigneeType === 'group') return (task.assigneeIds || []).includes(member.id);
   return task.assigneeId === member.id || (!!task.assigneeEmail && task.assigneeEmail.toLowerCase() === user.email.toLowerCase());
 }
@@ -1148,6 +1150,7 @@ export function canViewTaskExtended(task: TaskItem, user: SessionUser): boolean 
   if (hasCapability(user, 'TASKS_VIEW_ALL') || hasModuleViewAllGrant(user, 'TASKS')) return true;
   if (isExecutiveRole(user)) return true;
   if (canViewTask(task as any, user as any)) return true;
+  if (isSocialMediaPostTask(task) && isSocialMediaHeadOrSrHead(user)) return true;
   if (!user || !isHeadRole(user)) return false;
 
   const department = user.department || resolveMember(user)?.department;
@@ -1353,6 +1356,30 @@ export function isSocialMediaTeamMember(member: { division?: string; department?
   );
 }
 
+/** Check if a member is the Head or Senior Head of Social Media. */
+export function isSocialMediaHeadOrSrHead(member: { division?: string; department?: string; committee?: string; role?: string; status?: string } | null | undefined): boolean {
+  if (!member || isFaculty(member as SessionUser) || member.status === 'Terminated') return false;
+  if (!isSocialMediaTeamMember(member)) return false;
+  const role = (member.role || '').toLowerCase();
+  return role.includes('head') || role.includes('lead');
+}
+
+/** Check if a member is the Head of Social Media (non-senior). */
+export function isSocialMediaHead(member: { division?: string; department?: string; committee?: string; role?: string; status?: string } | null | undefined): boolean {
+  if (!member || isFaculty(member as SessionUser) || member.status === 'Terminated') return false;
+  if (!isSocialMediaTeamMember(member)) return false;
+  const role = (member.role || '').toLowerCase();
+  return (role.includes('head') || role.includes('lead')) && !role.includes('senior') && !role.includes('sr');
+}
+
+/** Check if a member is the Senior Head of Social Media. */
+export function isSocialMediaSrHead(member: { division?: string; department?: string; committee?: string; role?: string; status?: string } | null | undefined): boolean {
+  if (!member || isFaculty(member as SessionUser) || member.status === 'Terminated') return false;
+  if (!isSocialMediaTeamMember(member)) return false;
+  const role = (member.role || '').toLowerCase();
+  return (role.includes('head') || role.includes('lead')) && (role.includes('senior') || role.includes('sr.') || role.includes('sr '));
+}
+
 /** Check if a task is a social media posting/design deliverable task. */
 export function isSocialMediaPostTask(task: {
   title?: string;
@@ -1520,6 +1547,7 @@ export function canChangeTaskStatus(task: TaskItem, user: SessionUser): boolean 
   if (user.tier === 1) return true;
   if (isCentreHead(user)) return true;
   if (isHeadOfEvents(user) || isEventsHeadGgCampus(user) || isEventsHeadRtcCampus(user)) return true;
+  if (isSocialMediaPostTask(task) && isSocialMediaHeadOrSrHead(user)) return true;
   return isTaskAssignee(task, user);
 }
 

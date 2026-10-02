@@ -368,6 +368,7 @@ export interface TaskItem {
   // relying on a fragile title-string match.
   isDesignDeliverable?: boolean;
   isSocialMediaPost?: boolean;
+  designCategory?: 'Poster' | 'Postage' | 'Banner' | 'Social Media' | 'Brochure' | 'Certificates' | 'Other';
   workflowType?: 'design_caption_draft' | 'design_caption_review' | 'design_social_posting'
     | 'holiday_social_approval' | 'holiday_design_social'
     // Auto-created the day an event's dates lapse (see event-social-scheduler.ts) —
@@ -428,6 +429,8 @@ export interface TaskItem {
   submittedBy?: string;
   submittedByEmail?: string;
   rejectionReason?: string;
+  allottedBy?: string;
+  allottedAt?: string;
   // Full history of who this task was routed through and in what order —
   // submitted-for-review, approved/rejected, and delegated/reassigned steps
   // each append an entry rather than overwriting the last one, so the whole
@@ -489,6 +492,30 @@ export function isSocialMediaTeamMember(member: { division?: string; department?
     comm.includes('social media') ||
     role.includes('social media')
   );
+}
+
+/** Check if a member is the Head or Senior Head of Social Media. */
+export function isSocialMediaHeadOrSrHead(member: { division?: string; department?: string; committee?: string; role?: string; status?: string } | null | undefined): boolean {
+  if (!member || isFacultyMember(member) || member.status === 'Terminated') return false;
+  if (!isSocialMediaTeamMember(member)) return false;
+  const role = (member.role || '').toLowerCase();
+  return role.includes('head') || role.includes('lead');
+}
+
+/** Check if a member is the Head of Social Media (non-senior). */
+export function isSocialMediaHead(member: { division?: string; department?: string; committee?: string; role?: string; status?: string } | null | undefined): boolean {
+  if (!member || isFacultyMember(member) || member.status === 'Terminated') return false;
+  if (!isSocialMediaTeamMember(member)) return false;
+  const role = (member.role || '').toLowerCase();
+  return (role.includes('head') || role.includes('lead')) && !role.includes('senior') && !role.includes('sr');
+}
+
+/** Check if a member is the Senior Head of Social Media. */
+export function isSocialMediaSrHead(member: { division?: string; department?: string; committee?: string; role?: string; status?: string } | null | undefined): boolean {
+  if (!member || isFacultyMember(member) || member.status === 'Terminated') return false;
+  if (!isSocialMediaTeamMember(member)) return false;
+  const role = (member.role || '').toLowerCase();
+  return (role.includes('head') || role.includes('lead')) && (role.includes('senior') || role.includes('sr.') || role.includes('sr '));
 }
 
 /** Check if a task is a social media posting/design deliverable task. */
@@ -2490,7 +2517,7 @@ export function getEffectiveEventStatus(event: EventItem, tasks?: TaskItem[]): E
   return event.status;
 }
 
-export function addEventCommittee(eventId: string, committeeName: string, actorName: string): { event: EventItem; committee: EventCommittee } | null {
+export function addEventCommittee(eventId: string, committeeName: string, actorName: string, initialMemberIds?: string[]): { event: EventItem; committee: EventCommittee } | null {
   const events = getEvents();
   const event = events.find(e => e.id === eventId);
   if (!event) return null;
@@ -2504,14 +2531,14 @@ export function addEventCommittee(eventId: string, committeeName: string, actorN
   const newComm: EventCommittee = {
     id: 'comm_' + Date.now(),
     name: committeeName,
-    memberIds: []
+    memberIds: initialMemberIds ? [...initialMemberIds] : []
   };
   event.committees.push(newComm);
   saveEvents(events);
   // Committees are nested in event — patch the whole event object (full record,
   // so a server-side upsert of a client-only sample event stays complete).
   serverPatch('/api/events', eventId, event);
-  logAuditEvent('EVENT_COMMITTEE_ADDED', actorName, `Added committee "${committeeName}" to event "${event.title}"`);
+  logAuditEvent('EVENT_COMMITTEE_ADDED', actorName, `Added committee "${committeeName}" with ${newComm.memberIds.length} members to event "${event.title}"`);
   return { event, committee: newComm };
 }
 
@@ -2534,7 +2561,7 @@ export function updateEventCommitteeMembers(eventId: string, committeeId: string
  *  used when the creator isn't Centre Head or GG Campus Head of Events (see
  *  isCommitteeApprover). The committee exists but is hidden from the normal
  *  roster/task-assignment flows until approved. */
-export function submitEventCommitteeCreate(eventId: string, committeeName: string, submittedBy: string, submittedByEmail: string): EventItem | null {
+export function submitEventCommitteeCreate(eventId: string, committeeName: string, submittedBy: string, submittedByEmail: string, initialMemberIds?: string[]): EventItem | null {
   const events = getEvents();
   const event = events.find(e => e.id === eventId);
   if (!event) return null;
@@ -2543,6 +2570,7 @@ export function submitEventCommitteeCreate(eventId: string, committeeName: strin
     id: 'comm_' + Date.now(),
     name: committeeName,
     memberIds: [],
+    pendingMemberIds: initialMemberIds && initialMemberIds.length > 0 ? [...initialMemberIds] : undefined,
     approvalStatus: 'pending_create',
     submittedBy,
     submittedByEmail,
@@ -2550,7 +2578,7 @@ export function submitEventCommitteeCreate(eventId: string, committeeName: strin
   event.committees.push(newComm);
   saveEvents(events);
   serverPatch('/api/events', eventId, event);
-  logAuditEvent('EVENT_COMMITTEE_CREATE_SUBMITTED', submittedBy, `Submitted committee "${committeeName}" for event "${event.title}" for approval`, submittedByEmail);
+  logAuditEvent('EVENT_COMMITTEE_CREATE_SUBMITTED', submittedBy, `Submitted committee "${committeeName}" with ${initialMemberIds?.length || 0} proposed students for event "${event.title}" for approval`, submittedByEmail);
   return event;
 }
 
@@ -2588,7 +2616,7 @@ export function approveEventCommittee(eventId: string, committeeId: string, acto
   if (!comm) return null;
 
   const isMembersUpdate = comm.approvalStatus === 'pending_members';
-  if (isMembersUpdate) {
+  if (isMembersUpdate || (comm.approvalStatus === 'pending_create' && comm.pendingMemberIds && comm.pendingMemberIds.length > 0)) {
     comm.memberIds = comm.pendingMemberIds || [];
   }
   comm.approvalStatus = 'approved';
@@ -3467,6 +3495,24 @@ export function updateTask(id: string, updates: Partial<TaskItem>, actorName: st
     }
   }
 
+  // Bi-directional completion: if a design_social_posting task is marked Completed, mark the corresponding design posting completed
+  if (
+    updates.status === 'Completed' &&
+    previousStatus !== 'Completed' &&
+    tasks[idx].workflowType === 'design_social_posting' &&
+    tasks[idx].designId
+  ) {
+    const designs = getDesigns();
+    const dIdx = designs.findIndex(d => d.id === tasks[idx].designId);
+    if (dIdx !== -1) {
+      designs[dIdx].postingInstagramDone = true;
+      designs[dIdx].postingLinkedinDone = true;
+      designs[dIdx].workflowStage = 'completed';
+      saveDesigns(designs);
+      serverPatch('/api/designs', designs[dIdx].id, designs[dIdx]);
+    }
+  }
+
   return tasks[idx];
 }
 
@@ -3553,6 +3599,51 @@ export function delegateAutoTask(
   );
 }
 
+/**
+ * Direct allotment function for Social Media Head and Sr Head:
+ * Allows allotting an auto-created social media task to a team member or taking it up themselves,
+ * immediately assigning the task without a redundant approval step.
+ */
+export function allotSocialMediaTask(
+  taskId: string,
+  target: { id: string; name: string; email: string },
+  actorName: string,
+  actorEmail?: string
+): TaskItem | null {
+  const tasks = getTasks();
+  const task = tasks.find(t => t.id === taskId);
+  if (!task) return null;
+
+  const isSelf = actorEmail && target.email && actorEmail.toLowerCase() === target.email.toLowerCase();
+
+  const updated = updateTask(
+    taskId,
+    {
+      assignee: target.name,
+      assigneeId: target.id,
+      assigneeEmail: target.email,
+      assigneeType: 'individual',
+      assigneeIds: [target.id],
+      status: isSelf ? 'In Progress' : 'Assigned',
+      allottedBy: actorName,
+      allottedAt: new Date().toISOString(),
+    },
+    actorName
+  );
+
+  if (updated) {
+    logAuditEvent(
+      'TASK_ALLOTTED',
+      actorName,
+      isSelf
+        ? `Took up social media task "${task.title}"`
+        : `Allotted social media task "${task.title}" to ${target.name} (${target.email})`
+    );
+  }
+
+  return updated;
+}
+
 export function updateTaskStatus(id: string, status: TaskItem['status'], actorName?: string): TaskItem | null {
   return updateTask(id, { status }, actorName || 'User');
 }
@@ -3586,25 +3677,22 @@ export function respondToHolidayApproval(taskId: string, approved: boolean, acto
     );
     if (!existing) {
       const pool = resolveSocialPostingAssignees();
+      const isSingle = pool.length === 1;
       addTask({
         title: `Design & post content for "${task.event || task.title}"`,
         event: task.event,
         eventId: task.eventId,
-        assignee: pool.map(m => m.name).join(', ') || 'Social Media Team (Unassigned)',
-        assigneeType: 'group',
+        assignee: pool.map(m => m.name).join(', ') || 'Social Media Head',
+        assigneeType: isSingle ? 'individual' : 'group',
+        assigneeId: isSingle ? pool[0].id : undefined,
+        assigneeEmail: isSingle ? pool[0].email : undefined,
         assigneeIds: pool.map(m => m.id),
         dueDate: task.dueDate,
         creatorName: actorName,
         workflowType: 'holiday_design_social',
         isSocialMediaPost: true,
-        // Flag this as a real Design Task, not a general one — without this
-        // it never showed up in the Design Portal's "Design Task Requests"
-        // queue, so whoever picked it up had no way to submit a design
-        // against it: they could only upload a disconnected standalone
-        // design with no sourceTaskId, leaving this task orphaned forever
-        // (never auto-completed) instead of linked to the resulting design.
         taskCategory: 'design',
-        briefDescription: `Create and post social media content for "${task.event || task.title}". Submit the design asset here once ready.`,
+        briefDescription: `Allot this task to a social media team member or take it up yourself to create and post social media content for "${task.event || task.title}". Submit the design asset here once ready.`,
       });
     }
   }
@@ -5744,12 +5832,19 @@ export function resolveDesignReviewer(): { id: string; name: string; email: stri
  */
 /**
  * Resolves the member pool assigned to social-media posting tasks.
- * Strictly limited to student members of the Social Media team.
- * Non-social-media members and Professors/Faculty are strictly excluded.
+ * Strictly limited to the Head and Senior Head of Social Media.
+ * Committee or general student groups and Professors/Faculty are strictly excluded.
  */
 export function resolveSocialPostingAssignees(members?: Member[]): Member[] {
-  const all = (members || getMembers()).filter(m => m.status !== 'Terminated');
-  return all.filter(m => isSocialMediaTeamMember(m));
+  const all = (members || getMembers()).filter(m => m.status !== 'Terminated' && !isFacultyMember(m));
+  const heads = all.filter(m => isSocialMediaHeadOrSrHead(m));
+  if (heads.length > 0) return heads;
+  const team = all.filter(m => isSocialMediaTeamMember(m));
+  return team.length > 0 ? team : all.slice(0, 1);
+}
+
+export function resolveSocialMediaHeads(members?: Member[]): Member[] {
+  return resolveSocialPostingAssignees(members);
 }
 
 export async function addDesign(design: Omit<DesignSubmissionItem, 'id' | 'submittedAt' | 'expiresAt' | 'isExpired'>, onProgress?: UploadProgressCallback): Promise<DesignSubmissionItem> {
@@ -5919,28 +6014,53 @@ function syncDesignTask(item: DesignSubmissionItem, reviewerName: string): Desig
       return updatedItem;
     }
 
-    // Stage 1: Initiate Caption Requirement Task for Designer
-    if (!updatedItem.workflowStage || updatedItem.workflowStage === 'caption_required') {
-      if (!updatedItem.captionTaskId) {
+    // Only auto-generate caption & posting task if category is 'Social Media'
+    const isSocialMedia = updatedItem.category === 'Social Media';
+    if (!isSocialMedia) {
+      // Non-social media designs (Poster, Postage, Banner, Brochure, Certificates, Other)
+      // complete their design task and stop here. No captions or posting tasks are generated.
+      updatedItem.workflowStage = 'completed';
+      return updatedItem;
+    }
+
+    // Unified Caption Writing & Posting Task for Social Media Head / Sr Head
+    if (!updatedItem.workflowStage || updatedItem.workflowStage === 'caption_required' || updatedItem.workflowStage === 'posting_required') {
+      const existingPostingTask = allTasks.find(t =>
+        t.designId === updatedItem.id && t.workflowType === 'design_social_posting'
+      );
+      if (!existingPostingTask) {
         const dueDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-        const task1 = addTask({
-          title: `[Caption Required] Draft Captions: ${updatedItem.title}`,
+        const postingPool = resolveSocialPostingAssignees();
+        const isSingle = postingPool.length === 1;
+        const postingAssignee = {
+          assignee: postingPool.map(m => m.name).join(', ') || 'Social Media Head',
+          assigneeType: (isSingle ? 'individual' : 'group') as 'individual' | 'group',
+          assigneeId: isSingle ? postingPool[0].id : undefined,
+          assigneeEmail: isSingle ? postingPool[0].email : undefined,
+          assigneeIds: postingPool.map(m => m.id),
+        };
+
+        const postTask = addTask({
+          title: `[Social Media Post] Caption & Post: ${updatedItem.title}`,
           event: updatedItem.eventName || undefined,
           eventId: updatedItem.eventId || undefined,
-          assignee: updatedItem.designerName,
-          assigneeId: updatedItem.designerId,
-          assigneeEmail: updatedItem.designerEmail,
-          assigneeType: 'individual',
+          ...postingAssignee,
           dueDate,
           status: 'In Progress',
           creatorName: reviewerName,
-          isDesignDeliverable: true,
-          workflowType: 'design_caption_draft',
+          isSocialMediaPost: true,
+          workflowType: 'design_social_posting',
           designId: updatedItem.id,
+          draftInstagramCaption: updatedItem.draftInstagramCaption || '',
+          draftLinkedinCaption: updatedItem.draftLinkedinCaption || '',
+          approvedInstagramCaption: updatedItem.approvedInstagramCaption || '',
+          approvedLinkedinCaption: updatedItem.approvedLinkedinCaption || '',
         });
-        updatedItem.workflowStage = 'caption_required';
-        updatedItem.captionTaskId = task1.id;
-        updatedItem.captionStatus = 'pending_submission';
+
+        updatedItem.workflowStage = 'posting_required';
+        updatedItem.postingInstagramTaskId = postTask.id;
+        updatedItem.postingLinkedinTaskId = postTask.id;
+        updatedItem.captionTaskId = postTask.id;
       }
     }
 
@@ -5972,14 +6092,17 @@ export function submitDesignCaptions(designId: string, instaCaption: string, lin
 
   const dueDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-  // Captions go back to whoever did the ORIGINAL proofread — not a separate
-  // "Design Head" lookup, which could resolve to no one at all if the roster
-  // has no tier-2/"design head" member. Falls back to re-resolving a Centre
-  // Head/GG Events Head only if this design predates mandatory routing and
-  // has no assigned proofreader on record.
-  const captionReviewer = (design.assignedProofreaderId && design.assignedProofreaderName && design.assignedProofreaderEmail)
-    ? { id: design.assignedProofreaderId, name: design.assignedProofreaderName, email: design.assignedProofreaderEmail }
-    : resolveDesignReviewer();
+  const isSocialPost = design.category === 'Social Media' || (design.eventId && getTasks().some(t => t.eventId === design.eventId && isSocialMediaPostTask(t)));
+  const socialHeads = resolveSocialPostingAssignees();
+  const defaultSocialReviewer = socialHeads.length > 0 ? socialHeads[0] : null;
+
+  // By default, social media captions go to the Head / Sr Head of Social Media,
+  // never to a committee or group of students.
+  const captionReviewer = (isSocialPost && defaultSocialReviewer)
+    ? { id: defaultSocialReviewer.id, name: defaultSocialReviewer.name, email: defaultSocialReviewer.email }
+    : (design.assignedProofreaderId && design.assignedProofreaderName && design.assignedProofreaderEmail)
+      ? { id: design.assignedProofreaderId, name: design.assignedProofreaderName, email: design.assignedProofreaderEmail }
+      : resolveDesignReviewer();
 
   // If an auto-generated task for this event is already completed, do not spawn a duplicate review task
   if (design.eventId) {
@@ -6068,12 +6191,15 @@ export function reviewDesignCaptions(designId: string, approved: boolean, commen
 
     const dueDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-    // Posting is strictly routed to the Social Media team pool.
-    // Non-team members and Faculty are strictly excluded.
+    // Posting is strictly routed to the Social Media Head and Senior Head.
+    // Committee or general student groups and Faculty are strictly excluded.
     const postingPool = resolveSocialPostingAssignees();
+    const isSingle = postingPool.length === 1;
     const postingAssignee = {
-      assignee: postingPool.map(m => m.name).join(', ') || 'Social Media Team (Unassigned)',
-      assigneeType: 'group' as const,
+      assignee: postingPool.map(m => m.name).join(', ') || 'Social Media Head',
+      assigneeType: (isSingle ? 'individual' : 'group') as 'individual' | 'group',
+      assigneeId: isSingle ? postingPool[0].id : undefined,
+      assigneeEmail: isSingle ? postingPool[0].email : undefined,
       assigneeIds: postingPool.map(m => m.id),
     };
 
@@ -6186,10 +6312,7 @@ export function completeDesignPosting(designId: string, platform: 'instagram' | 
   if (idx === -1) return null;
 
   const design = designs[idx];
-  const taskId = platform === 'instagram' ? design.postingInstagramTaskId : design.postingLinkedinTaskId;
-  if (taskId) {
-    updateTaskStatus(taskId, 'Completed', actorName);
-  }
+  const isUnified = design.postingInstagramTaskId && design.postingInstagramTaskId === design.postingLinkedinTaskId;
 
   if (platform === 'instagram') {
     design.postingInstagramDone = true;
@@ -6197,14 +6320,52 @@ export function completeDesignPosting(designId: string, platform: 'instagram' | 
     design.postingLinkedinDone = true;
   }
 
-  if (design.postingInstagramDone && design.postingLinkedinDone) {
-    design.workflowStage = 'completed';
+  if (isUnified) {
+    if (design.postingInstagramDone && design.postingLinkedinDone) {
+      design.workflowStage = 'completed';
+      if (design.postingInstagramTaskId) {
+        updateTaskStatus(design.postingInstagramTaskId, 'Completed', actorName);
+      }
+    }
+  } else {
+    const taskId = platform === 'instagram' ? design.postingInstagramTaskId : design.postingLinkedinTaskId;
+    if (taskId) {
+      updateTaskStatus(taskId, 'Completed', actorName);
+    }
+    if (design.postingInstagramDone && design.postingLinkedinDone) {
+      design.workflowStage = 'completed';
+    }
   }
 
   designs[idx] = design;
   saveDesigns(designs);
   serverPatch('/api/designs', design.id, design);
   logAuditEvent('DESIGN_POSTING_COMPLETED', actorName, `Marked ${platform === 'instagram' ? 'Instagram' : 'LinkedIn'} posting complete for design "${design.title}"`);
+  return design;
+}
+
+export function completeAllDesignPosting(designId: string, actorName: string): DesignSubmissionItem | null {
+  const designs = getDesigns();
+  const idx = designs.findIndex(d => d.id === designId);
+  if (idx === -1) return null;
+
+  const design = designs[idx];
+  design.postingInstagramDone = true;
+  design.postingLinkedinDone = true;
+  design.workflowStage = 'completed';
+
+  const taskId = design.postingInstagramTaskId || design.postingLinkedinTaskId;
+  if (taskId) {
+    updateTaskStatus(taskId, 'Completed', actorName);
+  }
+  if (design.postingLinkedinTaskId && design.postingLinkedinTaskId !== taskId) {
+    updateTaskStatus(design.postingLinkedinTaskId, 'Completed', actorName);
+  }
+
+  designs[idx] = design;
+  saveDesigns(designs);
+  serverPatch('/api/designs', design.id, design);
+  logAuditEvent('DESIGN_POSTING_COMPLETED', actorName, `Marked social media posting complete for design "${design.title}"`);
   return design;
 }
 

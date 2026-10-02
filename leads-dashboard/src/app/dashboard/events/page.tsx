@@ -42,6 +42,7 @@ import {
   getMembers,
   isFestivalEvent,
   EventItem,
+  EventCommittee,
   EventSponsor,
   Member,
 } from '@/lib/local-data';
@@ -104,6 +105,11 @@ export default function EventsPage() {
   const [formError, setFormError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Initial Committee State (optional during event creation)
+  const [initialCommitteePreset, setInitialCommitteePreset] = useState<string>('None');
+  const [initialCustomCommitteeName, setInitialCustomCommitteeName] = useState<string>('');
+  const [initialCommitteeMemberIds, setInitialCommitteeMemberIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { isDragOver: isCsvDragOver, dragHandlers: csvDragHandlers } = useDropTarget((files) => handleCsvFile(files[0]));
 
@@ -288,6 +294,9 @@ export default function EventsPage() {
     setStatus('planned');
     setSponsors([]);
     setFormError('');
+    setInitialCommitteePreset('None');
+    setInitialCustomCommitteeName('');
+    setInitialCommitteeMemberIds([]);
     setIsCreateModalOpen(true);
   };
 
@@ -370,6 +379,18 @@ export default function EventsPage() {
       }
       setEditingEvent(null);
     } else {
+      const initialCommittees: EventCommittee[] = [];
+      if (initialCommitteePreset !== 'None') {
+        const commName = initialCommitteePreset === 'Others' ? initialCustomCommitteeName.trim() : initialCommitteePreset;
+        if (commName) {
+          initialCommittees.push({
+            id: 'comm_' + Date.now(),
+            name: commName,
+            memberIds: initialCommitteeMemberIds,
+          });
+        }
+      }
+
       const newEventBase = {
         title: title.trim(),
         description: description.trim(),
@@ -382,7 +403,7 @@ export default function EventsPage() {
         status,
         sponsors: cleanedSponsors,
         createdBy: user?.name || 'User',
-        committees: []
+        committees: initialCommittees
       };
       const approval = getEventApprovalRequirement(user, 'CREATE');
       if (approval.requiresApproval) {
@@ -978,6 +999,79 @@ export default function EventsPage() {
                   className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                 />
               </div>
+
+              {!editingEvent && (
+                <div className="space-y-3 border-t border-theme-border/30 pt-3">
+                  <div className="space-y-1.5">
+                    <label className="block font-medium text-theme-text-secondary flex items-center gap-1.5">
+                      Initial Committee Unit (optional)
+                    </label>
+                    <select
+                      value={initialCommitteePreset}
+                      onChange={(e) => setInitialCommitteePreset(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent text-xs"
+                    >
+                      <option value="None">None (Create later)</option>
+                      <option value="Food">Food</option>
+                      <option value="Stage">Stage</option>
+                      <option value="Organizing">Organizing</option>
+                      <option value="Hospitality">Hospitality</option>
+                      <option value="Design">Design</option>
+                      <option value="Photography">Photography</option>
+                      <option value="Others">Others (Enter Custom Tag)</option>
+                    </select>
+                  </div>
+
+                  {initialCommitteePreset === 'Others' && (
+                    <div className="space-y-1.5 animate-in fade-in duration-150">
+                      <label className="block text-[11px] font-medium text-theme-text-secondary">Custom Committee Name / Tag *</label>
+                      <input
+                        type="text"
+                        required={initialCommitteePreset === 'Others'}
+                        value={initialCustomCommitteeName}
+                        onChange={(e) => setInitialCustomCommitteeName(e.target.value)}
+                        placeholder="e.g. Media Production, Logistics"
+                        className="w-full px-4 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent text-xs"
+                      />
+                    </div>
+                  )}
+
+                  {initialCommitteePreset !== 'None' && (
+                    <div className="space-y-1.5 animate-in fade-in duration-150">
+                      <label className="block text-[11px] font-medium text-theme-text-secondary">
+                        Assign Students to Committee ({initialCommitteeMemberIds.length} selected)
+                      </label>
+                      <div className="max-h-36 overflow-y-auto rounded-xl border border-theme-card-border divide-y divide-theme-border/20 p-1 bg-theme-background/20">
+                        {members
+                          .filter(m => m.status !== 'Terminated' && m.division !== 'Faculty')
+                          .slice()
+                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .map(student => (
+                            <label
+                              key={student.id}
+                              className="flex items-center justify-between gap-2 px-2.5 py-1.5 hover:bg-theme-border/20 cursor-pointer rounded-lg text-xs"
+                            >
+                              <span className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={initialCommitteeMemberIds.includes(student.id)}
+                                  onChange={(e) => {
+                                    setInitialCommitteeMemberIds(prev =>
+                                      e.target.checked ? [...prev, student.id] : prev.filter(id => id !== student.id)
+                                    );
+                                  }}
+                                  className="accent-accent"
+                                />
+                                <span className="font-medium text-theme-text-primary">{student.name}</span>
+                              </span>
+                              <span className="text-theme-text-secondary text-[10px]">{student.division}</span>
+                            </label>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <button
                 type="submit"

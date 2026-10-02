@@ -64,8 +64,20 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
   const [user, setUser] = useState<any>(null);
 
   // Modals & States
+  const COMMITTEE_PRESETS = [
+    'Food',
+    'Stage',
+    'Organizing',
+    'Hospitality',
+    'Design',
+    'Photography',
+    'Others',
+  ] as const;
   const [isAddCommitteeModalOpen, setIsAddCommitteeModalOpen] = useState(false);
-  const [newCommitteeName, setNewCommitteeName] = useState('');
+  const [selectedCommitteePreset, setSelectedCommitteePreset] = useState<string>('Food');
+  const [customCommitteeName, setCustomCommitteeName] = useState('');
+  const [newCommitteeMemberIds, setNewCommitteeMemberIds] = useState<string[]>([]);
+  const [newCommitteeMemberQuery, setNewCommitteeMemberQuery] = useState('');
 
   const [managingCommittee, setManagingCommittee] = useState<EventCommittee | null>(null);
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
@@ -120,19 +132,31 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
 
   const canBypassCommitteeApproval = isCommitteeApprover(user);
 
+  const openAddCommitteeModal = () => {
+    setSelectedCommitteePreset('Food');
+    setCustomCommitteeName('');
+    setNewCommitteeMemberIds([]);
+    setNewCommitteeMemberQuery('');
+    setIsAddCommitteeModalOpen(true);
+  };
+
   const handleCreateCommittee = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCommitteeName.trim() || !event) return;
+    if (!event) return;
 
-    const committeeName = newCommitteeName.trim();
+    const committeeName = selectedCommitteePreset === 'Others' ? customCommitteeName.trim() : selectedCommitteePreset;
+    if (!committeeName) return;
+
     if (canBypassCommitteeApproval) {
-      addEventCommittee(event.id, committeeName, user?.name || 'User');
-      triggerSuccess(`Created event committee "${committeeName}"`);
+      addEventCommittee(event.id, committeeName, user?.name || 'User', newCommitteeMemberIds);
+      triggerSuccess(`Created event committee "${committeeName}" with ${newCommitteeMemberIds.length} members`);
     } else {
-      submitEventCommitteeCreate(event.id, committeeName, user?.name || 'User', user?.email || '');
-      triggerSuccess(`Committee "${committeeName}" submitted for approval from the Centre Head, Advisor, or GG Campus Head of Events.`);
+      submitEventCommitteeCreate(event.id, committeeName, user?.name || 'User', user?.email || '', newCommitteeMemberIds);
+      triggerSuccess(`Committee "${committeeName}" with ${newCommitteeMemberIds.length} members submitted for approval from the Centre Head, Advisor, or GG Campus Head of Events.`);
     }
-    setNewCommitteeName('');
+    setSelectedCommitteePreset('Food');
+    setCustomCommitteeName('');
+    setNewCommitteeMemberIds([]);
     setIsAddCommitteeModalOpen(false);
     setEvent(getEventById(eventId));
   };
@@ -468,7 +492,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
             </div>
             {isLeadership && (
               <button
-                onClick={() => setIsAddCommitteeModalOpen(true)}
+                onClick={openAddCommitteeModal}
                 className="px-2.5 py-1.5 bg-accent hover:bg-primary-light text-white text-[11px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
               >
                 <Plus className="h-3.5 w-3.5" />
@@ -523,11 +547,21 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                     </div>
 
                     {isPendingCreate ? (
-                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-warning">
-                        <Clock className="h-3 w-3" />
-                        Awaiting approval from Centre Head / Advisor / GG Campus Head of Events
-                        {committee.submittedBy && (
-                          <span className="font-normal text-theme-text-secondary">&middot; Requested by {committee.submittedBy}</span>
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-warning">
+                          <Clock className="h-3 w-3" />
+                          Awaiting approval from Centre Head / Advisor / GG Campus Head of Events
+                          {committee.submittedBy && (
+                            <span className="font-normal text-theme-text-secondary">&middot; Requested by {committee.submittedBy}</span>
+                          )}
+                        </div>
+                        {committee.pendingMemberIds && committee.pendingMemberIds.length > 0 && (
+                          <div className="text-[10px] text-theme-text-secondary">
+                            Proposed students ({committee.pendingMemberIds.length}):{' '}
+                            <span className="text-theme-text-primary font-medium">
+                              {members.filter(m => committee.pendingMemberIds?.includes(m.id)).map(m => m.name).join(', ')}
+                            </span>
+                          </div>
                         )}
                       </div>
                     ) : (
@@ -726,39 +760,117 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
 
       {/* Modal 1: Add Committee to this Event */}
       {isAddCommitteeModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="glass-panel w-full max-w-md rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="glass-panel w-full max-w-lg rounded-3xl p-6 flex flex-col space-y-4 relative border border-white/15 shadow-2xl max-h-[90vh]">
             <div>
               <h2 className="text-base font-bold text-theme-text-primary">Create Event Committee Unit</h2>
-              <p className="text-xs text-theme-text-secondary mt-0.5">Define a sub-category committee specifically for {event.title}</p>
+              <p className="text-xs text-theme-text-secondary mt-0.5">Select a committee and add students for {event.title}</p>
             </div>
 
-            <form onSubmit={handleCreateCommittee} className="space-y-4 text-xs">
+            <form onSubmit={handleCreateCommittee} className="space-y-4 text-xs flex flex-col flex-1 overflow-hidden">
               <div className="space-y-1.5">
-                <label className="block font-medium text-theme-text-secondary">Committee Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={newCommitteeName}
-                  onChange={(e) => setNewCommitteeName(e.target.value)}
-                  placeholder="e.g. Stage & AV Committee, Hospitality Unit"
+                <label className="block font-medium text-theme-text-secondary">Committee Type *</label>
+                <select
+                  value={selectedCommitteePreset}
+                  onChange={(e) => setSelectedCommitteePreset(e.target.value)}
                   className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-                />
+                >
+                  {COMMITTEE_PRESETS.map((c) => (
+                    <option key={c} value={c}>
+                      {c === 'Others' ? 'Others (Enter Custom Tag)' : c}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              {selectedCommitteePreset === 'Others' && (
+                <div className="space-y-1.5 animate-in fade-in duration-150">
+                  <label className="block font-medium text-theme-text-secondary">Custom Committee Name / Tag *</label>
+                  <input
+                    type="text"
+                    required
+                    value={customCommitteeName}
+                    onChange={(e) => setCustomCommitteeName(e.target.value)}
+                    placeholder="e.g. Media Production, Security, Logistics"
+                    className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                  />
+                </div>
+              )}
+
+              {/* Student Member Multi-Select */}
+              <div className="space-y-2 flex-1 overflow-hidden flex flex-col">
+                <label className="block font-medium text-theme-text-secondary">
+                  Add Students to Committee ({newCommitteeMemberIds.length} selected)
+                </label>
+                <div className="flex items-center gap-2 px-3 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl focus-within:border-accent">
+                  <Search className="h-3.5 w-3.5 text-theme-text-secondary shrink-0" />
+                  <input
+                    type="text"
+                    value={newCommitteeMemberQuery}
+                    onChange={(e) => setNewCommitteeMemberQuery(e.target.value)}
+                    placeholder="Search by student name, division, or email..."
+                    className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-theme-text-primary placeholder-theme-text-secondary text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1 overflow-y-auto max-h-52 pr-1 divide-y divide-theme-border/20 border border-theme-border/30 rounded-xl p-2 bg-theme-background/20">
+                  {(() => {
+                    const q = newCommitteeMemberQuery.trim().toLowerCase();
+                    const filtered = members
+                      .filter(m => m.status !== 'Terminated' && m.division !== 'Faculty')
+                      .filter(m => !q ||
+                        m.name.toLowerCase().includes(q) ||
+                        m.division.toLowerCase().includes(q) ||
+                        m.email.toLowerCase().includes(q)
+                      )
+                      .slice().sort((a, b) => a.name.localeCompare(b.name));
+
+                    if (filtered.length === 0) {
+                      return <p className="py-4 text-center text-xs text-theme-text-secondary italic">No students match search.</p>;
+                    }
+
+                    return filtered.map(student => {
+                      const isSelected = newCommitteeMemberIds.includes(student.id);
+                      return (
+                        <div
+                          key={student.id}
+                          onClick={() => {
+                            setNewCommitteeMemberIds(prev =>
+                              prev.includes(student.id) ? prev.filter(id => id !== student.id) : [...prev, student.id]
+                            );
+                          }}
+                          className="flex items-center justify-between p-2 hover:bg-theme-border/10 rounded-lg cursor-pointer transition-all text-xs"
+                        >
+                          <div>
+                            <p className="font-semibold text-theme-text-primary">{student.name}</p>
+                            <p className="text-[10px] text-theme-text-secondary">{student.division} &middot; {student.email}</p>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {}}
+                            className="h-4 w-4 accent-accent cursor-pointer"
+                          />
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-theme-border/20">
                 <button
                   type="button"
                   onClick={() => setIsAddCommitteeModalOpen(false)}
-                  className="px-4 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary font-semibold rounded-xl text-xs"
+                  className="px-4 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary font-semibold rounded-xl text-xs cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl text-xs shadow-md shadow-accent/15"
+                  className="px-4 py-2 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl text-xs shadow-md shadow-accent/15 cursor-pointer"
                 >
-                  Create Committee
+                  {canBypassCommitteeApproval ? 'Create Committee' : 'Submit Committee for Approval'}
                 </button>
               </div>
             </form>
@@ -878,7 +990,18 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                 </div>
 
                 {isReviewingPendingCreate ? (
-                  <p className="text-theme-text-secondary italic">No student roster proposed yet — this only creates the committee itself.</p>
+                  proposedStudents.length > 0 ? (
+                    <div className="p-3 bg-warning/10 border border-warning/25 rounded-xl space-y-1.5">
+                      <p className="text-[10px] uppercase tracking-wide text-warning font-bold">Proposed Initial Roster ({proposedStudents.length})</p>
+                      <ul className="space-y-1">
+                        {proposedStudents.map(s => (
+                          <li key={s.id} className="text-theme-text-primary font-medium">{s.name} <span className="text-theme-text-secondary font-normal">({s.division})</span></li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : (
+                    <p className="text-theme-text-secondary italic">No student roster proposed yet — this creates the committee with an empty roster.</p>
+                  )
                 ) : (
                   <div className="p-3 bg-warning/10 border border-warning/25 rounded-xl space-y-1.5">
                     <p className="text-[10px] uppercase tracking-wide text-warning font-bold">Proposed Roster ({proposedStudents.length})</p>

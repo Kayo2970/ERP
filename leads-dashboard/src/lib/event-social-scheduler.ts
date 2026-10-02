@@ -1,6 +1,6 @@
 import { readCollection, mutateCollection } from './server-db';
 import { enqueueTaskEmailNotification } from './task-email-queue';
-import { isSocialMediaTeamMember, isFaculty } from './permissions-server';
+import { isSocialMediaTeamMember, isSocialMediaHeadOrSrHead, isFaculty } from './permissions-server';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -62,9 +62,11 @@ export async function runEventLapseSocialTasks(): Promise<{ created: number }> {
   if (toCreate.length === 0) return { created: 0 };
 
   const members = await readCollection<any>('members');
-  const activeMembers = members.filter((m: any) => m.status !== 'Terminated' && m.email);
-  // Strictly members of the student Social Media team. Professors/Faculty and non-team members excluded.
-  const pool = activeMembers.filter((m: any) => isSocialMediaTeamMember(m));
+  const activeMembers = members.filter((m: any) => m.status !== 'Terminated' && m.email && !isFaculty(m));
+  // Auto-created social media tasks go strictly to the Head and Senior Head of Social Media,
+  // never to a committee or general group of students.
+  const heads = activeMembers.filter((m: any) => isSocialMediaHeadOrSrHead(m));
+  const pool = heads.length > 0 ? heads : activeMembers.filter((m: any) => isSocialMediaTeamMember(m));
 
   let created = 0;
   await mutateCollection<any>('tasks', (current) => {
@@ -73,13 +75,16 @@ export async function runEventLapseSocialTasks(): Promise<{ created: number }> {
       const id = `task_event_social_${e.id}`;
       if (next.some((t: any) => t.id === id)) continue;
       const eventEnd = e.endDate || e.startDate;
+      const isSingle = pool.length === 1;
       next.unshift({
         id,
         title: `Social media posts required for "${e.title}" (event concluded ${eventEnd})`,
         event: e.title,
         eventId: e.id,
-        assignee: pool.map((m: any) => m.name).join(', ') || 'Social Media Team (Unassigned)',
-        assigneeType: 'group',
+        assignee: pool.map((m: any) => m.name).join(', ') || 'Social Media Head',
+        assigneeType: isSingle ? 'individual' : 'group',
+        assigneeId: isSingle ? pool[0].id : undefined,
+        assigneeEmail: isSingle ? pool[0].email : undefined,
         assigneeIds: pool.map((m: any) => m.id),
         dueDate: today,
         status: 'Assigned',
@@ -92,19 +97,14 @@ export async function runEventLapseSocialTasks(): Promise<{ created: number }> {
         // task (no sourceTaskId), leaving it orphaned and never
         // auto-completed by the resulting design's approval.
         taskCategory: 'design',
-        briefDescription: `Create and post recap/highlight content for "${e.title}" on social media. Submit the design asset here once ready.`,
+        briefDescription: `Allot this task to a social media team member or take it up yourself to create and post recap/highlight content for "${e.title}". Submit the design asset here once ready.`,
       });
       created++;
     }
     return next;
   });
 
-  // This scheduler writes straight to the tasks collection via
-  // mutateCollection — unlike a task created through POST /api/tasks (the
-  // normal Tasks page flow), which enqueues the debounced assignment email
-  // itself, so that never happens here on its own. Enqueue it explicitly
-  // for every pool member on every newly-created event-lapse task, same as
-  // a manually-assigned task would get.
+  // Only notify the heads, never the general student body or whole committee
   for (const e of toCreate) {
     const eventEnd = e.endDate || e.startDate;
     for (const member of pool) {

@@ -740,7 +740,7 @@ export default function DesignPortalPage() {
     setSubmitError('');
     setTitle(task.title.replace(/^\[.*?\]\s*/, ''));
     setDescription(task.briefDescription || '');
-    setCategory('Poster');
+    setCategory(task.designCategory || (task.isSocialMediaPost ? 'Social Media' : 'Poster'));
     setEventId(task.eventId || '');
     setSourceTaskId(task.id);
     setFile(null);

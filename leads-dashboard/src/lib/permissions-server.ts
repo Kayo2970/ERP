@@ -180,7 +180,7 @@ export function isDesignHead(user: ServerUser, settings: AccessLevelSettings): b
   if (isCentreHead(user, settings)) return true; // Super User, Centre Head, and Advisor all have design review authority
   const role = (user.role || '').toLowerCase();
   const dept = (user.department || '').toLowerCase();
-  const isDesign = role.includes('design') || dept.includes('design');
+  const isDesign = role.includes('design') || dept.includes('design') || role.includes('social media') || dept.includes('social media');
   return isHeadRole(user, settings) && isDesign;
 }
 
@@ -357,6 +357,7 @@ export function canAccessGroupPoliciesServer(user: ServerUser, settings: AccessL
 
 export type ServerTask = {
   id?: string;
+  title?: string;
   assigneeType?: string;
   assignee?: string;
   assigneeEmail?: string;
@@ -369,6 +370,10 @@ export type ServerTask = {
   approverType?: string;
   approverMemberId?: string;
   submittedByEmail?: string;
+  workflowType?: string;
+  taskCategory?: string;
+  isSocialMediaPost?: boolean;
+  platform?: string;
 } | null | undefined;
 
 export type ServerEvent = {
@@ -472,6 +477,7 @@ export async function canChangeTaskStatus(task: ServerTask, user: ServerUser, se
   if (user.tier === 1) return true;
   if (isCentreHead(user, settings)) return true;
   if (isHeadOfEvents(user) || isEventsHeadGgCampus(user) || isEventsHeadRtcCampus(user)) return true;
+  if (isSocialMediaPostTask(task) && isSocialMediaHeadOrSrHead(user)) return true;
   return isTaskAssignee(task, user);
 }
 
@@ -577,6 +583,30 @@ export function isSocialMediaTeamMember(member: { division?: string; department?
     comm.includes('social media') ||
     role.includes('social media')
   );
+}
+
+/** Check if a member is the Head or Senior Head of Social Media. */
+export function isSocialMediaHeadOrSrHead(member: { division?: string; department?: string; committee?: string; role?: string; status?: string } | null | undefined): boolean {
+  if (!member || isFaculty(member as ServerUser) || member.status === 'Terminated') return false;
+  if (!isSocialMediaTeamMember(member)) return false;
+  const role = (member.role || '').toLowerCase();
+  return role.includes('head') || role.includes('lead');
+}
+
+/** Check if a member is the Head of Social Media (non-senior). */
+export function isSocialMediaHead(member: { division?: string; department?: string; committee?: string; role?: string; status?: string } | null | undefined): boolean {
+  if (!member || isFaculty(member as ServerUser) || member.status === 'Terminated') return false;
+  if (!isSocialMediaTeamMember(member)) return false;
+  const role = (member.role || '').toLowerCase();
+  return (role.includes('head') || role.includes('lead')) && !role.includes('senior') && !role.includes('sr');
+}
+
+/** Check if a member is the Senior Head of Social Media. */
+export function isSocialMediaSrHead(member: { division?: string; department?: string; committee?: string; role?: string; status?: string } | null | undefined): boolean {
+  if (!member || isFaculty(member as ServerUser) || member.status === 'Terminated') return false;
+  if (!isSocialMediaTeamMember(member)) return false;
+  const role = (member.role || '').toLowerCase();
+  return (role.includes('head') || role.includes('lead')) && (role.includes('senior') || role.includes('sr.') || role.includes('sr '));
 }
 
 /** Check if a task is a social media posting/design deliverable task. */

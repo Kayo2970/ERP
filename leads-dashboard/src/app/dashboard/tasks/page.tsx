@@ -56,6 +56,7 @@ import {
   submitDesignCaptions,
   reviewDesignCaptions,
   completeDesignPosting,
+  completeAllDesignPosting,
   updateApprovedCaption,
   isTaskAssignee,
   hasAcknowledgedTask,
@@ -68,7 +69,10 @@ import {
   Member,
   ReceiptFile,
   DesignSubmissionItem,
-  authHeaders
+  authHeaders,
+  allotSocialMediaTask,
+  isSocialMediaHeadOrSrHead,
+  isSocialMediaPostTask
 } from '@/lib/local-data';
 import { canViewTaskExtended, canManageTasks, canCreateTask, canEditTask, canDeleteTask, canRequestTaskExtension, canDecideTaskExtension, canChangeTaskStatus, isHeadRole, getTaskApprovalRequirement, canApprovePendingTask, canRespondToHolidayApproval, canDelegateAutoTask, canViewTaskDelegationTrail, canViewAllDesigns, canSendTaskAllotmentEmail } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
@@ -77,6 +81,8 @@ import { RequestApprovalModal } from '@/components/request-approval-modal';
 import { DelegateTaskModal } from '@/components/delegate-task-modal';
 import { FileDropzone, FilePreviewRow } from '@/components/ui/file-dropzone';
 import { SearchableSelect } from '@/components/searchable-select';
+
+const COMMITTEE_PRESETS = ['Food', 'Stage', 'Organizing', 'Hospitality', 'Design', 'Photography', 'Others'] as const;
 
 interface DesignTimelineStep {
   key: string;
@@ -96,6 +102,39 @@ interface DesignTimelineStep {
  * whatever has happened so far.
  */
 function getDesignTimelineSteps(design: DesignSubmissionItem, tasks: TaskItem[]): DesignTimelineStep[] {
+  if (design.category !== 'Social Media') {
+    const stageTask = design.linkedTaskId ? tasks.find(t => t.id === design.linkedTaskId) : undefined;
+    return [{
+      key: 'approved',
+      label: 'Design Deliverable',
+      status: stageTask?.status || 'Not Started',
+      assignee: stageTask?.assignee,
+      dueDate: stageTask?.dueDate,
+    }];
+  }
+
+  const isUnified = design.postingInstagramTaskId && design.postingInstagramTaskId === design.postingLinkedinTaskId;
+  if (isUnified) {
+    const approvedTask = design.linkedTaskId ? tasks.find(t => t.id === design.linkedTaskId) : undefined;
+    const postTask = tasks.find(t => t.id === design.postingInstagramTaskId);
+    return [
+      {
+        key: 'approved',
+        label: 'Design Approved',
+        status: approvedTask?.status || 'Not Started',
+        assignee: approvedTask?.assignee,
+        dueDate: approvedTask?.dueDate,
+      },
+      {
+        key: 'social_post',
+        label: 'Caption Writing & Posting',
+        status: postTask?.status || 'Not Started',
+        assignee: postTask?.assignee,
+        dueDate: postTask?.dueDate,
+      },
+    ];
+  }
+
   const stageDefs: { key: string; label: string; taskId?: string }[] = [
     { key: 'approved', label: 'Design Approved', taskId: design.linkedTaskId },
     { key: 'caption_draft', label: 'Draft Captions', taskId: design.captionTaskId },
@@ -162,6 +201,8 @@ export default function TasksPage() {
   // eventCommitteeId that rating propagation can actually resolve.
   const [selectedCommitteeId, setSelectedCommitteeId] = useState('');
   const [isCreatingCommittee, setIsCreatingCommittee] = useState(false);
+  const [selectedCommitteePreset, setSelectedCommitteePreset] = useState<string>('Food');
+  const [customCommitteeName, setCustomCommitteeName] = useState<string>('');
   const [newCommitteeName, setNewCommitteeName] = useState('');
   const [newCommitteeMemberIds, setNewCommitteeMemberIds] = useState<string[]>([]);
   // Ad-hoc "group" assignment — a task delegated to several individually
@@ -177,6 +218,7 @@ export default function TasksPage() {
   // reference files and write out exactly what they want from the deliverable,
   // instead of a title alone.
   const [taskCategory, setTaskCategory] = useState<'general' | 'design' | 'reportWriting'>('general');
+  const [designCategory, setDesignCategory] = useState<DesignSubmissionItem['category']>('Poster');
   const [briefDescription, setBriefDescription] = useState('');
   // Optional reference link to an editable Canva file/template — shown to
   // the designer picking this brief up from the Design Portal's "Design
@@ -372,9 +414,19 @@ export default function TasksPage() {
     }
   };
 
-  const openCaptionEdit = (task: TaskItem, currentCaption: string) => {
-    setCaptionEditTaskId(task.id);
+  const openCaptionEdit = (task: TaskItem, currentCaption: string, platform: 'instagram' | 'linkedin' = 'instagram', editKey?: string) => {
+    setCaptionEditTaskId(editKey || task.id);
     setCaptionEditText(currentCaption);
+  };
+
+  const handleCompleteAllPosting = (task: TaskItem) => {
+    if (!user || !task.designId) return;
+    const updated = completeAllDesignPosting(task.designId, user.name);
+    if (updated) {
+      setDesigns(getDesigns());
+      setTasks(getTasks());
+      triggerSuccess('Marked social media posting complete for all platforms.');
+    }
   };
 
   const handleSaveCaptionEdit = (e: React.FormEvent, task: TaskItem, platform: 'instagram' | 'linkedin') => {
@@ -395,6 +447,8 @@ export default function TasksPage() {
     if (members.length > 0) setSelectedAssigneeId(members[0].id);
     setSelectedCommitteeId('');
     setIsCreatingCommittee(false);
+    setSelectedCommitteePreset('Food');
+    setCustomCommitteeName('');
     setNewCommitteeName('');
     setNewCommitteeMemberIds([]);
     setSelectedGroupMemberIds([]);
@@ -405,6 +459,7 @@ export default function TasksPage() {
     setIsAssigneeDropdownOpen(false);
     setFormError('');
     setTaskCategory('general');
+    setDesignCategory('Poster');
     setBriefDescription('');
     setCanvaLink('');
     setAttachedFiles([]);
@@ -418,6 +473,8 @@ export default function TasksPage() {
     setSelectedEventId(task.eventId || 'standalone');
     setAssigneeType(task.assigneeType);
     setIsCreatingCommittee(false);
+    setSelectedCommitteePreset('Food');
+    setCustomCommitteeName('');
     setNewCommitteeName('');
     setNewCommitteeMemberIds([]);
     if (task.assigneeType === 'individual') {
@@ -436,6 +493,7 @@ export default function TasksPage() {
     setIsAssigneeDropdownOpen(false);
     setFormError('');
     setTaskCategory(task.taskCategory || 'general');
+    setDesignCategory(task.designCategory || (task.isSocialMediaPost ? 'Social Media' : 'Poster'));
     setBriefDescription(task.briefDescription || '');
     setCanvaLink(task.canvaLink || '');
     setAttachedFiles([]);
@@ -542,11 +600,12 @@ export default function TasksPage() {
       }
 
       if (isCreatingCommittee) {
-        if (!newCommitteeName.trim()) {
-          setFormError('Enter a name for the new committee.');
+        const commName = (selectedCommitteePreset === 'Others' ? customCommitteeName.trim() : selectedCommitteePreset) || newCommitteeName.trim();
+        if (!commName) {
+          setFormError('Select or enter a name for the new committee.');
           return;
         }
-        const created = addEventCommittee(eventIdVal, newCommitteeName.trim(), user?.name || 'User');
+        const created = addEventCommittee(eventIdVal, commName, user?.name || 'User', newCommitteeMemberIds);
         if (!created) {
           setFormError('Could not create the committee. Please try again.');
           return;
@@ -556,9 +615,6 @@ export default function TasksPage() {
         // committee if this event already has one with the same name,
         // corrupting which members this task and its ratings attach to.
         const createdCommittee = created.committee;
-        if (newCommitteeMemberIds.length > 0) {
-          updateEventCommitteeMembers(eventIdVal, createdCommittee.id, newCommitteeMemberIds, user?.name || 'User');
-        }
         committeeIdVal = createdCommittee.id;
         committeeNameVal = createdCommittee.name;
       } else {
@@ -596,6 +652,8 @@ export default function TasksPage() {
         dueDate,
         status,
         taskCategory,
+        designCategory: taskCategory === 'design' ? designCategory : undefined,
+        isSocialMediaPost: (taskCategory === 'design' && designCategory === 'Social Media') || editingTask.isSocialMediaPost,
         briefDescription: taskCategory === 'design' ? briefDescription.trim() : undefined,
         canvaLink: taskCategory === 'design' ? (canvaLink.trim() || undefined) : undefined,
         attachments: taskCategory === 'design' ? finalAttachments : undefined,
@@ -630,6 +688,8 @@ export default function TasksPage() {
         status,
         creatorName: user?.name || 'User',
         taskCategory,
+        designCategory: taskCategory === 'design' ? designCategory : undefined,
+        isSocialMediaPost: taskCategory === 'design' && designCategory === 'Social Media' ? true : undefined,
         briefDescription: taskCategory === 'design' ? briefDescription.trim() : undefined,
         canvaLink: taskCategory === 'design' ? (canvaLink.trim() || undefined) : undefined,
         attachments: taskCategory === 'design' ? finalAttachments : undefined,
@@ -1229,7 +1289,7 @@ export default function TasksPage() {
                   )}
                   {task.workflowType === 'design_social_posting' && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-success/15 border border-success/30 text-success text-[10px] font-bold rounded-full">
-                      <Megaphone className="h-3 w-3" /> Post {task.platform === 'linkedin' ? 'LinkedIn' : 'Instagram'} Caption
+                      <Megaphone className="h-3 w-3" /> {task.platform ? `Post ${task.platform === 'linkedin' ? 'LinkedIn' : 'Instagram'} Caption` : 'Social Media Post & Caption'}
                     </span>
                   )}
                   {task.taskCategory === 'design' && (() => {
@@ -1243,7 +1303,7 @@ export default function TasksPage() {
                     const statusLabel = isApproved ? 'Approved' : hasChanges ? 'Changes Requested' : (linkedDesign?.styleStatus === 'Style Approved' ? 'Style Approved' : 'In Review');
                     return (
                       <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-accent/15 border border-accent/30 text-accent text-[10px] font-bold rounded-full">
-                        <Palette className="h-3 w-3" /> Design Task
+                        <Palette className="h-3 w-3" /> {task.designCategory ? `${task.designCategory} Design` : 'Design Task'}
                         {linkedDesign ? (
                           <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-medium ${
                             isApproved ? 'bg-success/20 text-success' :
@@ -1642,7 +1702,7 @@ export default function TasksPage() {
                   }
 
                   if (task.workflowType === 'design_caption_review' && task.status !== 'Completed') {
-                    const canReview = design.assignedProofreaderEmail === user?.email || canViewAllDesigns(user);
+                    const canReview = design.assignedProofreaderEmail === user?.email || canViewAllDesigns(user) || isSocialMediaHeadOrSrHead(user);
                     return (
                       <div className="p-3 bg-theme-background/30 border border-theme-border/30 rounded-xl space-y-2">
                         <div className="text-[11px] space-y-1.5">
@@ -1703,10 +1763,151 @@ export default function TasksPage() {
                   }
 
                   if (task.workflowType === 'design_social_posting' && task.status !== 'Completed') {
+                    const isUnified = !task.platform || (design.postingInstagramTaskId === design.postingLinkedinTaskId);
+                    const canEditCaption = isTaskAssignee(task, user) || isSocialMediaHeadOrSrHead(user);
+
+                    if (isUnified) {
+                      const instaCaption = design.draftInstagramCaption || design.approvedInstagramCaption || '';
+                      const linkedinCaption = design.draftLinkedinCaption || design.approvedLinkedinCaption || '';
+                      return (
+                        <div className="p-3 bg-theme-background/30 border border-theme-border/30 rounded-xl space-y-3">
+                          <div className="text-[11px] font-bold text-accent uppercase tracking-wider flex items-center gap-1.5">
+                            <Megaphone className="h-3.5 w-3.5" /> Social Media Post (Captions &amp; Posting)
+                          </div>
+
+                          {/* Instagram Section */}
+                          <div className="p-2.5 bg-theme-background/40 border border-theme-border/30 rounded-lg space-y-1.5">
+                            <div className="flex items-center justify-between text-xs font-semibold text-theme-text-primary">
+                              <span>📸 Instagram</span>
+                              {design.postingInstagramDone ? (
+                                <span className="text-success flex items-center gap-1 text-[11px]"><CheckCircle2 className="h-3 w-3" /> Posted</span>
+                              ) : (
+                                <span className="text-warning text-[10px]">Pending Post</span>
+                              )}
+                            </div>
+                            {captionEditTaskId === `${task.id}-insta` ? (
+                              <form onSubmit={(e) => handleSaveCaptionEdit(e, task, 'instagram')} className="space-y-1.5">
+                                <textarea
+                                  rows={2}
+                                  required
+                                  autoFocus
+                                  value={captionEditText}
+                                  onChange={e => setCaptionEditText(e.target.value)}
+                                  placeholder="Write or edit Instagram caption..."
+                                  className="w-full bg-theme-background border border-theme-border rounded-lg px-2.5 py-1.5 text-[11px] focus:outline-none focus:border-accent"
+                                />
+                                <div className="flex items-center gap-1.5">
+                                  <button type="submit" className="px-2 py-0.5 bg-accent hover:bg-primary-light text-white font-semibold rounded text-[10px] cursor-pointer">
+                                    Save
+                                  </button>
+                                  <button type="button" onClick={() => setCaptionEditTaskId(null)} className="px-2 py-0.5 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary rounded text-[10px] cursor-pointer">
+                                    Cancel
+                                  </button>
+                                </div>
+                              </form>
+                            ) : (
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="text-[11px] text-theme-text-secondary whitespace-pre-wrap flex-1">
+                                  {instaCaption || <span className="italic text-theme-text-secondary/70">No Instagram caption written yet.</span>}
+                                </p>
+                                {canEditCaption && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openCaptionEdit(task, instaCaption, 'instagram', `${task.id}-insta`)}
+                                    className="px-1.5 py-0.5 bg-accent/10 hover:bg-accent/20 border border-accent/25 text-accent text-[10px] font-medium rounded transition-all cursor-pointer shrink-0"
+                                  >
+                                    <Edit2 className="h-2.5 w-2.5 inline mr-1" />
+                                    {instaCaption ? 'Edit' : 'Write'}
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                            {!design.postingInstagramDone && (
+                              <button
+                                type="button"
+                                onClick={() => handleCompleteCaptionPosting(task, 'instagram')}
+                                className="w-full mt-1 px-2.5 py-1 bg-success hover:bg-success/90 text-white font-semibold rounded-lg transition-all text-[11px] flex items-center justify-center gap-1.5 cursor-pointer"
+                              >
+                                <CheckCircle2 className="h-3 w-3" /> Mark Posted on Instagram
+                              </button>
+                            )}
+                          </div>
+
+                          {/* LinkedIn Section */}
+                          <div className="p-2.5 bg-theme-background/40 border border-theme-border/30 rounded-lg space-y-1.5">
+                            <div className="flex items-center justify-between text-xs font-semibold text-theme-text-primary">
+                              <span>💼 LinkedIn</span>
+                              {design.postingLinkedinDone ? (
+                                <span className="text-success flex items-center gap-1 text-[11px]"><CheckCircle2 className="h-3 w-3" /> Posted</span>
+                              ) : (
+                                <span className="text-warning text-[10px]">Pending Post</span>
+                              )}
+                            </div>
+                            {captionEditTaskId === `${task.id}-linkedin` ? (
+                              <form onSubmit={(e) => handleSaveCaptionEdit(e, task, 'linkedin')} className="space-y-1.5">
+                                <textarea
+                                  rows={2}
+                                  required
+                                  autoFocus
+                                  value={captionEditText}
+                                  onChange={e => setCaptionEditText(e.target.value)}
+                                  placeholder="Write or edit LinkedIn caption..."
+                                  className="w-full bg-theme-background border border-theme-border rounded-lg px-2.5 py-1.5 text-[11px] focus:outline-none focus:border-accent"
+                                />
+                                <div className="flex items-center gap-1.5">
+                                  <button type="submit" className="px-2 py-0.5 bg-accent hover:bg-primary-light text-white font-semibold rounded text-[10px] cursor-pointer">
+                                    Save
+                                  </button>
+                                  <button type="button" onClick={() => setCaptionEditTaskId(null)} className="px-2 py-0.5 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary rounded text-[10px] cursor-pointer">
+                                    Cancel
+                                  </button>
+                                </div>
+                              </form>
+                            ) : (
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="text-[11px] text-theme-text-secondary whitespace-pre-wrap flex-1">
+                                  {linkedinCaption || <span className="italic text-theme-text-secondary/70">No LinkedIn caption written yet.</span>}
+                                </p>
+                                {canEditCaption && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openCaptionEdit(task, linkedinCaption || instaCaption, 'linkedin', `${task.id}-linkedin`)}
+                                    className="px-1.5 py-0.5 bg-accent/10 hover:bg-accent/20 border border-accent/25 text-accent text-[10px] font-medium rounded transition-all cursor-pointer shrink-0"
+                                  >
+                                    <Edit2 className="h-2.5 w-2.5 inline mr-1" />
+                                    {linkedinCaption ? 'Edit' : 'Write'}
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                            {!design.postingLinkedinDone && (
+                              <button
+                                type="button"
+                                onClick={() => handleCompleteCaptionPosting(task, 'linkedin')}
+                                className="w-full mt-1 px-2.5 py-1 bg-success hover:bg-success/90 text-white font-semibold rounded-lg transition-all text-[11px] flex items-center justify-center gap-1.5 cursor-pointer"
+                              >
+                                <CheckCircle2 className="h-3 w-3" /> Mark Posted on LinkedIn
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Quick Full Completion */}
+                          {(!design.postingInstagramDone || !design.postingLinkedinDone) && (
+                            <button
+                              type="button"
+                              onClick={() => handleCompleteAllPosting(task)}
+                              className="w-full px-2.5 py-1.5 bg-accent hover:bg-primary-light text-white font-semibold rounded-lg transition-all text-[11px] flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-accent/15"
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5" /> Mark All Platforms Posted &amp; Complete Task
+                            </button>
+                          )}
+                        </div>
+                      );
+                    }
+
                     const platform = task.platform || 'instagram';
                     const caption = platform === 'linkedin' ? (design.approvedLinkedinCaption || design.approvedInstagramCaption) : design.approvedInstagramCaption;
                     const done = platform === 'linkedin' ? design.postingLinkedinDone : design.postingInstagramDone;
-                    const canEditCaption = isTaskAssignee(task, user);
                     return (
                       <div className="p-3 bg-theme-background/30 border border-theme-border/30 rounded-xl space-y-2">
                         {captionEditTaskId === task.id ? (
@@ -1734,7 +1935,7 @@ export default function TasksPage() {
                             {canEditCaption && (
                               <button
                                 type="button"
-                                onClick={() => openCaptionEdit(task, caption || '')}
+                                onClick={() => openCaptionEdit(task, caption || '', platform)}
                                 className="inline-flex items-center gap-1 px-2 py-1 bg-accent/10 hover:bg-accent/20 border border-accent/25 text-accent text-[10px] font-medium rounded-lg transition-all cursor-pointer"
                               >
                                 <Edit2 className="h-3 w-3" /> Change &amp; Resubmit Caption
@@ -1869,6 +2070,29 @@ export default function TasksPage() {
                     ) : (
                       <span className="text-[11px] text-theme-text-secondary italic">Awaiting Centre Head / Events Head decision</span>
                     )
+                  ) : ((task.workflowType === 'event_social_post' || task.workflowType === 'holiday_design_social') && task.status === 'Assigned' && user && isSocialMediaHeadOrSrHead(user) && (task.assigneeType === 'group' || !task.allottedBy)) ? (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        onClick={() => setDelegatingTask(task)}
+                        className="flex items-center gap-1 px-2.5 py-1 bg-accent hover:bg-primary-light text-white font-semibold rounded-lg transition-all text-[11px] cursor-pointer"
+                        title="Allot to a member of the Social Media team"
+                      >
+                        <UserPlus className="h-3 w-3" /> Allot Task
+                      </button>
+                      <button
+                        onClick={() => {
+                          const res = allotSocialMediaTask(task.id, { id: user.id, name: user.name, email: user.email }, user.name, user.email);
+                          if (res) {
+                            setTasks(getTasks());
+                            triggerSuccess('You have taken up this social media task!');
+                          }
+                        }}
+                        className="flex items-center gap-1 px-2.5 py-1 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary font-semibold rounded-lg transition-all text-[11px] cursor-pointer"
+                        title="Take this task up yourself"
+                      >
+                        <UserCheck className="h-3 w-3" /> Take It Up Myself
+                      </button>
+                    </div>
                   ) : task.status === 'Assigned' && (
                     // Acknowledgment is deliberately gated on isTaskAssignee
                     // alone, not canChangeTaskStatus — only the specific
@@ -2114,6 +2338,33 @@ export default function TasksPage() {
 
               {taskCategory === 'design' && (
                 <div className="space-y-3 p-3 bg-accent/5 border border-accent/20 rounded-xl">
+                  <div className="space-y-1.5">
+                    <label className="block font-medium text-theme-text-secondary">
+                      Design Category / Type *
+                    </label>
+                    <select
+                      value={designCategory}
+                      onChange={(e) => {
+                        const cat = e.target.value as DesignSubmissionItem['category'];
+                        setDesignCategory(cat);
+                      }}
+                      className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent text-xs"
+                    >
+                      <option value="Poster">Poster</option>
+                      <option value="Postage">Postage</option>
+                      <option value="Banner">Banner</option>
+                      <option value="Social Media">Social Media</option>
+                      <option value="Brochure">Brochure</option>
+                      <option value="Certificates">Certificates</option>
+                      <option value="Other">Other</option>
+                    </select>
+                    <p className="text-[11px] text-theme-text-secondary">
+                      {designCategory === 'Social Media'
+                        ? '✨ Social Media posts will automatically generate a single unified Caption & Posting task for the Social Media Head upon design approval.'
+                        : 'ℹ️ Other design types complete once approved — no social media captioning or posting tasks will be generated.'}
+                    </p>
+                  </div>
+
                   <div className="space-y-1.5">
                     <label className="block font-medium text-theme-text-secondary">
                       Design Brief — what do you want from this project? *
@@ -2365,14 +2616,33 @@ export default function TasksPage() {
                         </div>
 
                         {isCreatingCommittee ? (
-                          <div className="space-y-2 p-3 bg-theme-background/30 border border-theme-card-border rounded-xl">
-                            <input
-                              type="text"
-                              value={newCommitteeName}
-                              onChange={(e) => setNewCommitteeName(e.target.value)}
-                              placeholder="New committee name, e.g. Stage & Decor"
-                              className="w-full px-3 py-2 bg-background border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent"
-                            />
+                          <div className="space-y-3 p-3 bg-theme-background/30 border border-theme-card-border rounded-xl">
+                            <div className="space-y-1.5">
+                              <label className="block font-medium text-theme-text-secondary">Committee Type *</label>
+                              <select
+                                value={selectedCommitteePreset}
+                                onChange={(e) => setSelectedCommitteePreset(e.target.value)}
+                                className="w-full px-3 py-2 bg-background border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent text-xs"
+                              >
+                                {COMMITTEE_PRESETS.map(preset => (
+                                  <option key={preset} value={preset}>{preset}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {selectedCommitteePreset === 'Others' && (
+                              <div className="space-y-1.5">
+                                <label className="block font-medium text-theme-text-secondary">Custom Committee Name / Tag *</label>
+                                <input
+                                  type="text"
+                                  value={customCommitteeName}
+                                  onChange={(e) => setCustomCommitteeName(e.target.value)}
+                                  placeholder="e.g. Logistics & Transport"
+                                  className="w-full px-3 py-2 bg-background border border-theme-card-border rounded-lg text-theme-text-primary focus:outline-none focus:border-accent text-xs"
+                                />
+                              </div>
+                            )}
+
                             <p className="font-medium text-theme-text-secondary">
                               Add Students ({newCommitteeMemberIds.length} selected)
                             </p>
@@ -2535,7 +2805,8 @@ export default function TasksPage() {
           currentUser={user}
           onDelegated={() => {
             setTasks(getTasks());
-            triggerSuccess('Delegation submitted — awaiting Centre Head / GG Campus Events Head approval.');
+            const isSocial = delegatingTask && isSocialMediaPostTask(delegatingTask) && isSocialMediaHeadOrSrHead(user);
+            triggerSuccess(isSocial ? 'Task allotted successfully!' : 'Delegation submitted — awaiting Centre Head / GG Campus Events Head approval.');
           }}
         />
       )}
