@@ -532,55 +532,102 @@ The executive landing page upon signing in:
 ---
 
 ### 3.2 Events Management
-Events are the central operational unit in LEADS ERP.
+The **Events Management** module (`/dashboard/events`) is the operational engine of the LEADS ERP. It coordinates the complete lifecycle of university hackathons, conferences, technical symposiums, and cultural festivals from initial ideation to post-event reporting.
 
-#### Creating an Event:
-1. Navigate to **Events** from the sidebar.
-2. Click **+ Create Event**.
-3. Fill in the event details:
-   - **Title**, **Event Code** (e.g., `TECHFEST-2026`).
-   - **Date & Time Range**, **Venue / Campus** (Ramaiah Technology Campus or Gnanagangothri).
-   - **Estimated Budget** & **Target Attendance**.
-4. Attach **Sub-Committees**:
-   - Add specialized committees: Stage Management, Logistics, Hospitality, Social Media, Registration.
-   - Assign a **Lead Member** and assign committee members.
-5. Click **Submit Proposal**.
-6. The event enters **Proposal / Pending Approval** status until approved by a Tier 2/3 Faculty Head.
+> **Access Permissions & Scoping:**
+> - **Proposal & Setup:** Tier 1 (Super User), Tier 2 (Centre Head), Tier 3 (Department Heads), and Tier 5 (Core Committee Leads).
+> - **Executive Approval:** Tier 2 (Centre Head) and Tier 2.5 / Tier 3 (Faculty Event Heads).
+> - **Student Visibility:** Tier 6 (Training Associates) view events they are appointed to.
 
-#### Managing Active Events:
-- **Status Progression**: `Draft` → `Pending Approval` → `Approved / Active` → `Completed` → `Archived`.
-- From the event detail modal, organizers can trigger linked tasks, monitor pass distribution, generate event reports, and view financial balance sheets.
+![Events Management Main View](screenshots/steps/02_events_management/01_events_main_view.png)
+*Figure 3.2.1: Events directory showing active event cards, campus filters, budget utilization bars, and status pills.*
 
-![Live Events Management Screenshot](screenshots/03_events_management.png)
-*Figure 3.2: Live Events Management directory.*
+#### 1. Event Status Lifecycle
+Events transition through five strictly enforced operational states:
+```
+[Draft] ──► [Pending Approval] ──► [Approved / Active] ──► [Completed] ──► [Archived]
+                 │                           │
+                 └──► Rejected (Returned)    └──► Cancelled
+```
 
 ---
+
+#### Step 1: Creating an Event Proposal
+1. Navigate to **Events** from the sidebar.
+2. Click the **+ Create Event** button in the top toolbar.
+3. The **Create New Event** modal opens.
+4. Fill in the event configuration according to the table below.
+
+#### Input Field Reference ("What Information Goes Where")
+| Field Label | Input Type | Where to Enter | Allowed Format / Values | Description & System Behavior |
+|---|---|---|---|---|
+| **Event Title \*** | Text Input | First input box | Full title (e.g. `National Youth Tech Conclave 2026`) | Official institutional event name. Appears on delegate badges, public registrations, and financial vouchers. |
+| **Event Code \*** | Text Input | Second input box | Unique alphanumeric string (e.g. `TECHCON-2026`) | Internal ledger prefix used to tag procurement claims, passes, and task queues. |
+| **Campus / Venue \*** | Select Dropdown | Left column dropdown | `Ramaiah Technology Centre (RTC)`, `Gnanagangothri Campus (GG)`, `Virtual / Online` | Sets geographic venue and automatically assigns campus jurisdiction to the relevant Faculty Head. |
+| **Start & End Dates \*** | Date & Time Pickers | Middle row | Valid future date range | Defines active operational window. Automatically synchronizes with Master Calendar and Festival timetable. |
+| **Estimated Budget \*** | Currency Input | Right column | Integer INR (e.g. `₹1,50,000`) | Proposed financial allocation. Subject to Gate-1 faculty review and Centre Head clearance. |
+| **Target Capacity** | Number Input | Bottom row | Integer (e.g. `500`) | Maximum delegate capacity. Used by Event Passes studio to prevent over-subscription. |
+
+![Create Event Modal Filled](screenshots/steps/02_events_management/02_create_event_modal_filled.png)
+*Figure 3.2.2: Event proposal creation modal with campus venue, dates, budget estimates, and sub-committee allocation.*
+
+---
+
+#### Step 2: Sub-Committee Appointments & Leadership Delegation
+A major strength of LEADS ERP is its built-in sub-committee governance. Rather than leaving tasks unassigned, organizers attach dedicated functional committees:
+1. In the Event modal or detail view, click **+ Add Sub-Committee**.
+2. Select the sub-committee category:
+   - **Stage & AV Production:** Manages lighting, sound consoles, LED backdrops, and podium setup.
+   - **Logistics & Procurement:** Handles equipment sourcing, transport, venue seating, and supplies.
+   - **Hospitality & Protocol:** Dignitary escort, VIP green room management, catering, and guest kits.
+   - **Media, Design & Social:** Promotional posters, live streaming, photography, and press releases.
+   - **Registration & Badging:** Gate check-in kiosk operation, QR code scanning, and spot registrations.
+3. Appoint a **Student Committee Lead** from the Core Committee roster.
+4. Add committee volunteer members.
+
+![Event Detail Committees](screenshots/steps/02_events_management/03_event_detail_committees.png)
+*Figure 3.2.3: Event detail dossier displaying assigned sub-committees, lead student officers, task progress, and live attendance.*
 
 ### 3.3 Event Passes & Live Scanner Kiosk
-The Event Passes module provides a digital ticketing and attendance management suite.
+The **Event Passes** module (`/dashboard/event-passes`) provides digital ticketing, badge printing, and live gate access control.
 
-#### Designing & Generating Passes:
-1. Open **Event Passes** from the sidebar.
-2. Select the target event.
-3. Click **+ Issue Pass** (or **Bulk Generate Passes**).
-4. Configure attendee information:
-   - Attendee Name, Email, Organization/College, Pass Category (VIP, Speaker, Delegate, General Attendee).
-5. The system generates a cryptographically unique serial number (e.g., `LEADS-EVT-2026-0812`) and embedded QR/Barcode payload.
-6. Click **Send Pass by Email** to dispatch the pass directly to the attendee's inbox with attached pass images and wallet links.
+> **Access Permissions & Scoping:**
+> - **Badge Generation & Pass Studio:** Tier 1 (Super User), Tier 3 (Event Head), and Tier 5 (Core Committee Leads).
+> - **Gate Scanner Access:** Gate volunteers and student workforce (Tiers 1, 3, 5, 6).
 
-#### Live Scanner Kiosk:
-1. On event day, gate volunteers open **Event Passes → Check-in Scanner**.
-2. Grant camera permissions on a laptop, tablet, or smartphone.
-3. Point the camera at the attendee's QR pass (printed or on phone).
-4. **Immediate Feedback**:
-   - 🟢 **Green Screen & Chime**: Valid pass. Displays attendee name, category, and timestamps check-in.
-   - 🔴 **Red Screen & Buzzer**: Already checked in (prevents pass sharing) or invalid serial.
-5. Manual serial entry is supported in low-light conditions.
-
-![Live Event Passes & Scanner Screenshot](screenshots/04_event_passes.png)
-*Figure 3.3: Live On-the-Spot Pass Studio and 3D luxury credential interface.*
+![Passes Studio Overview](screenshots/steps/03_event_passes/01_passes_studio_overview.png)
+*Figure 3.3.1: Pass Studio interface featuring pass template designer, active attendee roster, and gate statistics.*
 
 ---
+
+#### Step 1: Issuing a Pass (Single or Bulk)
+1. Open **Event Passes** and click **+ Issue Pass** (or **Bulk CSV Ingest**).
+2. Enter attendee details according to the input field reference:
+
+#### Input Field Reference
+| Field Label | Input Type | Where to Enter | Allowed Values | Description & System Behavior |
+|---|---|---|---|---|
+| **Attendee Full Name \*** | Text Input | First input box | Full Name (e.g. `Dr. Vikram Sarabhai`) | Displayed in high-contrast typography on digital and printed passes. |
+| **Email Address \*** | Email Input | Second input box | Valid Email (`attendee@institution.edu`) | Destination address for automated PDF badge dispatch and Apple/Google Wallet links. |
+| **Pass Category \*** | Select Dropdown | Left dropdown | `VIP Dignitary`, `Keynote Speaker`, `Faculty Delegate`, `Student Participant` | Dictates pass color styling, lanyard badge layout, and gate security clearance privileges. |
+| **Seat / Zone Assignment** | Text Input | Right input box | Row & Seat (e.g. `Auditorium - Row A, Seat 12`) | Printed on pass barcode payload for ushering. |
+
+![Issue Pass Modal](screenshots/steps/03_event_passes/02_issue_pass_modal_filled.png)
+*Figure 3.3.2: Issue pass modal with category badges, organization details, and instant email dispatch options.*
+
+---
+
+#### Step 2: Operating the Live Gate Scanner Kiosk
+1. On event day, gate volunteers navigate to **Event Passes &rarr; Check-in Scanner**.
+2. Grant camera permissions. The camera feed initializes with a high-contrast targeting reticle.
+3. Present the attendee's QR badge (printed or displayed on smartphone).
+4. **Instant Security Feedback:**
+   - 🟢 **Green Flash & Chime:** Valid Pass. Displays Attendee Name, Category, and records check-in timestamp in `event_passes.json`.
+   - 🔴 **Red Flash & Alarm:** Duplicate Check-in! Shows exact prior entry timestamp to prevent badge sharing.
+   - 🟡 **Amber Flash:** Invalid or unapproved serial.
+
+![Live Scanner Kiosk](screenshots/steps/03_event_passes/03_live_scanner_kiosk.png)
+*Figure 3.3.3: Gate Scanner Kiosk with camera viewfinder, flashlight toggle, manual serial override, and live entry logs.*
 
 ### 3.4 Apple Wallet & Google Wallet Integration
 Attendees and committee members can store passes directly inside their phone's native digital wallet.
@@ -596,28 +643,38 @@ Attendees and committee members can store passes directly inside their phone's n
 ---
 
 ### 3.5 Task Management, Delegation & Gantt Timeline
-The Tasks module coordinates team deliverables across all operational tiers.
+The **Tasks** module (`/dashboard/tasks`) coordinates deliverables across all operational tiers with integrated timeline scheduling.
 
-#### Creating and Assigning a Task:
-1. Navigate to **Tasks**.
-2. Click **+ New Task**.
-3. Set the **Task Title**, **Description**, and **Priority** (`High`, `Medium`, `Low`).
-4. Select **Assignee Type**:
-   - **Individual**: Assign to a specific student or faculty member.
-   - **Committee**: Assign to an entire sub-committee (e.g., "Stage Committee" on "TechFest").
-5. Pick the **Deadline** date and time.
-6. Optional: Upload reference attachments or specifications.
-7. Click **Create Task**.
-
-#### Workflow & Gantt View:
-- **Status Flow**: `Pending` → `In Progress` → `Review Requested` → `Completed`.
-- **Gantt Chart**: Switch to the **Timeline** tab to visualize overlapping task dependencies, milestones, and critical paths across upcoming weeks.
-- **Automated Reminders**: The system automatically dispatches email reminders 24 hours and 2 hours before a task deadline.
-
-![Live Task Management Screenshot](screenshots/05_tasks_gantt.png)
-*Figure 3.4: Live Task Management interface with workflow categorization and deadlines.*
+![Tasks Board View](screenshots/steps/04_tasks_gantt/01_tasks_board_view.png)
+*Figure 3.5.1: Task board view showing priority badges, committee tags, assignee avatars, and deadline countdowns.*
 
 ---
+
+#### Step 1: Creating and Delegating a Task
+1. Navigate to **Tasks** and click **+ New Task**.
+2. Fill in task parameters:
+
+#### Input Field Reference
+| Field Label | Input Type | Where to Enter | Allowed Values | Description & System Behavior |
+|---|---|---|---|---|
+| **Task Title \*** | Text Input | First input box | Concise title (e.g. `Stage LED Wall Configuration & AV Soundcheck`) | Summarizes the deliverable. Appears on dashboard action cards. |
+| **Description** | Textarea | Main text area | Detailed instructions | Outlines technical requirements, dimensions, safety protocols, or file links. |
+| **Assignee Type \*** | Radio / Dropdown | Assignment section | `Individual Member` or `Entire Committee` | When *Committee* is chosen, every member appointed to that sub-committee receives visibility and notifications. |
+| **Priority Level \*** | Select Dropdown | Left column dropdown | `High (Urgent)`, `Medium (Standard)`, `Low (Flexible)` | High-priority items pin to the top of member dashboards with crimson badges. |
+| **Deadline Date & Time \***| Date/Time Picker | Right column picker | Future date & time | Triggers automated background email reminders 24 hours and 2 hours before expiration. |
+
+![New Task Modal Filled](screenshots/steps/04_tasks_gantt/02_new_task_modal_filled.png)
+*Figure 3.5.2: Task assignment modal with committee delegation, priority flags, and deadline scheduling.*
+
+---
+
+#### Step 2: Visualizing Schedule via Gantt Timeline
+1. Switch to the **Gantt Timeline** tab in the top navigation rail.
+2. The interactive timeline displays horizontal task bars grouped by sub-committee.
+3. Identify overlapping deliverables, critical dependencies, and potential resource bottlenecks before event day.
+
+![Gantt Timeline Active](screenshots/steps/04_tasks_gantt/03_gantt_timeline_active.png)
+*Figure 3.5.3: Interactive Gantt timeline visualization with date markers and progress milestones.*
 
 ### 3.6 Performance Ratings & Committee Evaluation
 Objective performance reviews conducted after event completions:
@@ -637,122 +694,153 @@ Objective performance reviews conducted after event completions:
 ---
 
 ### 3.7 Procurement & Equipment Requisitions
-Designed for sourcing hardware, printing, staging equipment, and external services:
-1. Open **Procurement**.
-2. Click **+ New Request**.
-3. Specify Item Name, Quantity, Estimated Cost, Justification, and Linked Event.
-4. Upload vendor quotation PDFs or bill estimates.
-5. **Approval Chain**:
-   - Requests below departmental limits: Approved by Tier 3 Department Head.
-   - High-value procurement: Routed to Tier 2 Centre Head for final clearance.
-6. Once purchased, vendor receipt is uploaded to transition the request to `Fulfilled`.
+The **Procurement** module (`/dashboard/procurement`) enforces structured financial requisitions for equipment, sound rentals, printing, and consumables.
 
-![Live Procurement Requisitions Screenshot](screenshots/07_procurement.png)
-*Figure 3.6: Equipment procurement requisitions and tracking.*
+![Procurement Table View](screenshots/steps/05_procurement/01_procurement_requests_table.png)
+*Figure 3.7.1: Equipment procurement ledger showing requisition status, vendor quotations, and cost breakdowns.*
 
 ---
+
+#### Step 1: Submitting a Procurement Requisition
+1. Navigate to **Procurement** and click **+ New Request**.
+2. Fill in the requisition modal:
+
+#### Input Field Reference
+| Field Label | Input Type | Where to Enter | Allowed Values | Description & System Behavior |
+|---|---|---|---|---|
+| **Item Name \*** | Text Input | First input box | Descriptive title (e.g. `Heavy-Duty Industrial Extension Cables & Power Strips`) | Identifies equipment or materials needed. |
+| **Quantity \*** | Number Input | Left number field | Positive integer (e.g. `10`) | Number of units requested. |
+| **Estimated Cost (INR) \*** | Currency Input | Right number field | Number in INR (e.g. `₹12,500`) | Total estimated price including taxes. |
+| **Vendor Quotation (PDF) \***| File Upload | Drag-and-drop zone | PDF or image scan (Max 10MB) | Mandatory competitive vendor quotation for financial audit compliance. |
+| **Justification & Event** | Textarea | Bottom text area | Explanatory note | Explains why existing centre inventory cannot fulfill the requirement. |
+
+![New Requisition Modal Filled](screenshots/steps/05_procurement/02_new_requisition_modal.png)
+*Figure 3.7.2: Procurement request modal with vendor estimate upload and budget justification.*
+
+---
+
+#### Step 2: Multi-Stage Approval Sequence
+```
+[Requisition Submitted] ──► [Level 1: Dept Head Clearance] ──► [Level 2: Centre Head Financial Approval] ──► [Fulfilled / Purchased]
+```
 
 ### 3.8 Financial Reimbursements & Multi-Gate Audit
-Ensures student organizers and faculty are reimbursed accurately for approved out-of-pocket expenses.
+The **Reimbursements** module (`/dashboard/reimbursements`) guarantees transparency and auditability for all out-of-pocket expenses incurred during university operations.
 
-#### Submitting a Claim:
-1. Navigate to **Reimbursements**.
-2. Click **+ Submit Claim**.
-3. Enter Expense Title, Amount (INR), Date of Expense, Category (Travel, Food, Supplies, Printing).
-4. Link to the relevant **Event**.
-5. Upload clear photos or PDF scans of payment receipts.
-6. Click **Submit**.
-
-#### Multi-Gate Verification Sequence:
-```
-[Member Submits Claim]
-         │
-         ▼
-[Gate 1: Tier 3 Faculty Head Audit] ────► Rejected (Returned with feedback)
-         │ Approved
-         ▼
-[Gate 2: Tier 2 Centre Head Clearance] ──► Rejected
-         │ Approved
-         ▼
-[Status: Disbursed / Paid]
-(Automatically adjusts Event Budget balance and logs transaction)
-```
-
-![Live Financial Reimbursements Screenshot](screenshots/08_reimbursements.png)
-*Figure 3.7: Live expense claim submission screen with bank settlement coordinates.*
+![Reimbursements Pipeline View](screenshots/steps/06_reimbursements/01_reimbursements_pipeline_view.png)
+*Figure 3.8.1: Reimbursement claims queue showing dual-gate audit status and payment vouchers.*
 
 ---
+
+#### Step 1: Submitting an Expense Claim
+1. Open **Reimbursements** and click **+ Submit Claim**.
+2. Complete claim submission form:
+
+#### Input Field Reference
+| Field Label | Input Type | Where to Enter | Allowed Values | Description & System Behavior |
+|---|---|---|---|---|
+| **Expense Title \*** | Text Input | First input box | Descriptive title (e.g. `VIP Guest Transport & Airport Escort Fuel Charges`) | Summary of expense. Appears on payment audit reports. |
+| **Amount (INR) \*** | Currency Input | Left number field | Positive number in INR (e.g. `₹3,450`) | Exact amount supported by attached receipt. |
+| **Category \*** | Select Dropdown | Right dropdown | `Travel & Transport`, `Food & Hospitality`, `Materials & Printing`, `Technical Supplies` | Categorizes expense for annual financial statements. |
+| **Receipt Scan \*** | File Upload | Upload dropzone | JPG, PNG, or PDF scan (Max 10MB) | Mandatory clear tax invoice or digital payment receipt. |
+| **Linked Event \*** | Select Dropdown | Event selector | Active approved events | Automatically debits the approved budget of the selected event upon disbursement. |
+
+![Submit Claim Modal Filled](screenshots/steps/06_reimbursements/02_submit_claim_modal_filled.png)
+*Figure 3.8.2: Expense claim submission screen with receipt dropzone and linked event balance tracking.*
+
+---
+
+#### Step 2: Dual-Gate Verification Audit
+Decision-makers inspect receipts directly in the built-in audit viewer:
+1. Click any pending claim row to open the **Claim Audit Modal**.
+2. View the uploaded receipt image side-by-side with claimed line items.
+3. **Gate 1 (Faculty Head Audit):** Verifies that items were necessary and prices conform to university guidelines. Click **Approve Gate 1**.
+4. **Gate 2 (Centre Head Clearance):** Confirms institutional fund disbursement and issues transaction reference. Click **Disburse & Settle**.
+
+![Claim Audit Modal](screenshots/steps/06_reimbursements/03_dual_gate_verification_audit.png)
+*Figure 3.8.3: Dual-gate audit modal displaying high-resolution receipt inspection and approval history.*
 
 ### 3.9 Budgeting, P&L & Income Sources
-Comprehensive financial balance sheet for the centre:
-- **Budget Allocations**: View approved university allocations per semester and event.
-- **Income Sources**: Track external sponsorships, ticket revenues, and institutional grants with received vs. pending status.
-- **Variance Tracking**: Automatic calculation of Budget vs. Actual Expenditure to prevent cost overruns.
-- **Exporting**: Download full fiscal P&L balance sheets to Excel/CSV or formatted PDF.
+The **Budgeting** module (`/dashboard/budget`) maintains the master fiscal balance sheet of the LEADS Next Gen Centre.
 
-![Live Budgeting & Funds Screenshot](screenshots/09_budgeting_funds.png)
-*Figure 3.8: Financial allocation ledger and variance tracking.*
+![Budget PnL Ledger](screenshots/steps/07_budgeting/01_budget_pnl_ledger.png)
+*Figure 3.9.1: Master budget ledger displaying institutional allocations, sponsorship inflows, and actual expenditures.*
 
 ---
+
+#### Step 1: Adding a Budget Allocation or Income Source
+1. Click **+ Add Allocation** or **+ Record Income**.
+2. Configure financial parameters:
+   - **Funding Source:** Institutional University Grant, Corporate Sponsorship, or Delegate Fee Inflow.
+   - **Total Allocation (INR):** Total capital available for the fiscal semester.
+   - **Target Event / Department:** Earmarks funds to prevent cross-departmental overspending.
+
+![Add Allocation Modal](screenshots/steps/07_budgeting/02_add_allocation_modal.png)
+*Figure 3.9.2: Financial allocation modal enabling fund allocation across academic departments.*
 
 ### 3.10 Design Portal, Proofreading & OCR Spellcheck
-Manages all promotional posters, banners, and digital creatives before public distribution:
-1. Navigate to **Designs**.
-2. Upload the graphic asset (PNG, JPG, WebP).
-3. Tag with Linked Event, Dimensions (Instagram Post, Banner, A3 Poster), and Target Date.
-4. **Automated AI OCR Spellcheck**:
-   - The built-in Tesseract.js engine scans the graphic for embedded text.
-   - Cross-references dates, guest names, and institutional spelling against English dictionaries (`nspell`).
-   - Flags typos or mismatched event dates automatically.
-5. **Faculty Sign-Off**: Designated Media Faculty approves the creative. Once approved, watermark status updates to `Ready for Publishing`.
+The **Design Portal** (`/dashboard/designs`) manages promotional posters, banners, and digital creatives before public distribution.
 
-![Live Design Portal & OCR Screenshot](screenshots/10_design_portal.png)
-*Figure 3.9: Design proofreading gallery and creative approvals.*
+![Design Portal Overview](screenshots/steps/08_design_portal/01_designs_gallery_view.png)
+*Figure 3.10.1: Design portal asset gallery showing proofreading status badges and linked event tags.*
 
 ---
+
+#### Step 1: Uploading a Creative Asset
+1. Click **+ Upload Creative** or **Add Design**.
+2. Select target event and format (e.g. `Instagram Post (1080x1080)`, `Auditorium Standee (3x6 ft)`).
+3. Upload image (PNG, JPG, WebP).
+4. **Automated AI OCR Spellcheck:** The integrated Tesseract.js engine scans all text lines within 3 seconds, cross-referencing dates, guest names, and institutional terminology against the English dictionary to detect typos automatically.
+5. **Faculty Sign-off:** Designated media faculty inspect the asset and click **Approve for Publishing**.
+
+![Upload Creative Modal](screenshots/steps/08_design_portal/02_upload_creative_modal.png)
+*Figure 3.10.2: Creative upload modal with dimensions picker and automated spellcheck analysis.*
 
 ### 3.11 Dynamic Form Builder & Public Submissions
-Create custom online registration, RSVP, and feedback surveys without external tools like Google Forms.
+The **Forms** module (`/dashboard/forms`) enables rapid creation of public event RSVPs, delegate registrations, and feedback surveys without external third-party subscriptions.
 
-#### Creating a Form:
-1. Navigate to **Forms**.
-2. Click **+ Create Form**.
-3. Customize form title, description, and custom public URL slug (e.g., `/forms/workshop-rsvp`).
-4. Add fields: Text, Email, Phone, Dropdown, Checkbox group, Rating stars, File upload.
-5. Set optional response limits and close dates.
-6. Save and publish.
-
-#### Sharing & Collecting:
-- The system generates a public URL and downloadable high-resolution **QR Code**.
-- Submissions are captured in real time.
-- View responses in structured data tables or click **Export to Word (.docx)** / **Export to CSV**.
-
-![Live Dynamic Form Builder Screenshot](screenshots/11_dynamic_forms.png)
-*Figure 3.10: Form designer canvas and custom field generator.*
+![Forms Management View](screenshots/steps/09_dynamic_forms/01_forms_management_view.png)
+*Figure 3.11.1: Dynamic forms management table displaying live submission tallies and QR download tools.*
 
 ---
+
+#### Step 1: Building a Dynamic Form
+1. Click **+ Create Form**.
+2. In the Form Designer canvas, add fields from the drag-and-drop palette:
+   - Text inputs, email validators, phone formatters, dropdown selectors, checkboxes, rating stars, and file uploads.
+3. Configure **Public URL Slug** (e.g. `/forms/tech-conclave-rsvp`).
+4. Generate instant high-resolution **QR Code** for event poster printing.
+5. Real-time responses stream directly into `submissions.json` with instant export to Word (.docx) and CSV.
+
+![Form Builder Canvas](screenshots/steps/09_dynamic_forms/02_form_builder_canvas.png)
+*Figure 3.11.2: Form builder canvas showing custom fields, validation rules, and live preview.*
 
 ### 3.12 Digital Visiting Cards & 3D Interactive Keycard
-Every verified member receives a personalized digital visiting card:
-- Accessible at `https://leads.msruas.ac.in/card/[slug]`.
-- **Interactive 3D Keycard**: WebGL-powered 3D badge that responds to touch, mouse movement, and device gyroscopes.
-- **vCard Download**: Instant "Save Contact" button adding name, designation, phone, email, and social links to the smartphone address book.
-- **Wallet Pass**: Downloadable Digital Visiting Card pass for Apple and Google Wallet.
+Every verified institutional member receives a personalized digital card accessible at `/card/[slug]`.
 
-![Live Digital Visiting Card Screenshot](screenshots/12_visiting_card.png)
-*Figure 3.11: 3D interactive keycard and public credential profile.*
+![3D Keycard Preview](screenshots/steps/10_visiting_card/01_visiting_card_3d_keycard.png)
+*Figure 3.12.1: Interactive 3D WebGL keycard badge with holographic sheen and one-tap vCard address book download.*
 
----
+- **Interactive 3D WebGL Badge:** Responds fluidly to mouse movement and smartphone gyroscopes.
+- **One-Tap Contact Save:** Tap **Save Contact (vCard)** to immediately save name, designation, phone, email, and social profiles directly into smartphone address books.
+- **Mobile Wallet Integration:** Downloadable pass for Apple Wallet and Google Wallet.
 
 ### 3.13 Guest Directory & VIP Invitation Engine
-Maintains institutional relationships with visiting dignitaries, keynote speakers, and industry partners:
-- **Adding Guests**: Enter contact details or photograph their physical visiting card—the built-in OCR scans the card and auto-populates Name, Company, Designation, and Phone.
-- **Personalized Invites**: Select multiple guests and click **Send Formal Invitation** to dispatch personalized invitation emails with embedded RSVP buttons.
+The **Guest Directory** (`/dashboard/guest-directory`) manages institutional records for visiting dignitaries, keynote speakers, and industry delegates.
 
-![Live Guest Directory Screenshot](screenshots/13_guest_directory.png)
-*Figure 3.12: Dignitary and VIP guest roster.*
+![Guest Roster Table](screenshots/steps/11_guest_directory/01_guest_roster_table.png)
+*Figure 3.13.1: VIP guest directory displaying dignitary designations, organizations, and engagement status.*
 
 ---
+
+#### Step 1: Adding a Dignitary via Business Card Photo OCR
+1. Click **+ Add Guest**.
+2. Either enter contact details manually or upload a photo of the guest's physical visiting card.
+3. The built-in OCR scans the card and auto-populates Full Name, Organization, Designation, Phone, and Email.
+4. Select guests and click **Send Formal Invitation** to dispatch personalized emails with embedded RSVP buttons.
+
+![Add Guest OCR Modal](screenshots/steps/11_guest_directory/02_add_guest_ocr_modal.png)
+*Figure 3.13.2: Guest creation modal with automated visiting card image OCR recognition.*
 
 ### 3.14 Announcements & Scoped Broadcasts
 Broadcast urgent notices, circulars, and updates:
@@ -796,15 +884,13 @@ After an event concludes, generate professional post-event documentation:
 ---
 
 ### 3.17 Unified Approvals Inbox
-A centralized hub for Tier 2 and Tier 3 decision-makers:
-- Collates pending **Event Proposals**, **Procurement Requests**, **Reimbursement Claims**, and **Design Assets** in one list.
-- Enables one-click inline approval or rejection with mandatory feedback notes.
-- Eliminates administrative bottlenecks across disparate modules.
+The **Approvals** module (`/dashboard/approvals`) is the centralized decision-making inbox for Tier 2 and Tier 3 heads.
 
-![Live Unified Approvals Screenshot](screenshots/20_approvals_inbox.png)
-*Figure 3.16: Centralized approval inbox for all institutional sign-offs.*
+![Unified Approvals Inbox](screenshots/steps/12_approvals_inbox/01_unified_approvals_queue.png)
+*Figure 3.17.1: Centralized approvals queue consolidating proposals, requisitions, expense claims, and creatives.*
 
----
+- **Tabbed Categories:** Switch seamlessly between Event Proposals, Procurement Requisitions, Financial Claims, and Design Creatives.
+- **Inline Actions:** Decision-makers can inspect item details and click **Approve** or **Reject** with mandatory feedback notes without navigating between disparate modules.
 
 ### 3.18 Members Directory & Account Provisioning
 The **Members Directory** (`/dashboard/directory`) is the central administrative hub for managing the institutional workforce, leadership appointments, user provisioning, access credentials, and student performance dossiers across the LEADS Next Gen Centre.
