@@ -1513,7 +1513,10 @@ export function canDecideTaskExtension(user: SessionUser): boolean {
  * to just because they can see or manage it.
  */
 export function canChangeTaskStatus(task: TaskItem, user: SessionUser): boolean {
-  if (!user) return false;
+  if (!user || !task) return false;
+  if (task.approvalStatus === 'pending_create' || task.approvalStatus === 'pending_edit' || task.approvalStatus === 'rejected') {
+    return false;
+  }
   if (user.tier === 1) return true;
   if (isCentreHead(user)) return true;
   if (isHeadOfEvents(user) || isEventsHeadGgCampus(user) || isEventsHeadRtcCampus(user)) return true;

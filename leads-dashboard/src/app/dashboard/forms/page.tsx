@@ -433,7 +433,7 @@ export default function FormsBuilderPage() {
           approverPolicyTagId: approval.approverPolicyTagId,
           policyName: approval.policyName,
         });
-        triggerNotification(`Edit submitted for approval from ${approval.approverName}. The live link keeps showing the current version until then.`);
+        triggerNotification(`Edit submitted for approval to ${approval.approverName}. The live link keeps showing the current version until then.`);
       } else {
         updateForm(editingForm.id, changes, user?.name || 'User');
         triggerNotification('Public form updated successfully.');
@@ -468,7 +468,7 @@ export default function FormsBuilderPage() {
           submittedBy: user?.name,
           submittedByEmail: user?.email,
         });
-        triggerNotification(`Form submitted for approval from ${approval.approverName}. Its public link goes live once approved.`);
+        triggerNotification(`Form submitted for approval to ${approval.approverName}. Its public link goes live once approved.`);
       } else {
         addForm(newFormBase);
         triggerNotification('New dynamic public form created successfully. QR Code is ready.');
@@ -507,7 +507,7 @@ export default function FormsBuilderPage() {
         approverPolicyTagId: approval.approverPolicyTagId,
         policyName: approval.policyName,
       });
-      triggerNotification(`Deletion submitted for approval from ${approval.approverName}. The form stays live until then.`);
+      triggerNotification(`Deletion submitted for approval to ${approval.approverName}. The form stays live until then.`);
       setDeletingFormId(null);
       setForms(getForms());
       return;

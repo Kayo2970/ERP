@@ -602,7 +602,7 @@ export default function TasksPage() {
           approverPolicyTagId: approval.approverPolicyTagId,
           policyName: approval.policyName,
         });
-        triggerSuccess(`Edit submitted for approval from ${approval.approverName}. It will apply once approved.`);
+        triggerSuccess(`Edit submitted for approval to ${approval.approverName}. It will apply once approved.`);
       } else {
         updateTask(editingTask.id, changes, user?.name || 'User');
         triggerSuccess('Task updated successfully.');
@@ -640,7 +640,7 @@ export default function TasksPage() {
           submittedBy: user?.name,
           submittedByEmail: user?.email,
         });
-        triggerSuccess(`Task submitted for approval from ${approval.approverName}. It will be assigned once approved.`);
+        triggerSuccess(`Task submitted for approval to ${approval.approverName}. It will be assigned once approved.`);
       } else {
         addTask(newTaskBase);
         triggerSuccess('Task assigned successfully.');
@@ -1126,8 +1126,9 @@ export default function TasksPage() {
                     <div className="flex items-center gap-1.5 text-warning font-semibold">
                       <Clock className="h-3.5 w-3.5 shrink-0" />
                       <span>
-                        {task.approvalStatus === 'pending_edit' ? 'Edit awaiting approval' : 'Awaiting approval'}
-                        {task.submittedBy ? ` from ${task.submittedBy === user?.name ? 'you' : task.submittedBy}` : ''}
+                        {canApprovePendingTask(task, user)
+                          ? `Awaiting your approval${task.submittedBy ? ` • Submitted by ${task.submittedBy}` : ''}`
+                          : `${task.approvalStatus === 'pending_edit' ? 'Edit pending approval' : 'Task pending approval'}${task.submittedBy ? ` • Submitted by ${task.submittedBy === user?.name ? 'you' : task.submittedBy}` : ''}`}
                       </span>
                     </div>
                     {canApprovePendingTask(task, user) && (
@@ -1533,7 +1534,11 @@ export default function TasksPage() {
               {/* Task Actions */}
               <div className="border-t border-theme-border/20 pt-3 flex items-center justify-between gap-2 text-xs">
                 <div className="flex items-center gap-1.5">
-                  {task.workflowType === 'holiday_social_approval' && task.status !== 'Completed' ? (
+                  {(task.approvalStatus === 'pending_create' || task.approvalStatus === 'pending_edit') ? (
+                    <span className="text-[11px] text-warning italic font-medium">Pending approval</span>
+                  ) : task.approvalStatus === 'rejected' ? (
+                    <span className="text-[11px] text-danger italic font-medium">Rejected</span>
+                  ) : task.workflowType === 'holiday_social_approval' && task.status !== 'Completed' ? (
                     canRespondToHolidayApproval(task, user) ? (
                       <>
                         <button
@@ -1609,6 +1614,9 @@ export default function TasksPage() {
                       regardless of where the task as a whole has gotten to. */}
                   {(task.assigneeType === 'group' || task.assigneeType === 'committee') &&
                     task.status !== 'Assigned' &&
+                    task.approvalStatus !== 'pending_create' &&
+                    task.approvalStatus !== 'pending_edit' &&
+                    task.approvalStatus !== 'rejected' &&
                     isTaskAssignee(task, user) &&
                     !hasAcknowledgedTask(task, user) && (
                       <button

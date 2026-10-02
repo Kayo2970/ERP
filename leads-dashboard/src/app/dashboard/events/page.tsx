@@ -363,7 +363,7 @@ export default function EventsPage() {
           approverPolicyTagId: approval.approverPolicyTagId,
           policyName: approval.policyName,
         });
-        triggerSuccess(`Edit submitted for approval from ${approval.approverName}. It will apply once approved.`);
+        triggerSuccess(`Edit submitted for approval to ${approval.approverName}. It will apply once approved.`);
       } else {
         updateEvent(editingEvent.id, changes, user?.name || 'User');
         triggerSuccess('Event details updated successfully.');
@@ -396,7 +396,7 @@ export default function EventsPage() {
           submittedBy: user?.name,
           submittedByEmail: user?.email,
         });
-        triggerSuccess(`Event submitted for approval from ${approval.approverName}. It will go live once approved.`);
+        triggerSuccess(`Event submitted for approval to ${approval.approverName}. It will go live once approved.`);
       } else {
         addEvent(newEventBase);
         triggerSuccess('New event created with its own directory.');
@@ -433,7 +433,7 @@ export default function EventsPage() {
         approverPolicyTagId: approval.approverPolicyTagId,
         policyName: approval.policyName,
       });
-      triggerSuccess(`Deletion submitted for approval from ${approval.approverName}. The event stays live until then.`);
+      triggerSuccess(`Deletion submitted for approval to ${approval.approverName}. The event stays live until then.`);
     } else {
       deleteEvent(deletingEventId, user?.name || 'User');
       triggerSuccess('Event removed from system.');
@@ -655,8 +655,9 @@ export default function EventsPage() {
                       <div className={`flex items-center gap-1.5 font-semibold ${event.approvalStatus === 'pending_delete' ? 'text-danger' : 'text-warning'}`}>
                         <Clock className="h-3.5 w-3.5 shrink-0" />
                         <span>
-                          {event.approvalStatus === 'pending_delete' ? 'Deletion awaiting approval' : event.approvalStatus === 'pending_edit' ? 'Edit awaiting approval' : 'Awaiting approval'}
-                          {event.submittedBy ? ` from ${event.submittedBy === user?.name ? 'you' : event.submittedBy}` : ''}
+                          {canApprovePendingEvent(event, user)
+                            ? `Awaiting your approval${event.submittedBy ? ` • Submitted by ${event.submittedBy}` : ''}`
+                            : `${event.approvalStatus === 'pending_delete' ? 'Deletion pending approval' : event.approvalStatus === 'pending_edit' ? 'Edit pending approval' : 'Event pending approval'}${event.submittedBy ? ` • Submitted by ${event.submittedBy === user?.name ? 'you' : event.submittedBy}` : ''}`}
                         </span>
                       </div>
                       {canApprovePendingEvent(event, user) && (

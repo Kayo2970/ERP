@@ -185,7 +185,13 @@ export default function DashboardHome() {
   // they'd otherwise silently drop off this banner despite never having
   // personally acknowledged anything themselves.
   const pendingAckCount = tasks.filter(t =>
-    t.status !== 'Completed' && isTaskAssignee(t, user) && !hasAcknowledgedTask(t, user) && isCurrentYearTask(t)
+    t.status !== 'Completed' &&
+    t.approvalStatus !== 'pending_create' &&
+    t.approvalStatus !== 'pending_edit' &&
+    t.approvalStatus !== 'rejected' &&
+    isTaskAssignee(t, user) &&
+    !hasAcknowledgedTask(t, user) &&
+    isCurrentYearTask(t)
   ).length;
 
   const completedTasksCount = displayedTasks.filter(t => t.status === 'Completed' && isCurrentYearTask(t)).length;
@@ -495,7 +501,11 @@ export default function DashboardHome() {
                             already In Progress from a DIFFERENT member's
                             acknowledgment still prompts this viewer for their
                             own if they haven't given it yet. */}
-                        {task.status !== 'Completed' && isTaskAssignee(task, user) && !hasAcknowledgedTask(task, user) ? (
+                        {task.approvalStatus === 'pending_create' || task.approvalStatus === 'pending_edit' ? (
+                          <span className="text-[10px] text-warning font-medium">Pending approval</span>
+                        ) : task.approvalStatus === 'rejected' ? (
+                          <span className="text-[10px] text-danger font-medium">Rejected</span>
+                        ) : task.status !== 'Completed' && isTaskAssignee(task, user) && !hasAcknowledgedTask(task, user) ? (
                           <button
                             onClick={() => handleAcknowledge(task.id)}
                             className="px-2.5 py-1 bg-accent hover:bg-primary-light text-white text-[10px] font-semibold rounded-lg transition-all cursor-pointer"

@@ -1377,6 +1377,7 @@ export async function syncWithServer(): Promise<boolean> {
       hydrateIfStale('leads_audit_logs', data.auditLogs, requestStartedAt);
       hydrateIfStale('leads_approval_requests', data.approvalRequests, requestStartedAt);
       hydrateIfStale('leads_event_passes', data.event_passes || data.eventPasses, requestStartedAt);
+      hydrateIfStale('leads_event_reports', data.eventReports, requestStartedAt);
       // Notify every open page in this tab to re-read localStorage and re-render.
       // The native 'storage' event only fires in OTHER tabs/windows — it never
       // fires in the tab that made the write, so this custom event is the only
@@ -3313,6 +3314,13 @@ export function updateTask(id: string, updates: Partial<TaskItem>, actorName: st
 
   const previousStatus = tasks[idx].status;
   const previousApprovalStatus = tasks[idx].approvalStatus;
+
+  // Unapproved or rejected tasks cannot have their status advanced (e.g. marked Completed or In Progress) until approved.
+  const isUnapproved = previousApprovalStatus === 'pending_create' || previousApprovalStatus === 'pending_edit' || previousApprovalStatus === 'rejected';
+  if (isUnapproved && updates.status && updates.status !== previousStatus && updates.approvalStatus !== 'approved') {
+    delete updates.status;
+  }
+
   tasks[idx] = { ...tasks[idx], ...updates };
 
   // Chain reaction: the moment the Centre Head / Advisor / GG Campus Events
@@ -3832,6 +3840,7 @@ export async function acknowledgeTask(
   const tasks = getTasks();
   const task = tasks.find(t => t.id === taskId);
   if (!task || !user || !isTaskAssignee(task, user)) return null;
+  if (task.approvalStatus === 'pending_create' || task.approvalStatus === 'pending_edit' || task.approvalStatus === 'rejected') return null;
 
   const res = await fetch('/api/tasks/ack', {
     method: 'POST',

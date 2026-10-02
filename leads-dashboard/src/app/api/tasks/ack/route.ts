@@ -31,7 +31,13 @@ async function acknowledgeTasksForActor(
   // first, then apply it inside the synchronous mutator.
   const allowedIds = new Set<string>();
   for (const task of existingTasks) {
-    if (idSet.has(task.id) && (await isTaskAssignee(task, actor))) {
+    if (
+      idSet.has(task.id) &&
+      task.approvalStatus !== 'pending_create' &&
+      task.approvalStatus !== 'pending_edit' &&
+      task.approvalStatus !== 'rejected' &&
+      (await isTaskAssignee(task, actor))
+    ) {
       allowedIds.add(task.id);
     }
   }

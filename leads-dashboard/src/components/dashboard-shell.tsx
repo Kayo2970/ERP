@@ -44,7 +44,7 @@ import {
   Ticket,
   Package,
 } from 'lucide-react';
-import { getAnnouncements, getTasks, getDesigns, getMembers, getBudgets, getReimbursements, getEvents, getApprovalRequests, logAuditEvent, Member, syncWithServer, getSystemSettings, signOutClient, getSessionToken, setSessionToken, authHeaders } from '@/lib/local-data';
+import { getAnnouncements, getTasks, getDesigns, getMembers, getBudgets, getReimbursements, getEvents, getEventReports, getApprovalRequests, logAuditEvent, Member, syncWithServer, getSystemSettings, signOutClient, getSessionToken, setSessionToken, authHeaders } from '@/lib/local-data';
 import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isFinanceHead, canAccessGuestDirectory, canVerifyBudgetCentreHead, canDecideBudget, canVerifyReimbursementCentreHead, canApproveAsSectorHead, canApproveAsFinanceHead, canSubmitEventReport, canReviewEventReports, canViewEventReports, canAccessEventPassesModule, canAccessGroupPolicies } from '@/lib/permissions';
 import { TermsModal } from '@/components/terms-modal';
 import { PrivacyPolicyModal } from '@/components/privacy-policy-modal';
@@ -1238,7 +1238,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                   </h4>
                 )}
                 <div className="space-y-1">
-                  {section.items.filter(item => (!item.superUserOnly || user.tier === 1) && (!item.centreHeadOnly || isCentreHead(user)) && (!item.guestDirectoryOnly || canAccessGuestDirectory(user)) && (!item.budgetAccessOnly || isCentreHead(user) || isFinanceHead(user)) && (!item.eventReportsOnly || canSubmitEventReport(user) || canReviewEventReports(user) || canViewEventReports(user)) && (!item.eventPassesOnly || canAccessEventPassesModule(user)) && (!item.groupPoliciesOnly || canAccessGroupPolicies(user))).map((item) => {
+                  {section.items.filter(item => (!item.superUserOnly || user.tier === 1) && (!item.centreHeadOnly || isCentreHead(user)) && (!item.guestDirectoryOnly || canAccessGuestDirectory(user)) && (!item.budgetAccessOnly || isCentreHead(user) || isFinanceHead(user)) && (!item.eventReportsOnly || canSubmitEventReport(user) || canReviewEventReports(user) || canViewEventReports(user) || getEventReports().some(r => (user?.email && r.submittedByEmail === user.email) || (user?.name && r.submittedBy?.toLowerCase() === user.name.toLowerCase()))) && (!item.eventPassesOnly || canAccessEventPassesModule(user)) && (!item.groupPoliciesOnly || canAccessGroupPolicies(user))).map((item) => {
                     const Icon = item.icon;
                     const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
                     return (
@@ -1354,7 +1354,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                   <h4 className="px-2 text-[10px] font-bold text-theme-text-secondary uppercase tracking-wider">
                     {section.title}
                   </h4>
-                  {section.items.filter(item => (!item.superUserOnly || user.tier === 1) && (!item.centreHeadOnly || isCentreHead(user)) && (!item.guestDirectoryOnly || canAccessGuestDirectory(user)) && (!item.budgetAccessOnly || isCentreHead(user) || isFinanceHead(user)) && (!item.eventReportsOnly || canSubmitEventReport(user) || canReviewEventReports(user) || canViewEventReports(user)) && (!item.eventPassesOnly || canAccessEventPassesModule(user)) && (!item.groupPoliciesOnly || canAccessGroupPolicies(user))).map((item) => {
+                  {section.items.filter(item => (!item.superUserOnly || user.tier === 1) && (!item.centreHeadOnly || isCentreHead(user)) && (!item.guestDirectoryOnly || canAccessGuestDirectory(user)) && (!item.budgetAccessOnly || isCentreHead(user) || isFinanceHead(user)) && (!item.eventReportsOnly || canSubmitEventReport(user) || canReviewEventReports(user) || canViewEventReports(user) || getEventReports().some(r => (user?.email && r.submittedByEmail === user.email) || (user?.name && r.submittedBy?.toLowerCase() === user.name.toLowerCase()))) && (!item.eventPassesOnly || canAccessEventPassesModule(user)) && (!item.groupPoliciesOnly || canAccessGroupPolicies(user))).map((item) => {
                     const Icon = item.icon;
                     const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
                     return (

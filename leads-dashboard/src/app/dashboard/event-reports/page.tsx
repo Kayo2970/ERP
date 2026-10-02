@@ -29,6 +29,8 @@ import {
   EventItem,
   EventReportItem,
   TaskItem,
+  authHeaders,
+  saveEventReports,
 } from '@/lib/local-data';
 import { canSubmitEventReport, canReviewEventReports, canViewEventReports, isCentreHead, isEventsHeadGgCampus, isChiefCoordinator, isGeneralSecretary, hasCapability, hasModuleViewAllGrant } from '@/lib/permissions';
 import { RATING_CRITERIA } from '@/lib/rating-criteria';
@@ -94,6 +96,16 @@ export default function EventReportsPage() {
     };
     refresh();
 
+    fetch('/api/event-reports', { headers: authHeaders() })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (Array.isArray(data)) {
+          saveEventReports(data);
+          setReports(data);
+        }
+      })
+      .catch(() => {});
+
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
       try {
@@ -135,12 +147,15 @@ export default function EventReportsPage() {
     (t.assigneeId === user?.id || (t.assigneeIds || []).includes(user?.id))
   );
   const hasStandingAccess = canViewEventReports(user);
+  const myReports = reports.filter(r => (user?.email && r.submittedByEmail === user?.email) || (user?.name && r.submittedBy?.toLowerCase() === user.name.toLowerCase()));
+  const pendingForReview = reports.filter(r => r.status === 'pending_review');
+  const approvedReports = reports.filter(r => r.status === 'approved');
   const canSubmit = canSubmitEventReport(user) || myOpenReportTasks.length > 0;
   const canReview = canReviewEventReports(user);
   const viewerIsCentreHead = isCentreHead(user);
   const viewerIsGgEventsHead = isEventsHeadGgCampus(user);
 
-  if (user && !hasStandingAccess && myOpenReportTasks.length === 0) {
+  if (user && !hasStandingAccess && myOpenReportTasks.length === 0 && myReports.length === 0) {
     return (
       <div className="p-8 max-w-2xl mx-auto">
         <div className="glass-panel p-8 rounded-3xl border border-danger/30 text-center space-y-4 shadow-2xl">
@@ -149,7 +164,7 @@ export default function EventReportsPage() {
           </div>
           <h2 className="text-xl font-bold text-theme-text-primary">Restricted Access</h2>
           <p className="text-xs text-theme-text-secondary leading-relaxed">
-            The Event Report module is restricted to the Centre Head, Advisor, GG Campus Head of Events, General Secretary, and Chief Coordinator — plus anyone currently delegated a report to prepare.
+            The Event Report module is restricted to the Centre Head, Advisor, GG Campus Head of Events, General Secretary, and Chief Coordinator — plus anyone currently delegated a report to prepare or with submitted reports.
           </p>
         </div>
       </div>
@@ -296,8 +311,6 @@ export default function EventReportsPage() {
     setDeletingId(null);
   };
 
-  const myReports = reports.filter(r => (user?.email && r.submittedByEmail === user?.email) || (user?.name && r.submittedBy?.toLowerCase() === user.name.toLowerCase()));
-  const pendingForReview = reports.filter(r => r.status === 'pending_review');
   const eligibleEvents = hasStandingAccess
     ? events.filter(ev => !ev.isHoliday && isApprovedEvent(ev, tasks))
     : events.filter(ev => myOpenReportTasks.some(t => t.eventId === ev.id));
@@ -496,7 +509,53 @@ export default function EventReportsPage() {
         </div>
       )}
 
-      {canSubmit && (
+      {(hasStandingAccess || canReview) && (
+        <div className="glass-panel p-6 rounded-3xl border border-theme-card-border space-y-4">
+          <h3 className="text-sm font-bold text-theme-text-primary uppercase tracking-wider">Approved Reports ({approvedReports.length})</h3>
+          {approvedReports.length === 0 ? (
+            <EmptyState icon={FileCheck2} title="No approved reports yet" description="Approved event reports will be displayed here." />
+          ) : (
+            <div className="space-y-3">
+              {approvedReports.map(report => (
+                <div key={report.id} id={`report-${report.id}`} className="p-4 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2.5 text-xs">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h4 className="font-bold text-theme-text-primary text-xs">{report.eventTitle}</h4>
+                      <span className="text-[10px] text-theme-text-secondary">Submitted by {report.submittedBy} &middot; {report.fileName} &middot; {new Date(report.submittedAt).toLocaleDateString()}</span>
+                    </div>
+                    {statusBadge(report)}
+                  </div>
+                  {approvalChecklist(report)}
+                  {report.reportScore != null && (
+                    <p className="text-[10px] font-semibold text-theme-text-secondary">
+                      Report Writing score: <span className="text-theme-text-primary">{report.reportScore.toFixed(1)}/5.0</span> (by {report.scoredBy})
+                    </p>
+                  )}
+                  <div className="flex items-center gap-2 pt-1">
+                    {report.fileUrl && (
+                      <a href={report.fileUrl} target="_blank" rel="noopener noreferrer" className="p-1.5 text-accent hover:bg-accent/10 rounded-lg transition-all" title="Download report">
+                        <Download className="h-3.5 w-3.5" />
+                      </a>
+                    )}
+                    {(viewerIsCentreHead || viewerIsGgEventsHead) && (
+                      <button onClick={() => openScoring(report)} className="px-3 py-1.5 bg-accent/15 hover:bg-accent/25 text-accent border border-accent/30 text-[11px] font-bold rounded-lg transition-all cursor-pointer">
+                        {report.reportScore != null ? 'Edit Score' : 'Score Report'}
+                      </button>
+                    )}
+                    {hasCapability(user, 'EVENT_REPORTS_DELETE') && (
+                      <button onClick={() => setDeletingId(report.id)} className="p-1.5 text-danger hover:bg-danger/10 rounded-lg transition-all cursor-pointer" title="Delete">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {(canSubmit || myReports.length > 0) && (
         <div className="glass-panel p-6 rounded-3xl border border-theme-card-border space-y-4">
           <h3 className="text-sm font-bold text-theme-text-primary uppercase tracking-wider">My Submissions ({myReports.length})</h3>
           {myReports.length === 0 ? (

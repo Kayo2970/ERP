@@ -465,7 +465,10 @@ export function canEditTask(user: ServerUser, settings: AccessLevelSettings): bo
  * collection.
  */
 export async function canChangeTaskStatus(task: ServerTask, user: ServerUser, settings: AccessLevelSettings): Promise<boolean> {
-  if (!user) return false;
+  if (!user || !task) return false;
+  if (task.approvalStatus === 'pending_create' || task.approvalStatus === 'pending_edit' || task.approvalStatus === 'rejected') {
+    return false;
+  }
   if (user.tier === 1) return true;
   if (isCentreHead(user, settings)) return true;
   if (isHeadOfEvents(user) || isEventsHeadGgCampus(user) || isEventsHeadRtcCampus(user)) return true;
