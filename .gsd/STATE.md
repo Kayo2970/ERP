@@ -1,42 +1,46 @@
 ---
-updated: 2026-09-29T23:53:35+05:30
+updated: 2026-10-03T01:41:00+05:30
 ---
 
 # Project State
 
 ## Current Position
 
-**Milestone:** Milestone 1 — Core Stabilization & Baseline
-**Phase:** 1 - Comprehensive User Manual & Operations Guide
-**Status:** complete
-**Plan:** None (Phase 1 complete)
+**Milestone:** Initial Setup & Codebase Mapping
+**Phase:** 0 - Codebase Discovery
+**Status:** Codebase Mapped / Initialized
+**Plan:** Ready for `/new-project` deep questioning or `/plan 1`
 
 ## Last Action
 
-Comprehensive 23-module User Manual completed:
-- Written master documentation to `docs/USER_MANUAL.md` (Markdown)
-- Created interactive, searchable, printable HTML manual with role filter at `docs/manual.html`
-- Updated and executed `scripts/generate_manual_docx.py` generating `docs/LEADS_ERP_User_Manual.docx`
-- All 7 roles (Tiers 1-7), approval pipelines, wallet passes, procurement, and FAQs documented
+Completed codebase mapping via `/map`:
+- Analyzed existing codebase (`leads-dashboard`, `src/app`, `src/components`, `src/lib`, `data`, `scripts`, `PROJECT DOCS`).
+- Identified 24 dashboard operational modules and 31 API services.
+- Documented full architecture in `.gsd/ARCHITECTURE.md`.
+- Documented complete technology stack and dependencies in `.gsd/STACK.md`.
 
 ## Next Steps
 
-1. Review and distribute `docs/LEADS_ERP_User_Manual.docx` to institutional stakeholders.
-2. Address identified technical debt items (in-process scheduler clustering, test runner setup).
-3. Proceed with further feature development or milestone planning via GSD.
+1. Continue `/new-project` workflow to finalize `.gsd/SPEC.md` and `.gsd/ROADMAP.md`.
+2. Define current goals or feature requirements with the user.
+3. Run `/plan` for subsequent development milestones.
 
 ## Active Decisions
 
 | Decision | Choice | Made | Affects |
 |----------|--------|------|---------|
-| User Manual Deliverables | Markdown, Standalone Searchable HTML, Formatted DOCX | 2026-09-29 | Documentation & User Onboarding |
-| Database Layer | Flat-file JSON (`server-db.ts`) with AES-GCM & per-collection mutex | Pre-existing | All data persistence |
-| Auth & Permissions | 7-tier RBAC (`permissions*.ts`) + SHA-256 session hashing | Pre-existing | All routes & modules |
+| Architecture Strategy | Modular Next.js 16 App Router + Per-Collection Local File DB | 2026-10-03 | Data layer & deployment |
+| Access Control | 7-Tier RBAC with dynamic group policies | 2026-10-03 | All modules |
 
 ## Blockers
 
-*None currently blocking.*
+None.
 
 ## Concerns
 
-- Background schedulers run in-process (`instrumentation.ts`); keep multi-worker instances aware of DB idempotency guards (`birthdayEmailLog`).
+- File-based persistence in `leads-dashboard/data` requires single-node deployment (currently deployed on AWS EC2).
+- In-process background interval schedulers reset on server restarts.
+
+## Session Context
+
+Codebase mapped. The project is an enterprise-grade ERP for LEADS Next Gen Centre (MSRUAS). Ready to proceed to specification or feature roadmap planning.
