@@ -760,14 +760,22 @@ export default function DesignPortalPage() {
     if (!targetTaskId) return;
 
     if (designs.length > 0 || tasks.length > 0) {
-      const matchingDesign = designs.find(d => d.sourceTaskId === targetTaskId || d.linkedTaskId === targetTaskId);
+      const matchingTask = tasks.find(t => t.id === targetTaskId);
+      const matchingDesign = designs.find(d =>
+        d.sourceTaskId === targetTaskId ||
+        d.linkedTaskId === targetTaskId ||
+        (matchingTask?.eventId && d.eventId === matchingTask.eventId)
+      );
       if (matchingDesign) {
         openInspector(matchingDesign);
         setHasHandledTaskRedirect(true);
         return;
       }
-      const matchingTask = tasks.find(t => t.id === targetTaskId);
       if (matchingTask) {
+        if (matchingTask.status === 'Completed') {
+          setHasHandledTaskRedirect(true);
+          return;
+        }
         handleOpenSubmitForTask(matchingTask);
         setHasHandledTaskRedirect(true);
       }

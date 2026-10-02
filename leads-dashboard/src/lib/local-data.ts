@@ -3285,6 +3285,14 @@ export function getTasks(): TaskItem[] {
       const now = new Date();
       const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       const events = getEvents();
+
+      // Track events that already have a completed auto-generated or design task
+      const completedAutoEventIds = new Set(
+        parsed
+          .filter(t => (t.workflowType === 'event_social_post' || t.workflowType === 'holiday_design_social') && t.status === 'Completed' && t.eventId)
+          .map(t => t.eventId!)
+      );
+
       const filtered = parsed.filter(t => {
         if (t.workflowType === 'event_poster_request' || (typeof t.id === 'string' && t.id.startsWith('task_event_poster_'))) {
           return false;
@@ -3295,6 +3303,11 @@ export function getTasks(): TaskItem[] {
             const evEnd = (ev.endDate && ev.endDate.trim()) || (ev.startDate && ev.startDate.trim());
             if (!evEnd || evEnd >= todayStr || ev.datesTBD) return false;
           }
+        }
+        // Deduplicate tasks created by the design portal for already completed auto-generated tasks
+        if (t.eventId && completedAutoEventIds.has(t.eventId)) {
+          if (typeof t.title === 'string' && t.title.startsWith('Design Approved:')) return false;
+          if (t.workflowType === 'design_caption_draft' || t.workflowType === 'design_caption_review' || t.workflowType === 'design_social_posting') return false;
         }
         return true;
       });
@@ -5655,10 +5668,16 @@ export async function addDesign(design: Omit<DesignSubmissionItem, 'id' | 'submi
       proofreaderName: primaryReviewer.name,
       status: 'Pending Proofread',
     } : undefined,
-    // Reuse the design-brief task (if this submission fulfills one) as the
-    // task syncDesignTask() completes on approval, instead of spawning a new
-    // standalone one.
-    linkedTaskId: design.sourceTaskId || design.linkedTaskId,
+    // Reuse the design-brief or auto-generated task (if this submission fulfills one or is for the same event) as the
+    // task syncDesignTask() completes on approval, instead of spawning a new standalone duplicate.
+    linkedTaskId: design.sourceTaskId || design.linkedTaskId || (() => {
+      if (!design.eventId) return undefined;
+      const match = getTasks().find(t =>
+        t.eventId === design.eventId &&
+        (t.workflowType === 'event_social_post' || t.workflowType === 'holiday_design_social' || t.taskCategory === 'design' || t.isDesignDeliverable)
+      );
+      return match?.id;
+    })(),
   };
 
   // POST to server first so the file is written to disk and fileUrl/storageKey is generated without polluting localStorage with base64 data
@@ -5714,8 +5733,21 @@ function syncDesignTask(item: DesignSubmissionItem, reviewerName: string): Desig
   let updatedItem = { ...item };
 
   if (isFullyFinalized) {
-    if (updatedItem.linkedTaskId) {
-      updateTask(updatedItem.linkedTaskId, { status: 'Completed' }, reviewerName);
+    const allTasks = getTasks();
+    const existingTask = updatedItem.linkedTaskId
+      ? allTasks.find(t => t.id === updatedItem.linkedTaskId)
+      : (updatedItem.eventId
+          ? allTasks.find(t =>
+              t.eventId === updatedItem.eventId &&
+              (t.workflowType === 'event_social_post' || t.workflowType === 'holiday_design_social' || t.taskCategory === 'design' || t.isDesignDeliverable)
+            )
+          : null);
+
+    if (existingTask) {
+      updatedItem.linkedTaskId = existingTask.id;
+      if (existingTask.status !== 'Completed') {
+        updateTask(existingTask.id, { status: 'Completed' }, reviewerName);
+      }
     } else {
       const task = addTask({
         title: `Design Approved: ${updatedItem.title}`,
@@ -5731,6 +5763,25 @@ function syncDesignTask(item: DesignSubmissionItem, reviewerName: string): Desig
         isDesignDeliverable: true,
       });
       updatedItem.linkedTaskId = task.id;
+    }
+
+    // Check if the auto-generated task for this event was ALREADY completed or was the linked task.
+    // If so, do NOT generate duplicate caption or posting tasks.
+    const autoTask = updatedItem.eventId
+      ? allTasks.find(t =>
+          t.eventId === updatedItem.eventId &&
+          (t.workflowType === 'event_social_post' || t.workflowType === 'holiday_design_social')
+        )
+      : null;
+
+    const isAutoTaskAlreadyDone = autoTask && (autoTask.status === 'Completed' || autoTask.id === updatedItem.linkedTaskId);
+
+    if (isAutoTaskAlreadyDone) {
+      updatedItem.workflowStage = 'completed';
+      updatedItem.postingInstagramDone = true;
+      updatedItem.postingLinkedinDone = true;
+      updatedItem.captionStatus = 'approved';
+      return updatedItem;
     }
 
     // Stage 1: Initiate Caption Requirement Task for Designer
@@ -5795,6 +5846,25 @@ export function submitDesignCaptions(designId: string, instaCaption: string, lin
     ? { id: design.assignedProofreaderId, name: design.assignedProofreaderName, email: design.assignedProofreaderEmail }
     : resolveDesignReviewer();
 
+  // If an auto-generated task for this event is already completed, do not spawn a duplicate review task
+  if (design.eventId) {
+    const autoTask = getTasks().find(t =>
+      t.eventId === design.eventId &&
+      (t.workflowType === 'event_social_post' || t.workflowType === 'holiday_design_social') &&
+      t.status === 'Completed'
+    );
+    if (autoTask) {
+      design.draftInstagramCaption = instaCaption;
+      design.draftLinkedinCaption = linkedinCaption;
+      design.workflowStage = 'completed';
+      design.captionStatus = 'approved';
+      designs[idx] = design;
+      saveDesigns(designs);
+      serverPatch('/api/designs', design.id, design);
+      return design;
+    }
+  }
+
   const task2 = addTask({
     title: `[Caption Approval] Review Captions: ${design.title}`,
     event: design.eventName || undefined,
@@ -5839,6 +5909,28 @@ export function reviewDesignCaptions(designId: string, approved: boolean, commen
   }
 
   if (approved) {
+    // If an auto-generated task for this event is already completed, do not spawn duplicate posting tasks
+    if (design.eventId) {
+      const autoTask = getTasks().find(t =>
+        t.eventId === design.eventId &&
+        (t.workflowType === 'event_social_post' || t.workflowType === 'holiday_design_social') &&
+        t.status === 'Completed'
+      );
+      if (autoTask) {
+        design.approvedInstagramCaption = design.draftInstagramCaption;
+        design.approvedLinkedinCaption = design.draftLinkedinCaption;
+        design.workflowStage = 'completed';
+        design.postingInstagramDone = true;
+        design.postingLinkedinDone = true;
+        design.captionStatus = 'approved';
+        design.captionReviewComments = comments;
+        designs[idx] = design;
+        saveDesigns(designs);
+        serverPatch('/api/designs', design.id, design);
+        return design;
+      }
+    }
+
     const dueDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
     // Posting is strictly routed to the Social Media team pool.

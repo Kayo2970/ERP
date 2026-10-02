@@ -1252,7 +1252,8 @@ export default function TasksPage() {
                   const linkedDesign = designs.find(d =>
                     (task.designId && d.id === task.designId) ||
                     d.sourceTaskId === task.id ||
-                    d.linkedTaskId === task.id
+                    d.linkedTaskId === task.id ||
+                    (Boolean(task.eventId) && d.eventId === task.eventId)
                   );
                   const isApproved = linkedDesign && linkedDesign.styleStatus === 'Style Approved' && linkedDesign.review?.status === 'Proofread Approved';
                   const hasChanges = linkedDesign && (linkedDesign.styleStatus === 'Style Rejected' || linkedDesign.review?.status === 'Changes Requested');
@@ -1273,6 +1274,10 @@ export default function TasksPage() {
                               : 'bg-warning/15 border-warning/30 text-warning'
                           }`}>
                             {statusLabel}
+                          </span>
+                        ) : task.status === 'Completed' ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-success/15 border border-success/30 text-success">
+                            Completed
                           </span>
                         ) : (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-warning/15 border border-warning/30 text-warning">
@@ -1326,6 +1331,12 @@ export default function TasksPage() {
                               Open in Design Module &rarr;
                             </Link>
                           </div>
+                        </div>
+                      ) : task.status === 'Completed' ? (
+                        <div className="space-y-1 text-[11px]">
+                          <p className="text-theme-text-secondary">
+                            This task has already been completed.
+                          </p>
                         </div>
                       ) : (
                         <div className="space-y-2 text-[11px]">

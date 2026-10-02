@@ -50,10 +50,14 @@ export async function runEventLapseSocialTasks(): Promise<{ created: number }> {
   });
   if (lapsedEvents.length === 0) return { created: 0 };
 
-  const tasks = await readCollection<any>('tasks');
-  const alreadyCreated = new Set(
-    tasks.filter((t: any) => t.workflowType === 'event_social_post').map((t: any) => t.eventId)
-  );
+  const [tasks, designs] = await Promise.all([
+    readCollection<any>('tasks'),
+    readCollection<any>('designs'),
+  ]);
+  const alreadyCreated = new Set([
+    ...tasks.filter((t: any) => t.workflowType === 'event_social_post' || (t.eventId && t.status === 'Completed' && (t.taskCategory === 'design' || t.isDesignDeliverable || t.isSocialMediaPost))).map((t: any) => t.eventId),
+    ...designs.filter((d: any) => d.eventId && (d.workflowStage === 'completed' || d.review?.status === 'Proofread Approved')).map((d: any) => d.eventId),
+  ]);
   const toCreate = lapsedEvents.filter((e: any) => !alreadyCreated.has(e.id));
   if (toCreate.length === 0) return { created: 0 };
 

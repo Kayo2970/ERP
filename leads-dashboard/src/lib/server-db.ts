@@ -735,6 +735,12 @@ function ensureHolidaysAndRatingsCleaned(): Promise<void> {
             (task.workflowType && AUTO_RECREATED_WORKFLOWS.has(task.workflowType)) ||
             (typeof task.id === 'string' && (task.id.startsWith('task_event_') || task.id.startsWith('task_holiday_')));
 
+          const completedAutoEventIds = new Set(
+            tasks
+              .filter((x: any) => (x.workflowType === 'event_social_post' || x.workflowType === 'holiday_design_social') && x.status === 'Completed' && x.eventId)
+              .map((x: any) => x.eventId)
+          );
+
           for (const t of tasks) {
             if (t.id === 'task_holiday_approval_holiday_2026-09-04_janmashtami-smarta' || dismissed.has(t.id)) {
               tasksChanged = true;
@@ -763,6 +769,18 @@ function ensureHolidaysAndRatingsCleaned(): Promise<void> {
                   tasksChanged = true;
                   continue;
                 }
+              }
+            }
+
+            // 3. For already completed auto-generated tasks, purge duplicate design portal tasks
+            if (t.eventId && completedAutoEventIds.has(t.eventId)) {
+              if (typeof t.title === 'string' && t.title.startsWith('Design Approved:')) {
+                tasksChanged = true;
+                continue;
+              }
+              if (t.workflowType === 'design_caption_draft' || t.workflowType === 'design_caption_review' || t.workflowType === 'design_social_posting') {
+                tasksChanged = true;
+                continue;
               }
             }
 
