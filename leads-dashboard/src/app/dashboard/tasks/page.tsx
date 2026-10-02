@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import {
   Plus,
   X,
@@ -33,6 +34,7 @@ import {
   ExternalLink,
   Mail,
   Package,
+  Upload,
 } from 'lucide-react';
 import {
   getTasks,
@@ -1195,11 +1197,34 @@ export default function TasksPage() {
                       <Megaphone className="h-3 w-3" /> Post {task.platform === 'linkedin' ? 'LinkedIn' : 'Instagram'} Caption
                     </span>
                   )}
-                  {task.taskCategory === 'design' && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent/15 border border-accent/30 text-accent text-[10px] font-bold rounded-full">
-                      <Palette className="h-3 w-3" /> Design Task
-                    </span>
-                  )}
+                  {task.taskCategory === 'design' && (() => {
+                    const linkedDesign = designs.find(d =>
+                      (task.designId && d.id === task.designId) ||
+                      d.sourceTaskId === task.id ||
+                      d.linkedTaskId === task.id
+                    );
+                    const isApproved = linkedDesign && linkedDesign.styleStatus === 'Style Approved' && linkedDesign.review?.status === 'Proofread Approved';
+                    const hasChanges = linkedDesign && (linkedDesign.styleStatus === 'Style Rejected' || linkedDesign.review?.status === 'Changes Requested');
+                    const statusLabel = isApproved ? 'Approved' : hasChanges ? 'Changes Requested' : (linkedDesign?.styleStatus === 'Style Approved' ? 'Style Approved' : 'In Review');
+                    return (
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-accent/15 border border-accent/30 text-accent text-[10px] font-bold rounded-full">
+                        <Palette className="h-3 w-3" /> Design Task
+                        {linkedDesign ? (
+                          <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-medium ${
+                            isApproved ? 'bg-success/20 text-success' :
+                            hasChanges ? 'bg-danger/20 text-danger' :
+                            'bg-warning/20 text-warning'
+                          }`}>
+                            {statusLabel}
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.2 rounded-full text-[9px] font-medium bg-theme-border/40 text-theme-text-secondary">
+                            Awaiting Upload
+                          </span>
+                        )}
+                      </span>
+                    );
+                  })()}
                   {(task.workflowType === 'procurement' || task.isProcurement || task.procurementId) && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/15 border border-blue-500/30 text-blue-400 text-[10px] font-bold rounded-full">
                       <Package className="h-3 w-3" /> Procurement (Not Subject to Rating)
@@ -1221,6 +1246,106 @@ export default function TasksPage() {
                     </p>
                   )}
                 </div>
+
+                {/* Design Deliverable Status & Portal Redirect */}
+                {(task.taskCategory === 'design' || task.isDesignDeliverable || task.designId) && (() => {
+                  const linkedDesign = designs.find(d =>
+                    (task.designId && d.id === task.designId) ||
+                    d.sourceTaskId === task.id ||
+                    d.linkedTaskId === task.id
+                  );
+                  const isApproved = linkedDesign && linkedDesign.styleStatus === 'Style Approved' && linkedDesign.review?.status === 'Proofread Approved';
+                  const hasChanges = linkedDesign && (linkedDesign.styleStatus === 'Style Rejected' || linkedDesign.review?.status === 'Changes Requested');
+                  const statusLabel = isApproved ? 'Approved' : hasChanges ? 'Changes Requested' : (linkedDesign?.styleStatus === 'Style Approved' ? 'Style Approved' : 'Under Review');
+                  return (
+                    <div className="p-3 bg-theme-background/40 border border-theme-border/40 rounded-xl space-y-2.5">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-1.5">
+                          <Palette className="h-3.5 w-3.5 text-accent" />
+                          <span className="text-[11px] font-bold text-theme-text-primary">Design Deliverable Status</span>
+                        </div>
+                        {linkedDesign ? (
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                            isApproved
+                              ? 'bg-success/15 border-success/30 text-success'
+                              : hasChanges
+                              ? 'bg-danger/15 border-danger/30 text-danger'
+                              : 'bg-warning/15 border-warning/30 text-warning'
+                          }`}>
+                            {statusLabel}
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-warning/15 border border-warning/30 text-warning">
+                            Awaiting Submission
+                          </span>
+                        )}
+                      </div>
+
+                      {linkedDesign ? (
+                        <div className="space-y-2 text-[11px]">
+                          <div className="flex items-center justify-between text-theme-text-secondary flex-wrap gap-1">
+                            <span className="truncate max-w-[14rem]">Title: <span className="font-medium text-theme-text-primary">{linkedDesign.title}</span></span>
+                            {linkedDesign.designerName && <span>By: <span className="font-medium text-theme-text-primary">{linkedDesign.designerName}</span></span>}
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 text-[10px]">
+                            <div className="p-2 rounded-lg bg-theme-background/60 border border-theme-border/25">
+                              <span className="text-theme-text-secondary block">Style Review</span>
+                              <span className={`font-semibold ${
+                                linkedDesign.styleStatus === 'Style Approved' ? 'text-success' :
+                                linkedDesign.styleStatus === 'Style Rejected' ? 'text-danger' :
+                                'text-warning'
+                              }`}>
+                                {linkedDesign.styleStatus || 'Pending Review'}
+                              </span>
+                            </div>
+                            <div className="p-2 rounded-lg bg-theme-background/60 border border-theme-border/25">
+                              <span className="text-theme-text-secondary block">Proofreading</span>
+                              <span className={`font-semibold ${
+                                linkedDesign.review?.status === 'Proofread Approved' ? 'text-success' :
+                                linkedDesign.review?.status === 'Changes Requested' ? 'text-danger' :
+                                'text-warning'
+                              }`}>
+                                {linkedDesign.review?.status || 'Pending Proofread'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {(linkedDesign.review?.comments || linkedDesign.styleFeedback) && (
+                            <p className="text-[10px] text-theme-text-secondary italic bg-theme-background/40 p-2 rounded-lg border border-theme-border/20">
+                              Feedback: {linkedDesign.review?.comments || linkedDesign.styleFeedback}
+                            </p>
+                          )}
+
+                          <div className="pt-1 flex items-center justify-end">
+                            <Link
+                              href={`/dashboard/designs?highlight=${linkedDesign.id}`}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-accent/15 hover:bg-accent/25 border border-accent/30 text-accent font-semibold text-[11px] rounded-lg transition-all"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              Open in Design Module &rarr;
+                            </Link>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-2 text-[11px]">
+                          <p className="text-theme-text-secondary">
+                            No design submission has been uploaded for this task yet.
+                          </p>
+                          <div className="pt-1 flex items-center justify-end">
+                            <Link
+                              href={`/dashboard/designs?sourceTaskId=${task.id}`}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-primary-light text-white font-semibold text-[11px] rounded-lg transition-all shadow-sm"
+                            >
+                              <Upload className="h-3 w-3" />
+                              Submit Design in Portal &rarr;
+                            </Link>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {task.taskCategory === 'design' && (task.briefDescription || task.canvaLink || (task.attachments && task.attachments.length > 0)) && (
                   <div className="p-2.5 bg-theme-background/30 border border-theme-border/30 rounded-xl space-y-2">

@@ -263,6 +263,7 @@ export async function cascadeCloseAutoApprovals(
         return {
           ...r,
           status: decision,
+          decidedBy: decidedByName,
           decidedAt: new Date().toISOString(),
           decisionNote: decidedByName ? `Resolved directly on the ${ENTITY_LABELS[entityType]} record by ${decidedByName}.` : `Resolved directly on the ${ENTITY_LABELS[entityType]} record.`,
         };

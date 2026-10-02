@@ -751,6 +751,29 @@ export default function DesignPortalPage() {
     setShowUploadModal(true);
   };
 
+  // Auto-redirect handling when arriving from a Task card in the Tasks module
+  const [hasHandledTaskRedirect, setHasHandledTaskRedirect] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined' || hasHandledTaskRedirect) return;
+    const params = new URLSearchParams(window.location.search);
+    const targetTaskId = params.get('sourceTaskId') || params.get('taskId');
+    if (!targetTaskId) return;
+
+    if (designs.length > 0 || tasks.length > 0) {
+      const matchingDesign = designs.find(d => d.sourceTaskId === targetTaskId || d.linkedTaskId === targetTaskId);
+      if (matchingDesign) {
+        openInspector(matchingDesign);
+        setHasHandledTaskRedirect(true);
+        return;
+      }
+      const matchingTask = tasks.find(t => t.id === targetTaskId);
+      if (matchingTask) {
+        handleOpenSubmitForTask(matchingTask);
+        setHasHandledTaskRedirect(true);
+      }
+    }
+  }, [designs, tasks, hasHandledTaskRedirect]);
+
   const handleSaveReview = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDesign) return;

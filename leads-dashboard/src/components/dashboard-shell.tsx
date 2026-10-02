@@ -45,7 +45,7 @@ import {
   Package,
 } from 'lucide-react';
 import { getAnnouncements, getTasks, getDesigns, getMembers, getBudgets, getReimbursements, getEvents, getEventReports, getApprovalRequests, logAuditEvent, Member, syncWithServer, getSystemSettings, signOutClient, getSessionToken, setSessionToken, authHeaders } from '@/lib/local-data';
-import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isFinanceHead, canAccessGuestDirectory, canVerifyBudgetCentreHead, canDecideBudget, canVerifyReimbursementCentreHead, canApproveAsSectorHead, canApproveAsFinanceHead, canSubmitEventReport, canReviewEventReports, canViewEventReports, canAccessEventPassesModule, canAccessGroupPolicies } from '@/lib/permissions';
+import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isEventsHeadGgCampus, isFinanceHead, canAccessGuestDirectory, canVerifyBudgetCentreHead, canDecideBudget, canVerifyReimbursementCentreHead, canApproveAsSectorHead, canApproveAsFinanceHead, canSubmitEventReport, canReviewEventReports, canViewEventReports, canAccessEventPassesModule, canAccessGroupPolicies } from '@/lib/permissions';
 import { TermsModal } from '@/components/terms-modal';
 import { PrivacyPolicyModal } from '@/components/privacy-policy-modal';
 import { IosInstallPrompt } from '@/components/ios-install-prompt';
@@ -301,8 +301,134 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         link: `/dashboard/approvals`,
       }));
 
+    // Notification for approvers when an approval decision is made by another person:
+    // "once one person gives approval others like superuser and other people who can give approval get a notification saying approved by that person"
+    const canUserGiveApproval =
+      currentUser.tier === 1 ||
+      isCentreHead(currentUser) ||
+      isEventsHeadGgCampus(currentUser) ||
+      currentUser.tier === 2 ||
+      (currentUser.role && currentUser.role.toLowerCase().includes('advisor'));
+
+    const recentCutoff = Date.now() - 7 * 24 * 60 * 60 * 1000; // last 7 days
+    const approvedByOthersNotifs: any[] = [];
+
+    // 1. From tracked approval requests
+    getApprovalRequests()
+      .filter(r => r.status === 'approved')
+      .filter(r => {
+        const t = r.decidedAt ? new Date(r.decidedAt).getTime() : 0;
+        return t >= recentCutoff;
+      })
+      .forEach(r => {
+        const isEligible = canUserGiveApproval || r.targetMemberId === currentUser.id;
+        if (!isEligible) return;
+
+        const decidedBy = r.decidedBy || (r.decisionNote?.match(/by\s+([^.]+)/i)?.[1]?.trim());
+        if (!decidedBy) return;
+        if (
+          decidedBy.toLowerCase() === (currentUser.name || '').toLowerCase() ||
+          decidedBy.toLowerCase() === (currentUser.email || '').toLowerCase()
+        ) {
+          return;
+        }
+
+        let link = '/dashboard/approvals';
+        if (r.entityType === 'task') link = `/dashboard/tasks?highlight=${r.entityId}`;
+        else if (r.entityType === 'event') link = `/dashboard/events`;
+        else if (r.entityType === 'design') link = `/dashboard/designs?highlight=${r.entityId}`;
+        else if (r.entityType === 'event-report') link = `/dashboard/event-reports?highlight=${r.entityId}`;
+
+        approvedByOthersNotifs.push({
+          id: 'appr_decided_' + r.id,
+          title: `Approved by ${decidedBy}: ${r.entityTitle}`,
+          time: r.decidedAt ? new Date(r.decidedAt).toLocaleDateString() : 'Recently',
+          read: false,
+          actionNeeded: false,
+          link,
+        });
+      });
+
+    // 2. From tasks approved directly
+    getTasks()
+      .filter(t => t.approvalStatus === 'approved' && t.decidedBy && t.decidedAt)
+      .filter(t => new Date(t.decidedAt!).getTime() >= recentCutoff)
+      .forEach(t => {
+        const isEligible = canUserGiveApproval || (t.approverType === 'SPECIFIC_MEMBER' && t.approverMemberId === currentUser.id);
+        if (!isEligible) return;
+        if (
+          t.decidedBy!.toLowerCase() === (currentUser.name || '').toLowerCase() ||
+          t.decidedBy!.toLowerCase() === (currentUser.email || '').toLowerCase()
+        ) {
+          return;
+        }
+        if (approvedByOthersNotifs.some(n => n.id.includes(t.id))) return;
+
+        approvedByOthersNotifs.push({
+          id: 'task_approved_' + t.id,
+          title: `Approved by ${t.decidedBy}: ${t.title}`,
+          time: t.decidedAt ? new Date(t.decidedAt).toLocaleDateString() : 'Recently',
+          read: false,
+          actionNeeded: false,
+          link: `/dashboard/tasks?highlight=${t.id}`,
+        });
+      });
+
+    // 3. From events approved directly
+    getEvents()
+      .filter(e => e.approvalStatus === 'approved' && e.decidedBy && e.decidedAt)
+      .filter(e => new Date(e.decidedAt!).getTime() >= recentCutoff)
+      .forEach(e => {
+        if (!canUserGiveApproval) return;
+        if (
+          e.decidedBy!.toLowerCase() === (currentUser.name || '').toLowerCase() ||
+          e.decidedBy!.toLowerCase() === (currentUser.email || '').toLowerCase()
+        ) {
+          return;
+        }
+        if (approvedByOthersNotifs.some(n => n.id.includes(e.id))) return;
+
+        approvedByOthersNotifs.push({
+          id: 'event_approved_' + e.id,
+          title: `Approved by ${e.decidedBy}: ${e.title}`,
+          time: e.decidedAt ? new Date(e.decidedAt).toLocaleDateString() : 'Recently',
+          read: false,
+          actionNeeded: false,
+          link: `/dashboard/events`,
+        });
+      });
+
+    // 4. From event reports approved directly
+    getEventReports()
+      .filter(er => er.status === 'approved' && (er.centreHeadApprovedBy || er.eventsHeadGgApprovedBy))
+      .filter(er => {
+        const d = er.centreHeadApprovedAt || er.eventsHeadGgApprovedAt;
+        return d ? new Date(d).getTime() >= recentCutoff : false;
+      })
+      .forEach(er => {
+        if (!canUserGiveApproval) return;
+        const approverName = er.centreHeadApprovedBy || er.eventsHeadGgApprovedBy || 'Approver';
+        if (
+          approverName.toLowerCase() === (currentUser.name || '').toLowerCase() ||
+          approverName.toLowerCase() === (currentUser.email || '').toLowerCase()
+        ) {
+          return;
+        }
+        if (approvedByOthersNotifs.some(n => n.id.includes(er.id))) return;
+
+        const at = er.centreHeadApprovedAt || er.eventsHeadGgApprovedAt;
+        approvedByOthersNotifs.push({
+          id: 'report_approved_' + er.id,
+          title: `Approved by ${approverName}: ${er.eventTitle}`,
+          time: at ? new Date(at).toLocaleDateString() : 'Recently',
+          read: false,
+          actionNeeded: false,
+          link: `/dashboard/event-reports?highlight=${er.id}`,
+        });
+      });
+
     const dismissed = loadDismissedNotifIds();
-    return [...budgetNotifs, ...reimbursementNotifs, ...eventApprovalNotifs, ...manualApprovalNotifs, ...proofreadNotifs, ...recentAnnounce, ...recentTasks]
+    return [...budgetNotifs, ...reimbursementNotifs, ...eventApprovalNotifs, ...manualApprovalNotifs, ...approvedByOthersNotifs, ...proofreadNotifs, ...recentAnnounce, ...recentTasks]
       .filter(n => !dismissed.has(n.id));
   };
 
