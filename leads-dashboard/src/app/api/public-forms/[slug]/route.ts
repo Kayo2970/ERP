@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { readCollection } from '@/lib/server-db';
 import { apiError } from '@/lib/api-error';
+import { formatEventDateRange } from '@/lib/local-data';
 
 /**
  * Deliberately unauthenticated — this is what src/app/forms/[slug]/page.tsx
@@ -33,7 +34,21 @@ export async function GET(
     }
 
     const { id, slug: formSlug, title, description, fields, eventName, sourceTemplateId } = match;
-    return NextResponse.json({ id, slug: formSlug, title, description, fields, eventName, sourceTemplateId });
+
+    // Live details of the linked event (so "default = the event's name/date/venue" follows renames/reschedules)
+    let eventInfo: { name?: string; date?: string; venue?: string } | undefined;
+    if (match.eventId) {
+      const events = await readCollection<any>('events');
+      const ev = events.find((e: any) => e.id === match.eventId);
+      if (ev) {
+        eventInfo = {
+          name: ev.title,
+          date: ev.datesTBD ? undefined : formatEventDateRange(ev),
+          venue: ev.location || undefined,
+        };
+      }
+    }
+    return NextResponse.json({ id, slug: formSlug, title, description, fields, eventName, sourceTemplateId, eventInfo });
   } catch (err: any) {
     return apiError(err, 'public-forms-slug-api-get', 500);
   }

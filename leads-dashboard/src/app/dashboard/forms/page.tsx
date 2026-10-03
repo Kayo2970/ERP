@@ -26,7 +26,9 @@ import {
   Save,
   TrendingUp,
   Users,
-  QrCode
+  QrCode,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { FormQrModal } from '@/components/form-qr-modal';
 import {
@@ -216,6 +218,9 @@ export default function FormsBuilderPage() {
   // Selected Form for submissions view
   const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'charts'>('table');
+  // Received Submissions table paging (same Rows-per-page pattern as the Members directory)
+  const [subPageSize, setSubPageSize] = useState(10);
+  const [subPage, setSubPage] = useState(1);
 
   // Notification States
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
@@ -605,6 +610,10 @@ export default function FormsBuilderPage() {
 
   const selectedForm = displayedForms.find(f => f.id === selectedFormId) || displayedForms[0];
   const selectedSubmissions = selectedForm ? submissions.filter(s => s.formId === selectedForm.id || s.slug === selectedForm.slug) : [];
+  const subTotalPages = Math.max(1, Math.ceil(selectedSubmissions.length / subPageSize));
+  const subCurrentPage = Math.min(subPage, subTotalPages);
+  const subStart = (subCurrentPage - 1) * subPageSize;
+  const pagedSubmissions = selectedSubmissions.slice(subStart, subStart + subPageSize);
 
   return (
     <div className="p-6 md:p-8 space-y-6">
@@ -722,7 +731,7 @@ export default function FormsBuilderPage() {
                 return (
                   <div
                     key={form.id}
-                    onClick={() => setSelectedFormId(form.id)}
+                    onClick={() => { setSelectedFormId(form.id); setSubPage(1); }}
                     className={`p-4 rounded-xl border transition-all cursor-pointer space-y-2.5 text-xs ${
                       isSelected
                         ? 'bg-accent/10 border-accent/40 shadow-sm'
@@ -969,7 +978,7 @@ export default function FormsBuilderPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-theme-border/20">
-                          {selectedSubmissions.map(sub => (
+                          {pagedSubmissions.map(sub => (
                             <tr key={sub.id} className="hover:bg-theme-border/10 transition-all text-xs">
                               <td className="py-3 pr-2 text-theme-text-secondary whitespace-nowrap">
                                 <span className="flex items-center gap-1">
@@ -1001,6 +1010,34 @@ export default function FormsBuilderPage() {
                           ))}
                         </tbody>
                       </table>
+                      <div className="flex flex-wrap items-center justify-between gap-3 pt-3 mt-1 border-t border-theme-border/20 text-xs text-theme-text-secondary">
+                        <div className="flex items-center gap-2">
+                          <span>Rows per page:</span>
+                          <select
+                            value={subPageSize}
+                            onChange={(e) => { setSubPageSize(Number(e.target.value)); setSubPage(1); }}
+                            className="px-2 py-1 bg-theme-background/40 border border-theme-border/40 rounded-lg text-xs text-theme-text-primary focus:outline-none"
+                          >
+                            <option value={10}>10</option>
+                            <option value={15}>15</option>
+                            <option value={20}>20</option>
+                          </select>
+                          <span>
+                            Showing <strong>{subStart + 1}–{Math.min(subStart + subPageSize, selectedSubmissions.length)}</strong> of <strong>{selectedSubmissions.length}</strong>
+                          </span>
+                        </div>
+                        {subTotalPages > 1 && (
+                          <div className="flex items-center gap-2">
+                            <span>Page <strong>{subCurrentPage}</strong> of <strong>{subTotalPages}</strong></span>
+                            <button type="button" onClick={() => setSubPage(Math.max(1, subCurrentPage - 1))} disabled={subCurrentPage === 1} className="p-1.5 rounded-lg border border-theme-border/30 hover:bg-theme-border/30 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-theme-text-primary" aria-label="Previous page">
+                              <ChevronLeft className="h-4 w-4" />
+                            </button>
+                            <button type="button" onClick={() => setSubPage(Math.min(subTotalPages, subCurrentPage + 1))} disabled={subCurrentPage === subTotalPages} className="p-1.5 rounded-lg border border-theme-border/30 hover:bg-theme-border/30 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-theme-text-primary" aria-label="Next page">
+                              <ChevronRight className="h-4 w-4" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     (() => {
