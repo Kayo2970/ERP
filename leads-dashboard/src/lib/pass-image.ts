@@ -70,10 +70,15 @@ export async function renderBoardingPassPng(
   theme: PassTheme = {}
 ): Promise<Buffer> {
   const fam = ensureFont();
-  const bg = theme.backgroundColor || pass.passColor || DEFAULT_PASS_THEME.backgroundColor;
-  const fg = pass.textColor || theme.foregroundColor || DEFAULT_PASS_THEME.foregroundColor;
-  const label = pass.labelColor || theme.labelColor || DEFAULT_PASS_THEME.labelColor;
-  const overlay = typeof theme.overlay === 'number' ? theme.overlay : DEFAULT_PASS_THEME.overlay;
+  // Ticket look: by default shares the event background; with emailUseBackground === false it has its own design
+  const own = theme.emailUseBackground === false;
+  const bg = (own && theme.emailBackgroundColor) || theme.backgroundColor || pass.passColor || DEFAULT_PASS_THEME.backgroundColor;
+  const fg = pass.textColor || (own && theme.emailForegroundColor) || theme.foregroundColor || DEFAULT_PASS_THEME.foregroundColor;
+  const label = pass.labelColor || (own && theme.emailLabelColor) || theme.labelColor || DEFAULT_PASS_THEME.labelColor;
+  const overlay = own && typeof theme.emailOverlay === 'number'
+    ? theme.emailOverlay
+    : typeof theme.overlay === 'number' ? theme.overlay : DEFAULT_PASS_THEME.overlay;
+  const artKey = own ? theme.emailArtworkKey : theme.backgroundKey;
 
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
@@ -90,9 +95,9 @@ export async function renderBoardingPassPng(
   // Background: artwork (cover-fit) or solid/gradient colour
   ctx.fillStyle = bg;
   ctx.fillRect(x0, y0, w, h);
-  if (theme.backgroundKey) {
+  if (artKey) {
     try {
-      const art = await loadImage(await readStoredFile(theme.backgroundKey));
+      const art = await loadImage(await readStoredFile(artKey));
       const s = Math.max(w / art.width, h / art.height);
       const dw = art.width * s, dh = art.height * s;
       ctx.drawImage(art, x0 + (w - dw) / 2, y0 + (h - dh) / 2, dw, dh);

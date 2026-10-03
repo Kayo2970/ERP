@@ -402,6 +402,14 @@ export interface PassTheme {
   backgroundKey?: string;   // storageKey of the above
   walletBackgroundUrl?: string; // 690x1010 portrait crop of the artwork, fetched by WalletWallet (public URL)
   walletBackgroundKey?: string;
+  /** Emailed boarding-pass ticket. Default (unset/true) = reuse the background above; false = its own design. */
+  emailUseBackground?: boolean;
+  emailArtworkUrl?: string; // 1160x420 cover crop used inside the ticket card
+  emailArtworkKey?: string;
+  emailOverlay?: number;
+  emailBackgroundColor?: string;
+  emailForegroundColor?: string;
+  emailLabelColor?: string;
   logoUrl?: string;
   logoKey?: string;
   backgroundColor?: string; // fallback / tint colour behind the artwork (hex)

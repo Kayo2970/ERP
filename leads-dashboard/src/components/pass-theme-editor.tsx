@@ -27,6 +27,8 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
   const [draft, setDraft] = useState<PassTheme>({});
   const [pendingBg, setPendingBg] = useState<string | null | undefined>(undefined); // undefined = unchanged, null = remove
   const [pendingLogo, setPendingLogo] = useState<string | null | undefined>(undefined);
+  const [pendingEmailArt, setPendingEmailArt] = useState<string | null | undefined>(undefined);
+  const emailInput = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const bgInput = useRef<HTMLInputElement>(null);
@@ -44,6 +46,7 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
       setDraft(data);
       setPendingBg(undefined);
       setPendingLogo(undefined);
+      setPendingEmailArt(undefined);
       onThemeChange?.(data);
     } catch {
       /* ignore */
@@ -73,8 +76,21 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
     label: draft.labelColor || DEFAULT_PASS_THEME.labelColor,
     overlay: typeof draft.overlay === 'number' ? draft.overlay : DEFAULT_PASS_THEME.overlay,
   };
+  // Emailed ticket: shares the background unless a custom design is switched on
+  const emailOwn = draft.emailUseBackground === false;
+  const em = {
+    bg: draft.emailBackgroundColor || val.bg,
+    fg: draft.emailForegroundColor || val.fg,
+    label: draft.emailLabelColor || val.label,
+    overlay: typeof draft.emailOverlay === 'number' ? draft.emailOverlay : val.overlay,
+    art: pendingEmailArt === null ? undefined : pendingEmailArt || draft.emailArtworkUrl,
+  };
+  const ticketTheme: PassTheme = emailOwn
+    ? { backgroundUrl: em.art, backgroundColor: em.bg, foregroundColor: em.fg, labelColor: em.label, overlay: em.overlay, logoUrl: merged.logoUrl }
+    : merged;
+  const tk = emailOwn ? em : val;
 
-  const pick = async (e: React.ChangeEvent<HTMLInputElement>, kind: 'bg' | 'logo') => {
+  const pick = async (e: React.ChangeEvent<HTMLInputElement>, kind: 'bg' | 'logo' | 'email') => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
@@ -82,6 +98,7 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
     if (file.size > 12 * 1024 * 1024) return setMessage('Image is too large (max 12 MB).');
     const url = await readAsDataUrl(file);
     if (kind === 'bg') setPendingBg(url);
+    else if (kind === 'email') setPendingEmailArt(url);
     else setPendingLogo(url);
     setMessage('');
   };
@@ -98,6 +115,12 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
           foregroundColor: val.fg,
           labelColor: val.label,
           overlay: val.overlay,
+          emailUseBackground: !emailOwn,
+          emailOverlay: em.overlay,
+          emailBackgroundColor: em.bg,
+          emailForegroundColor: em.fg,
+          emailLabelColor: em.label,
+          ...(pendingEmailArt !== undefined ? { emailArtwork: pendingEmailArt === null ? null : { dataUrl: pendingEmailArt } } : {}),
           ...(pendingBg !== undefined ? { background: pendingBg === null ? null : { dataUrl: pendingBg } } : {}),
           ...(pendingLogo !== undefined ? { logo: pendingLogo === null ? null : { dataUrl: pendingLogo } } : {}),
         }),
@@ -108,6 +131,7 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
       setDraft(data);
       setPendingBg(undefined);
       setPendingLogo(undefined);
+      setPendingEmailArt(undefined);
       onThemeChange?.(data);
       setMessage(
         data.walletErrors?.length
@@ -126,6 +150,12 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
   const dirty =
     pendingBg !== undefined ||
     pendingLogo !== undefined ||
+    pendingEmailArt !== undefined ||
+    emailOwn !== (theme.emailUseBackground === false) ||
+    (emailOwn && (em.bg !== (theme.emailBackgroundColor || theme.backgroundColor || DEFAULT_PASS_THEME.backgroundColor) ||
+      em.fg !== (theme.emailForegroundColor || theme.foregroundColor || DEFAULT_PASS_THEME.foregroundColor) ||
+      em.label !== (theme.emailLabelColor || theme.labelColor || DEFAULT_PASS_THEME.labelColor) ||
+      em.overlay !== (typeof theme.emailOverlay === 'number' ? theme.emailOverlay : (typeof theme.overlay === 'number' ? theme.overlay : DEFAULT_PASS_THEME.overlay)))) ||
     val.bg !== (theme.backgroundColor || DEFAULT_PASS_THEME.backgroundColor) ||
     val.fg !== (theme.foregroundColor || DEFAULT_PASS_THEME.foregroundColor) ||
     val.label !== (theme.labelColor || DEFAULT_PASS_THEME.labelColor) ||
@@ -178,27 +208,27 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
       </div>
 
       {/* Live boarding-pass preview (email + portal ticket) */}
-      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 -mb-1">Emailed boarding pass &amp; portal card</div>
+      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 -mb-1">Emailed boarding-pass ticket{emailOwn ? ' (custom design)' : ' (uses the event background)'}</div>
       <div
         className="relative rounded-2xl overflow-hidden border border-white/10 shadow-lg"
-        style={{ ...passThemeStyle(merged, `linear-gradient(145deg, ${val.bg} 0%, #030712 100%)`), aspectRatio: '1200 / 460' }}
+        style={{ ...passThemeStyle(ticketTheme, `linear-gradient(145deg, ${tk.bg} 0%, #030712 100%)`), aspectRatio: '1160 / 420' }}
       >
         <div className="absolute inset-0 flex">
           <div className="flex-1 p-4 flex flex-col justify-between min-w-0">
             <div className="flex items-center gap-2">
               {merged.logoUrl && <img src={merged.logoUrl} alt="" className="h-6 w-auto object-contain" />}
               <div>
-                <div className="text-[9px] font-black tracking-widest" style={{ color: val.label }}>LEADS NEXT GEN CENTRE • RUAS</div>
-                <div className="text-[8px]" style={{ color: val.label }}>OFFICIAL EVENT PASS</div>
+                <div className="text-[9px] font-black tracking-widest" style={{ color: tk.label }}>LEADS NEXT GEN CENTRE • RUAS</div>
+                <div className="text-[8px]" style={{ color: tk.label }}>OFFICIAL EVENT PASS</div>
               </div>
             </div>
             <div>
-              <div className="text-sm font-black truncate" style={{ color: val.fg }}>{eventName}</div>
-              <div className="text-[8px] mt-1" style={{ color: val.label }}>VIP DIGNITARY</div>
-              <div className="text-xs font-bold" style={{ color: val.fg }}>Attendee Name</div>
+              <div className="text-sm font-black truncate" style={{ color: tk.fg }}>{eventName}</div>
+              <div className="text-[8px] mt-1" style={{ color: tk.label }}>VIP DIGNITARY</div>
+              <div className="text-xs font-bold" style={{ color: tk.fg }}>Attendee Name</div>
             </div>
           </div>
-          <div className="w-[26%] bg-white/95 flex flex-col items-center justify-center border-l-2 border-dashed border-slate-400/50">
+          <div className="w-[25%] bg-white/95 flex flex-col items-center justify-center border-l-2 border-dashed border-slate-400/50">
             <div className="h-10 w-10 bg-slate-900 rounded-sm" />
             <div className="text-[7px] font-bold text-slate-700 mt-1">SCAN AT ENTRY</div>
           </div>
@@ -252,6 +282,70 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
           className="w-full accent-sky-500"
         />
       </label>
+
+      {/* Separate design for the emailed ticket */}
+      <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-3 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Email ticket design</div>
+          <div className="flex rounded-full border border-white/15 p-0.5 text-[10px] font-bold">
+            {([false, true] as const).map((own) => (
+              <button
+                key={String(own)}
+                type="button"
+                onClick={() => setDraft((d) => ({ ...d, emailUseBackground: !own }))}
+                className={`px-3 py-1 rounded-full cursor-pointer ${emailOwn === own ? 'bg-accent text-white' : 'text-slate-400 hover:text-white'}`}
+              >
+                {own ? 'Custom design' : 'Same as background'}
+              </button>
+            ))}
+          </div>
+        </div>
+        {emailOwn && (
+          <>
+            <p className="text-[10.5px] text-slate-500">
+              Upload art at <strong>1160 × 420 px</strong>. The right 290 px is covered by the white tear-off stub with the QR; the name, event, venue and dates are drawn over the main 870 px.{' '}
+              <a href={`/api/events/${eventId}/pass-theme/template`} className="text-accent underline font-semibold" onClick={async (e) => {
+                e.preventDefault();
+                const res = await fetch(`/api/events/${eventId}/pass-theme/template`, { headers: authHeaders() });
+                if (!res.ok) return setMessage('Could not download the template.');
+                const url = URL.createObjectURL(await res.blob());
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'leads-email-ticket-template-1160x420.png';
+                a.click();
+                URL.revokeObjectURL(url);
+              }}>Download template with safe zones</a>
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => emailInput.current?.click()} className="py-2 px-3 rounded-xl border border-dashed border-slate-400 dark:border-white/25 text-[11px] font-bold flex items-center justify-center gap-1.5 hover:border-accent cursor-pointer">
+                <ImagePlus className="h-3.5 w-3.5" /> {em.art ? 'Replace ticket art' : 'Upload ticket art'}
+              </button>
+              {em.art && (
+                <button type="button" onClick={() => setPendingEmailArt(null)} className="text-[10px] text-rose-400 hover:underline flex items-center justify-center gap-1 cursor-pointer">
+                  <Trash2 className="h-3 w-3" /> Remove ticket art
+                </button>
+              )}
+              <input ref={emailInput} type="file" accept="image/*" className="hidden" onChange={(e) => pick(e, 'email')} />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {([
+                ['Base colour', 'emailBackgroundColor', em.bg],
+                ['Text colour', 'emailForegroundColor', em.fg],
+                ['Label colour', 'emailLabelColor', em.label],
+              ] as const).map(([lbl, key, v]) => (
+                <label key={key} className="flex items-center justify-between gap-2 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                  {lbl}
+                  <input type="color" value={v} onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))} className="h-7 w-10 rounded border border-slate-300 dark:border-white/20 bg-transparent cursor-pointer" />
+                </label>
+              ))}
+            </div>
+            <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+              Darken ticket art: {Math.round(em.overlay * 100)}%
+              <input type="range" min={0} max={0.9} step={0.05} value={em.overlay} onChange={(e) => setDraft((d) => ({ ...d, emailOverlay: Number(e.target.value) }))} className="w-full accent-sky-500" />
+            </label>
+          </>
+        )}
+      </div>
 
       <button
         type="button"
