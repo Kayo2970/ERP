@@ -446,7 +446,19 @@ interface BufferedEmailEntry {
 }
 
 const bufferedEmails = new Map<string, BufferedEmailEntry>();
-let bufferQueueRestored = false;
+const sendingInProgress = new Set<string>();
+let sweeperIntervalStarted = false;
+
+function ensureSweeperInterval(): void {
+  if (sweeperIntervalStarted || typeof setInterval === 'undefined') return;
+  sweeperIntervalStarted = true;
+  const interval = setInterval(() => {
+    sweepExpiredBufferedEmails().catch(err => {
+      console.error('[email-service] Background sweeper tick error:', err);
+    });
+  }, 30000);
+  if (interval.unref) interval.unref();
+}
 
 function escapeHtml(text: string): string {
   return (text || '')
@@ -457,28 +469,39 @@ function escapeHtml(text: string): string {
     .replace(/'/g, '&#039;');
 }
 
-async function restoreBufferedQueue(): Promise<void> {
-  if (bufferQueueRestored) return;
-  bufferQueueRestored = true;
+export async function sweepExpiredBufferedEmails(): Promise<number> {
+  ensureSweeperInterval();
+  let dispatchedCount = 0;
   try {
     const list = await readCollection<EmailLog>('emails');
     const bufferedList = (list || []).filter(item => item.status === 'BUFFERED');
+    if (bufferedList.length === 0) return 0;
+
     const now = Date.now();
     for (const item of bufferedList) {
-      if (bufferedEmails.has(item.id)) continue;
+      if (sendingInProgress.has(item.id)) continue;
       const untilMs = item.bufferedUntil ? new Date(item.bufferedUntil).getTime() : 0;
       const remainingMs = Math.max(0, untilMs - now);
+
       if (remainingMs === 0) {
-        // Expired while server was offline/restarting — dispatch immediately
+        // 10 minutes have elapsed! Trigger SMTP send immediately
+        dispatchedCount++;
+        const entry = bufferedEmails.get(item.id);
+        if (entry?.timer) clearTimeout(entry.timer);
+        bufferedEmails.delete(item.id);
+
         sendBufferedEmailNow(item.id).catch(err => {
-          console.error(`[email-service] Failed to send expired buffered email ${item.id}:`, err);
+          console.error(`[email-service] Failed to dispatch matured buffered email ${item.id}:`, err);
         });
-      } else {
+      } else if (!bufferedEmails.has(item.id)) {
+        // Re-arm timer if missing in memory (e.g. after server boot)
         const timer = setTimeout(() => {
           sendBufferedEmailNow(item.id).catch(err => {
-            console.error(`[email-service] Failed to send scheduled buffered email ${item.id}:`, err);
+            console.error(`[email-service] Failed to dispatch scheduled buffered email ${item.id}:`, err);
           });
         }, remainingMs);
+        if (timer.unref) timer.unref();
+
         bufferedEmails.set(item.id, {
           id: item.id,
           payload: {
@@ -495,8 +518,13 @@ async function restoreBufferedQueue(): Promise<void> {
       }
     }
   } catch (err) {
-    console.error('[email-service] Failed to restore buffered emails from DB:', err);
+    console.error('[email-service] Failed to sweep buffered emails from DB:', err);
   }
+  return dispatchedCount;
+}
+
+export async function restoreBufferedQueue(): Promise<void> {
+  await sweepExpiredBufferedEmails();
 }
 
 async function executeSmtpSend(payload: SendEmailPayload): Promise<{
@@ -629,43 +657,52 @@ async function sendImmediateEmail(payload: SendEmailPayload): Promise<EmailLog> 
 }
 
 export async function sendBufferedEmailNow(id: string): Promise<EmailLog | null> {
-  await restoreBufferedQueue();
-  const entry = bufferedEmails.get(id);
-  if (entry?.timer) {
-    clearTimeout(entry.timer);
+  if (sendingInProgress.has(id)) return null;
+  sendingInProgress.add(id);
+
+  try {
+    const entry = bufferedEmails.get(id);
+    if (entry?.timer) {
+      clearTimeout(entry.timer);
+    }
+    bufferedEmails.delete(id);
+
+    const currentLogs = await readCollection<EmailLog>('emails');
+    const target = currentLogs.find(l => l.id === id);
+    if (!target || target.status === 'CANCELLED' || target.status === 'SENT') {
+      return null;
+    }
+
+    console.log(`[email-service] Dispatching buffered email ${id} to ${target.to} via SMTP...`);
+
+    const payloadToSend: SendEmailPayload = entry?.payload || {
+      to: target.to,
+      subject: target.subject,
+      bodyText: target.bodyText,
+      bodyHtml: target.bodyHtml,
+      category: target.category,
+    };
+
+    const sendResult = await executeSmtpSend(payloadToSend);
+
+    const updatedLog: EmailLog = {
+      ...target,
+      status: sendResult.status,
+      sentAt: new Date().toISOString(),
+      smtpResponse: sendResult.smtpResponse,
+      errorMessage: sendResult.errorMessage,
+      rejectedRecipients: sendResult.rejectedRecipients,
+    };
+
+    await mutateCollection<EmailLog>('emails', (current) => {
+      return (current || []).map(item => item.id === id ? updatedLog : item);
+    });
+
+    console.log(`[email-service] Buffered email ${id} dispatch complete. Result: ${sendResult.status} (SMTP: ${sendResult.smtpResponse || sendResult.errorMessage || 'OK'})`);
+    return updatedLog;
+  } finally {
+    sendingInProgress.delete(id);
   }
-  bufferedEmails.delete(id);
-
-  const currentLogs = await readCollection<EmailLog>('emails');
-  const target = currentLogs.find(l => l.id === id);
-  if (!target || target.status === 'CANCELLED') {
-    return null;
-  }
-
-  const payloadToSend: SendEmailPayload = entry?.payload || {
-    to: target.to,
-    subject: target.subject,
-    bodyText: target.bodyText,
-    bodyHtml: target.bodyHtml,
-    category: target.category,
-  };
-
-  const sendResult = await executeSmtpSend(payloadToSend);
-
-  const updatedLog: EmailLog = {
-    ...target,
-    status: sendResult.status,
-    sentAt: new Date().toISOString(),
-    smtpResponse: sendResult.smtpResponse,
-    errorMessage: sendResult.errorMessage,
-    rejectedRecipients: sendResult.rejectedRecipients,
-  };
-
-  await mutateCollection<EmailLog>('emails', (current) => {
-    return (current || []).map(item => item.id === id ? updatedLog : item);
-  });
-
-  return updatedLog;
 }
 
 export const flushBufferedEmail = sendBufferedEmailNow;

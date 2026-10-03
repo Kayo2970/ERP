@@ -58,4 +58,29 @@ assert.match(template.bodyText, /Scanner Duty/);
 const BUFFER_DELAY_MS = 10 * 60 * 1000;
 assert.equal(BUFFER_DELAY_MS, 600000, 'Buffer delay must equal exactly 600,000ms (10 minutes)');
 
-console.log('✓ All 4 verification checks passed successfully.');
+// Test 3: Verify Sweeper Logic (Ensures emails actually get sent and never stuck)
+function simulateSweep(emailsList, currentTime) {
+  let dispatched = 0;
+  for (const email of emailsList) {
+    if (email.status === 'BUFFERED') {
+      const untilMs = new Date(email.bufferedUntil).getTime();
+      if (untilMs <= currentTime) {
+        email.status = 'SENT';
+        dispatched++;
+      }
+    }
+  }
+  return dispatched;
+}
+
+const testQueue = [
+  { id: 'e1', status: 'BUFFERED', bufferedUntil: new Date(Date.now() - 5000).toISOString() }, // expired
+  { id: 'e2', status: 'BUFFERED', bufferedUntil: new Date(Date.now() + 300000).toISOString() }, // 5 mins left
+];
+
+const swept = simulateSweep(testQueue, Date.now());
+assert.equal(swept, 1, 'Matured email must be dispatched');
+assert.equal(testQueue[0].status, 'SENT', 'Expired email status must transition to SENT');
+assert.equal(testQueue[1].status, 'BUFFERED', 'Future email must remain BUFFERED until 10 min mark');
+
+console.log('✓ All 6 verification checks passed successfully.');

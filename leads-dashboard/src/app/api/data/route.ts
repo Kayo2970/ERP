@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { readDb } from '@/lib/server-db';
 import { requireSession } from '@/lib/session';
 import { apiError } from '@/lib/api-error';
+import { sweepExpiredBufferedEmails } from '@/lib/email-service';
 
 // This route is the one every signed-in client polls every ~7s for live
 // cross-session sync — it's the prime suspect for a "single dependency
@@ -16,6 +17,8 @@ export async function GET(request: Request) {
   const t0 = performance.now();
   try {
     await requireSession(request);
+    // Background sweep: ensure no buffered email stays held past 10 minutes
+    sweepExpiredBufferedEmails().catch(() => {});
     const tAuth = performance.now();
     const db: any = await readDb();
     const tRead = performance.now();
