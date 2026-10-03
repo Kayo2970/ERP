@@ -294,7 +294,7 @@ export default function PublicEventPassPage({
           brandHeader="LEADS Next Gen Centre"
           passColor={pass.passColor}
           passGradient={pass.passGradient}
-          theme={theme}
+          theme={{ ...(theme || {}), ...(pass.textColor ? { foregroundColor: pass.textColor } : {}), ...(pass.labelColor ? { labelColor: pass.labelColor } : {}) }}
           cardUrl={passUrl}
           qrUrl="/card/leads-qr-code.png"
           showActions={true}

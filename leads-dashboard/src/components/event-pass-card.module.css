@@ -48,7 +48,7 @@
     url('/card/dark-blue-leather.jpg');
   background-size: cover;
   background-position: center;
-  color: #ffffff;
+  color: var(--pass-fg, #ffffff);
   transform: rotateY(0deg);
   z-index: 2;
   border: 1px solid rgba(56, 189, 248, 0.25);
@@ -101,14 +101,14 @@
   font-weight: 900;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #f8fafc;
+  color: var(--pass-fg, #f8fafc);
   line-height: 1.1;
 }
 
 .brandSubtitle {
   font-size: 9px;
   font-weight: 700;
-  color: #38bdf8;
+  color: var(--pass-label, #38bdf8);
   letter-spacing: 0.06em;
 }
 
@@ -143,14 +143,14 @@
 .eventTitleText {
   font-size: 12.5px;
   font-weight: 800;
-  color: #ffffff;
+  color: var(--pass-fg, #ffffff);
   line-height: 1.25;
 }
 
 .eventDateText {
   font-size: 10px;
   font-weight: 600;
-  color: #94a3b8;
+  color: var(--pass-label, #94a3b8);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -185,7 +185,7 @@
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #38bdf8;
+  color: var(--pass-label, #38bdf8);
   background: rgba(56, 189, 248, 0.12);
   padding: 2px 8px;
   border-radius: 6px;
@@ -196,7 +196,7 @@
 .attendeeNameText {
   font-size: 18px;
   font-weight: 900;
-  color: #ffffff;
+  color: var(--pass-fg, #ffffff);
   line-height: 1.2;
   letter-spacing: -0.01em;
   word-break: break-word;
@@ -227,14 +227,14 @@
 .metaVal {
   font-size: 10.5px;
   font-weight: 700;
-  color: #e2e8f0;
+  color: var(--pass-fg, #e2e8f0);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .roomVal {
-  color: #38bdf8;
+  color: var(--pass-label, #38bdf8);
   font-weight: 800;
 }
 

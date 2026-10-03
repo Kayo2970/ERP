@@ -71,8 +71,8 @@ export async function renderBoardingPassPng(
 ): Promise<Buffer> {
   const fam = ensureFont();
   const bg = theme.backgroundColor || pass.passColor || DEFAULT_PASS_THEME.backgroundColor;
-  const fg = theme.foregroundColor || DEFAULT_PASS_THEME.foregroundColor;
-  const label = theme.labelColor || DEFAULT_PASS_THEME.labelColor;
+  const fg = pass.textColor || theme.foregroundColor || DEFAULT_PASS_THEME.foregroundColor;
+  const label = pass.labelColor || theme.labelColor || DEFAULT_PASS_THEME.labelColor;
   const overlay = typeof theme.overlay === 'number' ? theme.overlay : DEFAULT_PASS_THEME.overlay;
 
   const canvas = createCanvas(W, H);

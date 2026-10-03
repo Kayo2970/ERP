@@ -448,6 +448,9 @@ export interface EventPassItem {
   checkedInBy?: string;
   passColor?: string;
   passGradient?: string;
+  /** Optional per-pass text/label colours (hex). Override the event theme; unset = auto. */
+  textColor?: string;
+  labelColor?: string;
   attendance?: PassAttendanceRecord[];
   qrPayload: string;
   walletAppleUrl?: string;
@@ -2311,6 +2314,14 @@ export function deleteGuest(id: string, actorName: string): void {
 // -------------------------------------------------------------
 // Events
 // -------------------------------------------------------------
+
+/**
+ * Events that passes can be issued for: only events created in the Events module.
+ * Public holidays / festivals auto-synced from the holiday calendar feed are excluded.
+ */
+export function getPassIssuableEvents(): EventItem[] {
+  return getEvents().filter((e) => !e.isHoliday && !String(e.id).startsWith('holiday_'));
+}
 
 export function getEvents(): EventItem[] {
   if (typeof window === 'undefined') return initialEvents;
