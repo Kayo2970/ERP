@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection } from '@/lib/server-db';
+import { purgeMemberArtifacts } from '@/lib/cascade-delete';
 import { createActivationTokenAndSendEmail } from '@/lib/account-activation';
 import { requireSession, invalidateAllSessionsForMember } from '@/lib/session';
 import { getAccessLevelSettingsServer, canAddMember, canEditDirectory, canTerminateMember } from '@/lib/permissions-server';
@@ -157,6 +158,7 @@ export async function DELETE(request: Request) {
 
     const idSet = new Set(ids);
     let deletedIds: string[] = [];
+    const deletedEmails = new Map<string, string | undefined>();
     await mutateCollection('members', (current) => {
       // Kayomarz Pavri is always protected from bulk delete — never bypassable
       // via this endpoint (the single-record route's `force` escape hatch is
@@ -170,10 +172,12 @@ export async function DELETE(request: Request) {
         throw new Error('Action blocked: System must always maintain at least one active Super User (or Kayomarz Pavri).');
       }
       deletedIds = Array.from(toDelete);
+      current.forEach((m: any) => { if (toDelete.has(m.id)) deletedEmails.set(m.id, m.email); });
       return filtered;
     });
 
     await Promise.all(deletedIds.map(id => invalidateAllSessionsForMember(id)));
+    for (const id of deletedIds) await purgeMemberArtifacts(id, deletedEmails.get(id));
 
     return NextResponse.json({ success: true, deletedIds });
   } catch (err: any) {

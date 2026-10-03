@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { logAuditEvent, getSystemSettings, updateSystemSettings, authHeaders } from '@/lib/local-data';
 import { canManageBackup } from '@/lib/permissions';
+import { StoragePanel } from '@/components/storage-panel';
 import { EmptyState } from '@/components/ui/empty-state';
 import { FileDropzone, FilePreviewRow, createProgressTracker, uploadFormData } from '@/components/ui/file-dropzone';
 
@@ -198,10 +199,12 @@ export default function BackupRestorePage() {
         </h1>
         <p className="text-xs text-theme-text-secondary">
           Download an encrypted copy of everything — every collection (members, tasks, events, ratings, reimbursements,
-          announcements, forms, submissions, designs, group policies, audit logs) and every uploaded file (design assets,
-          reimbursement receipts) — or restore the system from a previous backup.
+          announcements, forms, submissions, designs, group policies, audit logs) and every uploaded file (avatars, visiting
+          cards, design assets, receipts, event reports, pass files) — or restore the system from a previous backup.
         </p>
       </div>
+
+      <StoragePanel />
 
       {/* Site-wide Lockdown */}
       <div className={`glass-panel rounded-2xl p-6 space-y-3 border ${lockdownEnabled ? 'border-danger/30' : 'border-theme-card-border'}`}>

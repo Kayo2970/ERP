@@ -319,3 +319,18 @@ export async function updateEventPassPushNotification(
 
 
 
+
+/**
+ * Revokes an issued event pass on every device (DELETE /api/passes/:serialNumber).
+ * A 404 means it was never issued / already revoked, which is fine.
+ */
+export async function revokeEventWalletPass(apiKey: string, serialNumber: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/passes/${encodeURIComponent(serialNumber)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  if (!res.ok && res.status !== 404) {
+    const detail = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+    throw new Error(`WalletWallet pass revoke failed: ${detail.error || res.statusText}`);
+  }
+}
