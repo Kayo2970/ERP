@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, X, Send, Mail, CheckCircle2, AlertTriangle, ExternalLink, Loader2 } from 'lucide-react';
+import { PassEmailComposer, usePassEmailTemplate } from '@/components/pass-email-composer';
 import {
   EventPassItem,
   buildPassEmail,
@@ -31,6 +32,8 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
   const [emails, setEmails] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<Record<string, { state: SendState; error?: string }>>({});
   const [isSending, setIsSending] = useState(false);
+  const [template, setTemplate] = usePassEmailTemplate(isOpen);
+  const [showEditor, setShowEditor] = useState(false);
   const stopRef = useRef(false);
 
   // Reset whenever the modal is (re)opened with a new selection
@@ -71,7 +74,7 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
   }, [isOpen, go, isSending, onClose]);
 
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const preview = useMemo(() => (pass ? buildPassEmail(pass, origin, { forPreview: true }) : null), [pass, origin]);
+  const preview = useMemo(() => (pass ? buildPassEmail(pass, origin, { forPreview: true, subjectTemplate: template.subject, bodyTemplate: template.body }) : null), [pass, origin, template]);
 
   const validEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
   const toSend = passes.filter((p) => included[p.id] && validEmail(emails[p.id] || ''));
@@ -88,7 +91,7 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
       if (stopRef.current) break;
       setStatus((s) => ({ ...s, [p.id]: { state: 'sending' } }));
       try {
-        const res = await dispatchPassEmail(p, emails[p.id].trim());
+        const res = await dispatchPassEmail(p, emails[p.id].trim(), { subjectTemplate: template.subject, bodyTemplate: template.body });
         setStatus((s) => ({ ...s, [p.id]: res.success ? { state: 'ok' } : { state: 'failed', error: res.error } }));
       } catch (err: any) {
         setStatus((s) => ({ ...s, [p.id]: { state: 'failed', error: err?.message || 'Network error' } }));
@@ -107,8 +110,8 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
   const st = status[pass.id];
 
   return (
-    <div className="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6" role="dialog" aria-modal="true">
-      <div className="w-full max-w-6xl max-h-full flex flex-col rounded-3xl border border-white/15 bg-[#0D1F38] text-white shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 xl:p-6" role="dialog" aria-modal="true">
+      <div className="w-full max-w-[1760px] h-[94vh] flex flex-col rounded-3xl border border-white/15 bg-[#0D1F38] text-white shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-white/10">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -143,7 +146,7 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
         </div>
 
         {/* Body */}
-        <div className="flex-1 min-h-0 overflow-y-auto grid grid-cols-1 lg:grid-cols-2 gap-4 p-5">
+        <div className={`flex-1 min-h-0 overflow-y-auto grid grid-cols-1 gap-5 p-5 ${showEditor ? 'xl:grid-cols-[minmax(0,5fr)_minmax(0,6fr)_minmax(0,4fr)]' : 'xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]'}`}>
           {/* Pass */}
           <div className="space-y-3 min-w-0">
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">The pass</div>
@@ -204,9 +207,17 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
               title={`Email preview for ${pass.attendeeName}`}
               sandbox=""
               srcDoc={`<html><body style="margin:0;padding:12px;background:#e2e8f0;">${preview?.bodyHtml || ''}</body></html>`}
-              className="w-full h-[460px] rounded-xl border border-white/10 bg-slate-200"
+              className="w-full h-[calc(94vh-390px)] min-h-[420px] rounded-xl border border-white/10 bg-slate-200"
             />
           </div>
+
+          {/* Message editor (same template as Mail-Merge Dispatch) */}
+          {showEditor && (
+            <div className="space-y-3 min-w-0 rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Edit the message (applies to all)</div>
+              <PassEmailComposer template={template} onChange={setTemplate} bodyRows={16} />
+            </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -219,6 +230,9 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
               <ChevronRight className="h-4 w-4" />
             </button>
             <span className="hidden sm:inline text-[10.5px] text-slate-500">← → to navigate</span>
+            <button type="button" onClick={() => setShowEditor((v) => !v)} className="ml-2 px-3 py-1.5 rounded-lg border border-white/15 text-[11px] font-bold hover:bg-white/10 cursor-pointer">
+              {showEditor ? 'Hide message editor' : 'Edit message'}
+            </button>
             <button type="button" onClick={() => setIncluded(Object.fromEntries(passes.map((p) => [p.id, !allIncluded])))} className="ml-2 text-[11px] font-bold text-sky-400 hover:underline cursor-pointer">
               {allIncluded ? 'Deselect all' : 'Select all'}
             </button>

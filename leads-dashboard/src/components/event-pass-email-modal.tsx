@@ -16,8 +16,8 @@ import {
   QrCode,
   RefreshCw,
 } from 'lucide-react';
-import { passEmailButtonsHtml } from '@/lib/pass-email-buttons';
-import { EventItem, EventPassItem, authHeaders, updateEventPassEmailStatus } from '@/lib/local-data';
+import { EventItem, EventPassItem, buildPassEmail, dispatchPassEmail } from '@/lib/local-data';
+import { PassEmailComposer, usePassEmailTemplate } from '@/components/pass-email-composer';
 
 interface EventPassEmailModalProps {
   isOpen: boolean;
@@ -30,21 +30,6 @@ interface EventPassEmailModalProps {
   onEmailsDispatched?: (count: number) => void;
 }
 
-const PLACEHOLDERS = [
-  { tag: '@name', desc: 'Attendee Name' },
-  { tag: '@pass_type', desc: 'Pass Tier' },
-  { tag: '@guest_category', desc: 'Category' },
-  { tag: '@room_or_venue', desc: 'Assigned Room' },
-  { tag: '@event_name', desc: 'Event Title' },
-  { tag: '@event_date', desc: 'Event Date' },
-  { tag: '@serial_number', desc: 'Pass Serial ID' },
-  { tag: '@pass_link', desc: 'Pass Link' },
-  { tag: '@pass_image', desc: 'Boarding-pass image (QR)' },
-];
-
-const PASS_IMAGE_SENTINEL = '[[PASS_IMAGE]]';
-const escapeHtml = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
 export function EventPassEmailModal({
   isOpen,
   onClose,
@@ -56,10 +41,8 @@ export function EventPassEmailModal({
   onEmailsDispatched,
 }: EventPassEmailModalProps) {
   const [activeEventId, setActiveEventId] = useState(selectedEventId || 'ALL');
-  const [subjectTemplate, setSubjectTemplate] = useState('Your Official Pass for @event_name — @pass_type');
-  const [bodyTemplate, setBodyTemplate] = useState(
-    `Dear @name,\n\nWe are delighted to welcome you to @event_name. Your official credential has been issued by the LEADS Next Gen Centre.\n\n@pass_image\n\n• Pass Tier: @pass_type\n• Guest Category: @guest_category\n• Assigned Venue / Room: @room_or_venue\n• Event Date & Validity: @event_date\n• Pass Serial ID: @serial_number\n\nYou can access your verified digital pass, save it to Apple Wallet / Google Wallet, or view check-in details via the link below:\n@pass_link\n\nPlease present your digital pass or QR code at official event turnstiles upon arrival.\n\nWarm regards,\nLEADS Next Gen Centre • RUAS`
-  );
+  // One shared message (also used by Preview & dispatch in Issued Passes)
+  const [template, setTemplate] = usePassEmailTemplate(isOpen);
 
   const [selectedPassIds, setSelectedPassIds] = useState<string[]>([]);
   const [previewPassIndex, setPreviewPassIndex] = useState(0);
@@ -95,29 +78,12 @@ export function EventPassEmailModal({
     }
   };
 
-  const insertPlaceholder = (tag: string) => {
-    setBodyTemplate((prev) => prev + ' ' + tag);
-  };
-
-  // Compute mail-merged preview
+  // Compute the designed email preview for the highlighted recipient
   const previewPass = eventPasses[previewPassIndex] || eventPasses[0];
-
-  const renderMailMerge = (template: string, pass?: EventPassItem) => {
-    if (!pass) return template;
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://portal-leads.msruas.ac.in';
-    const passUrl = `${origin}/pass/${pass.serialNumber}`;
-
-    return template
-      .replace(/@name|\{\{name\}\}/gi, pass.attendeeName)
-      .replace(/@pass_type|\{\{pass_type\}\}/gi, pass.passType)
-      .replace(/@guest_category|\{\{guest_category\}\}/gi, pass.guestCategory || 'Guest Attendee')
-      .replace(/@room_or_venue|\{\{room_or_venue\}\}/gi, pass.roomOrVenue || pass.eventVenue || 'Main Auditorium')
-      .replace(/@event_name|\{\{event_name\}\}/gi, pass.eventName)
-      .replace(/@event_date|\{\{event_date\}\}/gi, pass.validityDate || pass.eventDate || '2026')
-      .replace(/@serial_number|\{\{serial_number\}\}/gi, pass.serialNumber)
-      .replace(/@pass_link|\{\{pass_link\}\}/gi, passUrl)
-      .replace(/@pass_image|\{\{pass_image\}\}/gi, PASS_IMAGE_SENTINEL);
-  };
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://portal-leads.msruas.ac.in';
+  const previewEmail = previewPass
+    ? buildPassEmail(previewPass, origin, { forPreview: true, subjectTemplate: template.subject, bodyTemplate: template.body })
+    : null;
 
   const handleSendEmails = async () => {
     const targets = eventPasses.filter((p) => selectedPassIds.includes(p.id));
@@ -136,48 +102,13 @@ export function EventPassEmailModal({
       for (const pass of targets) {
         if (!pass.attendeeEmail) continue;
 
-        const personalizedSubject = renderMailMerge(subjectTemplate, pass);
-        const mergedBody = renderMailMerge(bodyTemplate, pass);
-        const personalizedBody = mergedBody.split(PASS_IMAGE_SENTINEL).join('').trim();
-        const origin = typeof window !== 'undefined' ? window.location.origin : '';
-        const imageTag = `<a href="${origin}/pass/${pass.serialNumber}"><img src="cid:leads-pass-image" alt="Your event pass" width="552" style="display:block;width:100%;max-width:552px;height:auto;margin:16px auto;border-radius:16px;" /></a>`;
-        const htmlBody = escapeHtml(mergedBody).replace(/\n/g, '<br/>');
-        const personalizedHtml =
-          (htmlBody.includes(PASS_IMAGE_SENTINEL) ? htmlBody.split(PASS_IMAGE_SENTINEL).join(imageTag) : `${htmlBody}<br/>${imageTag}`) +
-          passEmailButtonsHtml(origin, pass.serialNumber) +
-          `<img src="${origin}/api/pass/${pass.serialNumber}/track" width="1" height="1" alt="" style="display:none" />`;
-
         try {
-          const res = await fetch('/api/email/send', {
-            method: 'POST',
-            headers: authHeaders({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify({
-              scope: 'SINGLE',
-              recipientEmail: pass.attendeeEmail,
-              to: pass.attendeeEmail,
-              subject: personalizedSubject,
-              bodyText: personalizedBody,
-              bodyHtml: personalizedHtml,
-              passSerial: pass.serialNumber,
-              category: 'EVENT_INVITATION',
-              badgeText: 'Official Event Pass',
-              badgeColor: '#0284c7',
-              metadata: {
-                passId: pass.id,
-                serialNumber: pass.serialNumber,
-                eventId: pass.eventId,
-                eventName: pass.eventName,
-              },
-            }),
-          });
-
-          if (!res.ok) {
+          const res = await dispatchPassEmail(pass, pass.attendeeEmail, { subjectTemplate: template.subject, bodyTemplate: template.body });
+          if (!res.success) {
             failCount++;
-            const errData = await res.json().catch(() => ({}));
-            console.warn(`Failed to dispatch email to ${pass.attendeeEmail}:`, errData.error);
+            console.warn(`Failed to dispatch email to ${pass.attendeeEmail}:`, res.error);
           } else {
             sentCount++;
-            updateEventPassEmailStatus(pass.id, pass.emailStatus === 'Pass Viewed' ? 'Pass Viewed' : 'Email Sent');
           }
         } catch (subErr) {
           failCount++;
@@ -207,7 +138,7 @@ export function EventPassEmailModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in duration-200">
-      <div className="glass-panel w-full max-w-4xl rounded-3xl p-6 md:p-8 space-y-6 relative border border-slate-200/90 dark:border-white/15 bg-white/95 dark:bg-[#0D1F38]/95 shadow-2xl max-h-[90vh] flex flex-col">
+      <div className="glass-panel w-full max-w-[1600px] rounded-3xl p-5 md:p-7 space-y-5 relative border border-slate-200/90 dark:border-white/15 bg-white/95 dark:bg-[#0D1F38]/95 shadow-2xl h-[94vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-white/10 pb-4">
           <div className="flex items-center gap-3">
@@ -245,9 +176,9 @@ export function EventPassEmailModal({
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 overflow-y-auto flex-1 pr-1 text-xs">
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] gap-6 overflow-y-auto flex-1 pr-1 text-xs">
           {/* LEFT: TEMPLATE EDITOR & PLACEHOLDERS */}
-          <div className="lg:col-span-7 space-y-4">
+          <div className="space-y-4 min-w-0">
             {/* Event Filter */}
             <div className="space-y-1.5">
               <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px]">
@@ -267,54 +198,11 @@ export function EventPassEmailModal({
               </select>
             </div>
 
-            {/* Subject Line */}
-            <div className="space-y-1.5">
-              <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px]">
-                Email Subject Line *
-              </label>
-              <input
-                type="text"
-                value={subjectTemplate}
-                onChange={(e) => setSubjectTemplate(e.target.value)}
-                className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-900/60 border border-slate-300 dark:border-white/15 rounded-xl text-slate-900 dark:text-white font-semibold focus:outline-none focus:border-accent text-xs"
-              />
-            </div>
-
-            {/* Placeholder Chip Tags */}
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                Click to Insert Placeholders:
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {PLACEHOLDERS.map((ph) => (
-                  <button
-                    type="button"
-                    key={ph.tag}
-                    onClick={() => insertPlaceholder(ph.tag)}
-                    className="px-2 py-0.5 rounded-lg bg-accent/15 hover:bg-accent/25 text-accent border border-accent/30 text-[10.5px] font-mono font-bold cursor-pointer transition-colors"
-                  >
-                    + {ph.tag}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Body Editor */}
-            <div className="space-y-1.5">
-              <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px]">
-                Personalized Email Body *
-              </label>
-              <textarea
-                rows={9}
-                value={bodyTemplate}
-                onChange={(e) => setBodyTemplate(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-300 dark:border-white/15 rounded-xl text-slate-900 dark:text-white font-mono text-xs focus:outline-none focus:border-accent leading-relaxed"
-              />
-            </div>
+            <PassEmailComposer template={template} onChange={setTemplate} bodyRows={14} />
           </div>
 
           {/* RIGHT: RECIPIENTS SELECTION & LIVE PREVIEW */}
-          <div className="lg:col-span-5 space-y-4 flex flex-col">
+          <div className="space-y-4 flex flex-col min-w-0">
             {/* Recipients Checklist */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -385,24 +273,28 @@ export function EventPassEmailModal({
             <div className="space-y-1.5 flex-1 flex flex-col">
               <div className="flex items-center justify-between text-[11px] font-bold text-slate-600 dark:text-slate-300">
                 <span className="flex items-center gap-1">
-                  <Eye className="h-3 w-3 text-accent" /> Live Mail-Merge Output
+                  <Eye className="h-3 w-3 text-accent" /> Live email preview (exactly what is sent)
                 </span>
                 <span className="text-[10px] text-accent font-semibold truncate max-w-[160px]">
                   {previewPass?.attendeeName || 'No recipient'}
                 </span>
               </div>
 
-              <div className="flex-1 p-3.5 rounded-2xl bg-white dark:bg-[#071324] border border-slate-200 dark:border-white/15 text-slate-800 dark:text-slate-200 text-[11px] overflow-y-auto space-y-2 shadow-inner">
-                <div className="border-b border-slate-200 dark:border-white/10 pb-2">
-                  <span className="text-[9px] text-slate-400 uppercase font-bold block">Subject</span>
-                  <span className="font-bold text-slate-900 dark:text-white">
-                    {renderMailMerge(subjectTemplate, previewPass)}
-                  </span>
-                </div>
-                <div className="whitespace-pre-line leading-relaxed">
-                  {renderMailMerge(bodyTemplate, previewPass).split(PASS_IMAGE_SENTINEL).join('🎫 [ Boarding-pass image with QR code is inserted here ]')}
-                </div>
+              <div className="rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 px-3 py-2 text-[11px]">
+                <span className="text-[9px] text-slate-400 uppercase font-bold mr-2">Subject</span>
+                <span className="font-bold text-slate-900 dark:text-white">{previewEmail?.subject || '—'}</span>
               </div>
+              {previewEmail ? (
+                <iframe
+                  key={previewPass?.id}
+                  title="Email preview"
+                  sandbox=""
+                  srcDoc={`<html><body style="margin:0;padding:12px;background:#e2e8f0;">${previewEmail.bodyHtml}</body></html>`}
+                  className="w-full flex-1 min-h-[520px] rounded-2xl border border-slate-200 dark:border-white/15 bg-slate-200"
+                />
+              ) : (
+                <div className="flex-1 min-h-[200px] rounded-2xl border border-dashed border-slate-300 dark:border-white/15 flex items-center justify-center text-slate-400 text-[11px]">Select a recipient to preview</div>
+              )}
             </div>
           </div>
         </div>
