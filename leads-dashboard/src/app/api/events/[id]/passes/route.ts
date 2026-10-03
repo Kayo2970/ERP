@@ -3,10 +3,16 @@ import { readCollection, mutateCollection } from '@/lib/server-db';
 import { requireSession } from '@/lib/session';
 import { apiError } from '@/lib/api-error';
 import { EventPassItem, mergeAttendance } from '@/lib/local-data';
-import { getWalletWalletApiKey } from '@/lib/wallet/walletwallet-config';
-import { updateEventWalletPass } from '@/lib/wallet/walletwallet-client';
-import { walletDataForPass } from '@/lib/pass-theme';
+import { getAppBaseUrl } from '@/lib/app-url';
+import { syncEditedWalletPass, WalletSyncAction } from '@/lib/wallet/pass-cache';
 import { isPassArchived, PASS_RETENTION_DAYS } from '@/lib/pass-retention';
+
+/** Edits to these fields change what the wallet pass shows; check-ins, email tracking etc. must not touch the wallet. */
+const WALLET_RELEVANT_KEYS = new Set([
+  'attendeeName', 'attendeeOrg', 'guestCategory', 'passType', 'roomOrVenue', 'eventId', 'eventName', 'eventDate', 'eventVenue',
+  'validDays', 'validityDate', 'passColor', 'passGradient', 'textColor', 'labelColor', 'fontScale', 'showEventTitle',
+  'qrFormat', 'qrAltText', 'qrDark', 'qrLight', 'qrEyeColor', 'qrShape', 'qrLogo', 'qrInWallet',
+]);
 
 export async function GET(
   request: Request,
@@ -124,28 +130,22 @@ export async function PATCH(
       return NextResponse.json({ error: 'Pass not found' }, { status: 404 });
     }
 
-    // Check if Apple/Google Wallet API is configured and update wallet pass if present
+    // Keep the wallet copy in step: re-issue if no guest has taken it yet, otherwise update it in place
     let walletUpdated = false;
     let walletNotice: string | undefined;
-
-    try {
-      const apiKey = await getWalletWalletApiKey();
-      const target = updatedPass as EventPassItem | null;
-      // Only passes that were actually added to a wallet have something to update
-      if (apiKey && target && target.walletSerialNumber) {
-        const origin = request.headers.get('origin') || 'https://portal-leads.msruas.ac.in';
-        const passUrl = `${origin}/pass/${target.serialNumber}`;
-        await updateEventWalletPass(apiKey, await walletDataForPass(target), passUrl);
-        walletUpdated = true;
-      }
-    } catch (walletErr: any) {
-      console.warn('[event-pass-patch] Wallet API update notice:', walletErr?.message);
-      walletNotice = walletErr?.message;
+    let walletAction: WalletSyncAction = 'none';
+    const target = updatedPass as EventPassItem | null;
+    if (target && Object.keys(updates).some((k) => WALLET_RELEVANT_KEYS.has(k))) {
+      const sync = await syncEditedWalletPass(target.id, getAppBaseUrl(request));
+      walletAction = sync.action;
+      walletUpdated = sync.action !== 'none';
+      walletNotice = sync.error;
     }
 
     return NextResponse.json({
       ...(updatedPass as any),
       walletUpdated,
+      walletAction,
       walletNotice,
     });
   } catch (err: any) {

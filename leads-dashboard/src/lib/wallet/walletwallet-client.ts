@@ -1,4 +1,5 @@
-const API_BASE = 'https://api.walletwallet.dev';
+// WALLETWALLET_API_BASE exists only so tests can point at a local fake server
+const API_BASE = process.env.WALLETWALLET_API_BASE || 'https://api.walletwallet.dev';
 
 // Production domain the app is deployed at — hardcoded (rather than derived
 // from the request) so the wallet pass's logo URLs are stable and always
@@ -16,7 +17,7 @@ const API_BASE = 'https://api.walletwallet.dev';
 // with "iconURL could not be fetched" on every single pass. Pointing this
 // at the actual live domain fixes it.
 const SITE_ORIGIN = 'https://portal-leads.msruas.ac.in';
-import { posterFields } from '@/lib/wallet-poster-spec';
+import { gradientStops, luminance, posterFields } from '@/lib/wallet-poster-spec';
 import type { PassBarcodeFormat } from '@/lib/local-data';
 
 // Fixed org-wide details shown on the back of every pass — same for every
@@ -135,6 +136,7 @@ export interface WalletEventPassData {
   validityDate?: string;
   validDays?: string[];
   passColor?: string;
+  passGradient?: string;
   /**
    * Event pass theme. Images are sent to WalletWallet as PUBLIC HTTPS URLs (it fetches and re-hosts them
    * once at creation — same approach as the LEADS logo). Values are storage paths such as
@@ -188,16 +190,34 @@ export function walletImageUrl(pathOrUrl?: string): string | undefined {
   return origin ? `${origin}${pathOrUrl.startsWith('/') ? '' : '/'}${pathOrUrl}` : undefined;
 }
 
+/** Blend a hex colour toward `#0b1526` by `t` (0..1). */
+function darken(hex: string, t: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return '#0b1526';
+  const n = parseInt(m[1], 16);
+  const to = [0x0b, 0x15, 0x26];
+  const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c, i) => Math.round(c + (to[i] - c) * t));
+  return `#${ch.map((c) => c.toString(16).padStart(2, '0')).join('')}`;
+}
+
 /**
- * Theme/validity fields shared by pass create + update. `color` is the base colour; `backgroundURL` is
- * full-bleed artwork (690×1010 portrait). With a background, iOS 27 switches to Apple's poster layout.
+ * The wallet's base `color`. Apple derives the text/label colours from it (light base → dark text), and the
+ * poster layout is designed for white text, so a poster pass must always carry a DARK base colour — taken from the
+ * pass's own gradient/colour, never from the event theme's base colour (which can be white for the portal card).
+ */
+export function walletBaseColor(eventPass: WalletEventPassData, poster: boolean): string {
+  if (!poster) return eventPass.themeColor || eventPass.passColor || '#0b1526';
+  const start = gradientStops(eventPass.passGradient)[0] || eventPass.passColor || '#0b1526';
+  return luminance(start) > 0.2 ? darken(start, 0.85) : start;
+}
+
+/**
+ * Theme/validity fields shared by pass create + update. `backgroundURL` is the designed poster (690×1010 portrait);
+ * with a background, iOS 27 switches to Apple's poster layout.
  */
 function themeBody(eventPass: WalletEventPassData): Record<string, unknown> {
-  const out: Record<string, unknown> = {
-    color: eventPass.themeColor || eventPass.passColor || '#0b1526',
-  };
-  // The designed poster (artwork + colours + font size + title) is what the recipient's wallet shows
   const bg = walletImageUrl(eventPass.posterUrl) || walletImageUrl(eventPass.themeBackgroundUrl);
+  const out: Record<string, unknown> = { color: walletBaseColor(eventPass, Boolean(bg)) };
   if (bg) out.backgroundURL = bg;
   const logo = walletImageUrl(eventPass.themeLogoUrl);
   if (logo) {
@@ -208,6 +228,7 @@ function themeBody(eventPass: WalletEventPassData): Record<string, unknown> {
   if (exp) out.expirationDays = exp;
   return out;
 }
+
 
 /** Barcode settings: format + the small caption under it. */
 function barcodeBody(eventPass: WalletEventPassData, passUrl: string): Record<string, unknown> {
@@ -277,16 +298,43 @@ function buildEventFields(eventPass: WalletEventPassData, passUrl: string, opts:
 }
 
 /**
- * Creates an event access pass (Apple Wallet .pkpass + Google Wallet save link)
- * via WalletWallet API matching the 98% pixel-accurate native layout.
+ * The complete WalletWallet request body for an event pass. Create (POST) and update (PUT) both use it:
+ * WalletWallet replaces the stored body on PUT, so an update must carry the full specification.
+ */
+export function buildPassBody(
+  eventPass: WalletEventPassData,
+  passUrl: string,
+  opts: { live: boolean; notification?: string }
+): Record<string, unknown> {
+  const logoUrl = `${SITE_ORIGIN}/card/leads-logo.png`;
+  const themed = themeBody(eventPass);
+  const poster = Boolean(themed.backgroundURL);
+  return {
+    organizationName: ORG_NAME,
+    logoText: poster ? 'LEADS NGC' : 'LEADS Next Gen Centre',
+    description: `${eventPass.eventName} — ${eventPass.attendeeName}`.slice(0, 200),
+    logoURL: logoUrl,
+    iconURL: logoUrl,
+    ...themed,
+    ...barcodeBody(eventPass, passUrl),
+    ...buildEventFields(eventPass, passUrl, opts),
+  };
+}
+
+function debugLog(label: string, body: unknown) {
+  if (process.env.WALLET_DEBUG === '1') console.log(`[wallet-debug] ${label}`, JSON.stringify(body));
+}
+
+/**
+ * Creates an event access pass (Apple Wallet .pkpass + Google Wallet save link) via WalletWallet API.
  */
 export async function createEventWalletPass(
   apiKey: string,
   eventPass: WalletEventPassData,
   passUrl: string
 ): Promise<WalletWalletPass> {
-  const logoUrl = `${SITE_ORIGIN}/card/leads-logo.png`;
-  const fields = buildEventFields(eventPass, passUrl, { live: false });
+  const body = buildPassBody(eventPass, passUrl, { live: false });
+  debugLog('POST /api/passes', body);
 
   const res = await fetch(`${API_BASE}/api/passes`, {
     method: 'POST',
@@ -294,20 +342,7 @@ export async function createEventWalletPass(
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      organizationName: ORG_NAME,
-      logoText: eventPass.posterUrl || eventPass.themeBackgroundUrl ? 'LEADS NGC' : 'LEADS Next Gen Centre',
-      description: `${eventPass.eventName} — ${eventPass.attendeeName}`.slice(0, 200),
-      // Solid hex color only — WalletWallet's colorPreset field only accepts
-      // its fixed preset names (dark/blue/green/red/purple/orange), not "custom".
-      // Sending an unrecognized preset value made the API reject every event
-      // pass creation call, so we send just the hex `color` field instead.
-      logoURL: logoUrl,
-      iconURL: logoUrl,
-      ...themeBody(eventPass),
-      ...barcodeBody(eventPass, passUrl),
-      ...fields,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {
@@ -320,7 +355,7 @@ export async function createEventWalletPass(
 
 /**
  * Updates an issued event access pass (Apple Wallet + Google Wallet) via WalletWallet API
- * (PUT /api/passes/:serialNumber). Updates fields and pushes live update to attendee's wallet.
+ * (PUT /api/passes/:serialNumber) with the full specification; installed passes get a live push.
  */
 export async function updateEventWalletPass(
   apiKey: string,
@@ -328,7 +363,8 @@ export async function updateEventWalletPass(
   passUrl: string,
   notificationMsg?: string
 ): Promise<{ success: boolean; detail?: any }> {
-  const fields = buildEventFields(eventPass, passUrl, { live: true, notification: notificationMsg });
+  const body = buildPassBody(eventPass, passUrl, { live: true, notification: notificationMsg });
+  debugLog('PUT /api/passes/' + (eventPass.walletSerial || eventPass.serialNumber), body);
 
   const res = await fetch(`${API_BASE}/api/passes/${encodeURIComponent(eventPass.walletSerial || eventPass.serialNumber)}`, {
     method: 'PUT',
@@ -336,11 +372,7 @@ export async function updateEventWalletPass(
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      ...themeBody(eventPass),
-      ...barcodeBody(eventPass, passUrl),
-      ...fields,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {

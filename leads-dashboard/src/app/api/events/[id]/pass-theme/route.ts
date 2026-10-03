@@ -5,7 +5,8 @@ import { getPassTheme, updatePassTheme, walletDataForPass, PassThemeUpdate } fro
 import { readCollection } from '@/lib/server-db';
 import { EventPassItem } from '@/lib/local-data';
 import { getWalletWalletApiKey } from '@/lib/wallet/walletwallet-config';
-import { updateEventWalletPass } from '@/lib/wallet/walletwallet-client';
+import { getAppBaseUrl } from '@/lib/app-url';
+import { syncEditedWalletPass } from '@/lib/wallet/pass-cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,21 +39,15 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     let walletUpdated = 0;
     const walletErrors: string[] = [];
     try {
-      const apiKey = await getWalletWalletApiKey();
-      if (apiKey) {
-        const origin = request.headers.get('origin') || 'https://portal-leads.msruas.ac.in';
-        const passes = (await readCollection<EventPassItem>('event_passes')).filter(
-          (p) => p.eventId === id && p.walletSerialNumber && p.status !== 'Cancelled'
-        );
-        for (const pass of passes.slice(0, 300)) {
-          try {
-            await updateEventWalletPass(apiKey, await walletDataForPass(pass), `${origin}/pass/${pass.serialNumber}`);
-            walletUpdated += 1;
-          } catch (e: any) {
-            console.warn('[pass-theme] wallet update failed for', pass.serialNumber, e?.message);
-            if (walletErrors.length < 3) walletErrors.push(e?.message || 'Wallet update failed');
-          }
-        }
+      const origin = getAppBaseUrl(request);
+      const passes = (await readCollection<EventPassItem>('event_passes')).filter(
+        (p) => p.eventId === id && p.walletSerialNumber && p.status !== 'Cancelled'
+      );
+      for (const pass of passes.slice(0, 300)) {
+        // Installed → updated in place; never installed → rebuilt on the guest's next Add
+        const r = await syncEditedWalletPass(pass.id, origin);
+        if (r.action !== 'none') walletUpdated += 1;
+        if (r.error && walletErrors.length < 3) walletErrors.push(r.error);
       }
     } catch (e: any) {
       console.warn('[pass-theme] wallet sync skipped:', e?.message);

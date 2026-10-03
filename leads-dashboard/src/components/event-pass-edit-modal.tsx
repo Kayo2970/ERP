@@ -111,7 +111,11 @@ export function EventPassEditModal({
   const [successInfo, setSuccessInfo] = useState<{
     message: string;
     walletSynced?: boolean;
+    walletNote?: string;
+    walletWarn?: string;
   } | null>(null);
+  const [reissuing, setReissuing] = useState(false);
+  const [reissueMsg, setReissueMsg] = useState('');
 
   useEffect(() => {
     if (pass) {
@@ -264,12 +268,19 @@ export function EventPassEditModal({
       onPassUpdated(result.pass);
       setSuccessInfo({
         message: 'Pass details updated successfully.',
-        walletSynced: result.walletUpdated,
+        walletNote:
+          result.walletAction === 'updated'
+            ? 'Wallet pass updated — the change is being pushed to the guest\'s phone.'
+            : result.walletAction === 'queued'
+            ? 'Wallet pass will be rebuilt with the new design the next time the guest taps Add to Wallet.'
+            : undefined,
+        walletWarn: result.walletError ? `Wallet update problem: ${result.walletError}` : undefined,
       });
 
+      // Keep the dialog open longer when there is wallet news to read
       setTimeout(() => {
         onClose();
-      }, 1400);
+      }, result.walletError ? 6000 : 2600);
     } catch (err: any) {
       setErrorMsg(err?.message || 'Failed to update pass.');
     } finally {
@@ -330,12 +341,60 @@ export function EventPassEditModal({
               <CheckCircle2 className="h-4 w-4 shrink-0" />
               <span>
                 {successInfo.message}
-                {successInfo.walletSynced ? ' (Apple & Google Wallet pass synced!)' : ''}
+                {successInfo.walletNote ? ` ${successInfo.walletNote}` : ''}
               </span>
             </div>
           )}
 
           <PassSection title="1 · Event & guest details" hint="Who the pass is for, event, venue, valid days" icon={<Ticket className="h-4 w-4" />} open={!!open.details} onToggle={() => toggle('details')}>
+          {successInfo?.walletWarn && (
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{successInfo.walletWarn}</span>
+            </div>
+          )}
+
+          {/* Wallet status + manual re-issue */}
+          <div className="p-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/60 dark:bg-white/[0.03] text-[11px] flex flex-wrap items-center justify-between gap-2">
+            <div className="text-slate-600 dark:text-slate-300">
+              <span className="font-bold">Wallet pass: </span>
+              {!pass.walletSerialNumber
+                ? 'not created yet — it is built from the latest design when the guest first taps Add to Wallet.'
+                : pass.walletStale
+                ? 'created earlier; will be rebuilt with the latest design on the next Add.'
+                : pass.walletInstalledAt
+                ? `added by the guest ${new Date(pass.walletInstalledAt).toLocaleString()} — edits are pushed to their phone live.`
+                : 'created, not yet added by the guest.'}
+              {pass.walletSyncedAt && <span className="text-slate-400"> Last synced {new Date(pass.walletSyncedAt).toLocaleString()}.</span>}
+              {pass.walletLastError && <span className="text-amber-500 font-semibold"> Last error: {pass.walletLastError}</span>}
+              {reissueMsg && <span className="block mt-1 font-semibold text-emerald-500">{reissueMsg}</span>}
+            </div>
+            {pass.walletSerialNumber && (
+              <button
+                type="button"
+                disabled={reissuing}
+                onClick={async () => {
+                  if (!window.confirm('Re-issue the wallet pass?\n\nA brand-new pass is built from the current design. The copy already on the guest\'s phone is removed, so they need to tap Add to Wallet again.')) return;
+                  setReissuing(true);
+                  setReissueMsg('');
+                  try {
+                    const res = await fetch(`/api/events/${pass.eventId}/passes/${pass.id}/wallet/reissue`, { method: 'POST', headers: authHeaders() });
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok) throw new Error(data.error || 'Could not re-issue the wallet pass.');
+                    setReissueMsg('New wallet pass created from the current design — open the pass link and tap Add to Wallet.');
+                  } catch (e: any) {
+                    setReissueMsg(e?.message || 'Could not re-issue the wallet pass.');
+                  } finally {
+                    setReissuing(false);
+                  }
+                }}
+                className="px-3 py-1.5 rounded-lg border border-accent/40 text-accent font-bold hover:bg-accent/10 cursor-pointer disabled:opacity-50"
+              >
+                {reissuing ? 'Re-issuing…' : 'Re-issue wallet pass'}
+              </button>
+            )}
+          </div>
+
           {/* Event */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAppBaseUrl } from '@/lib/app-url';
 import { lookupPassBySerial } from '@/lib/pass-lookup';
-import { getOrCreateWalletPass } from '@/lib/wallet/pass-cache';
+import { getOrCreateWalletPass, markWalletInstalled } from '@/lib/wallet/pass-cache';
 import { readStoredFile } from '@/lib/file-storage';
 
 export const dynamic = 'force-dynamic';
@@ -18,6 +18,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const wallet = await getOrCreateWalletPass(found.pass.id, base);
     if (!wallet.appleUrl) return back('?wallet=unavailable');
     const buf = await readStoredFile(wallet.appleUrl.replace(/^\/api\/files\//, ''));
+    await markWalletInstalled(found.pass.id);
     return new NextResponse(new Uint8Array(buf), {
       headers: {
         'Content-Type': 'application/vnd.apple.pkpass',

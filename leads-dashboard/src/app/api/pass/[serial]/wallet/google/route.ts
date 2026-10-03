@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAppBaseUrl } from '@/lib/app-url';
 import { lookupPassBySerial } from '@/lib/pass-lookup';
-import { getOrCreateWalletPass } from '@/lib/wallet/pass-cache';
+import { getOrCreateWalletPass, markWalletInstalled } from '@/lib/wallet/pass-cache';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -16,6 +16,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!found || found.pass.status === 'Cancelled' || found.archived) return back();
     const wallet = await getOrCreateWalletPass(found.pass.id, base);
     if (!/^https:\/\//i.test(wallet.googleSaveUrl)) return back('?wallet=unavailable');
+    await markWalletInstalled(found.pass.id);
     return NextResponse.redirect(wallet.googleSaveUrl, 302);
   } catch (err) {
     console.warn('[pass-wallet-google]', (err as Error)?.message);

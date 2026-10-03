@@ -97,6 +97,9 @@ export function AppleWalletPassPreview({
           altText={altText}
           qr={qr}
         />
+        <p className="text-[10px] text-slate-500 text-center max-w-[300px] mx-auto mt-2">
+          iOS 27 poster layout. Apple draws the logo, barcode panel and field row in white over the artwork — the base colour we send is always dark so the text stays white.
+        </p>
       </div>
     );
   }
