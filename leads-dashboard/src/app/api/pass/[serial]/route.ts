@@ -58,7 +58,10 @@ export async function GET(
       foundPass = matched;
     }
 
-    const finalPass = foundPass as EventPassItem;
+    // Public endpoint: never expose the attendee's contact details or internal notes
+    const { attendeeEmail, attendeePhone, notes, issuedByEmail, qrPayload, ...publicPass } =
+      foundPass as EventPassItem;
+    const finalPass = publicPass as EventPassItem;
 
     return NextResponse.json({
       pass: finalPass,

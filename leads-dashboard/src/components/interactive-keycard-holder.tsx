@@ -25,6 +25,7 @@ export interface InteractiveKeycardProps {
   cardUrl?: string;
   qrUrl?: string;
   onSaveContact?: () => void;
+  saveContactLabel?: string;
   onAddToAppleWallet?: () => void;
   onAddToGoogleWallet?: () => void;
   isGeneratingWallet?: boolean;
@@ -61,6 +62,7 @@ export function InteractiveKeycardHolder({
   cardUrl,
   qrUrl = '/card/leads-qr-code.png',
   onSaveContact,
+  saveContactLabel = 'Save Contact',
   onAddToAppleWallet,
   onAddToGoogleWallet,
   isGeneratingWallet = false,
@@ -227,8 +229,11 @@ export function InteractiveKeycardHolder({
   }, [cardUrl, qrUrl]);
 
   useEffect(() => {
+    // Respect reduced-motion preferences: skip the cover/extract choreography entirely
+    const reduceMotion =
+      typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     const timer = setTimeout(() => {
-      setStageState(autoOpen ? 'opened' : 'entered');
+      setStageState(autoOpen || reduceMotion ? 'opened' : 'entered');
     }, 350);
     return () => clearTimeout(timer);
   }, [autoOpen]);
@@ -418,13 +423,15 @@ export function InteractiveKeycardHolder({
         <div className={styles.statusBadge}>
           <span className={styles.statusDot} />
           <span>
-            {stageState === 'init' && 'Minting Credentials...'}
-            {stageState === 'entered' && 'Tap leather holder to open'}
+            {stageState === 'init' && (isEvent ? 'Preparing your pass...' : 'Minting Credentials...')}
+            {stageState === 'entered' && (isEvent ? 'Tap the folder to open your pass' : 'Tap leather holder to open')}
             {stageState === 'opened' &&
               (activeTab === 'card'
                 ? 'Tap card to pull forward'
                 : activeTab === 'creds'
-                ? 'Viewing Member Credentials Sleeve'
+                ? isEvent
+                  ? 'Viewing Pass Details Sleeve'
+                  : 'Viewing Member Credentials Sleeve'
                 : 'Viewing Complete 3D Bookfold')}
             {stageState === 'extracting' && 'Extracting card...'}
             {stageState === 'extracted' &&
@@ -575,7 +582,7 @@ export function InteractiveKeycardHolder({
                             {serialNumber || formattedSerial}
                           </span>
                           <span className={styles.turnstileSignedBadge}>
-                            <span>🛡️</span> Cryptographically Signed
+                            <span>🛡️</span> Scan QR at entry
                           </span>
                           <span className={styles.turnstileHintSub}>
                             Valid at all official event turnstiles
@@ -819,6 +826,12 @@ export function InteractiveKeycardHolder({
             Replay
           </button>
 
+          {(stageState === 'init' || stageState === 'entered') && (
+            <button className={styles.btnAction} onClick={() => setStageState('opened')}>
+              Skip animation
+            </button>
+          )}
+
           {onSaveContact && (
             <button className={styles.btnAction} onClick={onSaveContact}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -826,7 +839,7 @@ export function InteractiveKeycardHolder({
                 <polyline points="7 10 12 15 17 10" />
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
-              Save Contact
+              {saveContactLabel}
             </button>
           )}
 
@@ -836,7 +849,7 @@ export function InteractiveKeycardHolder({
               onClick={onAddToAppleWallet}
               disabled={isGeneratingWallet}
             >
-              {isGeneratingWallet ? 'Generating Pass…' : 'Apple / Google Wallet'}
+              {isGeneratingWallet ? 'Generating Pass…' : isEvent ? 'Add to Wallet' : 'Apple / Google Wallet'}
             </button>
           )}
         </div>
