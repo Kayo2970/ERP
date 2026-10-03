@@ -3098,19 +3098,15 @@ export async function updateEventPass(
 
 
 /**
- * Dispatches a personalized pass invitation email to the attendee
- * with turnstile access details and digital wallet links.
+ * Builds the pass invitation email (subject, text, HTML). Pure: shared by the real send and the
+ * bulk-dispatch preview so the preview always matches what recipients get. `forPreview` omits the
+ * tracking pixel and points the inline ticket at a real URL instead of the `cid:` attachment.
  */
-export async function dispatchPassEmail(
+export function buildPassEmail(
   pass: EventPassItem,
-  targetEmail?: string
-): Promise<{ success: boolean; error?: string }> {
-  const recipient = (targetEmail || pass.attendeeEmail || '').trim();
-  if (!recipient) {
-    return { success: false, error: 'No recipient email address provided.' };
-  }
-
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://portal-leads.msruas.ac.in';
+  origin: string,
+  opts: { forPreview?: boolean } = {}
+): { subject: string; bodyText: string; bodyHtml: string } {
   const passUrl = `${origin}/pass/${pass.serialNumber}`;
   const trackPixelUrl = `${origin}/api/pass/${pass.serialNumber}/track`;
 
@@ -3129,7 +3125,7 @@ export async function dispatchPassEmail(
 
       <!-- Boarding-pass image (attached inline by the server; QR opens the full digital pass) -->
       <div style="text-align: center; margin-bottom: 24px;">
-        <a href="${passUrl}"><img src="cid:leads-pass-image" alt="Your event pass — ${pass.serialNumber}" width="552" style="display: block; width: 100%; max-width: 552px; height: auto; margin: 0 auto; border-radius: 16px;" /></a>
+        <a href="${passUrl}"><img src="${opts.forPreview ? `${origin}/api/pass/${encodeURIComponent(pass.serialNumber)}/image` : 'cid:leads-pass-image'}" alt="Your event pass — ${pass.serialNumber}" width="552" style="display: block; width: 100%; max-width: 552px; height: auto; margin: 0 auto; border-radius: 16px;" /></a>
       </div>
 
       <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
@@ -3174,9 +3170,28 @@ export async function dispatchPassEmail(
       </p>
 
       <!-- Invisible Open Tracking Pixel -->
-      <img src="${trackPixelUrl}" width="1" height="1" alt="" style="display:none;width:1px;height:1px;border:none;outline:none;" />
+      ${opts.forPreview ? '' : `<img src="${trackPixelUrl}" width="1" height="1" alt="" style="display:none;width:1px;height:1px;border:none;outline:none;" />`}
     </div>
   `;
+
+  return { subject, bodyText, bodyHtml };
+}
+
+/**
+ * Dispatches a personalized pass invitation email to the attendee
+ * with turnstile access details and digital wallet links.
+ */
+export async function dispatchPassEmail(
+  pass: EventPassItem,
+  targetEmail?: string
+): Promise<{ success: boolean; error?: string }> {
+  const recipient = (targetEmail || pass.attendeeEmail || '').trim();
+  if (!recipient) {
+    return { success: false, error: 'No recipient email address provided.' };
+  }
+
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://portal-leads.msruas.ac.in';
+  const { subject, bodyText, bodyHtml } = buildPassEmail(pass, origin);
 
   try {
     const res = await fetch('/api/email/send', {

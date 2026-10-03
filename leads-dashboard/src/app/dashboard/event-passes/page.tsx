@@ -51,6 +51,7 @@ import {
 import { EventPassStudio } from '@/components/event-pass-studio';
 import { EventPassScanner } from '@/components/event-pass-scanner';
 import { EventPassPushModal } from '@/components/event-pass-push-modal';
+import { EventPassBulkDispatchModal } from '@/components/event-pass-bulk-dispatch-modal';
 import { EventPassEditModal } from '@/components/event-pass-edit-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SearchableSelect } from '@/components/searchable-select';
@@ -90,6 +91,9 @@ export default function EventPassesPage() {
   // Email dispatching state
   const [dispatchingPassId, setDispatchingPassId] = useState<string | null>(null);
   const [isBatchDispatching, setIsBatchDispatching] = useState(false);
+  // Multi-select for "Preview & dispatch" (survives search/filter changes)
+  const [selectedPassIds, setSelectedPassIds] = useState<Set<string>>(new Set());
+  const [isBulkDispatchOpen, setIsBulkDispatchOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Push Alert Modal State
@@ -643,6 +647,27 @@ export default function EventPassesPage() {
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-slate-200/90 dark:border-white/10 text-theme-text-secondary text-[11px] uppercase tracking-wider">
+                      <th className="py-3 px-3 w-8">
+                        <input
+                          type="checkbox"
+                          aria-label="Select all passes in this view"
+                          checked={deepFilteredPasses.length > 0 && deepFilteredPasses.every((p) => selectedPassIds.has(p.id))}
+                          ref={(el) => {
+                            if (el) {
+                              const n = deepFilteredPasses.filter((p) => selectedPassIds.has(p.id)).length;
+                              el.indeterminate = n > 0 && n < deepFilteredPasses.length;
+                            }
+                          }}
+                          onChange={(e) =>
+                            setSelectedPassIds((prev) => {
+                              const next = new Set(prev);
+                              deepFilteredPasses.forEach((p) => (e.target.checked ? next.add(p.id) : next.delete(p.id)));
+                              return next;
+                            })
+                          }
+                          className="h-4 w-4 accent-sky-500 cursor-pointer"
+                        />
+                      </th>
                       <th className="py-3 px-4">Serial ID</th>
                       <th className="py-3 px-4">Attendee &amp; Category</th>
                       <th className="py-3 px-4">Room / Venue</th>
@@ -1091,6 +1116,29 @@ export default function EventPassesPage() {
               </span>
             </div>
 
+            {selectedPassIds.size > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-sky-500/10 border-y border-sky-500/30 text-xs">
+                <div className="font-bold text-sky-300">
+                  {selectedPassIds.size} selected
+                  {(() => {
+                    const noEmail = eventPasses.filter((p) => selectedPassIds.has(p.id) && !p.attendeeEmail).length;
+                    return noEmail > 0 ? <span className="ml-2 font-semibold text-amber-400">· {noEmail} without an email</span> : null;
+                  })()}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => setSelectedPassIds(new Set(deepFilteredPasses.map((p) => p.id)))} className="px-3 py-1.5 rounded-lg border border-sky-500/30 text-sky-300 font-bold hover:bg-sky-500/10 cursor-pointer">
+                    Select all {deepFilteredPasses.length} in view
+                  </button>
+                  <button type="button" onClick={() => setSelectedPassIds(new Set())} className="px-3 py-1.5 rounded-lg text-theme-text-secondary font-bold hover:text-theme-text-primary cursor-pointer">
+                    Clear
+                  </button>
+                  <button type="button" onClick={() => setIsBulkDispatchOpen(true)} className="px-4 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-black flex items-center gap-1.5 cursor-pointer">
+                    <Send className="h-3.5 w-3.5" /> Preview &amp; dispatch
+                  </button>
+                </div>
+              </div>
+            )}
+
             {deepFilteredPasses.length === 0 ? (
               <div className="py-16 text-center space-y-3">
                 <Ticket className="h-10 w-10 text-theme-text-secondary/40 mx-auto" />
@@ -1132,6 +1180,23 @@ export default function EventPassesPage() {
                   <tbody className="divide-y divide-slate-200/50 dark:divide-white/5">
                     {deepFilteredPasses.map((pass) => (
                       <tr key={pass.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
+                        <td className="py-3 px-3 w-8">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${pass.attendeeName}`}
+                            checked={selectedPassIds.has(pass.id)}
+                            onChange={(e) =>
+                              setSelectedPassIds((prev) => {
+                                const next = new Set(prev);
+                                if (e.target.checked) next.add(pass.id);
+                                else next.delete(pass.id);
+                                return next;
+                              })
+                            }
+                            className="h-4 w-4 accent-sky-500 cursor-pointer"
+                          />
+                        </td>
+
                         {/* Serial ID */}
                         <td className="py-3 px-4 font-mono font-bold">
                           <a
@@ -1377,6 +1442,13 @@ export default function EventPassesPage() {
       />
 
       {/* PUSH ALERT NOTIFICATION MODAL */}
+      <EventPassBulkDispatchModal
+        isOpen={isBulkDispatchOpen}
+        passes={eventPasses.filter((p) => selectedPassIds.has(p.id))}
+        onClose={() => setIsBulkDispatchOpen(false)}
+        onDone={() => setEventPasses(getEventPasses())}
+      />
+
       <EventPassPushModal
         isOpen={isPushModalOpen}
         onClose={() => {
