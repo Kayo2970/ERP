@@ -3,6 +3,7 @@ import { getWalletWalletApiKey } from '@/lib/wallet/walletwallet-config';
 import { updateEventPassPushNotification } from '@/lib/wallet/walletwallet-client';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { EventPassItem } from '@/lib/local-data';
+import { requireSession } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +12,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await requireSession(request);
     const { id: eventId } = await params;
     const body = await request.json();
     const { message, passIds, guestCategory, targetType } = body;
@@ -59,7 +61,12 @@ export async function POST(
 
     for (const pass of targetPasses) {
       try {
-        const serial = pass.serialNumber || pass.id;
+        const serial = pass.walletSerialNumber;
+        if (!serial) {
+          // Never added to a wallet — nothing to push to
+          results.total -= 1;
+          continue;
+        }
         await updateEventPassPushNotification(
           apiKey,
           serial,

@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { dispatchEmail, SendEmailPayload } from '@/lib/email-service';
 import { readCollection } from '@/lib/server-db';
-import { Member } from '@/lib/local-data';
+import { Member, EventPassItem } from '@/lib/local-data';
+import { renderBoardingPassPng } from '@/lib/pass-image';
+import { getPassTheme } from '@/lib/pass-theme';
 import { requireSession } from '@/lib/session';
 import { apiError } from '@/lib/api-error';
 
@@ -48,9 +50,25 @@ export async function POST(request: Request) {
       badgeText,
       badgeColor,
       attachments: rawAttachments,
+      passSerial,
     } = body;
 
-    const attachments = decodeAttachments(rawAttachments);
+    const attachments = decodeAttachments(rawAttachments) || [];
+
+    // Event pass emails: render the boarding-pass image and attach it inline (cid:leads-pass-image)
+    if (typeof passSerial === 'string' && passSerial) {
+      try {
+        const passes = await readCollection<EventPassItem>('event_passes');
+        const pass = passes.find((p) => p.serialNumber.toLowerCase() === passSerial.toLowerCase());
+        if (pass && pass.status !== 'Cancelled') {
+          const origin = new URL(request.url).origin;
+          const png = await renderBoardingPassPng(pass, `${origin}/pass/${pass.serialNumber}`, await getPassTheme(pass.eventId));
+          attachments.push({ filename: `${pass.serialNumber}.png`, content: png, contentType: 'image/png', cid: 'leads-pass-image' });
+        }
+      } catch (imgErr) {
+        console.warn('[email-send] Boarding-pass image skipped:', imgErr);
+      }
+    }
     const emailTo = recipientEmail || to;
     const finalSubject = subject;
     const textContent = bodyText || rawBody || content;
@@ -72,7 +90,7 @@ export async function POST(request: Request) {
         badgeText: badgeText || (category === 'EVENT_INVITATION' || category === 'EVENT_PASS' ? 'Official Event Pass' : undefined),
         badgeColor,
         category: category || (category === 'EVENT_INVITATION' || category === 'EVENT_PASS' ? category : 'DIRECT_MESSAGE'),
-        attachments,
+        attachments: attachments.length > 0 ? attachments : undefined,
       });
       return NextResponse.json({ count: 1, dispatched: [log] });
     }
@@ -100,7 +118,7 @@ export async function POST(request: Request) {
         badgeText,
         badgeColor,
         category: category || 'ANNOUNCEMENT',
-        attachments,
+        attachments: attachments.length > 0 ? attachments : undefined,
       });
       dispatchedLogs.push(log);
     }

@@ -121,6 +121,8 @@ export async function createWalletPass(apiKey: string, member: WalletCardMember,
 
 export interface WalletEventPassData {
   serialNumber: string;
+  /** WalletWallet's own serial for an already-created pass; defaults to serialNumber. */
+  walletSerial?: string;
   eventName: string;
   eventDate?: string;
   eventVenue?: string;
@@ -131,6 +133,35 @@ export interface WalletEventPassData {
   validityDate?: string;
   validDays?: string[];
   passColor?: string;
+  /** Event pass theme (see PassTheme): artwork/logo as data URLs (≤1MB each) and the base colour. */
+  themeBackgroundDataUrl?: string;
+  themeLogoDataUrl?: string;
+  themeColor?: string;
+}
+
+/** Days from now until the pass's last valid day (+1 so it stays valid through that day), 1..3650. */
+function expirationDaysFor(eventPass: WalletEventPassData): number | undefined {
+  const days = [...(eventPass.validDays || [])].sort();
+  const last = days[days.length - 1];
+  if (!last) return undefined;
+  const ms = new Date(`${last}T23:59:59`).getTime() - Date.now();
+  if (!Number.isFinite(ms)) return undefined;
+  return Math.min(3650, Math.max(1, Math.ceil(ms / 86_400_000) + 1));
+}
+
+/** Theme/validity fields shared by pass create + update. Colour is the pass base colour; artwork is full-bleed. */
+function themeBody(eventPass: WalletEventPassData): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    color: eventPass.themeColor || eventPass.passColor || '#0b1526',
+  };
+  if (eventPass.themeBackgroundDataUrl) out.backgroundURL = eventPass.themeBackgroundDataUrl;
+  if (eventPass.themeLogoDataUrl) {
+    out.logoURL = eventPass.themeLogoDataUrl;
+    out.iconURL = eventPass.themeLogoDataUrl;
+  }
+  const exp = expirationDaysFor(eventPass);
+  if (exp) out.expirationDays = exp;
+  return out;
 }
 
 /**
@@ -188,9 +219,9 @@ export async function createEventWalletPass(
       // its fixed preset names (dark/blue/green/red/purple/orange), not "custom".
       // Sending an unrecognized preset value made the API reject every event
       // pass creation call, so we send just the hex `color` field instead.
-      color: eventPass.passColor || '#0b1526',
       logoURL: logoUrl,
       iconURL: logoUrl,
+      ...themeBody(eventPass),
       barcodeValue: passUrl,
       barcodeFormat: 'QR',
       barcodeAltText: eventPass.serialNumber,
@@ -253,14 +284,14 @@ export async function updateEventWalletPass(
     { label: 'Notifications', value: notificationMsg || 'Pass details updated.', changeMessage: '%@' },
   ];
 
-  const res = await fetch(`${API_BASE}/api/passes/${encodeURIComponent(eventPass.serialNumber)}`, {
+  const res = await fetch(`${API_BASE}/api/passes/${encodeURIComponent(eventPass.walletSerial || eventPass.serialNumber)}`, {
     method: 'PUT',
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      color: eventPass.passColor || '#0b1526',
+      ...themeBody(eventPass),
       headerFields,
       primaryFields,
       secondaryFields,

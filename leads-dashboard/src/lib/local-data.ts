@@ -392,6 +392,30 @@ export function isPassValidOn(pass: EventPassItem, isoDay: string): boolean {
   return days.length === 0 || days.includes(isoDay);
 }
 
+/**
+ * Per-event look of event passes: used by the portal keycard/wallet preview, the emailed
+ * boarding-pass image and the Apple/Google Wallet pass, so all three always match.
+ * Stored server-side under data/uploads/pass-themes/<eventId>/ (deleted with the event).
+ */
+export interface PassTheme {
+  backgroundUrl?: string;   // /api/files/... full-bleed poster artwork
+  backgroundKey?: string;   // storageKey of the above
+  logoUrl?: string;
+  logoKey?: string;
+  backgroundColor?: string; // fallback / tint colour behind the artwork (hex)
+  foregroundColor?: string; // value text colour (hex)
+  labelColor?: string;      // small-caps label colour (hex)
+  overlay?: number;         // 0..0.9 darkening layer over the artwork for legibility
+  updatedAt?: string;
+}
+
+export const DEFAULT_PASS_THEME: Required<Pick<PassTheme, 'backgroundColor' | 'foregroundColor' | 'labelColor' | 'overlay'>> = {
+  backgroundColor: '#0b1526',
+  foregroundColor: '#ffffff',
+  labelColor: '#7dd3fc',
+  overlay: 0.35,
+};
+
 export type PassEmailStatus = 'Not Sent' | 'Email Sent' | 'Email Received' | 'Pass Viewed';
 
 export interface EventPassItem {
@@ -426,6 +450,8 @@ export interface EventPassItem {
   qrPayload: string;
   walletAppleUrl?: string;
   walletGoogleSaveUrl?: string;
+  /** Serial assigned by WalletWallet when the wallet pass was created (used for live updates / revoke). */
+  walletSerialNumber?: string;
 
   // Email delivery & pass viewing analytics
   emailStatus?: PassEmailStatus;
@@ -3076,6 +3102,11 @@ export async function dispatchPassEmail(
         <p style="margin: 0; color: #94a3b8; font-size: 14px;">LEADS Next Gen Centre • RUAS</p>
       </div>
 
+      <!-- Boarding-pass image (attached inline by the server; QR opens the full digital pass) -->
+      <div style="text-align: center; margin-bottom: 24px;">
+        <a href="${passUrl}"><img src="cid:leads-pass-image" alt="Your event pass — ${pass.serialNumber}" width="552" style="display: block; width: 100%; max-width: 552px; height: auto; margin: 0 auto; border-radius: 16px;" /></a>
+      </div>
+
       <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
         <p style="margin: 0 0 12px 0; font-size: 16px; color: #f1f5f9;">Dear <strong>${pass.attendeeName}</strong>,</p>
         <p style="margin: 0 0 16px 0; font-size: 14px; color: #cbd5e1; line-height: 1.5;">
@@ -3139,6 +3170,7 @@ export async function dispatchPassEmail(
         category: 'EVENT_INVITATION',
         badgeText: 'Official Event Pass',
         badgeColor: '#0284c7',
+        passSerial: pass.serialNumber, // server renders + attaches the boarding-pass image (cid:leads-pass-image)
         metadata: {
           passId: pass.id,
           serialNumber: pass.serialNumber,

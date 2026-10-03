@@ -18,14 +18,14 @@ export async function purgeStoredKey(storageKey?: string | null): Promise<void> 
 }
 
 /** Pass deletion: removes the cached .pkpass file(s) and best-effort revokes the wallet pass. */
-export async function purgeEventPassArtifacts(pass: { id: string; serialNumber?: string }): Promise<void> {
+export async function purgeEventPassArtifacts(pass: { id: string; walletSerialNumber?: string }): Promise<void> {
   await purgeFolders([['event-passes', pass.id]]);
-  if (!pass.serialNumber) return;
+  if (!pass.walletSerialNumber) return;
   try {
     const { getWalletWalletApiKey } = await import('@/lib/wallet/walletwallet-config');
     const { revokeEventWalletPass } = await import('@/lib/wallet/walletwallet-client');
     const apiKey = await getWalletWalletApiKey();
-    if (apiKey) await revokeEventWalletPass(apiKey, pass.serialNumber);
+    if (apiKey) await revokeEventWalletPass(apiKey, pass.walletSerialNumber);
   } catch (err: any) {
     console.warn('[cascade-delete] Wallet revoke skipped:', err?.message);
   }
