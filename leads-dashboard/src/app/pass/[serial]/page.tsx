@@ -31,6 +31,8 @@ export default function PublicEventPassPage({
 
   const [pass, setPass] = useState<EventPassItem | null>(null);
   const [theme, setTheme] = useState<PassTheme | undefined>(undefined);
+  const [archived, setArchived] = useState<{ eventName: string; socials: Record<string, string> } | null>(null);
+  const [walletNotice, setWalletNotice] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [isQrOpen, setIsQrOpen] = useState(false);
@@ -40,6 +42,8 @@ export default function PublicEventPassPage({
 
   useEffect(() => {
     document.documentElement.classList.add('dark');
+    // Email wallet buttons redirect here with ?wallet=unavailable when the wallet pass couldn't be issued
+    setWalletNotice(new URLSearchParams(window.location.search).get('wallet') === 'unavailable');
   }, []);
 
   useEffect(() => {
@@ -50,7 +54,9 @@ export default function PublicEventPassPage({
         return res.json();
       })
       .then((data) => {
-        if (!cancelled && data.pass) {
+        if (!cancelled && data.archived) {
+          setArchived({ eventName: data.eventName, socials: data.socials || {} });
+        } else if (!cancelled && data.pass) {
           setPass(data.pass);
           setTheme(data.theme);
         } else if (!cancelled) {
@@ -207,6 +213,37 @@ export default function PublicEventPassPage({
     );
   }
 
+  if (archived) {
+    const labels: Record<string, string> = { instagram: 'Instagram', linkedin: 'LinkedIn', x: 'X', youtube: 'YouTube', facebook: 'Facebook', website: 'Website' };
+    const links = Object.entries(archived.socials).filter(([, url]) => /^https?:\/\//i.test(url));
+    return (
+      <div className="min-h-screen bg-space-theme text-theme-text-primary flex flex-col items-center justify-center p-4 relative z-0 overflow-hidden">
+        <div className="glass-panel w-full max-w-md rounded-3xl p-8 flex flex-col items-center text-center space-y-5 border border-white/20 shadow-2xl backdrop-blur-2xl bg-slate-900/90 text-white">
+          <div className="h-14 w-14 rounded-2xl bg-accent/20 border border-accent/30 flex items-center justify-center text-accent">
+            <Sparkles className="h-7 w-7" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-xl font-black">Thank you for being part of</h1>
+            <p className="text-lg font-bold text-accent">{archived.eventName}</p>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              This event has wrapped up and your pass is now retired. We loved having you with us — follow us on our socials for more exciting events from LEADS Next Gen Centre.
+            </p>
+          </div>
+          {links.length > 0 && (
+            <div className="flex flex-wrap justify-center gap-2">
+              {links.map(([key, url]) => (
+                <a key={key} href={url} target="_blank" rel="noopener noreferrer" className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs font-bold transition-all inline-flex items-center gap-1.5">
+                  {labels[key] || key} <ExternalLink className="h-3 w-3" />
+                </a>
+              ))}
+            </div>
+          )}
+          <p className="text-[10.5px] text-slate-500">LEADS Next Gen Centre • RUAS</p>
+        </div>
+      </div>
+    );
+  }
+
   if (notFound || !pass) {
     return (
       <div className="min-h-screen bg-space-theme text-theme-text-primary flex flex-col items-center justify-center p-4 relative z-0 overflow-hidden">
@@ -294,7 +331,7 @@ export default function PublicEventPassPage({
           brandHeader="LEADS Next Gen Centre"
           passColor={pass.passColor}
           passGradient={pass.passGradient}
-          theme={theme}
+          theme={{ ...(theme || {}), ...(pass.textColor ? { foregroundColor: pass.textColor } : {}), ...(pass.labelColor ? { labelColor: pass.labelColor } : {}) }}
           cardUrl={passUrl}
           qrUrl="/card/leads-qr-code.png"
           showActions={true}
@@ -302,6 +339,12 @@ export default function PublicEventPassPage({
           walletError={walletError}
         />
       </div>
+
+      {walletNotice && (
+        <div className="w-full max-w-md my-3 p-3 bg-amber-500/15 border border-amber-500/40 rounded-2xl text-amber-200 text-xs font-semibold text-center">
+          We couldn&apos;t add this pass to your wallet right now. Please try again in a minute, or use the QR code below.
+        </div>
+      )}
 
       {/* Wallet Loading Banner */}
       {walletLoadingMsg && (

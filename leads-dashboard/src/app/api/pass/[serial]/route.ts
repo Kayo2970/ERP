@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { EventPassItem } from '@/lib/local-data';
 import { getPassTheme } from '@/lib/pass-theme';
+import { lookupPassBySerial } from '@/lib/pass-lookup';
+import { readCentreSocials } from '@/lib/centre-socials';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +15,16 @@ export async function GET(
     const { serial } = await params;
     if (!serial) {
       return NextResponse.json({ error: 'Serial is required' }, { status: 400 });
+    }
+
+    // 30+ days after the event: no personal data, no view tracking — just a thank-you payload
+    const lookup = await lookupPassBySerial(serial);
+    if (lookup?.archived) {
+      return NextResponse.json({
+        archived: true,
+        eventName: lookup.pass.eventName,
+        socials: await readCentreSocials(),
+      });
     }
 
     const now = new Date().toISOString();

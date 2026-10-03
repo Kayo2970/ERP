@@ -44,6 +44,26 @@ export async function toJpegDataUrl(dataUrl: string, maxSide: number, maxBytes =
   return dataUrl;
 }
 
+export const EMAIL_CARD_W = 1160;
+export const EMAIL_CARD_H = 420;
+
+/** Cover-crop to an exact W×H JPEG (≤ ~900 KB). */
+async function toCoverJpegDataUrl(dataUrl: string, W: number, H: number): Promise<string> {
+  const img = await loadImage(Buffer.from(dataUrl.split(',')[1] || '', 'base64'));
+  const scale = Math.max(W / img.width, H / img.height);
+  const dw = img.width * scale, dh = img.height * scale;
+  const canvas = createCanvas(W, H);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+  ctx.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  for (const quality of [90, 80, 70, 58, 45]) {
+    const buf = canvas.toBuffer('image/jpeg', quality);
+    if (buf.length <= 900_000 || quality === 45) return `data:image/jpeg;base64,${buf.toString('base64')}`;
+  }
+  return dataUrl;
+}
+
 /** Portrait 690×1010 cover crop (Apple poster / WalletWallet backgroundURL spec), JPEG ≤ ~900 KB. */
 async function toWalletPortraitJpeg(dataUrl: string): Promise<string> {
   const base64 = dataUrl.split(',')[1] || '';
@@ -75,6 +95,13 @@ async function toPngDataUrl(dataUrl: string, maxSide: number): Promise<string> {
 }
 
 export interface PassThemeUpdate {
+  emailUseBackground?: boolean;
+  emailOverlay?: number;
+  emailBackgroundColor?: string;
+  emailForegroundColor?: string;
+  emailLabelColor?: string;
+  /** New email-ticket artwork (data URL), or null to remove it. */
+  emailArtwork?: { dataUrl: string } | null;
   backgroundColor?: string;
   foregroundColor?: string;
   labelColor?: string;
@@ -93,6 +120,27 @@ export async function updatePassTheme(eventId: string, update: PassThemeUpdate):
   }
   if (typeof update.overlay === 'number' && Number.isFinite(update.overlay)) {
     theme.overlay = Math.min(0.9, Math.max(0, update.overlay));
+  }
+  for (const k of ['emailBackgroundColor', 'emailForegroundColor', 'emailLabelColor'] as const) {
+    const v = update[k];
+    if (typeof v === 'string' && HEX.test(v)) theme[k] = v;
+  }
+  if (typeof update.emailOverlay === 'number' && Number.isFinite(update.emailOverlay)) {
+    theme.emailOverlay = Math.min(0.9, Math.max(0, update.emailOverlay));
+  }
+  if (typeof update.emailUseBackground === 'boolean') theme.emailUseBackground = update.emailUseBackground;
+
+  if (update.emailArtwork === null && theme.emailArtworkKey) {
+    await deleteStoredFile(theme.emailArtworkKey);
+    delete theme.emailArtworkKey;
+    delete theme.emailArtworkUrl;
+  } else if (update.emailArtwork) {
+    // Exactly the ticket card size (1160x420) so a designer's file maps 1:1
+    const img = await toCoverJpegDataUrl(update.emailArtwork.dataUrl, EMAIL_CARD_W, EMAIL_CARD_H);
+    if (theme.emailArtworkKey) await deleteStoredFile(theme.emailArtworkKey);
+    const stored = await saveBase64File(CATEGORY, eventId, 3, `email-${Date.now()}.jpg`, img);
+    theme.emailArtworkKey = stored.storageKey;
+    theme.emailArtworkUrl = stored.url;
   }
 
   if (update.background === null && theme.backgroundKey) {

@@ -35,7 +35,7 @@ import {
   EventItem,
   EventPassItem,
   PassEmailStatus,
-  getEvents,
+  getPassIssuableEvents,
   getEventPasses,
   saveEventPasses,
   updateEventPassStatus,
@@ -143,14 +143,14 @@ export default function EventPassesPage() {
         console.error(e);
       }
     }
-    setEvents(getEvents());
+    setEvents(getPassIssuableEvents());
     setEventPasses(getEventPasses());
 
     // Initial server fetch to guarantee latest view states
     syncPassesFromServer();
 
     const handleSync = () => {
-      setEvents(getEvents());
+      setEvents(getPassIssuableEvents());
       setEventPasses(getEventPasses());
     };
     window.addEventListener('leads-data-sync', handleSync);

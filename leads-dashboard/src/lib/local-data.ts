@@ -310,6 +310,8 @@ export type EventGuestCategory =
   | 'Other'
   | string;
 
+import { passEmailButtonsHtml } from '@/lib/pass-email-buttons';
+
 export interface PassAttendanceRecord {
   day: string; // e.g. "Day 1", "Day 2", "2026-10-13"
   date?: string;
@@ -402,6 +404,14 @@ export interface PassTheme {
   backgroundKey?: string;   // storageKey of the above
   walletBackgroundUrl?: string; // 690x1010 portrait crop of the artwork, fetched by WalletWallet (public URL)
   walletBackgroundKey?: string;
+  /** Emailed boarding-pass ticket. Default (unset/true) = reuse the background above; false = its own design. */
+  emailUseBackground?: boolean;
+  emailArtworkUrl?: string; // 1160x420 cover crop used inside the ticket card
+  emailArtworkKey?: string;
+  emailOverlay?: number;
+  emailBackgroundColor?: string;
+  emailForegroundColor?: string;
+  emailLabelColor?: string;
   logoUrl?: string;
   logoKey?: string;
   backgroundColor?: string; // fallback / tint colour behind the artwork (hex)
@@ -448,12 +458,17 @@ export interface EventPassItem {
   checkedInBy?: string;
   passColor?: string;
   passGradient?: string;
+  /** Optional per-pass text/label colours (hex). Override the event theme; unset = auto. */
+  textColor?: string;
+  labelColor?: string;
   attendance?: PassAttendanceRecord[];
   qrPayload: string;
   walletAppleUrl?: string;
   walletGoogleSaveUrl?: string;
   /** Serial assigned by WalletWallet when the wallet pass was created (used for live updates / revoke). */
   walletSerialNumber?: string;
+  /** Set by the retention scheduler once cached wallet/theme files were removed (event end + 30 days). */
+  archivedAt?: string;
 
   // Email delivery & pass viewing analytics
   emailStatus?: PassEmailStatus;
@@ -2312,6 +2327,14 @@ export function deleteGuest(id: string, actorName: string): void {
 // Events
 // -------------------------------------------------------------
 
+/**
+ * Events that passes can be issued for: only events created in the Events module.
+ * Public holidays / festivals auto-synced from the holiday calendar feed are excluded.
+ */
+export function getPassIssuableEvents(): EventItem[] {
+  return getEvents().filter((e) => !e.isHoliday && !String(e.id).startsWith('holiday_'));
+}
+
 export function getEvents(): EventItem[] {
   if (typeof window === 'undefined') return initialEvents;
   const saved = localStorage.getItem('leads_events');
@@ -3139,14 +3162,11 @@ export async function dispatchPassEmail(
         </table>
       </div>
 
-      <div style="text-align: center; margin-bottom: 24px;">
-        <a href="${passUrl}" style="display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #0284c7, #2563eb); color: #ffffff; text-decoration: none; font-weight: bold; font-size: 14px; border-radius: 10px; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4);">
-          View Verified Digital Pass &rarr;
-        </a>
-        <p style="margin: 10px 0 0 0; font-size: 11px; color: #64748b;">
-          Includes Apple Wallet / Google Wallet pass &amp; QR turnstile code
-        </p>
-      </div>
+      <!-- Wallet / calendar / pass buttons: our own URLs, wallet pass is created once on first click and cached -->
+      ${passEmailButtonsHtml(origin, pass.serialNumber)}
+      <p style="margin: 0 0 24px 0; font-size: 11px; color: #64748b; text-align: center;">
+        One pass, one QR &mdash; present it at official event turnstiles on every valid day.
+      </p>
 
       <p style="margin: 0; font-size: 12px; color: #64748b; text-align: center; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 16px;">
         Please present your digital pass or QR code at official event turnstiles upon arrival.<br/>

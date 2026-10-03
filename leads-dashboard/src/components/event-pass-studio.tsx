@@ -183,6 +183,9 @@ export function EventPassStudio({
   const [attendeeOrg, setAttendeeOrg] = useState('');
   const [brandHeader, setBrandHeader] = useState('LEADS Next Gen Centre');
   const [validityDate, setValidityDate] = useState('');
+  // '' = auto (default pass colours / event theme)
+  const [textColor, setTextColor] = useState('');
+  const [labelColor, setLabelColor] = useState('');
   const [walletLayout, setWalletLayout] = useState<'poster' | 'classic'>('poster');
   const [passTheme, setPassTheme] = useState<PassTheme | undefined>(undefined);
   // null = all days of the selected event (default); otherwise the explicit subset this single pass is valid on
@@ -313,6 +316,8 @@ export function EventPassStudio({
         seatOrZone: displayRoom,
         passColor,
         passGradient: colorMode === 'gradient' ? passGradient : undefined,
+        textColor: textColor || undefined,
+        labelColor: labelColor || undefined,
         notes: notes.trim() || undefined,
         issuedBy: currentUserName,
         issuedByEmail: currentUserEmail,
@@ -815,6 +820,32 @@ export function EventPassStudio({
               )}
             </div>
 
+            {/* 4.6 Text colours */}
+            <div className="space-y-2">
+              <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] flex items-center justify-between">
+                <span>Pass Text Colours</span>
+                {(textColor || labelColor) && (
+                  <button type="button" onClick={() => { setTextColor(''); setLabelColor(''); }} className="text-[10px] text-sky-400 hover:underline">
+                    Reset to auto
+                  </button>
+                )}
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                {([
+                  ['Text (name, event)', textColor, setTextColor, '#ffffff'],
+                  ['Labels & accents', labelColor, setLabelColor, '#38bdf8'],
+                ] as const).map(([lbl, val, set, fallback]) => (
+                  <label key={lbl} className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl border border-slate-300 dark:border-white/15 bg-slate-50 dark:bg-slate-900/60 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                    {lbl}
+                    <input type="color" value={val || fallback} onChange={(e) => set(e.target.value)} className="h-7 w-10 rounded border border-slate-300 dark:border-white/20 bg-transparent cursor-pointer" />
+                  </label>
+                ))}
+              </div>
+              <p className="text-[10.5px] text-slate-500">
+                Applies to the pass card, the public pass page and the emailed ticket. Apple/Google Wallet draws its own white text on poster backgrounds.
+              </p>
+            </div>
+
             {/* 5. Room / Venue / Hall Allocation */}
             <div className="space-y-1.5">
               <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] flex items-center justify-between">
@@ -1042,6 +1073,8 @@ export function EventPassStudio({
                       colorMode === 'gradient' && passGradient
                         ? passGradient
                         : `linear-gradient(145deg, ${passColor}ee 0%, #060c18fa 100%)`,
+                    ...((textColor || passTheme?.foregroundColor) ? { ['--pass-fg' as any]: textColor || passTheme?.foregroundColor } : {}),
+                    ...((labelColor || passTheme?.labelColor) ? { ['--pass-label' as any]: labelColor || passTheme?.labelColor } : {}),
                   }}
                 >
                   {/* Lanyard Cut */}

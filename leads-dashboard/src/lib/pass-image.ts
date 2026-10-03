@@ -70,10 +70,15 @@ export async function renderBoardingPassPng(
   theme: PassTheme = {}
 ): Promise<Buffer> {
   const fam = ensureFont();
-  const bg = theme.backgroundColor || pass.passColor || DEFAULT_PASS_THEME.backgroundColor;
-  const fg = theme.foregroundColor || DEFAULT_PASS_THEME.foregroundColor;
-  const label = theme.labelColor || DEFAULT_PASS_THEME.labelColor;
-  const overlay = typeof theme.overlay === 'number' ? theme.overlay : DEFAULT_PASS_THEME.overlay;
+  // Ticket look: by default shares the event background; with emailUseBackground === false it has its own design
+  const own = theme.emailUseBackground === false;
+  const bg = (own && theme.emailBackgroundColor) || theme.backgroundColor || pass.passColor || DEFAULT_PASS_THEME.backgroundColor;
+  const fg = pass.textColor || (own && theme.emailForegroundColor) || theme.foregroundColor || DEFAULT_PASS_THEME.foregroundColor;
+  const label = pass.labelColor || (own && theme.emailLabelColor) || theme.labelColor || DEFAULT_PASS_THEME.labelColor;
+  const overlay = own && typeof theme.emailOverlay === 'number'
+    ? theme.emailOverlay
+    : typeof theme.overlay === 'number' ? theme.overlay : DEFAULT_PASS_THEME.overlay;
+  const artKey = own ? theme.emailArtworkKey : theme.backgroundKey;
 
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
@@ -90,9 +95,9 @@ export async function renderBoardingPassPng(
   // Background: artwork (cover-fit) or solid/gradient colour
   ctx.fillStyle = bg;
   ctx.fillRect(x0, y0, w, h);
-  if (theme.backgroundKey) {
+  if (artKey) {
     try {
-      const art = await loadImage(await readStoredFile(theme.backgroundKey));
+      const art = await loadImage(await readStoredFile(artKey));
       const s = Math.max(w / art.width, h / art.height);
       const dw = art.width * s, dh = art.height * s;
       ctx.drawImage(art, x0 + (w - dw) / 2, y0 + (h - dh) / 2, dw, dh);
@@ -202,5 +207,37 @@ export async function renderBoardingPassPng(
     ctx.fill();
   }
 
+  return canvas.toBuffer('image/png');
+}
+
+/** Small thank-you card served in place of the ticket image once a pass is archived. */
+export async function renderThankYouPng(eventName: string): Promise<Buffer> {
+  const fam = ensureFont();
+  const canvas = createCanvas(W, H);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#e2e8f0';
+  ctx.fillRect(0, 0, W, H);
+  ctx.save();
+  roundRect(ctx, 20, 20, W - 40, H - 40, 28);
+  ctx.clip();
+  const g = ctx.createLinearGradient(20, 20, W - 20, H - 20);
+  g.addColorStop(0, DEFAULT_PASS_THEME.backgroundColor);
+  g.addColorStop(1, '#030712');
+  ctx.fillStyle = g;
+  ctx.fillRect(20, 20, W - 40, H - 40);
+  ctx.restore();
+  ctx.textAlign = 'center';
+  ctx.fillStyle = DEFAULT_PASS_THEME.labelColor;
+  ctx.font = `bold 20px ${fam}`;
+  ctx.fillText('LEADS NEXT GEN CENTRE  •  RUAS', W / 2, 120);
+  ctx.fillStyle = '#ffffff';
+  fitText(ctx, 'Thank you for being part of', W - 200, 44, 26, 'bold');
+  ctx.fillText('Thank you for being part of', W / 2, 205);
+  fitText(ctx, eventName, W - 200, 52, 26, 'bold');
+  ctx.fillText(truncate(ctx, eventName, W - 200), W / 2, 275);
+  ctx.fillStyle = DEFAULT_PASS_THEME.labelColor;
+  ctx.font = `22px ${fam}`;
+  ctx.fillText('Follow us on our socials for more exciting events', W / 2, 345);
+  ctx.textAlign = 'left';
   return canvas.toBuffer('image/png');
 }

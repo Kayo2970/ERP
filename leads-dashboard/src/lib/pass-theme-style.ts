@@ -3,7 +3,7 @@ import { PassTheme, DEFAULT_PASS_THEME } from '@/lib/local-data';
 
 /** Inline style that paints an event's themed artwork (with legibility overlay) on a pass face. */
 export function passThemeStyle(theme: PassTheme | undefined | null, fallbackBackground?: string): CSSProperties | undefined {
-  if (!theme || (!theme.backgroundUrl && !theme.backgroundColor && !theme.foregroundColor)) {
+  if (!theme || (!theme.backgroundUrl && !theme.backgroundColor && !theme.foregroundColor && !theme.labelColor)) {
     return fallbackBackground ? { background: fallbackBackground } : undefined;
   }
   const overlay = typeof theme.overlay === 'number' ? theme.overlay : DEFAULT_PASS_THEME.overlay;
