@@ -95,10 +95,13 @@ export async function GET(
 
   const body = lines.join('\r\n') + '\r\n';
 
+  // ?inline=1 lets iOS Safari open the native "Add to Contacts" sheet instead of saving a file
+  const inline = new URL(request.url).searchParams.get('inline') === '1';
+
   return new NextResponse(body, {
     headers: {
       'Content-Type': 'text/vcard; charset=utf-8',
-      'Content-Disposition': `attachment; filename="${member.cardSlug || 'contact'}.vcf"`,
+      'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename="${member.cardSlug || 'contact'}.vcf"`,
     },
   });
 }
