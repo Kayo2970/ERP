@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readCollection } from '@/lib/server-db';
-import { EventPassItem } from '@/lib/local-data';
 import { getPassTheme } from '@/lib/pass-theme';
-import { renderBoardingPassPng } from '@/lib/pass-image';
+import { renderBoardingPassPng, renderThankYouPng } from '@/lib/pass-image';
+import { lookupPassBySerial } from '@/lib/pass-lookup';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -14,8 +13,14 @@ export const runtime = 'nodejs';
 export async function GET(request: NextRequest, { params }: { params: Promise<{ serial: string }> }) {
   try {
     const { serial } = await params;
-    const passes = await readCollection<EventPassItem>('event_passes');
-    const pass = passes.find((p) => p.serialNumber.toLowerCase() === serial.toLowerCase());
+    const found = await lookupPassBySerial(serial);
+    if (found?.archived) {
+      const thanks = await renderThankYouPng(found.pass.eventName);
+      return new NextResponse(new Uint8Array(thanks), {
+        headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=3600' },
+      });
+    }
+    const pass = found?.pass;
     if (!pass || pass.status === 'Cancelled') {
       return NextResponse.json({ error: 'Pass not found' }, { status: 404 });
     }

@@ -467,6 +467,8 @@ export interface EventPassItem {
   walletGoogleSaveUrl?: string;
   /** Serial assigned by WalletWallet when the wallet pass was created (used for live updates / revoke). */
   walletSerialNumber?: string;
+  /** Set by the retention scheduler once cached wallet/theme files were removed (event end + 30 days). */
+  archivedAt?: string;
 
   // Email delivery & pass viewing analytics
   emailStatus?: PassEmailStatus;

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { mutateCollection } from '@/lib/server-db';
+import { mutateCollection, readCollection } from '@/lib/server-db';
+import { isPassArchived } from '@/lib/pass-retention';
 import { requireSession } from '@/lib/session';
 import { apiError } from '@/lib/api-error';
 import {
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'passId and days are required' }, { status: 400 });
     }
 
+    const eventRows = await readCollection<any>('events');
     let result: { pass?: EventPassItem; error?: string; alreadyChecked?: string[] } = {};
     await mutateCollection<EventPassItem>('event_passes', (current = []) => {
       const idx = current.findIndex((p) => p.id === passId || p.serialNumber === passId);
@@ -34,6 +36,10 @@ export async function POST(request: Request) {
         return current;
       }
       const existing = current[idx];
+      if (isPassArchived(existing, eventRows.find((e: any) => e.id === existing.eventId))) {
+        result = { error: 'This pass has expired.' };
+        return current;
+      }
       if (existing.status === 'Cancelled') {
         result = { error: 'This pass has been cancelled.' };
         return current;

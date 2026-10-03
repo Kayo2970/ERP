@@ -21,6 +21,9 @@ export async function register() {
     const { startTaskDeadlineScheduler } = await import('./lib/task-deadline-scheduler');
     startTaskDeadlineScheduler();
 
+    const { startPassRetentionScheduler } = await import('./lib/pass-retention-scheduler');
+    startPassRetentionScheduler();
+
     const { startCommitteeReviewScheduler } = await import('./lib/committee-review-scheduler');
     startCommitteeReviewScheduler();
   }

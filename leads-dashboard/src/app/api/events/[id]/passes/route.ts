@@ -6,6 +6,7 @@ import { EventPassItem, mergeAttendance } from '@/lib/local-data';
 import { getWalletWalletApiKey } from '@/lib/wallet/walletwallet-config';
 import { updateEventWalletPass } from '@/lib/wallet/walletwallet-client';
 import { walletDataForPass } from '@/lib/pass-theme';
+import { isPassArchived, PASS_RETENTION_DAYS } from '@/lib/pass-retention';
 
 export async function GET(
   request: Request,
@@ -205,6 +206,14 @@ export async function PUT(
           reason: 'Pass not found or invalid QR signature.',
         },
         { status: 404 }
+      );
+    }
+
+    const eventRows = await readCollection<any>('events');
+    if (isPassArchived(matched, eventRows.find((e: any) => e.id === matched.eventId))) {
+      return NextResponse.json(
+        { valid: false, reason: `This pass expired ${PASS_RETENTION_DAYS} days after the event.` },
+        { status: 410 }
       );
     }
 
