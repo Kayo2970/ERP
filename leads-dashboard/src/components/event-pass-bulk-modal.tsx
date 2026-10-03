@@ -18,6 +18,8 @@ import {
   EventPassType,
   EventGuestCategory,
   addEventPass,
+  expandDateRange,
+  formatValidDaysLabel,
 } from '@/lib/local-data';
 import { useDropTarget } from '@/components/ui/file-dropzone';
 import { SearchableSelect } from '@/components/searchable-select';
@@ -42,6 +44,8 @@ interface ParsedPassRow {
   phone?: string;
   org?: string;
   validity?: string;
+  validFrom?: string;
+  validTo?: string;
   notes?: string;
   isValid: boolean;
   error?: string;
@@ -97,6 +101,9 @@ export function EventPassBulkModal({
         : `${selectedEvent.startDate}${selectedEvent.endDate ? ` – ${selectedEvent.endDate}` : ''}`
       : '2026-10-15 – 2026-10-17';
 
+    const sampleDays = selectedEvent && !selectedEvent.datesTBD ? expandDateRange(selectedEvent.startDate, selectedEvent.endDate) : [];
+    const sampleFrom = sampleDays[0] || '';
+    const sampleTo = sampleDays[Math.min(1, sampleDays.length - 1)] || '';
     const headers = [
       'AttendeeName',
       'GuestCategory',
@@ -106,15 +113,17 @@ export function EventPassBulkModal({
       'Mobile',
       'Organization',
       'CustomValidity',
+      'ValidFrom',
+      'ValidTo',
       'Notes',
     ];
 
     const sampleRows = [
-      toCsvRow(['Dr. Meera Swaminathan', 'Keynote Speaker', 'Keynote Speaker', 'Main Auditorium - VIP Box', 'meera.s@domain.com', '+91 98765 43210', 'IISc Bangalore', formattedDate, 'Invited Speaker']),
-      toCsvRow(['Alex Chen', 'VIP Dignitary', 'VIP Pass', 'Main Auditorium - Front Row', 'alex.chen@techcorp.com', '+91 98450 11223', 'TechCorp Singapore', formattedDate, 'Executive Sponsor']),
-      toCsvRow(['Rohan Sharma', 'Student', 'Student Delegate', 'Seminar Hall A - Room 102', 'rohan.s@msruas.ac.in', '+91 91234 56789', 'RUAS FET', formattedDate, 'Student Project Lead']),
-      toCsvRow(['Priya Nambiar', 'Faculty', 'Executive Delegate', 'Seminar Hall B - Room 204', 'priya.n@msruas.ac.in', '+91 99887 76655', 'RUAS FMC', formattedDate, 'Session Chair']),
-      toCsvRow(['Sarah Jenkins', 'Other: Hackathon Judge', 'Other: Special Access', 'Judging Arena - Room 301', 'sarah.j@innovate.org', '+91 97711 22334', 'Innovate Labs', formattedDate, 'Invited Hackathon Jury']),
+      toCsvRow(['Dr. Meera Swaminathan', 'Keynote Speaker', 'Keynote Speaker', 'Main Auditorium - VIP Box', 'meera.s@domain.com', '+91 98765 43210', 'IISc Bangalore', formattedDate, sampleFrom, sampleTo, 'Invited Speaker']),
+      toCsvRow(['Alex Chen', 'VIP Dignitary', 'VIP Pass', 'Main Auditorium - Front Row', 'alex.chen@techcorp.com', '+91 98450 11223', 'TechCorp Singapore', formattedDate, '', '', 'Executive Sponsor']),
+      toCsvRow(['Rohan Sharma', 'Student', 'Student Delegate', 'Seminar Hall A - Room 102', 'rohan.s@msruas.ac.in', '+91 91234 56789', 'RUAS FET', formattedDate, '', '', 'Student Project Lead']),
+      toCsvRow(['Priya Nambiar', 'Faculty', 'Executive Delegate', 'Seminar Hall B - Room 204', 'priya.n@msruas.ac.in', '+91 99887 76655', 'RUAS FMC', formattedDate, '', '', 'Session Chair']),
+      toCsvRow(['Sarah Jenkins', 'Other: Hackathon Judge', 'Other: Special Access', 'Judging Arena - Room 301', 'sarah.j@innovate.org', '+91 97711 22334', 'Innovate Labs', formattedDate, '', '', 'Invited Hackathon Jury']),
     ];
 
     const csvContent = [toCsvRow(headers), ...sampleRows].join('\n');
@@ -148,7 +157,9 @@ export function EventPassBulkModal({
         const emailIdx = headers.findIndex((h) => h.includes('email') || h.includes('mail'));
         const phoneIdx = headers.findIndex((h) => h.includes('phone') || h.includes('mobile') || h.includes('contact'));
         const orgIdx = headers.findIndex((h) => h.includes('org') || h.includes('company') || h.includes('affiliation'));
-        const valIdx = headers.findIndex((h) => h.includes('validity') || h.includes('date'));
+        const fromIdx = headers.findIndex((h) => h.includes('validfrom') || h === 'from' || h === 'startday');
+        const toIdx = headers.findIndex((h) => h.includes('validto') || h === 'to' || h === 'endday');
+        const valIdx = headers.findIndex((h) => h.includes('validity') || (h.includes('date') && !h.includes('valid')));
         const notesIdx = headers.findIndex((h) => h.includes('notes') || h.includes('remark'));
 
         if (nameIdx === -1) {
@@ -183,6 +194,8 @@ export function EventPassBulkModal({
           const phone = phoneIdx !== -1 && values[phoneIdx]?.trim() ? values[phoneIdx].trim() : undefined;
           const org = orgIdx !== -1 && values[orgIdx]?.trim() ? values[orgIdx].trim() : undefined;
           const validity = valIdx !== -1 && values[valIdx]?.trim() ? values[valIdx].trim() : undefined;
+          const validFrom = fromIdx !== -1 && values[fromIdx]?.trim() ? values[fromIdx].trim() : undefined;
+          const validTo = toIdx !== -1 && values[toIdx]?.trim() ? values[toIdx].trim() : undefined;
           const notes = notesIdx !== -1 && values[notesIdx]?.trim() ? values[notesIdx].trim() : undefined;
 
           rows.push({
@@ -194,6 +207,8 @@ export function EventPassBulkModal({
             phone,
             org,
             validity,
+            validFrom,
+            validTo,
             notes,
             isValid: true,
           });
@@ -231,6 +246,16 @@ export function EventPassBulkModal({
       for (const row of parsedRows) {
         if (!row.isValid) continue;
 
+        const eventDays = selectedEvent.datesTBD ? [] : expandDateRange(selectedEvent.startDate, selectedEvent.endDate);
+        // One pass / one QR: valid on the row's ValidFrom..ValidTo (clamped to the event), else every event day
+        let rowDays = eventDays;
+        if (row.validFrom || row.validTo) {
+          const from = row.validFrom || eventDays[0];
+          const to = row.validTo || row.validFrom || eventDays[eventDays.length - 1];
+          const ranged = expandDateRange(from, to).filter((d) => eventDays.length === 0 || eventDays.includes(d));
+          if (ranged.length > 0) rowDays = ranged;
+        }
+
         addEventPass({
           eventId: selectedEvent.id,
           eventName: selectedEvent.title,
@@ -244,7 +269,8 @@ export function EventPassBulkModal({
           attendeeOrg: row.org,
           passType: row.passType,
           accessTier: row.passType === 'VIP Pass' ? 'All Access VIP' : 'General Admission',
-          validityDate: row.validity || formattedDate,
+          validityDate: row.validity || (rowDays.length > 0 ? formatValidDaysLabel(rowDays) : formattedDate),
+          validDays: rowDays.length > 0 ? rowDays : undefined,
           seatOrZone: row.roomOrVenue,
           passColor: '#0b1526',
           passGradient: 'linear-gradient(135deg, #0284c7 0%, #0369a1 50%, #075985 100%)',

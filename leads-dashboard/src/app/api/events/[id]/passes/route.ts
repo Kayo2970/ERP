@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { requireSession } from '@/lib/session';
 import { apiError } from '@/lib/api-error';
-import { EventPassItem } from '@/lib/local-data';
+import { EventPassItem, mergeAttendance } from '@/lib/local-data';
 import { getWalletWalletApiKey } from '@/lib/wallet/walletwallet-config';
 import { updateEventWalletPass } from '@/lib/wallet/walletwallet-client';
 
@@ -80,6 +80,10 @@ export async function PATCH(
         ...existing,
         ...updates,
         status: newStatus,
+        // Merge per-day attendance instead of overwriting so concurrent scanners can't clobber each other
+        ...(Array.isArray(updates.attendance)
+          ? { attendance: mergeAttendance(existing.attendance, updates.attendance) }
+          : {}),
         ...(newStatus === 'Checked In' && existing.status !== 'Checked In'
           ? {
               checkedInAt: updates.checkedInAt || now,
@@ -135,6 +139,7 @@ export async function PATCH(
             roomOrVenue: (updatedPass as EventPassItem).roomOrVenue,
             passType: (updatedPass as EventPassItem).passType,
             validityDate: (updatedPass as EventPassItem).validityDate,
+            validDays: (updatedPass as EventPassItem).validDays,
             passColor: (updatedPass as EventPassItem).passColor,
           },
           passUrl
@@ -221,7 +226,8 @@ export async function PUT(
       valid: true,
       pass: matched,
       status: matched.status,
-      isAlreadyCheckedIn: matched.status === 'Checked In',
+      isAlreadyCheckedIn: (matched.attendance || []).length > 0,
+      isCancelled: matched.status === 'Cancelled',
       attendance: matched.attendance || [],
     });
   } catch (err: any) {

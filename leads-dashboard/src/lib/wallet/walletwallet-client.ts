@@ -129,6 +129,7 @@ export interface WalletEventPassData {
   roomOrVenue?: string;
   passType: string;
   validityDate?: string;
+  validDays?: string[];
   passColor?: string;
 }
 

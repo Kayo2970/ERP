@@ -319,6 +319,79 @@ export interface PassAttendanceRecord {
   session?: string;
 }
 
+// -------------------------------------------------------------
+// Multi-day pass validity helpers (one pass, one QR, many days)
+// -------------------------------------------------------------
+const ISO_DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Expand an inclusive ISO date range into a list of ISO days (capped at 62 days). */
+export function expandDateRange(start?: string, end?: string): string[] {
+  if (!start || !ISO_DAY_RE.test(start)) return [];
+  const last = end && ISO_DAY_RE.test(end) && end >= start ? end : start;
+  const days: string[] = [];
+  const cursor = new Date(`${start}T00:00:00Z`);
+  const stop = new Date(`${last}T00:00:00Z`);
+  while (cursor <= stop && days.length < 62) {
+    days.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return days;
+}
+
+export function todayIso(now: Date = new Date()): string {
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/** Human label for a set of valid days, e.g. "10 Oct – 12 Oct 2026" or "10, 12 & 14 Oct 2026". */
+export function formatValidDaysLabel(days: string[]): string {
+  const sorted = [...days].filter((d) => ISO_DAY_RE.test(d)).sort();
+  if (sorted.length === 0) return '';
+  const fmt = (iso: string, withYear = false) =>
+    new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      ...(withYear ? { year: 'numeric' } : {}),
+    });
+  if (sorted.length === 1) return fmt(sorted[0], true);
+  const contiguous = expandDateRange(sorted[0], sorted[sorted.length - 1]).length === sorted.length;
+  if (contiguous) return `${fmt(sorted[0])} – ${fmt(sorted[sorted.length - 1], true)}`;
+  return sorted.map((d) => fmt(d)).join(', ') + ` ${sorted[sorted.length - 1].slice(0, 4)}`;
+}
+
+/** Days a pass is valid on. Legacy passes (no validDays) return []. */
+export function getPassValidDays(pass: Pick<EventPassItem, 'validDays'>): string[] {
+  return Array.isArray(pass.validDays) ? pass.validDays.filter((d) => ISO_DAY_RE.test(d)).sort() : [];
+}
+
+/** Attendance progress for a pass, used for "Checked In (2/3 days)" style badges. */
+export function getPassAttendanceSummary(pass: EventPassItem): { attended: number; total: number } {
+  const validDays = getPassValidDays(pass);
+  const attended = (pass.attendance || []).length;
+  return { attended, total: validDays.length || Math.max(attended, 1) };
+}
+
+/** Merge attendance records by day key (case-insensitive); later records win. */
+export function mergeAttendance(
+  current: PassAttendanceRecord[] = [],
+  incoming: PassAttendanceRecord[] = []
+): PassAttendanceRecord[] {
+  const out = [...current];
+  incoming.forEach((rec) => {
+    const idx = out.findIndex((a) => a.day.toLowerCase() === rec.day.toLowerCase());
+    if (idx >= 0) out[idx] = { ...out[idx], ...rec, timestamp: out[idx].timestamp };
+    else out.push(rec);
+  });
+  return out;
+}
+
+export function isPassValidOn(pass: EventPassItem, isoDay: string): boolean {
+  const days = getPassValidDays(pass);
+  return days.length === 0 || days.includes(isoDay);
+}
+
 export type PassEmailStatus = 'Not Sent' | 'Email Sent' | 'Email Received' | 'Pass Viewed';
 
 export interface EventPassItem {
@@ -337,6 +410,8 @@ export interface EventPassItem {
   passType: EventPassType;
   accessTier?: string;
   validityDate?: string;
+  /** ISO dates (YYYY-MM-DD) this single pass is valid on. One pass / one QR covers all of them. */
+  validDays?: string[];
   seatOrZone?: string;
   notes?: string;
   issuedBy: string;
@@ -349,6 +424,8 @@ export interface EventPassItem {
   passGradient?: string;
   attendance?: PassAttendanceRecord[];
   qrPayload: string;
+  walletAppleUrl?: string;
+  walletGoogleSaveUrl?: string;
 
   // Email delivery & pass viewing analytics
   emailStatus?: PassEmailStatus;

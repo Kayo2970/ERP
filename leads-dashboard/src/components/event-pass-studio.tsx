@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Ticket,
   User,
@@ -36,6 +36,8 @@ import {
   addEventPass,
   getEventPasses,
   dispatchPassEmail,
+  expandDateRange,
+  formatValidDaysLabel,
 } from '@/lib/local-data';
 import styles from './event-pass-card.module.css';
 import { AppleWalletPassPreview } from './apple-wallet-pass-preview';
@@ -179,6 +181,8 @@ export function EventPassStudio({
   const [attendeeOrg, setAttendeeOrg] = useState('');
   const [brandHeader, setBrandHeader] = useState('LEADS Next Gen Centre');
   const [validityDate, setValidityDate] = useState('');
+  // null = all days of the selected event (default); otherwise the explicit subset this single pass is valid on
+  const [selectedValidDays, setSelectedValidDays] = useState<string[] | null>(null);
   const [notes, setNotes] = useState('');
 
   // Modals & Preview mode
@@ -228,7 +232,24 @@ export function EventPassStudio({
 
   const previewSerial = `LEADS-EVT-2026-${(attendeeName || 'GUEST').slice(0, 3).toUpperCase()}-99`;
   const displayRoom = roomOrVenue.trim() || selectedEvent?.location || 'Main Auditorium';
-  const displayValidity = validityDate.trim() || formattedEventDate;
+  useEffect(() => {
+    setSelectedValidDays(null);
+  }, [selectedEventId, eventMode]);
+
+  const eventDays = selectedEvent && !selectedEvent.datesTBD ? expandDateRange(selectedEvent.startDate, selectedEvent.endDate) : [];
+  const effectiveValidDays = selectedValidDays
+    ? selectedValidDays.filter((d) => eventDays.includes(d) || eventDays.length === 0)
+    : eventDays.length > 1
+    ? eventDays
+    : validityDate
+    ? [validityDate]
+    : [];
+  const displayValidity = effectiveValidDays.length > 0 ? formatValidDaysLabel(effectiveValidDays) : formattedEventDate;
+  const toggleValidDay = (d: string) => {
+    const base = selectedValidDays ?? eventDays;
+    const next = base.includes(d) ? base.filter((x) => x !== d) : [...base, d].sort();
+    setSelectedValidDays(next.length === 0 ? base : next);
+  };
 
   const handleDirectDownloadTemplate = () => {
     const targetEvt = selectedEvent || events[0];
@@ -284,6 +305,7 @@ export function EventPassStudio({
         passType: resolvedPass as any,
         accessTier: resolvedPass === 'VIP Pass' ? 'All Access VIP' : 'General Admission',
         validityDate: displayValidity,
+        validDays: effectiveValidDays.length > 0 ? effectiveValidDays : undefined,
         seatOrZone: displayRoom,
         passColor,
         passGradient: colorMode === 'gradient' ? passGradient : undefined,
@@ -840,28 +862,54 @@ export function EventPassStudio({
                 </div>
               </div>
 
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 sm:col-span-2">
                 <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] flex items-center justify-between">
-                  <span>Pass Validity Date</span>
-                  {validityDate && (
+                  <span>Valid On (one pass, one QR for all selected days)</span>
+                  {selectedValidDays && (
                     <button
                       type="button"
-                      onClick={() => setValidityDate('')}
+                      onClick={() => setSelectedValidDays(null)}
                       className="text-[10px] text-sky-400 hover:underline"
                     >
-                      Reset to Event
+                      All event days
                     </button>
                   )}
                 </label>
-                <div className="relative">
-                  <Calendar className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
-                  <input
-                    type="date"
-                    value={validityDate}
-                    onChange={(e) => setValidityDate(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-300 dark:border-white/15 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:border-accent text-xs"
-                  />
-                </div>
+                {eventDays.length > 1 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {eventDays.map((d) => {
+                      const on = effectiveValidDays.includes(d);
+                      return (
+                        <button
+                          type="button"
+                          key={d}
+                          onClick={() => toggleValidDay(d)}
+                          className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-all cursor-pointer ${
+                            on
+                              ? 'bg-sky-500/20 border-sky-400 text-sky-600 dark:text-sky-200'
+                              : 'bg-slate-50 dark:bg-slate-900/60 border-slate-300 dark:border-white/15 text-slate-500 line-through'
+                          }`}
+                        >
+                          {new Date(`${d}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <Calendar className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
+                    <input
+                      type="date"
+                      value={validityDate}
+                      onChange={(e) => setValidityDate(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-300 dark:border-white/15 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:border-accent text-xs"
+                    />
+                  </div>
+                )}
+                <p className="text-[10.5px] text-slate-500">
+                  Valid: <strong>{displayValidity}</strong>
+                  {effectiveValidDays.length > 1 ? ` · ${effectiveValidDays.length} days` : ''}
+                </p>
               </div>
             </div>
 

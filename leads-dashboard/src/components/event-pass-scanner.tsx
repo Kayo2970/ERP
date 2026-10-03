@@ -21,7 +21,22 @@ import {
   Check,
   Plus,
 } from 'lucide-react';
-import { EventPassItem, PassAttendanceRecord, updateEventPassStatus, authHeaders } from '@/lib/local-data';
+import {
+  EventPassItem,
+  getEventPasses,
+  saveEventPasses,
+  getPassValidDays,
+  formatValidDaysLabel,
+  todayIso,
+  authHeaders,
+} from '@/lib/local-data';
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+/** "2026-10-11" -> "Sun 11 Oct"; custom labels pass through. */
+function dayLabel(day: string): string {
+  if (!ISO_DAY.test(day)) return day;
+  return new Date(`${day}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+}
 
 interface EventPassScannerProps {
   currentUserName: string;
@@ -41,11 +56,12 @@ export function EventPassScanner({
     isAlreadyCheckedIn?: boolean;
     reason?: string;
   } | null>(null);
+  const [checkInError, setCheckInError] = useState('');
 
   const [checkInSuccess, setCheckInSuccess] = useState(false);
 
   // Multi-day Attendance State
-  const [availableDays, setAvailableDays] = useState<string[]>(['Day 1', 'Day 2', 'Day 3']);
+  const [availableDays, setAvailableDays] = useState<string[]>([]);
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [customDayInput, setCustomDayInput] = useState('');
   const [showAddCustomDay, setShowAddCustomDay] = useState(false);
@@ -114,6 +130,7 @@ export function EventPassScanner({
     setIsVerifying(true);
     setVerificationResult(null);
     setCheckInSuccess(false);
+    setCheckInError('');
 
     try {
       const res = await fetch('/api/events/all/passes', {
@@ -343,61 +360,67 @@ export function EventPassScanner({
     };
   }, [stopCamera]);
 
-  // Synchronize available days & selected days whenever a pass is verified
+  // Synchronize available days & selected days whenever a pass is verified.
+  // Structured passes use their own validDays (one pass, one QR, many days); legacy passes fall back to Day 1-3.
   useEffect(() => {
     if (verificationResult?.pass) {
       const pass = verificationResult.pass;
-      const daysSet = new Set<string>();
-
-      // 1. Load any previously saved attendance records
-      if (pass.attendance && pass.attendance.length > 0) {
-        pass.attendance.forEach((a) => {
-          if (a.day) daysSet.add(a.day);
-        });
-      }
-
-      // 2. Default day set (Day 1, Day 2, Day 3)
-      ['Day 1', 'Day 2', 'Day 3'].forEach((d) => daysSet.add(d));
+      const validDays = getPassValidDays(pass);
+      const daysSet = new Set<string>(validDays);
+      (pass.attendance || []).forEach((a) => {
+        if (a.day) daysSet.add(a.day);
+      });
+      if (validDays.length === 0) ['Day 1', 'Day 2', 'Day 3'].forEach((d) => daysSet.add(d));
 
       const daysList = Array.from(daysSet);
       setAvailableDays(daysList);
 
-      // Pre-select first unattended day
       const attendedSet = new Set((pass.attendance || []).map((a) => a.day.toLowerCase()));
-      const firstUnattended = daysList.find((d) => !attendedSet.has(d.toLowerCase()));
-      setSelectedDays(firstUnattended ? [firstUnattended] : []);
+      if (validDays.length > 0) {
+        const today = todayIso();
+        setSelectedDays(validDays.includes(today) && !attendedSet.has(today) ? [today] : []);
+      } else {
+        const firstUnattended = daysList.find((d) => !attendedSet.has(d.toLowerCase()));
+        setSelectedDays(firstUnattended ? [firstUnattended] : []);
+      }
     } else {
       setSelectedDays([]);
     }
   }, [verificationResult?.pass?.id]);
 
-  const handleCheckInDays = (daysToCheckIn: string[]) => {
+  const handleCheckInDays = async (daysToCheckIn: string[]) => {
     if (!verificationResult?.pass || daysToCheckIn.length === 0) return;
-    const now = new Date().toISOString();
-    const newRecords: PassAttendanceRecord[] = daysToCheckIn.map((d) => ({
-      day: d,
-      timestamp: now,
-      scannedBy: currentUserName,
-      checkedInBy: currentUserName,
-    }));
-
-    const updated = updateEventPassStatus(
-      verificationResult.pass.id,
-      'Checked In',
-      currentUserName,
-      newRecords
-    );
-
-    if (updated) {
+    setCheckInError('');
+    try {
+      const res = await fetch('/api/events/all/passes/checkin', {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ passId: verificationResult.pass.id, days: daysToCheckIn }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.pass) {
+        setCheckInError(data.error || 'Check-in failed.');
+        return;
+      }
+      const updated: EventPassItem = data.pass;
+      // Keep this device's cache in step with the server copy
+      const cached = getEventPasses();
+      const idx = cached.findIndex((p) => p.id === updated.id);
+      if (idx >= 0) {
+        cached[idx] = updated;
+        saveEventPasses(cached);
+      }
       setVerificationResult({
         ...verificationResult,
         pass: updated,
-        status: 'Checked In',
+        status: updated.status,
         isAlreadyCheckedIn: true,
       });
       setCheckInSuccess(true);
       setSelectedDays([]);
       if (onPassCheckedIn) onPassCheckedIn(updated);
+    } catch {
+      setCheckInError('Check-in request failed. Please check network connection.');
     }
   };
 
@@ -416,7 +439,7 @@ export function EventPassScanner({
 
   const handleCheckIn = () => {
     if (!verificationResult?.pass) return;
-    handleCheckInDays(selectedDays.length > 0 ? selectedDays : ['Day 1']);
+    handleCheckInDays(selectedDays);
   };
 
   return (
@@ -583,8 +606,30 @@ export function EventPassScanner({
             const pass = verificationResult.pass;
             const attendance = pass.attendance || [];
             const attendedMap = new Map(attendance.map((a) => [a.day.toLowerCase(), a]));
+            const validDays = getPassValidDays(pass);
+            const isStructured = validDays.length > 0;
+            const today = todayIso();
+            const isCancelled = pass.status === 'Cancelled';
             const pendingDays = availableDays.filter((d) => !attendedMap.has(d.toLowerCase()));
+            // Structured passes can only be checked in on the day itself
+            const isDayOpen = (d: string) => !isStructured || d === today;
+            const checkableDays = pendingDays.filter(isDayOpen);
+            const validToday = !isStructured || validDays.includes(today);
             const isAllAttended = availableDays.length > 0 && pendingDays.length === 0;
+
+            if (isCancelled) {
+              return (
+                <div className="p-6 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 flex items-center gap-3">
+                  <XCircle className="h-6 w-6 text-rose-400 shrink-0" />
+                  <div>
+                    <div className="font-bold text-rose-200">Pass Cancelled — Do Not Admit</div>
+                    <div className="text-xs text-rose-300/80">
+                      {pass.attendeeName} · {pass.serialNumber}
+                    </div>
+                  </div>
+                </div>
+              );
+            }
 
             return (
               <div
@@ -618,7 +663,9 @@ export function EventPassScanner({
                     ) : (
                       <>
                         <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
-                        <span className="font-bold text-emerald-300 text-sm">Genuine &amp; Verified Pass</span>
+                        <span className="font-bold text-emerald-300 text-sm">
+                          {validToday ? 'Genuine & Verified Pass' : `Genuine pass — not valid today (${formatValidDaysLabel(validDays)})`}
+                        </span>
                       </>
                     )}
                   </div>
@@ -658,7 +705,7 @@ export function EventPassScanner({
                   <div className="space-y-0.5 pt-2 border-t border-white/10">
                     <span className="text-[9px] text-slate-400 uppercase tracking-wider block font-semibold">Validity / Issued</span>
                     <span className="text-xs text-slate-300 block">
-                      {pass.validityDate || pass.eventDate || '2026'}
+                      {isStructured ? formatValidDaysLabel(validDays) : pass.validityDate || pass.eventDate || '2026'}
                     </span>
                   </div>
                 </div>
@@ -700,7 +747,7 @@ export function EventPassScanner({
                           >
                             <div className="flex items-center gap-2">
                               <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                              <span className="font-extrabold text-xs text-white">{day}</span>
+                              <span className="font-extrabold text-xs text-white">{dayLabel(day)}</span>
                               <span className="text-[9.5px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-semibold">
                                 Attended
                               </span>
@@ -715,6 +762,18 @@ export function EventPassScanner({
                                 by {record.scannedBy || record.checkedInBy || 'Staff'}
                               </span>
                             </div>
+                          </div>
+                        );
+                      }
+
+                      if (!isDayOpen(day)) {
+                        return (
+                          <div
+                            key={day}
+                            className="w-full flex items-center justify-between p-2.5 rounded-xl border border-white/5 bg-white/[0.03] text-slate-500"
+                          >
+                            <span className="font-bold text-xs">{dayLabel(day)}</span>
+                            <span className="text-[10px] font-medium">{day < today ? 'Missed' : 'Not yet — valid on this date'}</span>
                           </div>
                         );
                       }
@@ -742,7 +801,7 @@ export function EventPassScanner({
                             >
                               {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
                             </div>
-                            <span className="font-bold text-xs">{day}</span>
+                            <span className="font-bold text-xs">{dayLabel(day)}</span>
                           </div>
                           <span className="text-[10px] text-slate-400 font-medium">
                             {isSelected ? 'Selected for check-in' : 'Click to select'}
@@ -754,7 +813,7 @@ export function EventPassScanner({
 
                   {/* Add Custom Day or Session */}
                   <div className="pt-1">
-                    {!showAddCustomDay ? (
+                    {isStructured ? null : !showAddCustomDay ? (
                       <button
                         type="button"
                         onClick={() => setShowAddCustomDay(true)}
@@ -801,7 +860,7 @@ export function EventPassScanner({
 
                   {/* Multi-Day Check-In Trigger Buttons */}
                   <div className="pt-2 flex flex-col sm:flex-row gap-2">
-                    {pendingDays.length > 0 ? (
+                    {checkableDays.length > 0 ? (
                       <>
                         <button
                           type="button"
@@ -813,11 +872,11 @@ export function EventPassScanner({
                           {selectedDays.length > 1
                             ? `Check In ${selectedDays.length} Days Simultaneously`
                             : selectedDays.length === 1
-                            ? `Check In ${selectedDays[0]}`
+                            ? `Check In ${dayLabel(selectedDays[0])}`
                             : 'Select Day(s) to Check In'}
                         </button>
 
-                        {pendingDays.length > 1 && (
+                        {!isStructured && pendingDays.length > 1 && (
                           <button
                             type="button"
                             onClick={() => handleCheckInDays(pendingDays)}
@@ -828,6 +887,11 @@ export function EventPassScanner({
                           </button>
                         )}
                       </>
+                    ) : isStructured && pendingDays.length > 0 ? (
+                      <div className="w-full py-2.5 px-4 bg-amber-500/15 border border-amber-500/30 text-amber-200 font-bold rounded-xl text-xs flex items-center justify-center gap-2">
+                        <AlertTriangle className="h-4 w-4 text-amber-400" />
+                        {validToday ? 'Already checked in for today' : 'This pass is not valid today — no check-in possible'}
+                      </div>
                     ) : (
                       <div className="w-full py-2.5 px-4 bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 font-extrabold rounded-xl text-xs flex items-center justify-center gap-2">
                         <CheckCircle2 className="h-4 w-4 text-emerald-400" />
@@ -835,6 +899,11 @@ export function EventPassScanner({
                       </div>
                     )}
                   </div>
+                  {checkInError && (
+                    <div className="text-xs font-semibold text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2">
+                      {checkInError}
+                    </div>
+                  )}
                 </div>
               </div>
             );
