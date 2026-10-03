@@ -79,6 +79,21 @@ export async function buildStorageReport(): Promise<StorageReport> {
   const referenced = new Set<string>();
   collectReferencedKeys(db, referenced);
 
+  // Pass themes live on disk (not in a collection): theme.json + its artwork are referenced while the event exists
+  const eventIds = new Set((db.events || []).map((e: any) => e.id));
+  for (const f of files) {
+    const m = f.key.match(/^pass-themes\/([^/]+)\/9__theme\.json$/);
+    if (!m || !eventIds.has(m[1])) continue;
+    referenced.add(f.key);
+    try {
+      const theme = JSON.parse(await fs.readFile(path.join(UPLOADS_DIR, f.key), 'utf8'));
+      if (theme.backgroundKey) referenced.add(theme.backgroundKey);
+      if (theme.logoKey) referenced.add(theme.logoKey);
+    } catch {
+      /* unreadable theme file — leave its artwork unreferenced */
+    }
+  }
+
   const byCategory = new Map<string, { bytes: number; files: number }>();
   for (const f of files) {
     const cat = f.key.split('/')[0] || 'other';

@@ -300,8 +300,6 @@ export default function PublicEventPassPage({
           showActions={true}
           autoOpen={false}
           walletError={walletError}
-          onSaveContact={handleAddToCalendar}
-          saveContactLabel="Add to Calendar"
         />
       </div>
 
