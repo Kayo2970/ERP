@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection } from '@/lib/server-db';
+import { purgeMemberArtifacts } from '@/lib/cascade-delete';
 import { deleteStoredFile, saveBase64File } from '@/lib/file-storage';
 import { requireSession } from '@/lib/session';
 import { getAccessLevelSettingsServer, canEditDirectory, canTerminateMember, isSuperUser } from '@/lib/permissions-server';
@@ -215,9 +216,11 @@ export async function DELETE(
     const { id } = await params;
     const force = new URL(request.url).searchParams.get('force') === 'true';
     let found = false;
+    let deletedEmail: string | undefined;
     await mutateCollection('members', (current) => {
       const target = current.find((m: any) => m.id === id);
       if (!target) return current;
+      deletedEmail = target.email;
 
       if (isKayomarzIdentity(target) && !force) {
         throw new Error('The primary Super User account (Kayomarz Pavri) is protected and cannot be deleted.');
@@ -233,6 +236,7 @@ export async function DELETE(
     });
     if (!found) return NextResponse.json({ error: 'Not found or protected' }, { status: 404 });
     await invalidateAllSessionsForMember(id);
+    await purgeMemberArtifacts(id, deletedEmail);
     return NextResponse.json({ success: true });
   } catch (err: any) {
     return apiError(err, 'members-id-api-delete');

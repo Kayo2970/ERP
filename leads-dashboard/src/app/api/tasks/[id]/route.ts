@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection, readCollection } from '@/lib/server-db';
+import { purgeRemovedAttachments, purgeAttachmentFiles } from '@/lib/cascade-delete';
 import { enqueueTaskEmailNotification } from '@/lib/task-email-queue';
 import { deleteStoredFilesForRecord } from '@/lib/file-storage';
 import { fanOutAutoApproval, cascadeCloseAutoApprovals, deleteLinkedApprovalRequests, resolveCustomApprovalPanel } from '@/lib/approval-sync';
@@ -50,6 +51,11 @@ export async function PATCH(
       return next;
     });
     const result = updated.find((t: any) => t.id === id);
+
+    // Attachments removed in this edit must also go from disk, not just from the record
+    if (previous && Array.isArray(updates.attachments)) {
+      await purgeRemovedAttachments(previous.attachments, updates.attachments);
+    }
 
     if (result) {
       const wasPending = previous && PENDING_STATES.has(previous.approvalStatus);
@@ -166,9 +172,9 @@ export async function DELETE(
     });
     if (!found) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    if (deleted?.attachments?.length) {
-      await deleteStoredFilesForRecord('tasks', id);
-    }
+    // Attachments may sit under a temporary upload id (task_att_*) rather than the task id
+    await deleteStoredFilesForRecord('tasks', id);
+    await purgeAttachmentFiles(deleted?.attachments);
 
     // Purge any pending/tracked approval requests for this deleted task
     await deleteLinkedApprovalRequests('task', id);

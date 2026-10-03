@@ -116,7 +116,14 @@ export async function readStoredFile(storageKey: string): Promise<Buffer> {
 /** Best-effort delete — missing files are not an error. */
 export async function deleteStoredFile(storageKey: string): Promise<void> {
   try {
-    await fs.unlink(resolveStoragePath(storageKey));
+    const resolved = resolveStoragePath(storageKey);
+    await fs.unlink(resolved);
+    // Prune the now-possibly-empty <category>/<recordId> folder so empty dirs don't pile up
+    try {
+      await fs.rmdir(path.dirname(resolved));
+    } catch {
+      /* not empty — leave it */
+    }
   } catch (err: any) {
     if (err?.code !== 'ENOENT') console.error('[file-storage] Failed to delete', storageKey, err);
   }

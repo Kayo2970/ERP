@@ -67,7 +67,7 @@ export interface SendEmailPayload {
   // readStoredFile(). Not persisted on the EmailLog entry (only the fact
   // that an email was sent/failed is), since the file itself already lives
   // in data/uploads and re-storing it on every log entry would duplicate it.
-  attachments?: Array<{ filename: string; content: Buffer; contentType?: string }>;
+  attachments?: Array<{ filename: string; content: Buffer; contentType?: string; cid?: string }>;
   immediate?: boolean; // if true, bypasses the 10-minute quiet buffer (e.g. for urgent security OTPs or manual flush)
 }
 

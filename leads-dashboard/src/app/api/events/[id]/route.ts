@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection } from '@/lib/server-db';
+import { cascadeDeleteEvent } from '@/lib/cascade-delete';
 import { fanOutAutoApproval, cascadeCloseAutoApprovals, deleteLinkedApprovalRequests, resolveCustomApprovalPanel } from '@/lib/approval-sync';
 import { requireSession, requirePermission, ForbiddenError } from '@/lib/session';
 import { canDeleteEvent, canApprovePendingEvent, getAccessLevelSettingsServer } from '@/lib/permissions-server';
@@ -172,6 +173,7 @@ export async function DELETE(
     });
     if (!found) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     await deleteLinkedApprovalRequests('event', id);
+    await cascadeDeleteEvent(id);
     for (const committeeId of deletedCommitteeIds) {
       await deleteLinkedApprovalRequests('committee', committeeId);
     }

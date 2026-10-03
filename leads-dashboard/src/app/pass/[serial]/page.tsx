@@ -18,7 +18,7 @@ import {
   QrCode,
   Smartphone,
 } from 'lucide-react';
-import { EventPassItem } from '@/lib/local-data';
+import { EventPassItem, PassTheme, getPassValidDays, getPassAttendanceSummary, formatValidDaysLabel } from '@/lib/local-data';
 import { InteractiveKeycardHolder } from '@/components/interactive-keycard-holder';
 import { CardQrModal } from '@/components/card-qr-modal';
 
@@ -30,6 +30,7 @@ export default function PublicEventPassPage({
   const { serial } = use(params);
 
   const [pass, setPass] = useState<EventPassItem | null>(null);
+  const [theme, setTheme] = useState<PassTheme | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [isQrOpen, setIsQrOpen] = useState(false);
@@ -51,6 +52,7 @@ export default function PublicEventPassPage({
       .then((data) => {
         if (!cancelled && data.pass) {
           setPass(data.pass);
+          setTheme(data.theme);
         } else if (!cancelled) {
           setNotFound(true);
         }
@@ -137,9 +139,14 @@ export default function PublicEventPassPage({
     const location = pass.roomOrVenue || pass.eventVenue || 'Main Auditorium, RUAS GG Campus';
     const description = `Official admission pass for ${pass.attendeeName}.\nPass Serial: ${pass.serialNumber}\nView digital pass: ${passUrl}`;
     
-    const now = new Date();
-    const startTime = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString().replace(/-|:|\.\d\d\d/g, '');
-    const endTime = new Date(now.getTime() + 28 * 60 * 60 * 1000).toISOString().replace(/-|:|\.\d\d\d/g, '');
+    // All-day event spanning the pass's valid days (falls back to a single day today if unknown)
+    const days = getPassValidDays(pass);
+    const compact = (iso: string) => iso.replace(/-/g, '');
+    const first = days[0] || new Date().toISOString().slice(0, 10);
+    const lastPlusOne = new Date(`${days[days.length - 1] || first}T00:00:00Z`);
+    lastPlusOne.setUTCDate(lastPlusOne.getUTCDate() + 1);
+    const startTime = compact(first);
+    const endTime = compact(lastPlusOne.toISOString().slice(0, 10));
 
     const icsContent = [
       'BEGIN:VCALENDAR',
@@ -149,8 +156,8 @@ export default function PublicEventPassPage({
       `SUMMARY:${title}`,
       `LOCATION:${location}`,
       `DESCRIPTION:${description}`,
-      `DTSTART:${startTime}`,
-      `DTEND:${endTime}`,
+      `DTSTART;VALUE=DATE:${startTime}`,
+      `DTEND;VALUE=DATE:${endTime}`,
       `UID:${pass.id}@leads-centre.org`,
       'STATUS:CONFIRMED',
       'END:VEVENT',
@@ -225,7 +232,11 @@ export default function PublicEventPassPage({
     );
   }
 
-  const isCheckedIn = pass.status === 'Checked In';
+  const validDays = getPassValidDays(pass);
+  const attendance = getPassAttendanceSummary(pass);
+  const isCheckedIn = attendance.attended > 0;
+  const isCancelled = pass.status === 'Cancelled';
+  const isMultiDay = validDays.length > 1;
 
   return (
     <div className="min-h-screen bg-space-theme text-theme-text-primary flex flex-col items-center p-4 sm:p-6 md:p-8 relative z-0 overflow-x-hidden">
@@ -245,9 +256,14 @@ export default function PublicEventPassPage({
         </div>
 
         <div className="flex items-center gap-2">
-          {isCheckedIn ? (
+          {isCancelled ? (
+            <span className="px-2.5 py-1 rounded-full text-[10.5px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1">
+              <AlertTriangle className="h-3.5 w-3.5" /> Cancelled
+            </span>
+          ) : isCheckedIn ? (
             <span className="px-2.5 py-1 rounded-full text-[10.5px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
-              <CheckCircle2 className="h-3.5 w-3.5" /> Checked In
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              {isMultiDay ? `Checked In (${attendance.attended}/${attendance.total} days)` : 'Checked In'}
             </span>
           ) : (
             <span className="px-2.5 py-1 rounded-full text-[10.5px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
@@ -263,8 +279,8 @@ export default function PublicEventPassPage({
           isEventPass={true}
           memberName={pass.attendeeName}
           memberRole={`${pass.passType}${pass.guestCategory ? ` • ${pass.guestCategory}` : ''}`}
-          phone={pass.attendeePhone || ''}
-          email={pass.attendeeEmail || ''}
+          phone=""
+          email=""
           serialNumber={pass.serialNumber}
           eventName={pass.eventName}
           eventDate={pass.eventDate}
@@ -273,20 +289,17 @@ export default function PublicEventPassPage({
           roomOrVenue={pass.roomOrVenue || pass.eventVenue || 'Main Auditorium'}
           attendeeOrg={pass.attendeeOrg || ''}
           accessLevel={`${pass.passType} — ${pass.roomOrVenue || pass.eventVenue || 'Main Auditorium'}`}
-          validityPeriod={pass.validityDate || pass.eventDate || '2026'}
+          validityPeriod={validDays.length > 0 ? formatValidDaysLabel(validDays) : pass.validityDate || pass.eventDate || '2026'}
           issuingAuthority={pass.eventName ? `${pass.eventName} • RUAS` : 'LEADS Next Gen Centre • RUAS'}
           brandHeader="LEADS Next Gen Centre"
           passColor={pass.passColor}
           passGradient={pass.passGradient}
+          theme={theme}
           cardUrl={passUrl}
           qrUrl="/card/leads-qr-code.png"
           showActions={true}
-          autoOpen={true}
-          isGeneratingWallet={Boolean(walletLoadingMsg)}
+          autoOpen={false}
           walletError={walletError}
-          onAddToAppleWallet={handleAddToAppleWallet}
-          onAddToGoogleWallet={handleAddToGoogleWallet}
-          onSaveContact={handleAddToCalendar}
         />
       </div>
 
@@ -356,7 +369,7 @@ export default function PublicEventPassPage({
             </div>
             <div className="flex items-start gap-2">
               <Clock className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
-              <span><strong>Date &amp; Schedule:</strong> {pass.validityDate || pass.eventDate || '2026'}</span>
+              <span><strong>Date &amp; Schedule:</strong> {validDays.length > 0 ? formatValidDaysLabel(validDays) : pass.validityDate || pass.eventDate || '2026'}</span>
             </div>
             <div className="flex items-start gap-2">
               <QrCode className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />

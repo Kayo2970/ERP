@@ -171,3 +171,24 @@ pipeline with real Apple/Google Developer credentials instead. Ask before
 re-introducing that if it's ever needed; the self-hosted approach was
 removed in favor of WalletWallet to avoid the Apple Developer Program
 enrollment ($99/yr + account setup) and Google Cloud service account setup.
+
+
+## Event passes: backgrounds, posters and public image URLs
+
+Event passes (Event Passes → Studio → *Customise pass background & colours*) can carry per-event artwork.
+
+- **Public URL, not data URI.** WalletWallet accepts `backgroundURL`, `logoURL`, `iconURL`, `stripURL`,
+  `thumbnailURL` as public HTTPS URLs (or PNG data URIs), fetches them **once at creation** and re-hosts
+  them. We send URLs built from `SITE_ORIGIN` (override with `WALLET_PUBLIC_ORIGIN`), pointing at
+  `/api/files/pass-themes/<eventId>/...`, which is deliberately public. Localhost/private origins are
+  skipped, so background/logo only reach WalletWallet from the deployed site.
+- **Spec:** background 690×1010 px portrait (we store a centre-cropped JPEG ≤ ~900 KB as
+  `wallet-<timestamp>.jpg`), logo 160×160. Every re-upload gets a new timestamped filename, i.e. a new URL,
+  and installed passes are refreshed with `PUT`.
+- **iOS 27 poster layout:** with a background, Apple shows only logo + logoText, **one header field, up to
+  four primary fields, up to two footer fields** and the barcode, in **white text with light labels** —
+  text colours are not configurable. `secondaryFields` are not shown in this layout, so poster passes put
+  name / event / venue / validity in the primary fields and serial / "One pass · N days" in the footer.
+  Older iOS and Google Wallet show the classic card (base colour + fields).
+- **Plan:** background, logo, footer fields and custom colour require a WalletWallet **Pro** key.
+- Request bodies are capped at 2 MB, another reason to send URLs instead of embedded images.

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { EventPassItem } from '@/lib/local-data';
+import { getPassTheme } from '@/lib/pass-theme';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,10 +59,14 @@ export async function GET(
       foundPass = matched;
     }
 
-    const finalPass = foundPass as EventPassItem;
+    // Public endpoint: never expose the attendee's contact details or internal notes
+    const { attendeeEmail, attendeePhone, notes, issuedByEmail, qrPayload, ...publicPass } =
+      foundPass as EventPassItem;
+    const finalPass = publicPass as EventPassItem;
 
     return NextResponse.json({
       pass: finalPass,
+      theme: await getPassTheme(finalPass.eventId),
       status: finalPass.status,
       valid: finalPass.status !== 'Cancelled',
       emailStatus: finalPass.emailStatus,

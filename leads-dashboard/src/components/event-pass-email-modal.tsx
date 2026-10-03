@@ -16,7 +16,7 @@ import {
   QrCode,
   RefreshCw,
 } from 'lucide-react';
-import { EventItem, EventPassItem, authHeaders } from '@/lib/local-data';
+import { EventItem, EventPassItem, authHeaders, updateEventPassEmailStatus } from '@/lib/local-data';
 
 interface EventPassEmailModalProps {
   isOpen: boolean;
@@ -38,7 +38,11 @@ const PLACEHOLDERS = [
   { tag: '@event_date', desc: 'Event Date' },
   { tag: '@serial_number', desc: 'Pass Serial ID' },
   { tag: '@pass_link', desc: 'Pass Link' },
+  { tag: '@pass_image', desc: 'Boarding-pass image (QR)' },
 ];
+
+const PASS_IMAGE_SENTINEL = '[[PASS_IMAGE]]';
+const escapeHtml = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 export function EventPassEmailModal({
   isOpen,
@@ -53,7 +57,7 @@ export function EventPassEmailModal({
   const [activeEventId, setActiveEventId] = useState(selectedEventId || 'ALL');
   const [subjectTemplate, setSubjectTemplate] = useState('Your Official Pass for @event_name — @pass_type');
   const [bodyTemplate, setBodyTemplate] = useState(
-    `Dear @name,\n\nWe are delighted to welcome you to @event_name. Your official credential has been issued by the LEADS Next Gen Centre.\n\n• Pass Tier: @pass_type\n• Guest Category: @guest_category\n• Assigned Venue / Room: @room_or_venue\n• Event Date & Validity: @event_date\n• Pass Serial ID: @serial_number\n\nYou can access your verified digital pass, save it to Apple Wallet / Google Wallet, or view check-in details via the link below:\n@pass_link\n\nPlease present your digital pass or QR code at official event turnstiles upon arrival.\n\nWarm regards,\nLEADS Next Gen Centre • RUAS`
+    `Dear @name,\n\nWe are delighted to welcome you to @event_name. Your official credential has been issued by the LEADS Next Gen Centre.\n\n@pass_image\n\n• Pass Tier: @pass_type\n• Guest Category: @guest_category\n• Assigned Venue / Room: @room_or_venue\n• Event Date & Validity: @event_date\n• Pass Serial ID: @serial_number\n\nYou can access your verified digital pass, save it to Apple Wallet / Google Wallet, or view check-in details via the link below:\n@pass_link\n\nPlease present your digital pass or QR code at official event turnstiles upon arrival.\n\nWarm regards,\nLEADS Next Gen Centre • RUAS`
   );
 
   const [selectedPassIds, setSelectedPassIds] = useState<string[]>([]);
@@ -110,7 +114,8 @@ export function EventPassEmailModal({
       .replace(/@event_name|\{\{event_name\}\}/gi, pass.eventName)
       .replace(/@event_date|\{\{event_date\}\}/gi, pass.validityDate || pass.eventDate || '2026')
       .replace(/@serial_number|\{\{serial_number\}\}/gi, pass.serialNumber)
-      .replace(/@pass_link|\{\{pass_link\}\}/gi, passUrl);
+      .replace(/@pass_link|\{\{pass_link\}\}/gi, passUrl)
+      .replace(/@pass_image|\{\{pass_image\}\}/gi, PASS_IMAGE_SENTINEL);
   };
 
   // Fetches (or, via the existing VPS cache, reuses) the wallet pass for this
@@ -163,7 +168,14 @@ export function EventPassEmailModal({
         if (!pass.attendeeEmail) continue;
 
         const personalizedSubject = renderMailMerge(subjectTemplate, pass);
-        const personalizedBody = renderMailMerge(bodyTemplate, pass);
+        const mergedBody = renderMailMerge(bodyTemplate, pass);
+        const personalizedBody = mergedBody.split(PASS_IMAGE_SENTINEL).join('').trim();
+        const origin = typeof window !== 'undefined' ? window.location.origin : '';
+        const imageTag = `<a href="${origin}/pass/${pass.serialNumber}"><img src="cid:leads-pass-image" alt="Your event pass" width="552" style="display:block;width:100%;max-width:552px;height:auto;margin:16px auto;border-radius:16px;" /></a>`;
+        const htmlBody = escapeHtml(mergedBody).replace(/\n/g, '<br/>');
+        const personalizedHtml =
+          (htmlBody.includes(PASS_IMAGE_SENTINEL) ? htmlBody.split(PASS_IMAGE_SENTINEL).join(imageTag) : `${htmlBody}<br/>${imageTag}`) +
+          `<img src="${origin}/api/pass/${pass.serialNumber}/track" width="1" height="1" alt="" style="display:none" />`;
         const walletAttachment = await fetchWalletAttachment(pass);
 
         try {
@@ -176,6 +188,8 @@ export function EventPassEmailModal({
               to: pass.attendeeEmail,
               subject: personalizedSubject,
               bodyText: personalizedBody,
+              bodyHtml: personalizedHtml,
+              passSerial: pass.serialNumber,
               category: 'EVENT_INVITATION',
               badgeText: 'Official Event Pass',
               badgeColor: '#0284c7',
@@ -195,6 +209,7 @@ export function EventPassEmailModal({
             console.warn(`Failed to dispatch email to ${pass.attendeeEmail}:`, errData.error);
           } else {
             sentCount++;
+            updateEventPassEmailStatus(pass.id, pass.emailStatus === 'Pass Viewed' ? 'Pass Viewed' : 'Email Sent');
           }
         } catch (subErr) {
           failCount++;
@@ -417,7 +432,7 @@ export function EventPassEmailModal({
                   </span>
                 </div>
                 <div className="whitespace-pre-line leading-relaxed">
-                  {renderMailMerge(bodyTemplate, previewPass)}
+                  {renderMailMerge(bodyTemplate, previewPass).split(PASS_IMAGE_SENTINEL).join('🎫 [ Boarding-pass image with QR code is inserted here ]')}
                 </div>
               </div>
             </div>
