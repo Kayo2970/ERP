@@ -10,7 +10,7 @@ interface Props {
   eventId: string;
   eventName: string;
   /** Called after a successful save/load so previews elsewhere (wallet card, keycard) can use it. */
-  onThemeChange?: (theme: PassTheme) => void;
+  onThemeChange?: (theme: PassTheme | undefined) => void;
 }
 
 const readAsDataUrl = (file: File) =>
@@ -38,6 +38,11 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
 
   const load = useCallback(async () => {
     if (!eligible) return;
+    // Switching event: drop the previous event's unsaved draft straight away
+    setDraft({});
+    setPendingBg(undefined);
+    setPendingLogo(undefined);
+    setPendingEmailArt(undefined);
     try {
       const res = await fetch(`/api/events/${eventId}/pass-theme`, { headers: authHeaders() });
       if (!res.ok) return;
@@ -47,7 +52,6 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
       setPendingBg(undefined);
       setPendingLogo(undefined);
       setPendingEmailArt(undefined);
-      onThemeChange?.(data);
     } catch {
       /* ignore */
     }
@@ -56,6 +60,28 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Live preview: report the *draft* (saved + unsaved edits + not-yet-uploaded images) to the Studio on every
+  // change, so the luxury card, wallet poster and ticket update before anything is saved.
+  useEffect(() => {
+    if (!eligible) {
+      onThemeChange?.(undefined);
+      return;
+    }
+    const t: PassTheme = { ...draft };
+    if (pendingBg === null) {
+      delete t.backgroundUrl;
+      delete t.walletBackgroundUrl;
+    } else if (pendingBg) {
+      t.backgroundUrl = pendingBg;
+      t.walletBackgroundUrl = pendingBg;
+    }
+    if (pendingLogo === null) delete t.logoUrl;
+    else if (pendingLogo) t.logoUrl = pendingLogo;
+    if (pendingEmailArt === null) delete t.emailArtworkUrl;
+    else if (pendingEmailArt) t.emailArtworkUrl = pendingEmailArt;
+    onThemeChange?.(t);
+  }, [draft, pendingBg, pendingLogo, pendingEmailArt, eligible, onThemeChange]);
 
   if (!eligible) {
     return (
@@ -132,7 +158,6 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
       setPendingBg(undefined);
       setPendingLogo(undefined);
       setPendingEmailArt(undefined);
-      onThemeChange?.(data);
       setMessage(
         data.walletErrors?.length
           ? `Saved, but WalletWallet rejected the update: ${data.walletErrors[0]} (background/logo need a Pro key and a publicly reachable portal URL).`

@@ -44,6 +44,7 @@ import styles from './event-pass-card.module.css';
 import { AppleWalletPassPreview } from './apple-wallet-pass-preview';
 import { EventPassBulkModal } from './event-pass-bulk-modal';
 import { PassThemeEditor } from './pass-theme-editor';
+import { passThemeStyle } from '@/lib/pass-theme-style';
 import { EventPassEmailModal } from './event-pass-email-modal';
 import { SearchableSelect } from './searchable-select';
 
@@ -188,6 +189,8 @@ export function EventPassStudio({
   const [labelColor, setLabelColor] = useState('');
   const [walletLayout, setWalletLayout] = useState<'poster' | 'classic'>('poster');
   const [passTheme, setPassTheme] = useState<PassTheme | undefined>(undefined);
+  // Only an existing event has a pass look; for custom/standalone passes ignore any stale draft
+  const activeTheme = eventMode === 'existing' ? passTheme : undefined;
   // null = all days of the selected event (default); otherwise the explicit subset this single pass is valid on
   const [selectedValidDays, setSelectedValidDays] = useState<string[] | null>(null);
   const [notes, setNotes] = useState('');
@@ -673,6 +676,9 @@ export function EventPassStudio({
                   <Palette className="h-3.5 w-3.5 text-accent" />
                   <span>Pass Color &amp; Gradient Customization</span>
                 </label>
+              {activeTheme?.backgroundUrl && (
+                <p className="text-[10.5px] text-sky-400">Event background image is active on the card — the colour/gradient below is only the fallback.</p>
+              )}
                 <div className="flex items-center gap-1 bg-slate-200/80 dark:bg-white/10 p-0.5 rounded-lg text-[10px] font-bold">
                   <button
                     type="button"
@@ -1073,8 +1079,10 @@ export function EventPassStudio({
                       colorMode === 'gradient' && passGradient
                         ? passGradient
                         : `linear-gradient(145deg, ${passColor}ee 0%, #060c18fa 100%)`,
-                    ...((textColor || passTheme?.foregroundColor) ? { ['--pass-fg' as any]: textColor || passTheme?.foregroundColor } : {}),
-                    ...((labelColor || passTheme?.labelColor) ? { ['--pass-label' as any]: labelColor || passTheme?.labelColor } : {}),
+                    // Event artwork (live draft) + darkening overlay sits behind the card; gradient is the fallback
+                    ...(activeTheme?.backgroundUrl ? passThemeStyle(activeTheme) : {}),
+                    ...((textColor || activeTheme?.foregroundColor) ? { ['--pass-fg' as any]: textColor || activeTheme?.foregroundColor } : {}),
+                    ...((labelColor || activeTheme?.labelColor) ? { ['--pass-label' as any]: labelColor || activeTheme?.labelColor } : {}),
                   }}
                 >
                   {/* Lanyard Cut */}
@@ -1146,7 +1154,7 @@ export function EventPassStudio({
                       </span>
                       <span className={styles.verifiedPill}>
                         <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-                        Cryptographically Signed
+                        Scan QR at entry
                       </span>
                       <span className="text-[8px] text-slate-500 font-semibold">
                         Valid at all official event turnstiles
@@ -1174,7 +1182,11 @@ export function EventPassStudio({
                 <div
                   className={`${styles.passFace} ${styles.passBack}`}
                   style={{
-                    backgroundImage: `linear-gradient(155deg, ${passColor}f2 0%, #080e1afa 100%), url('/card/dark-blue-leather.jpg')`,
+                    backgroundImage: activeTheme?.backgroundUrl
+                      ? `linear-gradient(rgba(3,7,18,0.82), rgba(3,7,18,0.9)), url("${activeTheme.backgroundUrl}")`
+                      : `linear-gradient(155deg, ${passColor}f2 0%, #080e1afa 100%), url('/card/dark-blue-leather.jpg')`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
                   }}
                 >
                   {/* Lanyard Cut */}
@@ -1238,7 +1250,7 @@ export function EventPassStudio({
           )}
 
           {/* VIEW 2: 98% PIXEL-ACCURATE NATIVE APPLE WALLET PREVIEW */}
-          {previewMode === 'apple-wallet' && passTheme?.walletBackgroundUrl && (
+          {previewMode === 'apple-wallet' && activeTheme?.walletBackgroundUrl && (
             <div className="flex items-center gap-1 rounded-full border border-white/15 p-0.5 text-[10px] font-bold">
               {(['poster', 'classic'] as const).map((m) => (
                 <button
@@ -1265,7 +1277,7 @@ export function EventPassStudio({
               interactive={true}
               logoText={brandHeader}
               passColor={passColor}
-              theme={passTheme}
+              theme={activeTheme}
               layout={walletLayout}
               validDaysCount={effectiveValidDays.length}
             />
