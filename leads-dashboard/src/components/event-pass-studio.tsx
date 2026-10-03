@@ -32,6 +32,7 @@ import {
   EventPassItem,
   EventPassType,
   EventGuestCategory,
+  PassBarcodeFormat,
   PassTheme,
   addEventPass,
   getEventPasses,
@@ -43,7 +44,7 @@ import { AppleWalletPassPreview } from './apple-wallet-pass-preview';
 import { EventPassBulkModal } from './event-pass-bulk-modal';
 import { PassThemeEditor } from './pass-theme-editor';
 import { EventPassKeycard } from './event-pass-keycard';
-import { PassColorControls, PassTextColorControls, PassValidityPicker, PASS_COLOR_PRESETS, PASS_GRADIENT_PRESETS } from './pass-design-controls';
+import { PassFontControls, PassQrControls, PassSection, PassColorControls, PassTextColorControls, PassValidityPicker, PASS_COLOR_PRESETS, PASS_GRADIENT_PRESETS } from './pass-design-controls';
 
 export { PASS_COLOR_PRESETS, PASS_GRADIENT_PRESETS };
 import { EventPassEmailModal } from './event-pass-email-modal';
@@ -148,6 +149,10 @@ export function EventPassStudio({
 
   const [eventMode, setEventMode] = useState<'existing' | 'custom' | 'none'>('existing');
   const [selectedEventId, setSelectedEventId] = useState(defaultEvent?.id || '');
+  // Events can arrive after first render (synced from the server): pick the first one then
+  useEffect(() => {
+    if (!selectedEventId && defaultEvent?.id) setSelectedEventId(defaultEvent.id);
+  }, [selectedEventId, defaultEvent?.id]);
   const [customEventTitle, setCustomEventTitle] = useState('');
   const [attendeeName, setAttendeeName] = useState('');
   const [guestCategory, setGuestCategory] = useState<EventGuestCategory>('VIP Dignitary');
@@ -174,6 +179,15 @@ export function EventPassStudio({
   // null = all days of the selected event (default); otherwise the explicit subset this single pass is valid on
   const [selectedValidDays, setSelectedValidDays] = useState<string[] | null>(null);
   const [notes, setNotes] = useState('');
+  // Designer drop-downs: only the first group is open by default
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({ details: true });
+  const toggleSection = (k: string) => setOpenSections((o) => ({ ...o, [k]: !o[k] }));
+  const [fontScale, setFontScale] = useState(1);
+  const [showEventTitle, setShowEventTitle] = useState<boolean | undefined>(undefined);
+  const [qrFormat, setQrFormat] = useState<PassBarcodeFormat>('QR');
+  const [qrAltText, setQrAltText] = useState<'serial' | 'name' | 'none'>('serial');
+  const [qrDark, setQrDark] = useState('#0B1B2E');
+  const [qrLight, setQrLight] = useState('#ffffff');
 
   // Modals & Preview mode
   const [previewMode, setPreviewMode] = useState<'luxury' | 'apple-wallet'>('luxury');
@@ -273,6 +287,11 @@ export function EventPassStudio({
   const handleIssuePass = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!attendeeName.trim()) return;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(attendeeEmail.trim())) {
+      setOpenSections((o) => ({ ...o, details: true }));
+      setSuccessToast('');
+      return;
+    }
     if (eventMode === 'custom' && !customEventTitle.trim()) return;
 
     const resolvedGuest = guestCategory === 'Other' ? (customGuestCategory.trim() || 'Guest Invitee') : guestCategory;
@@ -300,6 +319,12 @@ export function EventPassStudio({
         passGradient: colorMode === 'gradient' ? passGradient : undefined,
         textColor: textColor || undefined,
         labelColor: labelColor || undefined,
+        fontScale: fontScale !== 1 ? fontScale : undefined,
+        showEventTitle,
+        qrFormat: qrFormat !== 'QR' ? qrFormat : undefined,
+        qrAltText: qrAltText !== 'serial' ? qrAltText : undefined,
+        qrDark: qrDark.toLowerCase() !== '#0b1b2e' ? qrDark : undefined,
+        qrLight: qrLight.toLowerCase() !== '#ffffff' ? qrLight : undefined,
         notes: notes.trim() || undefined,
         issuedBy: currentUserName,
         issuedByEmail: currentUserEmail,
@@ -455,6 +480,14 @@ export function EventPassStudio({
           </div>
 
           <form onSubmit={handleIssuePass} className="space-y-4 text-xs">
+            {/* 1 · Event & guest details */}
+            <PassSection
+              title="1 · Event & guest details"
+              hint="Who the pass is for, and which event"
+              icon={<Ticket className="h-4 w-4" />}
+              open={!!openSections.details}
+              onToggle={() => toggleSection('details')}
+            >
             {/* 1. Target Event / Occasion Selection */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -531,21 +564,6 @@ export function EventPassStudio({
                   <span className="text-[10px] text-emerald-400 font-bold uppercase">Generic Pass</span>
                 </div>
               )}
-            </div>
-
-            {/* Pass Header Branding Customization */}
-            <div className="space-y-1.5">
-              <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] flex items-center justify-between">
-                <span>Pass Header Title / Organization</span>
-                <span className="text-[10px] text-accent font-semibold lowercase">(branding)</span>
-              </label>
-              <input
-                type="text"
-                value={brandHeader}
-                onChange={(e) => setBrandHeader(e.target.value)}
-                placeholder="LEADS Next Gen Centre"
-                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-300 dark:border-white/15 rounded-xl text-slate-900 dark:text-white font-semibold focus:outline-none focus:border-accent text-xs"
-              />
             </div>
 
             {/* 2. Guest / Attendee Name */}
@@ -647,20 +665,6 @@ export function EventPassStudio({
               )}
             </div>
 
-            {/* 4.5. Pass colour, gradient and text colours (shared with Edit Pass) */}
-            <PassColorControls
-              colorMode={colorMode}
-              setColorMode={setColorMode}
-              passColor={passColor}
-              setPassColor={setPassColor}
-              passGradient={passGradient}
-              setPassGradient={setPassGradient}
-              gradientEndColor={gradientEndColor}
-              setGradientEndColor={setGradientEndColor}
-              activeTheme={activeTheme}
-            />
-            <PassTextColorControls textColor={textColor} setTextColor={setTextColor} labelColor={labelColor} setLabelColor={setLabelColor} />
-
             {/* 5. Room / Venue / Hall Allocation */}
             <div className="space-y-1.5">
               <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] flex items-center justify-between">
@@ -726,32 +730,17 @@ export function EventPassStudio({
               </div>
             </div>
 
-            {/* Pass look: background artwork, logo, colours — applies to keycard, email boarding pass & wallet */}
-            {eventMode === 'existing' && selectedEvent && (
-              <details className="rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50/60 dark:bg-white/[0.03] p-3 group">
-                <summary className="cursor-pointer text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                  <Palette className="h-3.5 w-3.5 text-accent" /> Customise pass background &amp; colours
-                </summary>
-                <div className="pt-3">
-                  <PassThemeEditor
-                    eventId={selectedEvent.id}
-                    eventName={selectedEvent.title}
-                    onThemeChange={setPassTheme}
-                  />
-                </div>
-              </details>
-            )}
-
             {/* 7. Contact Details: Mobile & Email */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px]">
-                  Email ID (Optional)
+                  Email ID <span className="text-rose-500">*</span> <span className="normal-case font-semibold text-slate-400">(the pass is sent here)</span>
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
                   <input
                     type="email"
+                    required
                     value={attendeeEmail}
                     onChange={(e) => setAttendeeEmail(e.target.value)}
                     placeholder="guest@domain.com"
@@ -777,10 +766,87 @@ export function EventPassStudio({
               </div>
             </div>
 
+            {/* Pass Header Branding Customization */}
+            <div className="space-y-1.5">
+              <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] flex items-center justify-between">
+                <span>Pass Header Title / Organization</span>
+                <span className="text-[10px] text-accent font-semibold lowercase">(branding)</span>
+              </label>
+              <input
+                type="text"
+                value={brandHeader}
+                onChange={(e) => setBrandHeader(e.target.value)}
+                placeholder="LEADS Next Gen Centre"
+                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-300 dark:border-white/15 rounded-xl text-slate-900 dark:text-white font-semibold focus:outline-none focus:border-accent text-xs"
+              />
+            </div>
+
+            </PassSection>
+
+            {/* 2 · Colours & text */}
+            <PassSection
+              title="2 · Colours & text"
+              hint="Solid or custom gradient, text colours, font size"
+              icon={<Palette className="h-4 w-4" />}
+              open={!!openSections.colours}
+              onToggle={() => toggleSection('colours')}
+            >
+                        <PassColorControls
+              colorMode={colorMode}
+              setColorMode={setColorMode}
+              passColor={passColor}
+              setPassColor={setPassColor}
+              passGradient={passGradient}
+              setPassGradient={setPassGradient}
+              gradientEndColor={gradientEndColor}
+              setGradientEndColor={setGradientEndColor}
+              activeTheme={activeTheme}
+            />
+            <PassTextColorControls textColor={textColor} setTextColor={setTextColor} labelColor={labelColor} setLabelColor={setLabelColor} />
+
+              <PassFontControls fontScale={fontScale} setFontScale={setFontScale} showEventTitle={showEventTitle} setShowEventTitle={setShowEventTitle} />
+            </PassSection>
+
+            {/* Event artwork & logo (applies to portal card, emailed ticket and wallet pass) */}
+            <PassSection
+              title="3 · Event artwork & logo"
+              hint="Background image, logo, overlay — saved per event"
+              icon={<Palette className="h-4 w-4" />}
+              open={!!openSections.art}
+              keepMounted
+              onToggle={() => toggleSection('art')}
+            >
+              {eventMode === 'existing' && selectedEvent ? (
+                <PassThemeEditor eventId={selectedEvent.id} eventName={selectedEvent.title} onThemeChange={setPassTheme} />
+              ) : (
+                <p className="text-[11px] text-slate-500">Pick an event from the Events module in section 1 to set its artwork and logo.</p>
+              )}
+            </PassSection>
+
+            {/* 4 · QR code */}
+            <PassSection
+              title="4 · QR code"
+              hint="Barcode type, caption and QR colours"
+              icon={<QrCode className="h-4 w-4" />}
+              open={!!openSections.qr}
+              onToggle={() => toggleSection('qr')}
+            >
+              <PassQrControls
+                qrFormat={qrFormat}
+                setQrFormat={setQrFormat}
+                qrAltText={qrAltText}
+                setQrAltText={setQrAltText}
+                qrDark={qrDark}
+                setQrDark={setQrDark}
+                qrLight={qrLight}
+                setQrLight={setQrLight}
+              />
+            </PassSection>
+
             {/* Submit Action */}
             <button
               type="submit"
-              disabled={isSubmitting || !attendeeName.trim()}
+              disabled={isSubmitting || !attendeeName.trim() || !attendeeEmail.trim()}
               className="w-full py-3.5 bg-accent hover:bg-accent/90 text-white font-extrabold rounded-xl transition-all duration-200 shadow-xl shadow-accent/25 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed mt-4 text-xs tracking-wider uppercase"
             >
               {isSubmitting ? (
@@ -845,6 +911,9 @@ export function EventPassStudio({
                   passGradient: colorMode === 'gradient' ? passGradient : undefined,
                   textColor: textColor || undefined,
                   labelColor: labelColor || undefined,
+                  fontScale,
+                  qrDark,
+                  qrLight,
                 }}
                 theme={activeTheme}
                 autoOpen
@@ -858,7 +927,7 @@ export function EventPassStudio({
           )}
 
           {/* VIEW 2: 98% PIXEL-ACCURATE NATIVE APPLE WALLET PREVIEW */}
-          {previewMode === 'apple-wallet' && activeTheme?.walletBackgroundUrl && (
+          {previewMode === 'apple-wallet' && (
             <div className="flex items-center gap-1 rounded-full border border-white/15 p-0.5 text-[10px] font-bold">
               {(['poster', 'classic'] as const).map((m) => (
                 <button
@@ -888,6 +957,14 @@ export function EventPassStudio({
               theme={activeTheme}
               layout={walletLayout}
               validDaysCount={effectiveValidDays.length}
+              validDays={effectiveValidDays}
+              passGradient={colorMode === 'gradient' ? passGradient : undefined}
+              textColor={textColor || undefined}
+              labelColor={labelColor || undefined}
+              fontScale={fontScale}
+              showEventTitle={showEventTitle}
+              barcodeFormat={qrFormat}
+              altText={qrAltText}
             />
           )}
 
@@ -999,7 +1076,7 @@ export function EventPassStudio({
             </div>
           ) : (
             <p className="text-[11px] text-slate-500 text-center max-w-[340px]">
-              Tip: Toggle between 3D Luxury and Apple Wallet view above to inspect native wallet rendering.
+              Tip: switch between the Issued Pass and Apple Wallet views above — both are rendered from the same design you are editing.
             </p>
           )}
         </div>

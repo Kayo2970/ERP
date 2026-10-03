@@ -1,8 +1,9 @@
 'use client';
 
 import React from 'react';
-import { Calendar, Palette, Sparkles } from 'lucide-react';
-import { PassTheme, expandDateRange } from '@/lib/local-data';
+import { Calendar, ChevronDown, Palette, Sparkles } from 'lucide-react';
+import { PassBarcodeFormat, PassTheme, expandDateRange } from '@/lib/local-data';
+import { contrastRatio } from '@/lib/wallet-poster-spec';
 
 export const PASS_COLOR_PRESETS = [
   { name: 'Obsidian Black', hex: '#0b1526', ring: 'ring-slate-500' },
@@ -310,3 +311,164 @@ export function PassValidityPicker({
 }
 
 export { expandDateRange };
+
+
+/** One collapsible group ("dropdown") of the pass designer. */
+export function PassSection({
+  title, hint, icon, open, onToggle, children, keepMounted,
+}: {
+  title: string;
+  hint?: string;
+  icon?: React.ReactNode;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+  /** Keep the content mounted (hidden) while collapsed, e.g. when it loads data other previews depend on. */
+  keepMounted?: boolean;
+}) {
+  return (
+    <section className="rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50/60 dark:bg-white/[0.03] overflow-hidden">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left cursor-pointer hover:bg-slate-100/70 dark:hover:bg-white/[0.04] transition-colors"
+      >
+        <span className="flex items-center gap-2.5 min-w-0">
+          {icon && <span className="text-accent shrink-0">{icon}</span>}
+          <span className="min-w-0">
+            <span className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-800 dark:text-slate-100">{title}</span>
+            {hint && <span className="block text-[10.5px] text-slate-500 dark:text-slate-400 font-medium normal-case tracking-normal truncate">{hint}</span>}
+          </span>
+        </span>
+        <ChevronDown className={`h-4 w-4 text-slate-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {(open || keepMounted) && (
+        <div className={`px-4 pb-4 pt-1 space-y-4 border-t border-slate-200/70 dark:border-white/10 ${open ? '' : 'hidden'}`}>{children}</div>
+      )}
+    </section>
+  );
+}
+
+const label = 'block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] mb-1.5';
+const chip = (on: boolean) =>
+  `px-3 py-1.5 rounded-lg border text-[11px] font-bold cursor-pointer transition-all ${
+    on ? 'border-accent bg-accent/15 text-accent' : 'border-slate-300 dark:border-white/15 text-slate-500 dark:text-slate-400 hover:border-accent/50'
+  }`;
+
+/** Text size of the designed artwork (wallet poster, emailed ticket, portal card) and whether the poster prints the event title. */
+export function PassFontControls({
+  fontScale, setFontScale, showEventTitle, setShowEventTitle,
+}: {
+  fontScale: number;
+  setFontScale: (n: number) => void;
+  showEventTitle: boolean | undefined;
+  setShowEventTitle: (v: boolean | undefined) => void;
+}) {
+  const sizes: Array<[string, number]> = [['Small', 0.85], ['Normal', 1], ['Large', 1.15], ['X-Large', 1.3]];
+  return (
+    <div className="space-y-3">
+      <div>
+        <span className={label}>Text size</span>
+        <div className="flex flex-wrap items-center gap-2">
+          {sizes.map(([name, v]) => (
+            <button key={name} type="button" onClick={() => setFontScale(v)} className={chip(Math.abs(fontScale - v) < 0.01)}>{name}</button>
+          ))}
+          <input
+            type="range"
+            min={0.8}
+            max={1.3}
+            step={0.05}
+            value={fontScale}
+            onChange={(e) => setFontScale(Number(e.target.value))}
+            className="flex-1 min-w-[120px] accent-sky-500"
+            aria-label="Text size"
+          />
+          <span className="text-[11px] font-bold tabular-nums text-slate-500 w-10 text-right">{Math.round(fontScale * 100)}%</span>
+        </div>
+        <p className="text-[10.5px] text-slate-500 mt-1">Applies to the event title, guest name and details on the portal card, the emailed ticket and the wallet pass artwork. Apple draws its own small field row on the wallet pass.</p>
+      </div>
+      <div>
+        <span className={label}>Event title on the wallet pass</span>
+        <div className="flex flex-wrap gap-2">
+          {([['Auto', undefined], ['Always show', true], ['Hide', false]] as Array<[string, boolean | undefined]>).map(([name, v]) => (
+            <button key={name} type="button" onClick={() => setShowEventTitle(v)} className={chip(showEventTitle === v)}>{name}</button>
+          ))}
+        </div>
+        <p className="text-[10.5px] text-slate-500 mt-1">Auto prints the title only when your event artwork doesn&apos;t already contain it.</p>
+      </div>
+    </div>
+  );
+}
+
+const QR_FORMATS: Array<[PassBarcodeFormat, string]> = [['QR', 'QR code'], ['Aztec', 'Aztec'], ['PDF417', 'PDF417'], ['Code128', 'Code 128']];
+const QR_COLOR_PRESETS: Array<[string, string, string]> = [
+  ['Classic', '#0B1B2E', '#ffffff'],
+  ['Black', '#000000', '#ffffff'],
+  ['Emerald', '#064e3b', '#ecfdf5'],
+  ['Royal', '#1e3a8a', '#eff6ff'],
+  ['Gold', '#451a03', '#fef3c7'],
+];
+
+/** QR customisation: wallet barcode format + caption, and the QR colours used on the portal card and emailed ticket. */
+export function PassQrControls({
+  qrFormat, setQrFormat, qrAltText, setQrAltText, qrDark, setQrDark, qrLight, setQrLight,
+}: {
+  qrFormat: PassBarcodeFormat;
+  setQrFormat: (f: PassBarcodeFormat) => void;
+  qrAltText: 'serial' | 'name' | 'none';
+  setQrAltText: (a: 'serial' | 'name' | 'none') => void;
+  qrDark: string;
+  setQrDark: (c: string) => void;
+  qrLight: string;
+  setQrLight: (c: string) => void;
+}) {
+  const ratio = contrastRatio(qrDark, qrLight);
+  const weak = ratio < 4;
+  const inverted = qrDark.length === 7 && qrLight.length === 7 && contrastRatio(qrDark, '#000000') > contrastRatio(qrLight, '#000000');
+  return (
+    <div className="space-y-4">
+      <div>
+        <span className={label}>Wallet barcode type</span>
+        <div className="flex flex-wrap gap-2">
+          {QR_FORMATS.map(([f, name]) => (
+            <button key={f} type="button" onClick={() => setQrFormat(f)} className={chip(qrFormat === f)}>{name}</button>
+          ))}
+        </div>
+        <p className="text-[10.5px] text-slate-500 mt-1">QR is the most reliable at the gate. Apple/Google decide the barcode&apos;s size.</p>
+      </div>
+      <div>
+        <span className={label}>Caption under the wallet barcode</span>
+        <div className="flex flex-wrap gap-2">
+          {([['serial', 'Pass ID'], ['name', 'Guest name'], ['none', 'None']] as const).map(([v, name]) => (
+            <button key={v} type="button" onClick={() => setQrAltText(v)} className={chip(qrAltText === v)}>{name}</button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <span className={label}>QR colours (portal card &amp; emailed ticket)</span>
+        <div className="flex flex-wrap items-center gap-2">
+          {QR_COLOR_PRESETS.map(([name, d, l]) => (
+            <button key={name} type="button" onClick={() => { setQrDark(d); setQrLight(l); }} className={`flex items-center gap-2 ${chip(qrDark.toLowerCase() === d.toLowerCase() && qrLight.toLowerCase() === l.toLowerCase())}`}>
+              <span className="h-3.5 w-3.5 rounded border border-black/20" style={{ background: `linear-gradient(135deg, ${d} 50%, ${l} 50%)` }} />
+              {name}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-4 mt-2">
+          <label className="flex items-center gap-2 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+            Dots <input type="color" value={qrDark} onChange={(e) => setQrDark(e.target.value)} className="h-7 w-9 rounded cursor-pointer bg-transparent" />
+          </label>
+          <label className="flex items-center gap-2 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+            Background <input type="color" value={qrLight} onChange={(e) => setQrLight(e.target.value)} className="h-7 w-9 rounded cursor-pointer bg-transparent" />
+          </label>
+        </div>
+        {(weak || inverted) && (
+          <p className="text-[10.5px] text-amber-500 font-semibold mt-1.5">
+            {inverted ? 'Light dots on a dark background may not scan on some phones — keep the dots darker than the background.' : 'Low contrast — some scanners may struggle. Pick darker dots or a lighter background.'}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}

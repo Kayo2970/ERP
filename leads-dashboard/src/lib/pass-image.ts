@@ -80,6 +80,7 @@ export async function renderBoardingPassPng(
     : typeof theme.overlay === 'number' ? theme.overlay : DEFAULT_PASS_THEME.overlay;
   const artKey = own ? theme.emailArtworkKey : theme.backgroundKey;
 
+  const scale = Math.min(1.3, Math.max(0.8, pass.fontScale || 1));
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
 
@@ -137,7 +138,7 @@ export async function renderBoardingPassPng(
 
   // Event name
   ctx.fillStyle = fg;
-  fitText(ctx, pass.eventName, maxMain, 44, 26, 'bold');
+  fitText(ctx, pass.eventName, maxMain, Math.round(44 * scale), 26, 'bold');
   ctx.fillText(truncate(ctx, pass.eventName, maxMain), 70, 168);
 
   // Attendee
@@ -145,7 +146,7 @@ export async function renderBoardingPassPng(
   ctx.font = `15px ${fam}`;
   ctx.fillText((pass.guestCategory || 'GUEST').toString().toUpperCase(), 70, 218);
   ctx.fillStyle = fg;
-  fitText(ctx, pass.attendeeName, maxMain, 40, 24, 'bold');
+  fitText(ctx, pass.attendeeName, maxMain, Math.round(40 * scale), 24, 'bold');
   ctx.fillText(truncate(ctx, pass.attendeeName, maxMain), 70, 262);
 
   // Field grid
@@ -163,7 +164,7 @@ export async function renderBoardingPassPng(
     ctx.font = `14px ${fam}`;
     ctx.fillText(k, cx, 330);
     ctx.fillStyle = fg;
-    fitText(ctx, v, colW - 16, 24, 15, 'bold');
+    fitText(ctx, v, colW - 16, Math.round(24 * scale), 15, 'bold');
     ctx.fillText(truncate(ctx, v, colW - 16), cx, 362);
   });
   if (validDays.length > 1) {
@@ -175,7 +176,12 @@ export async function renderBoardingPassPng(
   // Stub (white) with QR
   ctx.fillStyle = 'rgba(255,255,255,0.97)';
   ctx.fillRect(STUB_X, y0, x0 + w - STUB_X, h);
-  const qrBuf = await QRCode.toBuffer(passUrl, { margin: 1, width: 300, errorCorrectionLevel: 'H' });
+  const qrBuf = await QRCode.toBuffer(passUrl, {
+    margin: 1,
+    width: 300,
+    errorCorrectionLevel: 'H',
+    color: { dark: pass.qrDark || '#000000', light: pass.qrLight || '#ffffff' },
+  });
   const qr = await loadImage(qrBuf);
   const qrSize = 220;
   const stubW = x0 + w - STUB_X;

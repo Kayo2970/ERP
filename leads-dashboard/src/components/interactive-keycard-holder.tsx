@@ -26,6 +26,10 @@ export interface InteractiveKeycardProps {
   issuingAuthority?: string;
   cardUrl?: string;
   qrUrl?: string;
+  /** Event pass design: text size multiplier and QR colours. */
+  fontScale?: number;
+  qrDark?: string;
+  qrLight?: string;
   onSaveContact?: () => void;
   saveContactLabel?: string;
   onAddToAppleWallet?: () => void;
@@ -66,6 +70,9 @@ export function InteractiveKeycardHolder({
   issuingAuthority = 'LEADS Next Gen Centre',
   cardUrl,
   qrUrl = '/card/leads-qr-code.png',
+  fontScale = 1,
+  qrDark = '#0B1B2E',
+  qrLight = '#ffffff',
   onSaveContact,
   saveContactLabel = 'Save Contact',
   onAddToAppleWallet,
@@ -187,7 +194,7 @@ export function InteractiveKeycardHolder({
         await QRCode.toCanvas(qrCanvas, targetUrl, {
           width: 360,
           margin: 2,
-          color: { dark: '#0B1B2E', light: '#ffffff' },
+          color: { dark: qrDark, light: qrLight },
           errorCorrectionLevel: 'H',
         });
 
@@ -233,7 +240,7 @@ export function InteractiveKeycardHolder({
 
     generateQr();
     return () => { isMounted = false; };
-  }, [cardUrl, qrUrl]);
+  }, [cardUrl, qrUrl, qrDark, qrLight]);
 
   useEffect(() => {
     // Respect reduced-motion preferences: skip the cover/extract choreography entirely
@@ -529,10 +536,13 @@ export function InteractiveKeycardHolder({
                   /* EVENT PASS LUXURY TURNSTILE CREDENTIAL (MATCHES STUDIO DESIGN) */
                   <div
                     className={`${styles.passFace} ${styles.eventPassFront}`}
-                    style={passThemeStyle(
-                      theme,
-                      passGradient || (passColor ? `linear-gradient(145deg, ${passColor} 0%, #030712 100%)` : undefined)
-                    )}
+                    style={{
+                      ...(passThemeStyle(
+                        theme,
+                        passGradient || (passColor ? `linear-gradient(145deg, ${passColor} 0%, #030712 100%)` : undefined)
+                      ) || {}),
+                      ['--pass-font-scale' as string]: String(fontScale || 1),
+                    } as React.CSSProperties}
                   >
                     {/* Luxury Holographic Foil Shimmer */}
                     <div className={styles.holographicFoil} />

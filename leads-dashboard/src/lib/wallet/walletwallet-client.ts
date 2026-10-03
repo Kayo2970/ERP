@@ -16,6 +16,8 @@ const API_BASE = 'https://api.walletwallet.dev';
 // with "iconURL could not be fetched" on every single pass. Pointing this
 // at the actual live domain fixes it.
 const SITE_ORIGIN = 'https://portal-leads.msruas.ac.in';
+import { posterFields } from '@/lib/wallet-poster-spec';
+import type { PassBarcodeFormat } from '@/lib/local-data';
 
 // Fixed org-wide details shown on the back of every pass — same for every
 // member, so they live here rather than on the Member record. Sourced
@@ -141,6 +143,11 @@ export interface WalletEventPassData {
   themeBackgroundUrl?: string;
   themeLogoUrl?: string;
   themeColor?: string;
+  attendeeOrg?: string;
+  /** Public URL of the designed 690×1010 poster artwork (/api/pass/<serial>/wallet-poster?v=…). */
+  posterUrl?: string;
+  barcodeFormat?: PassBarcodeFormat;
+  barcodeAltText?: 'serial' | 'name' | 'none';
 }
 
 /** Days from now until the pass's last valid day (+1 so it stays valid through that day), 1..3650. */
@@ -187,7 +194,8 @@ function themeBody(eventPass: WalletEventPassData): Record<string, unknown> {
   const out: Record<string, unknown> = {
     color: eventPass.themeColor || eventPass.passColor || '#0b1526',
   };
-  const bg = walletImageUrl(eventPass.themeBackgroundUrl);
+  // The designed poster (artwork + colours + font size + title) is what the recipient's wallet shows
+  const bg = walletImageUrl(eventPass.posterUrl) || walletImageUrl(eventPass.themeBackgroundUrl);
   if (bg) out.backgroundURL = bg;
   const logo = walletImageUrl(eventPass.themeLogoUrl);
   if (logo) {
@@ -196,6 +204,15 @@ function themeBody(eventPass: WalletEventPassData): Record<string, unknown> {
   }
   const exp = expirationDaysFor(eventPass);
   if (exp) out.expirationDays = exp;
+  return out;
+}
+
+/** Barcode settings: format + the small caption under it. */
+function barcodeBody(eventPass: WalletEventPassData, passUrl: string): Record<string, unknown> {
+  const out: Record<string, unknown> = { barcodeValue: passUrl, barcodeFormat: eventPass.barcodeFormat || 'QR' };
+  const alt = eventPass.barcodeAltText ?? 'serial';
+  if (alt === 'serial') out.barcodeAltText = eventPass.serialNumber;
+  else if (alt === 'name') out.barcodeAltText = eventPass.attendeeName.slice(0, 128);
   return out;
 }
 
@@ -212,10 +229,11 @@ function buildEventFields(eventPass: WalletEventPassData, passUrl: string, opts:
   const venue = eventPass.roomOrVenue || eventPass.eventVenue || 'Main Auditorium';
   const validity = eventPass.validityDate || eventPass.eventDate || '2026';
   const days = eventPass.validDays?.length || 0;
-  const poster = Boolean(walletImageUrl(eventPass.themeBackgroundUrl));
+  const poster = Boolean(walletImageUrl(eventPass.posterUrl) || walletImageUrl(eventPass.themeBackgroundUrl));
 
   const backFields: WalletField[] = [
     { label: 'Event Name', value: eventPass.eventName },
+    { label: 'Venue', value: venue },
     { label: 'Pass Serial ID', value: eventPass.serialNumber },
     { label: 'Valid On', value: validity },
     { label: 'Issuing Authority', value: 'LEADS Next Gen Centre • RUAS' },
@@ -225,19 +243,23 @@ function buildEventFields(eventPass: WalletEventPassData, passUrl: string, opts:
   ];
 
   if (poster) {
+    // Short fields only: Apple draws them in one row, over the dark fade baked into the poster artwork.
+    const pf = posterFields({
+      attendeeName: eventPass.attendeeName,
+      guestCategory: eventPass.guestCategory,
+      passType: String(eventPass.passType),
+      eventName: eventPass.eventName,
+      venue,
+      validity,
+      validDays: eventPass.validDays,
+      serial: eventPass.serialNumber,
+      validDaysCount: days,
+    });
     return {
-      headerFields: [f('ACCESS', (eventPass.passType || 'VIP PASS').toUpperCase())],
-      primaryFields: [
-        f((eventPass.guestCategory || 'GUEST ATTENDEE').toUpperCase(), eventPass.attendeeName),
-        f('EVENT', eventPass.eventName),
-        f('VENUE', venue),
-        f('VALID', validity),
-      ],
-      footerFields: [
-        { label: 'PASS ID', value: eventPass.serialNumber },
-        { label: 'ENTRY', value: days > 1 ? `One pass · ${days} days` : 'Scan QR at gate' },
-      ],
-      // Clear classic-layout fields on live updates (e.g. a theme background was just added)
+      headerFields: [f(pf.header.label, pf.header.value)],
+      primaryFields: pf.primary.map((x) => f(x.label, x.value)),
+      footerFields: pf.footer.map((x) => ({ label: x.label, value: x.value })),
+      // Clear classic-layout fields on live updates (e.g. a poster was just added)
       ...(opts.live ? { secondaryFields: [] as WalletField[] } : {}),
       backFields,
     };
@@ -271,7 +293,8 @@ export async function createEventWalletPass(
     },
     body: JSON.stringify({
       organizationName: ORG_NAME,
-      logoText: 'LEADS Next Gen Centre',
+      logoText: eventPass.posterUrl || eventPass.themeBackgroundUrl ? 'LEADS NGC' : 'LEADS Next Gen Centre',
+      description: `${eventPass.eventName} — ${eventPass.attendeeName}`.slice(0, 200),
       // Solid hex color only — WalletWallet's colorPreset field only accepts
       // its fixed preset names (dark/blue/green/red/purple/orange), not "custom".
       // Sending an unrecognized preset value made the API reject every event
@@ -279,9 +302,7 @@ export async function createEventWalletPass(
       logoURL: logoUrl,
       iconURL: logoUrl,
       ...themeBody(eventPass),
-      barcodeValue: passUrl,
-      barcodeFormat: 'QR',
-      barcodeAltText: eventPass.serialNumber,
+      ...barcodeBody(eventPass, passUrl),
       ...fields,
     }),
   });
@@ -314,6 +335,7 @@ export async function updateEventWalletPass(
     },
     body: JSON.stringify({
       ...themeBody(eventPass),
+      ...barcodeBody(eventPass, passUrl),
       ...fields,
     }),
   });

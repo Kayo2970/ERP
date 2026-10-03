@@ -1068,7 +1068,7 @@
 }
 
 .eventTitleHeader {
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--pass-font-scale, 1));
   font-weight: 900;
   color: var(--pass-fg, #ffffff);
   line-height: 1.2;
@@ -1120,7 +1120,7 @@
 }
 
 .guestAttendeeName {
-  font-size: 14px;
+  font-size: calc(14px * var(--pass-font-scale, 1));
   font-weight: 900;
   color: #ffffff;
   letter-spacing: 0.02em;
@@ -1154,7 +1154,7 @@
 }
 
 .guestMetaVal {
-  font-size: 9px;
+  font-size: calc(9px * var(--pass-font-scale, 1));
   font-weight: 700;
   color: #f1f5f9;
   white-space: nowrap;

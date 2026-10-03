@@ -431,6 +431,8 @@ export const DEFAULT_PASS_THEME: Required<Pick<PassTheme, 'backgroundColor' | 'f
 
 export type PassEmailStatus = 'Not Sent' | 'Email Sent' | 'Email Received' | 'Pass Viewed';
 
+export type PassBarcodeFormat = 'QR' | 'PDF417' | 'Aztec' | 'Code128';
+
 export interface EventPassItem {
   id: string;
   serialNumber: string;
@@ -462,6 +464,15 @@ export interface EventPassItem {
   /** Optional per-pass text/label colours (hex). Override the event theme; unset = auto. */
   textColor?: string;
   labelColor?: string;
+  /** Text size multiplier for the designed artwork (wallet poster, ticket). 1 = normal. */
+  fontScale?: number;
+  /** Print the event title on the wallet poster artwork. Unset = auto (only when the event has no artwork of its own). */
+  showEventTitle?: boolean;
+  /** QR customisation: wallet barcode format, caption under it, and QR colours on the portal card / ticket. */
+  qrFormat?: PassBarcodeFormat;
+  qrAltText?: 'serial' | 'name' | 'none';
+  qrDark?: string;
+  qrLight?: string;
   attendance?: PassAttendanceRecord[];
   qrPayload: string;
   walletAppleUrl?: string;

@@ -19,6 +19,7 @@ import {
   Smartphone,
 } from 'lucide-react';
 import { EventPassItem, PassTheme, getPassValidDays, getPassAttendanceSummary, formatValidDaysLabel } from '@/lib/local-data';
+import { WalletProgressBar, fetchWalletPrepared, openWalletPass, useWalletProgress, WalletTarget } from '@/components/wallet-progress';
 import { EventPassKeycard } from '@/components/event-pass-keycard';
 import { CardQrModal } from '@/components/card-qr-modal';
 
@@ -37,6 +38,7 @@ export default function PublicEventPassPage({
   const [notFound, setNotFound] = useState(false);
   const [isQrOpen, setIsQrOpen] = useState(false);
   const [walletLoadingMsg, setWalletLoadingMsg] = useState('');
+  const walletProgress = useWalletProgress(5000);
   const [walletError, setWalletError] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
 
@@ -78,65 +80,23 @@ export default function PublicEventPassPage({
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://portal-leads.msruas.ac.in';
   const passUrl = pass ? `${origin}/pass/${pass.serialNumber}` : '';
 
-  // Generate & Download Apple Wallet Pass (.pkpass)
-  const handleAddToAppleWallet = async () => {
+  // Build the wallet pass behind a progress bar (it can take a few seconds the first time), then hand it to the device
+  const startWallet = async (target: WalletTarget) => {
     if (!pass) return;
     setWalletError('');
-    setWalletLoadingMsg('Please wait, processing... Creating your Apple Wallet pass');
-
+    setWalletLoadingMsg(`Getting your pass converted for ${target === 'apple' ? 'Apple' : 'Google'} Wallet…`);
     try {
-      const res = await fetch(`/api/events/${pass.eventId}/passes/${pass.id}/wallet`);
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to generate Apple Wallet pass.');
-      }
-
-      if (data.appleUrl) {
-        // Trigger download of the .pkpass file
-        const a = document.createElement('a');
-        a.href = data.appleUrl;
-        a.download = `${pass.serialNumber}.pkpass`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-      } else {
-        throw new Error('No Apple Wallet pass file returned.');
-      }
+      const prepared = await walletProgress.run(() => fetchWalletPrepared(pass.serialNumber));
+      openWalletPass(pass.serialNumber, target, prepared);
     } catch (err: any) {
-      console.error('Apple Wallet error:', err);
-      setWalletError(err.message || 'Unable to generate Apple Wallet pass.');
+      console.error('Wallet error:', err);
+      setWalletError(err.message || 'Unable to generate the wallet pass.');
     } finally {
       setWalletLoadingMsg('');
     }
   };
-
-  // Generate & Redirect to Google Wallet
-  const handleAddToGoogleWallet = async () => {
-    if (!pass) return;
-    setWalletError('');
-    setWalletLoadingMsg('Please wait, processing... Creating your Google Wallet pass');
-
-    try {
-      const res = await fetch(`/api/events/${pass.eventId}/passes/${pass.id}/wallet`);
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to generate Google Wallet pass.');
-      }
-
-      if (data.googleSaveUrl) {
-        window.open(data.googleSaveUrl, '_blank');
-      } else {
-        throw new Error('No Google Wallet save link available.');
-      }
-    } catch (err: any) {
-      console.error('Google Wallet error:', err);
-      setWalletError(err.message || 'Unable to generate Google Wallet pass.');
-    } finally {
-      setWalletLoadingMsg('');
-    }
-  };
+  const handleAddToAppleWallet = () => startWallet('apple');
+  const handleAddToGoogleWallet = () => startWallet('google');
 
   // Download .ics calendar invite
   const handleAddToCalendar = () => {
@@ -329,12 +289,7 @@ export default function PublicEventPassPage({
       )}
 
       {/* Wallet Loading Banner */}
-      {walletLoadingMsg && (
-        <div className="w-full max-w-md my-3 p-3.5 bg-accent/20 border border-accent/40 rounded-2xl text-accent text-xs font-semibold flex items-center justify-center gap-2.5 animate-in fade-in zoom-in-95 shadow-lg shadow-accent/15">
-          <div className="h-4 w-4 rounded-full border-2 border-accent border-t-transparent animate-spin shrink-0" />
-          <span>{walletLoadingMsg}</span>
-        </div>
-      )}
+      {walletLoadingMsg && <WalletProgressBar progress={walletProgress.progress} label={walletLoadingMsg} />}
 
       {/* Actions & Digital Wallet Suite */}
       <div className="w-full max-w-md space-y-3 mt-4">

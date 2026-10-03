@@ -228,8 +228,8 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
               serialNumber="LEADS-EVT-2026-XXXXXX"
               validDaysCount={3}
               logoUrl={merged.logoUrl || '/card/leads-logo.png'}
-              backgroundUrl={pendingBg || draft.walletBackgroundUrl}
-              baseColor={val.bg}
+              theme={{ ...merged, walletBackgroundUrl: pendingBg || draft.walletBackgroundUrl }}
+              passColor={val.bg}
             />
           </div>
         </div>
