@@ -97,9 +97,10 @@ async function toPngDataUrl(dataUrl: string, maxSide: number): Promise<string> {
 export interface PassThemeUpdate {
   emailUseBackground?: boolean;
   emailOverlay?: number;
-  emailBackgroundColor?: string;
-  emailForegroundColor?: string;
-  emailLabelColor?: string;
+  /** Email-specific colours; `null` clears them so the ticket follows the general colours again. */
+  emailBackgroundColor?: string | null;
+  emailForegroundColor?: string | null;
+  emailLabelColor?: string | null;
   /** New email-ticket artwork (data URL), or null to remove it. */
   emailArtwork?: { dataUrl: string } | null;
   backgroundColor?: string;
@@ -123,7 +124,8 @@ export async function updatePassTheme(eventId: string, update: PassThemeUpdate):
   }
   for (const k of ['emailBackgroundColor', 'emailForegroundColor', 'emailLabelColor'] as const) {
     const v = update[k];
-    if (typeof v === 'string' && HEX.test(v)) theme[k] = v;
+    if (v === null) delete theme[k];
+    else if (typeof v === 'string' && HEX.test(v)) theme[k] = v;
   }
   if (typeof update.emailOverlay === 'number' && Number.isFinite(update.emailOverlay)) {
     theme.emailOverlay = Math.min(0.9, Math.max(0, update.emailOverlay));

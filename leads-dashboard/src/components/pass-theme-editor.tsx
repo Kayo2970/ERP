@@ -129,6 +129,16 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
     setMessage('');
   };
 
+  // Only explicit email colours are stored; a colour the user reset is sent as null so the server clears it
+  const emailColourUpdates = (): Record<string, string | null> => {
+    const out: Record<string, string | null> = {};
+    for (const k of ['emailBackgroundColor', 'emailForegroundColor', 'emailLabelColor'] as const) {
+      if (draft[k]) out[k] = draft[k] as string;
+      else if (theme[k]) out[k] = null;
+    }
+    return out;
+  };
+
   const save = async () => {
     setSaving(true);
     setMessage('');
@@ -143,9 +153,8 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
           overlay: val.overlay,
           emailUseBackground: !emailOwn,
           emailOverlay: em.overlay,
-          emailBackgroundColor: em.bg,
-          emailForegroundColor: em.fg,
-          emailLabelColor: em.label,
+          // Email colours are only stored when explicitly chosen; otherwise the ticket follows the general colours
+          ...emailColourUpdates(),
           ...(pendingEmailArt !== undefined ? { emailArtwork: pendingEmailArt === null ? null : { dataUrl: pendingEmailArt } } : {}),
           ...(pendingBg !== undefined ? { background: pendingBg === null ? null : { dataUrl: pendingBg } } : {}),
           ...(pendingLogo !== undefined ? { logo: pendingLogo === null ? null : { dataUrl: pendingLogo } } : {}),
@@ -177,10 +186,10 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
     pendingLogo !== undefined ||
     pendingEmailArt !== undefined ||
     emailOwn !== (theme.emailUseBackground === false) ||
-    (emailOwn && (em.bg !== (theme.emailBackgroundColor || theme.backgroundColor || DEFAULT_PASS_THEME.backgroundColor) ||
-      em.fg !== (theme.emailForegroundColor || theme.foregroundColor || DEFAULT_PASS_THEME.foregroundColor) ||
-      em.label !== (theme.emailLabelColor || theme.labelColor || DEFAULT_PASS_THEME.labelColor) ||
-      em.overlay !== (typeof theme.emailOverlay === 'number' ? theme.emailOverlay : (typeof theme.overlay === 'number' ? theme.overlay : DEFAULT_PASS_THEME.overlay)))) ||
+    draft.emailBackgroundColor !== theme.emailBackgroundColor ||
+    draft.emailForegroundColor !== theme.emailForegroundColor ||
+    draft.emailLabelColor !== theme.emailLabelColor ||
+    (emailOwn && (em.overlay !== (typeof theme.emailOverlay === 'number' ? theme.emailOverlay : (typeof theme.overlay === 'number' ? theme.overlay : DEFAULT_PASS_THEME.overlay)))) ||
     val.bg !== (theme.backgroundColor || DEFAULT_PASS_THEME.backgroundColor) ||
     val.fg !== (theme.foregroundColor || DEFAULT_PASS_THEME.foregroundColor) ||
     val.label !== (theme.labelColor || DEFAULT_PASS_THEME.labelColor) ||
@@ -207,7 +216,7 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
       {/* Wallet preview: exactly what iOS 27 draws from the portrait 690×1010 crop WalletWallet receives */}
       <div className="flex flex-col sm:flex-row gap-4 items-start">
         <div className="shrink-0">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Apple / Google Wallet (iOS 27 poster)</div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Apple / Google Wallet (iOS 27 poster) <span className="ml-1 normal-case tracking-normal font-semibold text-amber-500">· Apple fixes the text: white</span></div>
           <div style={{ zoom: 0.8 }}>
             <AppleWalletPosterPreview
               attendeeName="Attendee Name"
@@ -289,6 +298,7 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
         )}
       </div>
 
+      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 -mb-1">Portal card &amp; ticket colours <span className="normal-case tracking-normal font-semibold text-slate-400">(the Wallet poster ignores these — Apple draws its own white text)</span></div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {colourField('Base colour', 'backgroundColor', val.bg)}
         {colourField('Text colour', 'foregroundColor', val.fg)}
@@ -351,6 +361,14 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
                 </button>
               )}
               <input ref={emailInput} type="file" accept="image/*" className="hidden" onChange={(e) => pick(e, 'email')} />
+            </div>
+            <div className="flex items-center justify-between text-[10.5px] text-slate-500">
+              <span>{draft.emailBackgroundColor || draft.emailForegroundColor || draft.emailLabelColor ? 'Ticket uses its own colours.' : 'Ticket follows the general colours above.'}</span>
+              {(draft.emailBackgroundColor || draft.emailForegroundColor || draft.emailLabelColor) && (
+                <button type="button" onClick={() => setDraft((d) => ({ ...d, emailBackgroundColor: undefined, emailForegroundColor: undefined, emailLabelColor: undefined }))} className="text-sky-400 hover:underline cursor-pointer">
+                  Match general colours
+                </button>
+              )}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {([

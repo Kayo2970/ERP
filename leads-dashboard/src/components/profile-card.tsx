@@ -13,6 +13,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { Linkedin } from '@/components/ui/linkedin-icon';
+import { saveContactToPhone } from '@/lib/save-contact';
 import { resolveCustomLinkIcon } from '@/lib/custom-link-icons';
 import styles from './profile-card.module.css';
 
@@ -356,6 +357,14 @@ export function ProfileCard({
                     onContactClick();
                     return;
                   }
+                  const contact = {
+                    name: name || 'LEADS Member',
+                    phone: phone || undefined,
+                    email: email || undefined,
+                    company: 'LEADS Next Gen Centre',
+                    title: title || undefined,
+                    notes: [linkedin, ...(customLinks || []).map((l) => `${l.label}: ${l.url}`)].filter(Boolean).join('\n') || undefined,
+                  };
                   if (!slug || slug === 'preview') {
                     e.preventDefault();
                     const vcardLines = [
@@ -372,15 +381,22 @@ export function ProfileCard({
                     ].filter(Boolean).join('\r\n') + '\r\n';
                     const blob = new Blob([vcardLines], { type: 'text/vcard;charset=utf-8;' });
                     const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `${(name || 'contact').toLowerCase().replace(/\s+/g, '-')}.vcf`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
+                    const download = () => {
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `${(name || 'contact').toLowerCase().replace(/\s+/g, '-')}.vcf`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+                    };
+                    saveContactToPhone({ contact, inlineUrl: url, downloadFallback: download });
                   } else {
-                    window.location.href = `/api/card/${slug}/vcf`;
+                    saveContactToPhone({
+                      contact,
+                      inlineUrl: `/api/card/${slug}/vcf?inline=1`,
+                      downloadFallback: () => { window.location.href = `/api/card/${slug}/vcf`; },
+                    });
                   }
                 }}
                 className={styles.primaryActionButton}

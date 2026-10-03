@@ -311,6 +311,7 @@ export type EventGuestCategory =
   | string;
 
 import { passEmailButtonsHtml } from '@/lib/pass-email-buttons';
+import { mergePassTemplate, DEFAULT_PASS_EMAIL_SUBJECT, DEFAULT_PASS_EMAIL_BODY, IMAGE_MARKER, DETAILS_MARKER } from '@/lib/pass-email-template';
 
 export interface PassAttendanceRecord {
   day: string; // e.g. "Day 1", "Day 2", "2026-10-13"
@@ -3098,12 +3099,109 @@ export async function updateEventPass(
 
 
 /**
+ * Builds the pass invitation email. ONE message for every send path: an editable subject/body template
+ * (see lib/pass-email-template.ts) wrapped in the designed layout — header, wide boarding-pass ticket, details
+ * table, wallet / calendar buttons. Pure, so the preview in the dispatch screens is exactly what is sent.
+ * `forPreview` omits the tracking pixel and points the inline ticket at a real URL instead of `cid:`.
+ */
+export function buildPassEmail(
+  pass: EventPassItem,
+  origin: string,
+  opts: { forPreview?: boolean; subjectTemplate?: string; bodyTemplate?: string } = {}
+): { subject: string; bodyText: string; bodyHtml: string } {
+  const passUrl = `${origin}/pass/${pass.serialNumber}`;
+  const trackPixelUrl = `${origin}/api/pass/${pass.serialNumber}/track`;
+  const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  const days = getPassValidDays(pass);
+  const validDays = days.length > 0 ? formatValidDaysLabel(days) : pass.validityDate || pass.eventDate || '2026';
+  const venue = pass.roomOrVenue || pass.eventVenue || 'Main Auditorium';
+  const vars: Record<string, string> = {
+    name: pass.attendeeName,
+    first_name: (pass.attendeeName || '').trim().split(/\s+/)[0] || pass.attendeeName,
+    event_name: pass.eventName,
+    pass_type: String(pass.passType),
+    guest_category: pass.guestCategory || 'Guest Attendee',
+    room_or_venue: venue,
+    valid_days: validDays,
+    event_date: pass.validityDate || pass.eventDate || '2026',
+    serial_number: pass.serialNumber,
+    pass_link: passUrl,
+  };
+
+  const subject = mergePassTemplate(opts.subjectTemplate || DEFAULT_PASS_EMAIL_SUBJECT, vars)
+    .split(IMAGE_MARKER).join('').split(DETAILS_MARKER).join('').trim();
+  const merged = mergePassTemplate(opts.bodyTemplate || DEFAULT_PASS_EMAIL_BODY, vars);
+
+  const detailRows: Array<[string, string]> = [
+    ['Pass Tier', String(pass.passType)],
+    ['Category', pass.guestCategory || 'Guest Attendee'],
+    ['Venue / Room', venue],
+    ['Valid On', validDays],
+    ['Serial ID', pass.serialNumber],
+  ];
+
+  const imageSrc = opts.forPreview ? `${origin}/api/pass/${encodeURIComponent(pass.serialNumber)}/image` : 'cid:leads-pass-image';
+  const imageBlock = `<div style="text-align:center;margin:18px 0;"><a href="${passUrl}"><img src="${imageSrc}" alt="Your event pass — ${esc(pass.serialNumber)}" width="552" style="display:block;width:100%;max-width:552px;height:auto;margin:0 auto;border-radius:16px;" /></a></div>`;
+  const detailsBlock = `<table role="presentation" style="width:100%;font-size:13px;color:#cbd5e1;border-collapse:collapse;margin:14px 0;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;">${detailRows
+    .map(
+      ([k, v], i) =>
+        `<tr><td style="padding:9px 14px;color:#94a3b8;${i ? 'border-top:1px solid rgba(255,255,255,0.07);' : ''}">${k}</td><td style="padding:9px 14px;font-weight:bold;color:${k === 'Serial ID' ? '#f59e0b' : '#ffffff'};${k === 'Serial ID' ? 'font-family:monospace;' : ''}${i ? 'border-top:1px solid rgba(255,255,255,0.07);' : ''}">${esc(v)}</td></tr>`
+    )
+    .join('')}</table>`;
+
+  const paragraphs = (text: string) =>
+    text
+      .split(/\n{2,}/)
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .map((p) => `<p style="margin:0 0 14px 0;font-size:14px;color:#cbd5e1;line-height:1.6;">${esc(p).replace(/\n/g, '<br/>')}</p>`)
+      .join('');
+
+  const hasImage = merged.includes(IMAGE_MARKER);
+  const hasDetails = merged.includes(DETAILS_MARKER);
+  const messageHtml = merged
+    .split(/(\[\[PASS_IMAGE\]\]|\[\[PASS_DETAILS\]\])/)
+    .map((part) => (part === IMAGE_MARKER ? imageBlock : part === DETAILS_MARKER ? detailsBlock : paragraphs(part)))
+    .join('');
+
+  const detailsText = detailRows.map(([k, v]) => `• ${k}: ${v}`).join('\n');
+  const bodyText = (merged.split(IMAGE_MARKER).join('').split(DETAILS_MARKER).join(detailsText) + (hasDetails ? '' : `\n\n${detailsText}`))
+    .replace(/\n{3,}/g, '\n\n')
+    .trim() + `\n\nYour digital pass: ${passUrl}`;
+
+  const bodyHtml = `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;padding:24px;background:#0f172a;color:#f8fafc;border-radius:16px;">
+      <div style="text-align:center;margin-bottom:20px;">
+        <span style="display:inline-block;padding:4px 12px;font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;color:#38bdf8;background:rgba(56,189,248,0.15);border-radius:20px;">Official Event Pass</span>
+        <h1 style="margin:16px 0 8px 0;font-size:22px;color:#ffffff;">${esc(pass.eventName)}</h1>
+        <p style="margin:0;color:#94a3b8;font-size:14px;">LEADS Next Gen Centre • RUAS</p>
+      </div>
+      ${hasImage ? '' : imageBlock}
+      <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:20px;margin-bottom:8px;">
+        ${messageHtml}
+        ${hasDetails ? '' : detailsBlock}
+      </div>
+      ${passEmailButtonsHtml(origin, pass.serialNumber)}
+      <p style="margin:0;font-size:12px;color:#64748b;text-align:center;border-top:1px solid rgba(255,255,255,0.08);padding-top:16px;">
+        Please present your digital pass or QR code at official event turnstiles upon arrival.<br/>
+        &copy; ${new Date().getFullYear()} LEADS Next Gen Centre &bull; MSRUAS
+      </p>
+      ${opts.forPreview ? '' : `<img src="${trackPixelUrl}" width="1" height="1" alt="" style="display:none;width:1px;height:1px;border:none;outline:none;" />`}
+    </div>
+  `;
+
+  return { subject, bodyText, bodyHtml };
+}
+
+/**
  * Dispatches a personalized pass invitation email to the attendee
  * with turnstile access details and digital wallet links.
  */
 export async function dispatchPassEmail(
   pass: EventPassItem,
-  targetEmail?: string
+  targetEmail?: string,
+  template?: { subjectTemplate?: string; bodyTemplate?: string }
 ): Promise<{ success: boolean; error?: string }> {
   const recipient = (targetEmail || pass.attendeeEmail || '').trim();
   if (!recipient) {
@@ -3111,72 +3209,7 @@ export async function dispatchPassEmail(
   }
 
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://portal-leads.msruas.ac.in';
-  const passUrl = `${origin}/pass/${pass.serialNumber}`;
-  const trackPixelUrl = `${origin}/api/pass/${pass.serialNumber}/track`;
-
-  const subject = `Your Official Pass for ${pass.eventName} — ${pass.passType}`;
-  const bodyText = `Dear ${pass.attendeeName},\n\nWe are delighted to welcome you to ${pass.eventName}. Your official credential has been issued by the LEADS Next Gen Centre.\n\n• Pass Tier: ${pass.passType}\n• Guest Category: ${pass.guestCategory || 'Guest Attendee'}\n• Assigned Venue / Room: ${pass.roomOrVenue || pass.eventVenue || 'Main Auditorium'}\n• Event Date & Validity: ${pass.validityDate || pass.eventDate || '2026'}\n• Pass Serial ID: ${pass.serialNumber}\n\nYou can access your verified digital pass, save it to Apple Wallet / Google Wallet, or view check-in details via the link below:\n${passUrl}\n\nPlease present your digital pass or QR code at official event turnstiles upon arrival.\n\nWarm regards,\nLEADS Next Gen Centre • RUAS`;
-
-  const bodyHtml = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #0f172a; color: #f8fafc; border-radius: 16px;">
-      <div style="text-align: center; margin-bottom: 24px;">
-        <span style="display: inline-block; padding: 4px 12px; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; color: #38bdf8; background: rgba(56, 189, 248, 0.15); border-radius: 20px; border: 1px solid rgba(56, 189, 248, 0.3);">
-          Official Event Pass
-        </span>
-        <h1 style="margin: 16px 0 8px 0; font-size: 22px; color: #ffffff;">${pass.eventName}</h1>
-        <p style="margin: 0; color: #94a3b8; font-size: 14px;">LEADS Next Gen Centre • RUAS</p>
-      </div>
-
-      <!-- Boarding-pass image (attached inline by the server; QR opens the full digital pass) -->
-      <div style="text-align: center; margin-bottom: 24px;">
-        <a href="${passUrl}"><img src="cid:leads-pass-image" alt="Your event pass — ${pass.serialNumber}" width="552" style="display: block; width: 100%; max-width: 552px; height: auto; margin: 0 auto; border-radius: 16px;" /></a>
-      </div>
-
-      <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
-        <p style="margin: 0 0 12px 0; font-size: 16px; color: #f1f5f9;">Dear <strong>${pass.attendeeName}</strong>,</p>
-        <p style="margin: 0 0 16px 0; font-size: 14px; color: #cbd5e1; line-height: 1.5;">
-          We are delighted to confirm your credential for <strong>${pass.eventName}</strong>. Your pass is ready and verified for gate turnstile entry.
-        </p>
-        
-        <table style="width: 100%; font-size: 13px; color: #cbd5e1; border-collapse: collapse;">
-          <tr>
-            <td style="padding: 6px 0; color: #94a3b8;">Pass Tier:</td>
-            <td style="padding: 6px 0; font-weight: bold; color: #38bdf8;">${pass.passType}</td>
-          </tr>
-          <tr>
-            <td style="padding: 6px 0; color: #94a3b8;">Category:</td>
-            <td style="padding: 6px 0; font-weight: bold; color: #ffffff;">${pass.guestCategory || 'Guest Attendee'}</td>
-          </tr>
-          <tr>
-            <td style="padding: 6px 0; color: #94a3b8;">Venue / Room:</td>
-            <td style="padding: 6px 0; color: #ffffff;">${pass.roomOrVenue || pass.eventVenue || 'Main Auditorium'}</td>
-          </tr>
-          <tr>
-            <td style="padding: 6px 0; color: #94a3b8;">Date / Validity:</td>
-            <td style="padding: 6px 0; color: #ffffff;">${pass.validityDate || pass.eventDate || '2026'}</td>
-          </tr>
-          <tr>
-            <td style="padding: 6px 0; color: #94a3b8;">Serial ID:</td>
-            <td style="padding: 6px 0; font-family: monospace; font-weight: bold; color: #f59e0b;">${pass.serialNumber}</td>
-          </tr>
-        </table>
-      </div>
-
-      <!-- Wallet / calendar / pass buttons: our own URLs, wallet pass is created once on first click and cached -->
-      ${passEmailButtonsHtml(origin, pass.serialNumber)}
-      <p style="margin: 0 0 24px 0; font-size: 11px; color: #64748b; text-align: center;">
-        One pass, one QR &mdash; present it at official event turnstiles on every valid day.
-      </p>
-
-      <p style="margin: 0; font-size: 12px; color: #64748b; text-align: center; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 16px;">
-        Please present your digital pass or QR code at official event turnstiles upon arrival.<br/>
-        &copy; 2026 LEADS Next Gen Centre &bull; MSRUAS
-      </p>
-
-      <!-- Invisible Open Tracking Pixel -->
-      <img src="${trackPixelUrl}" width="1" height="1" alt="" style="display:none;width:1px;height:1px;border:none;outline:none;" />
-    </div>
-  `;
+  const { subject, bodyText, bodyHtml } = buildPassEmail(pass, origin, template || {});
 
   try {
     const res = await fetch('/api/email/send', {
