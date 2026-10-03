@@ -193,13 +193,14 @@ export async function walletDataForPass(pass: EventPassItem): Promise<WalletEven
   const theme = await getPassTheme(pass.eventId);
   // Version the poster URL by everything that changes how it looks, so WalletWallet re-fetches after a design edit
   const version = createHash('sha1')
-    .update(JSON.stringify([pass.eventName, pass.passColor, pass.passGradient, pass.textColor, pass.labelColor, pass.fontScale, pass.showEventTitle, theme.updatedAt, theme.walletBackgroundUrl, theme.overlay]))
+    .update(JSON.stringify([pass.eventName, pass.passColor, pass.passGradient, pass.textColor, pass.labelColor, pass.fontScale, pass.showEventTitle, pass.qrInWallet, pass.qrDark, pass.qrLight, pass.qrEyeColor, pass.qrShape, pass.qrLogo, pass.qrAltText, theme.updatedAt, theme.walletBackgroundUrl, theme.overlay]))
     .digest('hex')
     .slice(0, 10);
   return {
     posterUrl: `/api/pass/${encodeURIComponent(pass.serialNumber)}/wallet-poster?v=${version}`,
     barcodeFormat: pass.qrFormat,
     barcodeAltText: pass.qrAltText,
+    qrInWallet: pass.qrInWallet,
     attendeeOrg: pass.attendeeOrg,
     serialNumber: pass.serialNumber,
     walletSerial: pass.walletSerialNumber,

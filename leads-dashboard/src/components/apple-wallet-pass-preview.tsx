@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { Info, RotateCw } from 'lucide-react';
 import styles from './apple-wallet-pass.module.css';
 import { AppleWalletPosterPreview } from './apple-wallet-poster-preview';
-import type { PassBarcodeFormat, PassTheme } from '@/lib/local-data';
+import type { PassBarcodeFormat, PassQrOptions, PassTheme } from '@/lib/local-data';
 import { passThemeStyle } from '@/lib/pass-theme-style';
 
 export interface AppleWalletPassPreviewProps {
@@ -34,6 +34,7 @@ export interface AppleWalletPassPreviewProps {
   showEventTitle?: boolean;
   barcodeFormat?: PassBarcodeFormat;
   altText?: 'serial' | 'name' | 'none';
+  qr?: PassQrOptions;
 }
 
 export function AppleWalletPassPreview({
@@ -60,6 +61,7 @@ export function AppleWalletPassPreview({
   showEventTitle,
   barcodeFormat,
   altText,
+  qr,
 }: AppleWalletPassPreviewProps) {
   const [isFlipped, setIsFlipped] = useState(false);
 
@@ -93,6 +95,7 @@ export function AppleWalletPassPreview({
           showEventTitle={showEventTitle}
           barcodeFormat={barcodeFormat}
           altText={altText}
+          qr={qr}
         />
       </div>
     );

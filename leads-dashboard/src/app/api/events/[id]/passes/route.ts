@@ -94,6 +94,11 @@ export async function PATCH(
           : {}),
       };
 
+      // A null in the update means "clear this optional field"
+      for (const [k, v] of Object.entries(updates)) {
+        if (v === null) delete (merged as unknown as Record<string, unknown>)[k];
+      }
+
       // Re-generate QR verification payload if key attributes changed
       if (
         updates.attendeeName !== undefined ||

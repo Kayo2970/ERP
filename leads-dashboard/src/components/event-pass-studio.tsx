@@ -32,7 +32,10 @@ import {
   EventPassItem,
   EventPassType,
   EventGuestCategory,
-  PassBarcodeFormat,
+  PassQrOptions,
+  DEFAULT_QR_OPTIONS,
+  qrFieldsFromOptions,
+  qrOptionsFromPass,
   PassTheme,
   addEventPass,
   getEventPasses,
@@ -184,10 +187,8 @@ export function EventPassStudio({
   const toggleSection = (k: string) => setOpenSections((o) => ({ ...o, [k]: !o[k] }));
   const [fontScale, setFontScale] = useState(1);
   const [showEventTitle, setShowEventTitle] = useState<boolean | undefined>(undefined);
-  const [qrFormat, setQrFormat] = useState<PassBarcodeFormat>('QR');
-  const [qrAltText, setQrAltText] = useState<'serial' | 'name' | 'none'>('serial');
-  const [qrDark, setQrDark] = useState('#0B1B2E');
-  const [qrLight, setQrLight] = useState('#ffffff');
+  const [qr, setQr] = useState<PassQrOptions>(DEFAULT_QR_OPTIONS);
+  const patchQr = (patch: Partial<PassQrOptions>) => setQr((q) => ({ ...q, ...patch }));
 
   // Modals & Preview mode
   const [previewMode, setPreviewMode] = useState<'luxury' | 'apple-wallet'>('luxury');
@@ -321,10 +322,7 @@ export function EventPassStudio({
         labelColor: labelColor || undefined,
         fontScale: fontScale !== 1 ? fontScale : undefined,
         showEventTitle,
-        qrFormat: qrFormat !== 'QR' ? qrFormat : undefined,
-        qrAltText: qrAltText !== 'serial' ? qrAltText : undefined,
-        qrDark: qrDark.toLowerCase() !== '#0b1b2e' ? qrDark : undefined,
-        qrLight: qrLight.toLowerCase() !== '#ffffff' ? qrLight : undefined,
+        ...qrFieldsFromOptions(qr),
         notes: notes.trim() || undefined,
         issuedBy: currentUserName,
         issuedByEmail: currentUserEmail,
@@ -831,16 +829,7 @@ export function EventPassStudio({
               open={!!openSections.qr}
               onToggle={() => toggleSection('qr')}
             >
-              <PassQrControls
-                qrFormat={qrFormat}
-                setQrFormat={setQrFormat}
-                qrAltText={qrAltText}
-                setQrAltText={setQrAltText}
-                qrDark={qrDark}
-                setQrDark={setQrDark}
-                qrLight={qrLight}
-                setQrLight={setQrLight}
-              />
+              <PassQrControls value={qr} onChange={patchQr} />
             </PassSection>
 
             {/* Submit Action */}
@@ -912,8 +901,11 @@ export function EventPassStudio({
                   textColor: textColor || undefined,
                   labelColor: labelColor || undefined,
                   fontScale,
-                  qrDark,
-                  qrLight,
+                  qrDark: qr.dark,
+                  qrLight: qr.light,
+                  qrEyeColor: qr.eye || undefined,
+                  qrShape: qr.shape,
+                  qrLogo: qr.logo,
                 }}
                 theme={activeTheme}
                 autoOpen
@@ -963,8 +955,9 @@ export function EventPassStudio({
               labelColor={labelColor || undefined}
               fontScale={fontScale}
               showEventTitle={showEventTitle}
-              barcodeFormat={qrFormat}
-              altText={qrAltText}
+              barcodeFormat={qr.format}
+              altText={qr.altText}
+              qr={qr}
             />
           )}
 

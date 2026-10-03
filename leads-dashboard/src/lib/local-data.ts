@@ -432,6 +432,56 @@ export const DEFAULT_PASS_THEME: Required<Pick<PassTheme, 'backgroundColor' | 'f
 export type PassEmailStatus = 'Not Sent' | 'Email Sent' | 'Email Received' | 'Pass Viewed';
 
 export type PassBarcodeFormat = 'QR' | 'PDF417' | 'Aztec' | 'Code128';
+export type PassQrShape = 'square' | 'rounded' | 'dots';
+
+/** Everything about a pass's QR that a designer can change. */
+export interface PassQrOptions {
+  format: PassBarcodeFormat;
+  altText: 'serial' | 'name' | 'none';
+  dark: string;
+  light: string;
+  /** Colour of the three corner eyes; '' = same as the dots. */
+  eye: string;
+  shape: PassQrShape;
+  /** LEADS logo in the centre of the QR. */
+  logo: boolean;
+  /** Draw the styled QR into the wallet artwork instead of Apple/Google's native black-on-white barcode. */
+  inWallet: boolean;
+}
+
+export const DEFAULT_QR_OPTIONS: PassQrOptions = {
+  format: 'QR', altText: 'serial', dark: '#0B1B2E', light: '#ffffff', eye: '', shape: 'square', logo: true, inWallet: false,
+};
+
+type PassQrFields = Pick<EventPassItem, 'qrFormat' | 'qrAltText' | 'qrDark' | 'qrLight' | 'qrEyeColor' | 'qrShape' | 'qrLogo' | 'qrInWallet'>;
+
+export function qrOptionsFromPass(p: Partial<PassQrFields>): PassQrOptions {
+  return {
+    format: p.qrFormat || DEFAULT_QR_OPTIONS.format,
+    altText: p.qrAltText || DEFAULT_QR_OPTIONS.altText,
+    dark: p.qrDark || DEFAULT_QR_OPTIONS.dark,
+    light: p.qrLight || DEFAULT_QR_OPTIONS.light,
+    eye: p.qrEyeColor || '',
+    shape: p.qrShape || DEFAULT_QR_OPTIONS.shape,
+    logo: p.qrLogo !== false,
+    inWallet: Boolean(p.qrInWallet),
+  };
+}
+
+/** Pass fields for the options; defaults are stored as undefined so a PATCH can clear a previous choice. */
+export function qrFieldsFromOptions(o: PassQrOptions): PassQrFields {
+  const d = DEFAULT_QR_OPTIONS;
+  return {
+    qrFormat: o.format !== d.format ? o.format : undefined,
+    qrAltText: o.altText !== d.altText ? o.altText : undefined,
+    qrDark: o.dark.toLowerCase() !== d.dark.toLowerCase() ? o.dark : undefined,
+    qrLight: o.light.toLowerCase() !== d.light.toLowerCase() ? o.light : undefined,
+    qrEyeColor: o.eye || undefined,
+    qrShape: o.shape !== d.shape ? o.shape : undefined,
+    qrLogo: o.logo ? undefined : false,
+    qrInWallet: o.inWallet ? true : undefined,
+  };
+}
 
 export interface EventPassItem {
   id: string;
@@ -473,6 +523,11 @@ export interface EventPassItem {
   qrAltText?: 'serial' | 'name' | 'none';
   qrDark?: string;
   qrLight?: string;
+  qrEyeColor?: string;
+  qrShape?: PassQrShape;
+  /** false hides the centre logo (default shown). */
+  qrLogo?: boolean;
+  qrInWallet?: boolean;
   attendance?: PassAttendanceRecord[];
   qrPayload: string;
   walletAppleUrl?: string;
@@ -3111,9 +3166,10 @@ export async function updateEventPass(
     const res = await fetch(`/api/events/${updated.eventId}/passes`, {
       method: 'PATCH',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
+      // JSON drops `undefined`, so a cleared option (e.g. text colour back to auto) is sent as null and removed server-side
       body: JSON.stringify({
         passId: updated.id,
-        ...updates,
+        ...Object.fromEntries(Object.entries(updates).map(([k, v]) => [k, v === undefined ? null : v])),
       }),
     });
     if (res.ok) {

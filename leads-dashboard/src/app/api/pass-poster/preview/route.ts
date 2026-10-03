@@ -19,6 +19,7 @@ export async function POST(request: NextRequest) {
         labelColor: body.labelColor,
         fontScale: Number(body.fontScale) || 1,
         showEventTitle: typeof body.showEventTitle === 'boolean' ? body.showEventTitle : undefined,
+        qr: body.qr && body.qr.options ? { url: String(body.qr.url || 'https://portal-leads.msruas.ac.in/pass/PREVIEW'), options: body.qr.options, caption: body.qr.caption ? String(body.qr.caption).slice(0, 40) : undefined } : undefined,
       },
       body.theme || {}
     );

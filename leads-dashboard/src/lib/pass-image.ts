@@ -4,7 +4,7 @@
  */
 import path from 'path';
 import { createCanvas, loadImage, GlobalFonts, SKRSContext2D } from '@napi-rs/canvas';
-import QRCode from 'qrcode';
+import { drawStyledQr } from '@/lib/qr-style';
 import { readStoredFile } from '@/lib/file-storage';
 import {
   EventPassItem,
@@ -176,14 +176,24 @@ export async function renderBoardingPassPng(
   // Stub (white) with QR
   ctx.fillStyle = 'rgba(255,255,255,0.97)';
   ctx.fillRect(STUB_X, y0, x0 + w - STUB_X, h);
-  const qrBuf = await QRCode.toBuffer(passUrl, {
-    margin: 1,
-    width: 300,
-    errorCorrectionLevel: 'H',
-    color: { dark: pass.qrDark || '#000000', light: pass.qrLight || '#ffffff' },
-  });
-  const qr = await loadImage(qrBuf);
   const qrSize = 220;
+  const qrCanvas = createCanvas(600, 600);
+  let qrLogo: any;
+  if (pass.qrLogo !== false) {
+    try {
+      qrLogo = await loadImage(path.join(process.cwd(), 'public', 'card', 'leads-logo-clean.png'));
+    } catch {
+      /* no logo */
+    }
+  }
+  drawStyledQr(qrCanvas.getContext('2d'), passUrl, 0, 0, 600, {
+    dark: pass.qrDark || '#000000',
+    light: pass.qrLight || '#ffffff',
+    eye: pass.qrEyeColor,
+    shape: pass.qrShape || 'square',
+    logo: qrLogo,
+  });
+  const qr = await loadImage(qrCanvas.toBuffer('image/png'));
   const stubW = x0 + w - STUB_X;
   const qx = STUB_X + (stubW - qrSize) / 2;
   ctx.drawImage(qr, qx, 70, qrSize, qrSize);

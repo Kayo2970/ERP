@@ -148,6 +148,8 @@ export interface WalletEventPassData {
   posterUrl?: string;
   barcodeFormat?: PassBarcodeFormat;
   barcodeAltText?: 'serial' | 'name' | 'none';
+  /** The QR is drawn into the poster artwork: send no native barcode. */
+  qrInWallet?: boolean;
 }
 
 /** Days from now until the pass's last valid day (+1 so it stays valid through that day), 1..3650. */
@@ -209,6 +211,7 @@ function themeBody(eventPass: WalletEventPassData): Record<string, unknown> {
 
 /** Barcode settings: format + the small caption under it. */
 function barcodeBody(eventPass: WalletEventPassData, passUrl: string): Record<string, unknown> {
+  if (eventPass.qrInWallet) return {};
   const out: Record<string, unknown> = { barcodeValue: passUrl, barcodeFormat: eventPass.barcodeFormat || 'QR' };
   const alt = eventPass.barcodeAltText ?? 'serial';
   if (alt === 'serial') out.barcodeAltText = eventPass.serialNumber;

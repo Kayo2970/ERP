@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { PassBarcodeFormat, PassTheme, authHeaders } from '@/lib/local-data';
+import { PassBarcodeFormat, PassQrOptions, PassTheme, authHeaders } from '@/lib/local-data';
 import { POSTER_ZONES, posterFields } from '@/lib/wallet-poster-spec';
 
 export interface ApplePosterPreviewProps {
@@ -26,6 +26,8 @@ export interface ApplePosterPreviewProps {
   showEventTitle?: boolean;
   barcodeFormat?: PassBarcodeFormat;
   altText?: 'serial' | 'name' | 'none';
+  /** Full QR styling; with `inWallet` the QR is part of the artwork and Apple's barcode panel is not drawn. */
+  qr?: PassQrOptions;
   /** Absolute pass URL encoded in the barcode. */
   passUrl?: string;
 }
@@ -40,8 +42,9 @@ export function AppleWalletPosterPreview(props: ApplePosterPreviewProps) {
   const {
     attendeeName, guestCategory, passType, roomOrVenue = 'Main Auditorium', eventName, validity, serialNumber, validDaysCount = 0, validDays,
     logoUrl = '/card/leads-logo.png', theme, passColor, passGradient, textColor, labelColor, fontScale, showEventTitle,
-    barcodeFormat = 'QR', altText = 'serial', passUrl,
+    barcodeFormat = 'QR', altText = 'serial', passUrl, qr: qrOpts,
   } = props;
+  const inWallet = Boolean(qrOpts?.inWallet);
 
   const [art, setArt] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -49,7 +52,7 @@ export function AppleWalletPosterPreview(props: ApplePosterPreviewProps) {
   const lastUrl = useRef('');
 
   // Re-render the artwork (debounced) whenever the design changes
-  const draftKey = JSON.stringify([eventName, passColor, passGradient, textColor, labelColor, fontScale, showEventTitle, theme?.walletBackgroundUrl, theme?.backgroundUrl, theme?.overlay, theme?.foregroundColor, theme?.labelColor, theme?.backgroundColor]);
+  const draftKey = JSON.stringify([inWallet ? qrOpts : null, serialNumber, eventName, passColor, passGradient, textColor, labelColor, fontScale, showEventTitle, theme?.walletBackgroundUrl, theme?.backgroundUrl, theme?.overlay, theme?.foregroundColor, theme?.labelColor, theme?.backgroundColor]);
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -60,6 +63,7 @@ export function AppleWalletPosterPreview(props: ApplePosterPreviewProps) {
           headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             eventName, passColor, passGradient, textColor, labelColor, fontScale, showEventTitle,
+            qr: inWallet && qrOpts ? { url: passUrl || `https://portal-leads.msruas.ac.in/pass/${serialNumber}`, options: qrOpts, caption: qrOpts.altText === 'none' ? undefined : qrOpts.altText === 'name' ? attendeeName : serialNumber } : undefined,
             theme: theme ? { walletBackgroundUrl: theme.walletBackgroundUrl, backgroundUrl: theme.backgroundUrl, overlay: theme.overlay, foregroundColor: theme.foregroundColor, labelColor: theme.labelColor, backgroundColor: theme.backgroundColor } : {},
           }),
         });
@@ -137,8 +141,8 @@ export function AppleWalletPosterPreview(props: ApplePosterPreviewProps) {
         </div>
       </div>
 
-      {/* Apple: barcode panel */}
-      <div
+      {/* Apple: barcode panel (not drawn when the styled QR is part of the artwork) */}
+      {!inWallet && <div
         style={{
           position: 'absolute',
           left: wide ? '14%' : '25%',
@@ -165,7 +169,7 @@ export function AppleWalletPosterPreview(props: ApplePosterPreviewProps) {
           qr && <img src={qr} alt="QR" style={{ width: '100%', display: 'block' }} />
         )}
         {f.barcodeAltText && <div style={{ color: '#000', fontSize: 7.5, fontWeight: 600, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.barcodeAltText}</div>}
-      </div>
+      </div>}
 
       {/* Apple: one row of primary fields, then the footer */}
       <div style={{ position: 'absolute', left: '5%', right: '5%', top: `${POSTER_ZONES.fieldsTop * 100}%`, display: 'flex', gap: 8 }}>

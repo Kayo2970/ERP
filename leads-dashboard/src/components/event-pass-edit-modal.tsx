@@ -23,7 +23,10 @@ import {
   EventPassItem,
   EventPassType,
   EventGuestCategory,
-  PassBarcodeFormat,
+  PassQrOptions,
+  DEFAULT_QR_OPTIONS,
+  qrFieldsFromOptions,
+  qrOptionsFromPass,
   PassTheme,
   authHeaders,
   expandDateRange,
@@ -96,10 +99,8 @@ export function EventPassEditModal({
   const skipDayReset = useRef(true);
   const [fontScale, setFontScale] = useState(1);
   const [showEventTitle, setShowEventTitle] = useState<boolean | undefined>(undefined);
-  const [qrFormat, setQrFormat] = useState<PassBarcodeFormat>('QR');
-  const [qrAltText, setQrAltText] = useState<'serial' | 'name' | 'none'>('serial');
-  const [qrDark, setQrDark] = useState('#0B1B2E');
-  const [qrLight, setQrLight] = useState('#ffffff');
+  const [qr, setQr] = useState<PassQrOptions>(DEFAULT_QR_OPTIONS);
+  const patchQr = (patch: Partial<PassQrOptions>) => setQr((q) => ({ ...q, ...patch }));
   const [previewMode, setPreviewMode] = useState<'pass' | 'wallet'>('pass');
   const [open, setOpen] = useState<Record<string, boolean>>({ details: true });
   const toggle = (k: string) => setOpen((o) => ({ ...o, [k]: !o[k] }));
@@ -135,10 +136,7 @@ export function EventPassEditModal({
       setLabelColor(pass.labelColor || '');
       setFontScale(pass.fontScale || 1);
       setShowEventTitle(pass.showEventTitle);
-      setQrFormat(pass.qrFormat || 'QR');
-      setQrAltText(pass.qrAltText || 'serial');
-      setQrDark(pass.qrDark || '#0B1B2E');
-      setQrLight(pass.qrLight || '#ffffff');
+      setQr(qrOptionsFromPass(pass));
       setOpen({ details: true });
       setEventId(pass.eventId);
       setValidityDate(pass.validityDate || '');
@@ -243,10 +241,7 @@ export function EventPassEditModal({
           labelColor: labelColor || undefined,
           fontScale: fontScale !== 1 ? fontScale : undefined,
           showEventTitle,
-          qrFormat: qrFormat !== 'QR' ? qrFormat : undefined,
-          qrAltText: qrAltText !== 'serial' ? qrAltText : undefined,
-          qrDark: qrDark.toLowerCase() !== '#0b1b2e' ? qrDark : undefined,
-          qrLight: qrLight.toLowerCase() !== '#ffffff' ? qrLight : undefined,
+          ...qrFieldsFromOptions(qr),
           validDays: effectiveValidDays.length > 0 ? effectiveValidDays : undefined,
           validityDate: displayValidity,
           ...(eventChanged && selectedEvent
@@ -312,7 +307,7 @@ export function EventPassEditModal({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto flex-1 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] gap-6">
+        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto flex-1 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_540px] gap-6">
           <div className="space-y-4 min-w-0">
           {/* Live Wallet Sync Notice Banner */}
           <div className="p-3 rounded-xl bg-gradient-to-r from-sky-500/10 via-indigo-500/10 to-transparent border border-sky-500/20 flex items-start gap-2.5">
@@ -565,7 +560,7 @@ export function EventPassEditModal({
           </PassSection>
 
           <PassSection title="3 · QR code" hint="Barcode type, caption and QR colours" icon={<Smartphone className="h-4 w-4" />} open={!!open.qr} onToggle={() => toggle('qr')}>
-            <PassQrControls qrFormat={qrFormat} setQrFormat={setQrFormat} qrAltText={qrAltText} setQrAltText={setQrAltText} qrDark={qrDark} setQrDark={setQrDark} qrLight={qrLight} setQrLight={setQrLight} />
+            <PassQrControls value={qr} onChange={patchQr} />
           </PassSection>
 
           {/* Footer Actions */}
@@ -599,7 +594,7 @@ export function EventPassEditModal({
           </div>
 
           {/* Live preview: exactly the pass the recipient receives */}
-          <aside className="lg:sticky lg:top-0 self-start space-y-2">
+          <aside className="lg:sticky lg:top-0 self-start space-y-2 min-w-0 overflow-x-auto">
             <p className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
               <Eye className="h-3.5 w-3.5 text-accent" /> Live preview — the issued pass
             </p>
@@ -628,8 +623,11 @@ export function EventPassEditModal({
                 textColor: textColor || undefined,
                 labelColor: labelColor || undefined,
                 fontScale,
-                qrDark,
-                qrLight,
+                qrDark: qr.dark,
+                qrLight: qr.light,
+                qrEyeColor: qr.eye || undefined,
+                qrShape: qr.shape,
+                qrLogo: qr.logo,
               }}
               theme={theme}
               autoOpen
@@ -656,8 +654,9 @@ export function EventPassEditModal({
                 labelColor={labelColor || undefined}
                 fontScale={fontScale}
                 showEventTitle={showEventTitle}
-                barcodeFormat={qrFormat}
-                altText={qrAltText}
+                barcodeFormat={qr.format}
+                altText={qr.altText}
+              qr={qr}
               />
             )}
           </aside>

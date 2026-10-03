@@ -7,7 +7,8 @@
 import path from 'path';
 import { createCanvas, loadImage, GlobalFonts, SKRSContext2D } from '@napi-rs/canvas';
 import { readStoredFile } from '@/lib/file-storage';
-import { DEFAULT_PASS_THEME, PassTheme } from '@/lib/local-data';
+import { DEFAULT_PASS_THEME, PassQrOptions, PassTheme } from '@/lib/local-data';
+import { drawStyledQr } from '@/lib/qr-style';
 import { POSTER_H, POSTER_W, POSTER_ZONES, gradientStops } from '@/lib/wallet-poster-spec';
 
 export interface PosterRenderInput {
@@ -18,6 +19,8 @@ export interface PosterRenderInput {
   labelColor?: string;
   fontScale?: number;
   showEventTitle?: boolean;
+  /** When set, the styled QR is drawn into the artwork (the wallet then carries no native barcode). */
+  qr?: { url: string; options: PassQrOptions; caption?: string };
 }
 
 let fontReady = false;
@@ -151,6 +154,41 @@ export async function renderWalletPosterJpeg(input: PosterRenderInput, theme: Pa
     ctx.shadowBlur = 0;
     ctx.fillStyle = label;
     ctx.fillRect(left, y + 20, 72, 4);
+  }
+
+  // Styled QR instead of Apple's native barcode: white plate in the barcode band, same place Apple would draw it
+  if (input.qr) {
+    const { url, options, caption } = input.qr;
+    const size = 300;
+    const plate = 20;
+    const px = (W - size - plate * 2) / 2;
+    const py = H * POSTER_ZONES.barcodeTop;
+    const ph = size + plate * 2 + (caption ? 34 : 0);
+    ctx.fillStyle = options.light;
+    ctx.beginPath();
+    ctx.moveTo(px + 22, py);
+    ctx.arcTo(px + size + plate * 2, py, px + size + plate * 2, py + ph, 22);
+    ctx.arcTo(px + size + plate * 2, py + ph, px, py + ph, 22);
+    ctx.arcTo(px, py + ph, px, py, 22);
+    ctx.arcTo(px, py, px + size + plate * 2, py, 22);
+    ctx.closePath();
+    ctx.fill();
+    let logo: any;
+    if (options.logo) {
+      try {
+        logo = await loadImage(path.join(process.cwd(), 'public', 'card', 'leads-logo-clean.png'));
+      } catch {
+        /* no logo */
+      }
+    }
+    drawStyledQr(ctx, url, px + plate, py + plate, size, { dark: options.dark, light: options.light, eye: options.eye || undefined, shape: options.shape, logo });
+    if (caption) {
+      ctx.fillStyle = options.dark;
+      ctx.font = `bold 20px ${fam}`;
+      ctx.textAlign = 'center';
+      ctx.fillText(caption, W / 2, py + plate * 2 + size + 8);
+      ctx.textAlign = 'left';
+    }
   }
 
   return canvas.toBuffer('image/jpeg', 86);

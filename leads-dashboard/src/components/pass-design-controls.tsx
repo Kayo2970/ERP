@@ -1,8 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Calendar, ChevronDown, Palette, Sparkles } from 'lucide-react';
-import { PassBarcodeFormat, PassTheme, expandDateRange } from '@/lib/local-data';
+import { PassBarcodeFormat, PassQrOptions, PassQrShape, PassTheme, DEFAULT_QR_OPTIONS, expandDateRange } from '@/lib/local-data';
+import { drawStyledQr } from '@/lib/qr-style';
 import { contrastRatio } from '@/lib/wallet-poster-spec';
 
 export const PASS_COLOR_PRESETS = [
@@ -402,72 +403,122 @@ export function PassFontControls({
 }
 
 const QR_FORMATS: Array<[PassBarcodeFormat, string]> = [['QR', 'QR code'], ['Aztec', 'Aztec'], ['PDF417', 'PDF417'], ['Code128', 'Code 128']];
-const QR_COLOR_PRESETS: Array<[string, string, string]> = [
-  ['Classic', '#0B1B2E', '#ffffff'],
-  ['Black', '#000000', '#ffffff'],
-  ['Emerald', '#064e3b', '#ecfdf5'],
-  ['Royal', '#1e3a8a', '#eff6ff'],
-  ['Gold', '#451a03', '#fef3c7'],
+const QR_SHAPES: Array<[PassQrShape, string]> = [['square', 'Square'], ['rounded', 'Rounded'], ['dots', 'Dots']];
+const QR_COLOR_PRESETS: Array<[string, string, string, string]> = [
+  ['Classic', '#0B1B2E', '#ffffff', ''],
+  ['Black', '#000000', '#ffffff', ''],
+  ['Emerald', '#064e3b', '#ecfdf5', ''],
+  ['Royal', '#1e3a8a', '#eff6ff', '#0b1b2e'],
+  ['Gold', '#451a03', '#fef3c7', '#92400e'],
 ];
 
-/** QR customisation: wallet barcode format + caption, and the QR colours used on the portal card and emailed ticket. */
-export function PassQrControls({
-  qrFormat, setQrFormat, qrAltText, setQrAltText, qrDark, setQrDark, qrLight, setQrLight,
-}: {
-  qrFormat: PassBarcodeFormat;
-  setQrFormat: (f: PassBarcodeFormat) => void;
-  qrAltText: 'serial' | 'name' | 'none';
-  setQrAltText: (a: 'serial' | 'name' | 'none') => void;
-  qrDark: string;
-  setQrDark: (c: string) => void;
-  qrLight: string;
-  setQrLight: (c: string) => void;
-}) {
-  const ratio = contrastRatio(qrDark, qrLight);
+/** Live canvas preview of the styled QR, drawn by the same routine as the card, ticket and wallet artwork. */
+function QrLivePreview({ value }: { value: PassQrOptions }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const c = ref.current;
+    const ctx = c?.getContext('2d');
+    if (!c || !ctx) return;
+    let cancelled = false;
+    const draw = (logo?: HTMLImageElement) => {
+      if (!cancelled) drawStyledQr(ctx, 'https://portal-leads.msruas.ac.in/pass/LEADS-EVT-2026-SAMPLE', 0, 0, 240, { dark: value.dark, light: value.light, eye: value.eye || undefined, shape: value.shape, logo });
+    };
+    if (!value.logo) return draw();
+    const img = new Image();
+    img.onload = () => draw(img);
+    img.onerror = () => draw();
+    img.src = '/card/leads-logo-clean.png';
+    return () => {
+      cancelled = true;
+    };
+  }, [value.dark, value.light, value.eye, value.shape, value.logo]);
+  return <canvas ref={ref} width={240} height={240} className="h-28 w-28 rounded-xl border border-slate-300 dark:border-white/15 shrink-0" aria-label="QR preview" />;
+}
+
+/** Full QR customisation: shape, colours (dots, background, corner eyes), centre logo, wallet barcode type/caption and wallet mode. */
+export function PassQrControls({ value, onChange }: { value: PassQrOptions; onChange: (patch: Partial<PassQrOptions>) => void }) {
+  const ratio = contrastRatio(value.dark, value.light);
   const weak = ratio < 4;
-  const inverted = qrDark.length === 7 && qrLight.length === 7 && contrastRatio(qrDark, '#000000') > contrastRatio(qrLight, '#000000');
+  const inverted = value.dark.length === 7 && value.light.length === 7 && contrastRatio(value.dark, '#000000') > contrastRatio(value.light, '#000000');
+  const colour = (name: string, key: 'dark' | 'light' | 'eye', fallback: string) => (
+    <label className="flex items-center gap-2 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+      {name}
+      <input type="color" value={value[key] || fallback} onChange={(e) => onChange({ [key]: e.target.value })} className="h-7 w-9 rounded cursor-pointer bg-transparent" />
+    </label>
+  );
   return (
     <div className="space-y-4">
-      <div>
-        <span className={label}>Wallet barcode type</span>
-        <div className="flex flex-wrap gap-2">
-          {QR_FORMATS.map(([f, name]) => (
-            <button key={f} type="button" onClick={() => setQrFormat(f)} className={chip(qrFormat === f)}>{name}</button>
-          ))}
+      <div className="flex items-start gap-4">
+        <QrLivePreview value={value} />
+        <div className="space-y-3 min-w-0">
+          <div>
+            <span className={label}>Shape</span>
+            <div className="flex flex-wrap gap-2">
+              {QR_SHAPES.map(([sh, name]) => (
+                <button key={sh} type="button" onClick={() => onChange({ shape: sh })} className={chip(value.shape === sh)}>{name}</button>
+              ))}
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-[11px] font-semibold text-slate-600 dark:text-slate-300 cursor-pointer">
+            <input type="checkbox" checked={value.logo} onChange={(e) => onChange({ logo: e.target.checked })} className="accent-sky-500" />
+            LEADS logo in the centre
+          </label>
         </div>
-        <p className="text-[10.5px] text-slate-500 mt-1">QR is the most reliable at the gate. Apple/Google decide the barcode&apos;s size.</p>
       </div>
+
       <div>
-        <span className={label}>Caption under the wallet barcode</span>
-        <div className="flex flex-wrap gap-2">
-          {([['serial', 'Pass ID'], ['name', 'Guest name'], ['none', 'None']] as const).map(([v, name]) => (
-            <button key={v} type="button" onClick={() => setQrAltText(v)} className={chip(qrAltText === v)}>{name}</button>
-          ))}
-        </div>
-      </div>
-      <div>
-        <span className={label}>QR colours (portal card &amp; emailed ticket)</span>
+        <span className={label}>Colours</span>
         <div className="flex flex-wrap items-center gap-2">
-          {QR_COLOR_PRESETS.map(([name, d, l]) => (
-            <button key={name} type="button" onClick={() => { setQrDark(d); setQrLight(l); }} className={`flex items-center gap-2 ${chip(qrDark.toLowerCase() === d.toLowerCase() && qrLight.toLowerCase() === l.toLowerCase())}`}>
+          {QR_COLOR_PRESETS.map(([name, d, l, e]) => (
+            <button key={name} type="button" onClick={() => onChange({ dark: d, light: l, eye: e })} className={`flex items-center gap-2 ${chip(value.dark.toLowerCase() === d.toLowerCase() && value.light.toLowerCase() === l.toLowerCase() && (value.eye || '').toLowerCase() === e.toLowerCase())}`}>
               <span className="h-3.5 w-3.5 rounded border border-black/20" style={{ background: `linear-gradient(135deg, ${d} 50%, ${l} 50%)` }} />
               {name}
             </button>
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-4 mt-2">
-          <label className="flex items-center gap-2 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-            Dots <input type="color" value={qrDark} onChange={(e) => setQrDark(e.target.value)} className="h-7 w-9 rounded cursor-pointer bg-transparent" />
-          </label>
-          <label className="flex items-center gap-2 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-            Background <input type="color" value={qrLight} onChange={(e) => setQrLight(e.target.value)} className="h-7 w-9 rounded cursor-pointer bg-transparent" />
-          </label>
+          {colour('Dots', 'dark', DEFAULT_QR_OPTIONS.dark)}
+          {colour('Background', 'light', DEFAULT_QR_OPTIONS.light)}
+          {colour('Corner eyes', 'eye', value.dark)}
+          {value.eye && <button type="button" onClick={() => onChange({ eye: '' })} className="text-[11px] font-bold text-accent hover:underline cursor-pointer">Eyes = dots</button>}
         </div>
         {(weak || inverted) && (
           <p className="text-[10.5px] text-amber-500 font-semibold mt-1.5">
             {inverted ? 'Light dots on a dark background may not scan on some phones — keep the dots darker than the background.' : 'Low contrast — some scanners may struggle. Pick darker dots or a lighter background.'}
           </p>
         )}
+      </div>
+
+      <div className="rounded-xl border border-slate-200 dark:border-white/10 p-3 space-y-2">
+        <label className="flex items-start gap-2 text-[11px] font-bold text-slate-700 dark:text-slate-200 cursor-pointer">
+          <input type="checkbox" checked={value.inWallet} onChange={(e) => onChange({ inWallet: e.target.checked })} className="accent-sky-500 mt-0.5" />
+          <span>
+            Use this styled QR inside the Apple / Google Wallet pass
+            <span className="block font-medium text-slate-500 dark:text-slate-400 mt-0.5">
+              The QR is drawn into the pass artwork instead of Apple&apos;s native black-on-white barcode. Scanning still works, but the wallet no longer auto-brightens the screen for the barcode or treats it as a native barcode.
+            </span>
+          </span>
+        </label>
+        {!value.inWallet && (
+          <div className="space-y-3 pt-1">
+            <div>
+              <span className={label}>Wallet barcode type</span>
+              <div className="flex flex-wrap gap-2">
+                {QR_FORMATS.map(([f, name]) => (
+                  <button key={f} type="button" onClick={() => onChange({ format: f })} className={chip(value.format === f)}>{name}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+        <div>
+          <span className={label}>Caption under the wallet QR</span>
+          <div className="flex flex-wrap gap-2">
+            {([['serial', 'Pass ID'], ['name', 'Guest name'], ['none', 'None']] as const).map(([v, name]) => (
+              <button key={v} type="button" onClick={() => onChange({ altText: v })} className={chip(value.altText === v)}>{name}</button>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
