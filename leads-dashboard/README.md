@@ -122,6 +122,9 @@ pm2 restart leads-dashboard
 - **Interactive Form Builder**: Custom form engine for student signups, feedback collection, and event registrations.
 - **Instant QR Code & Poster Download**: Generates high-res printable poster PNG cards with branding header and scannable QR code.
 - **Official Word (DOCX) Export**: Built-in Feedback Form template generates field-for-field filled copies matching `Feedback_Events.docx`.
+- **Paged Submissions**: the received-responses table shows 10 / 15 / 20 rows per page with page navigation and a "Showing a–b of N" counter (same pattern as the Members directory); CSV export still includes everything.
+- **Manage Templates**: every template, including the built-in Event Registration and Feedback templates, can be edited and deleted. Edited built-ins are badged "Edited" with a Reset button; deleted built-ins are listed under "Deleted built-in templates" with a Restore button.
+- **Default Values**: any question can have a default answer (typed, a chosen option, ticked choices, a scale value, or a ticked checkbox). Short-text questions can instead be filled from the **linked event's name, date or venue**, which stays current if the event is renamed or rescheduled. Respondents can still change the pre-filled answer.
 
 #### 13. Analytics & Reports (`/dashboard/reports`)
 - **Executive Report Generator**: Styled PDF report generation and CSV data exports for scorecards, event post-mortems, and financial audits.

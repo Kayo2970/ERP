@@ -15,20 +15,18 @@ export async function PATCH(
     if (!canBuildForms(actor, settings)) throw new ForbiddenError();
     const { id } = await params;
 
-    // Built-in templates are code-managed (see initialFormTemplates in
-    // local-data.ts) — server-db.ts's ensureFeedbackFormTemplateSeeded
-    // re-syncs the Feedback Form Template from code on every boot, so a
-    // saved edit to a built-in id would appear to work and then silently
-    // revert. Refuse it here rather than let that happen quietly.
-    if (initialFormTemplates.some(t => t.id === id)) {
-      return NextResponse.json({ error: 'Built-in templates cannot be edited.' }, { status: 400 });
-    }
-
     const body = await request.json();
+    // Built-in templates can be edited (saved as a `customized` copy) or deleted (a `deleted` marker row, so
+    // server-db.ts's boot-time re-seed of a missing built-in doesn't bring it back). Upsert for built-in ids.
+    const builtIn = initialFormTemplates.find(t => t.id === id);
     let found = false;
     const updated = await mutateCollection('formTemplates', (current) => {
       const idx = current.findIndex((t: any) => t.id === id);
-      if (idx === -1) return current;
+      if (idx === -1) {
+        if (!builtIn) return current;
+        found = true;
+        return [{ ...builtIn, ...body, id }, ...current];
+      }
       found = true;
       const next = [...current];
       next[idx] = { ...next[idx], ...body, id };

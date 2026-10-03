@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { FormFieldEditor } from '@/components/form-field-editor';
 import {
   Plus,
   Trash2,
@@ -25,7 +26,9 @@ import {
   Save,
   TrendingUp,
   Users,
-  QrCode
+  QrCode,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { FormQrModal } from '@/components/form-qr-modal';
 import {
@@ -55,6 +58,9 @@ import {
   addFormTemplate,
   updateFormTemplate,
   deleteFormTemplate,
+  restoreBuiltInTemplate,
+  getDeletedBuiltInTemplates,
+  isBuiltInTemplate,
   getEvents,
   getTasks,
   isApprovedEvent,
@@ -190,6 +196,7 @@ export default function FormsBuilderPage() {
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [templateEditName, setTemplateEditName] = useState('');
   const [templateEditFields, setTemplateEditFields] = useState<FormField[]>([]);
+  const [templateEditDescription, setTemplateEditDescription] = useState('');
 
   // Manage Templates modal — a direct entry point to edit/delete a custom
   // template without first having to start building a new form and select
@@ -211,6 +218,9 @@ export default function FormsBuilderPage() {
   // Selected Form for submissions view
   const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'charts'>('table');
+  // Received Submissions table paging (same Rows-per-page pattern as the Members directory)
+  const [subPageSize, setSubPageSize] = useState(10);
+  const [subPage, setSubPage] = useState(1);
 
   // Notification States
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
@@ -350,9 +360,17 @@ export default function FormsBuilderPage() {
   };
 
   const handleDeleteTemplate = (templateId: string) => {
+    const t = templates.find((x) => x.id === templateId);
+    if (!window.confirm(`Delete the template "${t?.name || ''}"? Forms already created from it are not affected.${isBuiltInTemplate(templateId) ? ' You can restore this built-in template later from Manage Templates.' : ''}`)) return;
     deleteFormTemplate(templateId, user?.name || 'User');
     setTemplates(getFormTemplates());
     if (selectedTemplateId === templateId) setSelectedTemplateId('');
+  };
+
+  const handleRestoreTemplate = (templateId: string) => {
+    restoreBuiltInTemplate(templateId, user?.name || 'User');
+    setTemplates(getFormTemplates());
+    triggerNotification('Built-in template restored to its original version.');
   };
 
   const handleOpenEditTemplate = (templateId: string) => {
@@ -361,12 +379,13 @@ export default function FormsBuilderPage() {
     setEditingTemplateId(templateId);
     setTemplateEditName(template.name);
     setTemplateEditFields(template.fields.map(f => ({ ...f })));
+    setTemplateEditDescription(template.description || '');
   };
 
   const handleSaveTemplateEdit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTemplateId || !templateEditName.trim() || templateEditFields.length === 0) return;
-    updateFormTemplate(editingTemplateId, { name: templateEditName.trim(), fields: templateEditFields }, user?.name || 'User');
+    updateFormTemplate(editingTemplateId, { name: templateEditName.trim(), description: templateEditDescription.trim() || undefined, fields: templateEditFields }, user?.name || 'User');
     setTemplates(getFormTemplates());
     setEditingTemplateId(null);
     triggerNotification('Template updated.');
@@ -591,6 +610,10 @@ export default function FormsBuilderPage() {
 
   const selectedForm = displayedForms.find(f => f.id === selectedFormId) || displayedForms[0];
   const selectedSubmissions = selectedForm ? submissions.filter(s => s.formId === selectedForm.id || s.slug === selectedForm.slug) : [];
+  const subTotalPages = Math.max(1, Math.ceil(selectedSubmissions.length / subPageSize));
+  const subCurrentPage = Math.min(subPage, subTotalPages);
+  const subStart = (subCurrentPage - 1) * subPageSize;
+  const pagedSubmissions = selectedSubmissions.slice(subStart, subStart + subPageSize);
 
   return (
     <div className="p-6 md:p-8 space-y-6">
@@ -708,7 +731,7 @@ export default function FormsBuilderPage() {
                 return (
                   <div
                     key={form.id}
-                    onClick={() => setSelectedFormId(form.id)}
+                    onClick={() => { setSelectedFormId(form.id); setSubPage(1); }}
                     className={`p-4 rounded-xl border transition-all cursor-pointer space-y-2.5 text-xs ${
                       isSelected
                         ? 'bg-accent/10 border-accent/40 shadow-sm'
@@ -955,7 +978,7 @@ export default function FormsBuilderPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-theme-border/20">
-                          {selectedSubmissions.map(sub => (
+                          {pagedSubmissions.map(sub => (
                             <tr key={sub.id} className="hover:bg-theme-border/10 transition-all text-xs">
                               <td className="py-3 pr-2 text-theme-text-secondary whitespace-nowrap">
                                 <span className="flex items-center gap-1">
@@ -987,6 +1010,34 @@ export default function FormsBuilderPage() {
                           ))}
                         </tbody>
                       </table>
+                      <div className="flex flex-wrap items-center justify-between gap-3 pt-3 mt-1 border-t border-theme-border/20 text-xs text-theme-text-secondary">
+                        <div className="flex items-center gap-2">
+                          <span>Rows per page:</span>
+                          <select
+                            value={subPageSize}
+                            onChange={(e) => { setSubPageSize(Number(e.target.value)); setSubPage(1); }}
+                            className="px-2 py-1 bg-theme-background/40 border border-theme-border/40 rounded-lg text-xs text-theme-text-primary focus:outline-none"
+                          >
+                            <option value={10}>10</option>
+                            <option value={15}>15</option>
+                            <option value={20}>20</option>
+                          </select>
+                          <span>
+                            Showing <strong>{subStart + 1}–{Math.min(subStart + subPageSize, selectedSubmissions.length)}</strong> of <strong>{selectedSubmissions.length}</strong>
+                          </span>
+                        </div>
+                        {subTotalPages > 1 && (
+                          <div className="flex items-center gap-2">
+                            <span>Page <strong>{subCurrentPage}</strong> of <strong>{subTotalPages}</strong></span>
+                            <button type="button" onClick={() => setSubPage(Math.max(1, subCurrentPage - 1))} disabled={subCurrentPage === 1} className="p-1.5 rounded-lg border border-theme-border/30 hover:bg-theme-border/30 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-theme-text-primary" aria-label="Previous page">
+                              <ChevronLeft className="h-4 w-4" />
+                            </button>
+                            <button type="button" onClick={() => setSubPage(Math.min(subTotalPages, subCurrentPage + 1))} disabled={subCurrentPage === subTotalPages} className="p-1.5 rounded-lg border border-theme-border/30 hover:bg-theme-border/30 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-theme-text-primary" aria-label="Next page">
+                              <ChevronRight className="h-4 w-4" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     (() => {
@@ -1286,71 +1337,14 @@ export default function FormsBuilderPage() {
 
                 <div className="space-y-2.5">
                   {fields.map((field, idx) => (
-                    <div key={field.id} className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2">
-                      <div className="flex items-center gap-3">
-                        <div className="flex-1 space-y-1">
-                          <input
-                            type="text"
-                            required
-                            value={field.label}
-                            onChange={(e) => updateField(idx, 'label', e.target.value)}
-                            placeholder="Question Label"
-                            className="w-full px-3 py-1.5 bg-theme-background/40 border border-theme-border/30 rounded-lg text-theme-text-primary text-xs"
-                          />
-                        </div>
-
-                        <div className="w-36">
-                          <select
-                            value={field.type}
-                            onChange={(e) => updateField(idx, 'type', e.target.value)}
-                            className="w-full px-2 py-1.5 bg-theme-background/40 border border-theme-border/30 rounded-lg text-theme-text-primary text-xs"
-                          >
-                            <option value="text">Short Text</option>
-                            <option value="email">Email</option>
-                            <option value="number">Number</option>
-                            <option value="textarea">Paragraph</option>
-                            <option value="scale">Scale (1-5)</option>
-                            <option value="select">Single Choice</option>
-                            <option value="multiselect">Multiple Choice</option>
-                          </select>
-                        </div>
-
-                        <label className="flex items-center gap-1 text-[11px] text-theme-text-secondary cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={field.required}
-                            onChange={(e) => updateField(idx, 'required', e.target.checked)}
-                            className="accent-accent"
-                          />
-                          Required
-                        </label>
-
-                        <button
-                          type="button"
-                          onClick={() => removeField(idx)}
-                          disabled={fields.length <= 1}
-                          className="p-1.5 hover:bg-danger/10 rounded-lg text-danger transition-all cursor-pointer disabled:opacity-30"
-                          title="Remove Question"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-
-                      {(field.type === 'select' || field.type === 'multiselect') && (
-                        <div className="pl-0.5 space-y-1">
-                          <label className="block text-[10px] font-medium text-theme-text-secondary">
-                            {field.type === 'multiselect' ? 'Choices (respondent can pick one or more)' : 'Choices (respondent picks exactly one)'}
-                          </label>
-                          <input
-                            type="text"
-                            value={(field.options || []).join(', ')}
-                            onChange={(e) => updateField(idx, 'options', e.target.value.split(',').map(o => o.trim()).filter(Boolean))}
-                            placeholder="e.g. Workshop, Guest Lecture, Seminar/Conference"
-                            className="w-full px-3 py-1.5 bg-theme-background/40 border border-theme-border/30 rounded-lg text-theme-text-primary text-xs"
-                          />
-                        </div>
-                      )}
-                    </div>
+                    <FormFieldEditor
+                      key={field.id}
+                      field={field}
+                      onChange={(key, value) => updateField(idx, key, value)}
+                      onRemove={() => removeField(idx)}
+                      canRemove={fields.length > 1}
+                      eventLinked={Boolean(eventId)}
+                    />
                   ))}
                 </div>
               </div>
@@ -1425,8 +1419,34 @@ export default function FormsBuilderPage() {
             </div>
 
             {(() => {
-              const customTemplates = templates.filter(t => !initialFormTemplates.some(it => it.id === t.id));
-              const builtInTemplates = templates.filter(t => initialFormTemplates.some(it => it.id === t.id));
+              const customTemplates = templates.filter(t => !isBuiltInTemplate(t.id));
+              const builtInTemplates = templates.filter(t => isBuiltInTemplate(t.id));
+              const deletedBuiltIns = getDeletedBuiltInTemplates();
+              const row = (t: FormTemplateItem, builtIn: boolean) => (
+                <div key={t.id} className="flex items-center justify-between gap-2 p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl">
+                  <div className="min-w-0">
+                    <p className="font-bold text-theme-text-primary flex items-center gap-1.5 flex-wrap">
+                      {t.name}
+                      {builtIn && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-accent/15 text-accent">Built-in</span>}
+                      {builtIn && t.customized && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400">Edited</span>}
+                    </p>
+                    <p className="text-[10px] text-theme-text-secondary">{t.fields.length} field{t.fields.length === 1 ? '' : 's'}</p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {builtIn && t.customized && (
+                      <button type="button" onClick={() => handleRestoreTemplate(t.id)} className="px-2 py-1.5 hover:bg-theme-border/30 rounded-lg text-theme-text-secondary text-[10px] font-semibold transition-all cursor-pointer" title="Discard your edits and go back to the original">
+                        Reset
+                      </button>
+                    )}
+                    <button type="button" onClick={() => { setIsManageTemplatesOpen(false); handleOpenEditTemplate(t.id); }} className="p-2 hover:bg-accent/10 rounded-lg text-accent transition-all cursor-pointer" title="Edit Template">
+                      <Edit2 className="h-3.5 w-3.5" />
+                    </button>
+                    <button type="button" onClick={() => handleDeleteTemplate(t.id)} className="p-2 hover:bg-danger/10 rounded-lg text-danger transition-all cursor-pointer" title="Delete Template">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              );
               return (
                 <div className="space-y-4 text-xs">
                   <div className="space-y-2">
@@ -1438,52 +1458,37 @@ export default function FormsBuilderPage() {
                         No custom templates yet — build a form, then use &quot;Save as Template&quot; to create one.
                       </div>
                     ) : (
-                      <div className="space-y-2">
-                        {customTemplates.map(t => (
-                          <div key={t.id} className="flex items-center justify-between gap-2 p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl">
-                            <div>
-                              <p className="font-bold text-theme-text-primary">{t.name}</p>
-                              <p className="text-[10px] text-theme-text-secondary">{t.fields.length} field{t.fields.length === 1 ? '' : 's'}</p>
-                            </div>
-                            <div className="flex items-center gap-1 shrink-0">
-                              <button
-                                type="button"
-                                onClick={() => { setIsManageTemplatesOpen(false); handleOpenEditTemplate(t.id); }}
-                                className="p-2 hover:bg-accent/10 rounded-lg text-accent transition-all cursor-pointer"
-                                title="Edit Template"
-                              >
-                                <Edit2 className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteTemplate(t.id)}
-                                className="p-2 hover:bg-danger/10 rounded-lg text-danger transition-all cursor-pointer"
-                                title="Delete Template"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                      <div className="space-y-2">{customTemplates.map(t => row(t, false))}</div>
                     )}
                   </div>
 
-                  {builtInTemplates.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="font-semibold text-theme-text-secondary uppercase tracking-wider text-[10px]">
-                        Built-in Templates ({builtInTemplates.length})
+                  <div className="space-y-2">
+                    <p className="font-semibold text-theme-text-secondary uppercase tracking-wider text-[10px]">
+                      Built-in Templates ({builtInTemplates.length})
+                    </p>
+                    {builtInTemplates.length === 0 ? (
+                      <div className="text-center py-4 text-theme-text-secondary bg-theme-border/5 rounded-xl border border-theme-border/20">All built-in templates are deleted.</div>
+                    ) : (
+                      <div className="space-y-2">{builtInTemplates.map(t => row(t, true))}</div>
+                    )}
+                    {builtInTemplates.some(t => t.id === FEEDBACK_FORM_TEMPLATE_ID) && (
+                      <p className="text-[10px] text-amber-400/90">
+                        Tip: the Feedback Form&apos;s downloadable Word copy is built from its original questions — if you remove or rename those, the matching spots in the Word file are left blank.
                       </p>
-                      <div className="space-y-2">
-                        {builtInTemplates.map(t => (
-                          <div key={t.id} className="flex items-center justify-between gap-2 p-3 bg-theme-border/5 border border-theme-border/10 rounded-xl opacity-75">
-                            <div>
-                              <p className="font-bold text-theme-text-primary">{t.name}</p>
-                              <p className="text-[10px] text-theme-text-secondary">{t.fields.length} field{t.fields.length === 1 ? '' : 's'} &middot; managed by the app, not editable</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                    )}
+                  </div>
+
+                  {deletedBuiltIns.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="font-semibold text-theme-text-secondary uppercase tracking-wider text-[10px]">Deleted built-in templates</p>
+                      {deletedBuiltIns.map(t => (
+                        <div key={t.id} className="flex items-center justify-between gap-2 p-3 bg-theme-border/5 border border-dashed border-theme-border/30 rounded-xl">
+                          <p className="font-semibold text-theme-text-secondary">{t.name}</p>
+                          <button type="button" onClick={() => handleRestoreTemplate(t.id)} className="px-3 py-1.5 bg-accent/15 hover:bg-accent/25 text-accent rounded-lg text-[11px] font-bold cursor-pointer">
+                            Restore
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -1493,11 +1498,11 @@ export default function FormsBuilderPage() {
         </div>
       )}
 
-      {/* Edit Template Modal — custom templates only; built-in ones (Feedback
-          Form Template etc.) are code-managed and not editable here. */}
+      {/* Edit Template Modal — custom templates are updated in place; built-in ones are saved as an edited copy
+          (Manage Templates shows an Edited badge and a Reset button). */}
       {editingTemplateId && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="glass-panel w-full max-w-xl max-h-[85vh] overflow-y-auto rounded-3xl p-6 flex flex-col space-y-4 relative border border-white/15 shadow-2xl">
+          <div className="glass-panel w-full max-w-2xl max-h-[88vh] overflow-y-auto rounded-3xl p-6 flex flex-col space-y-4 relative border border-white/15 shadow-2xl">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-bold text-theme-text-primary flex items-center gap-1.5">
                 <Edit2 className="h-4 w-4" />
@@ -1520,6 +1525,13 @@ export default function FormsBuilderPage() {
                 placeholder="Template name"
                 className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
               />
+              <textarea
+                rows={2}
+                value={templateEditDescription}
+                onChange={(e) => setTemplateEditDescription(e.target.value)}
+                placeholder="Short description (optional)"
+                className="w-full px-4 py-2 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+              />
 
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
@@ -1535,72 +1547,15 @@ export default function FormsBuilderPage() {
                 </div>
 
                 {templateEditFields.map((field, idx) => (
-                  <div key={field.id} className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2">
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 space-y-1">
-                        <input
-                          type="text"
-                          required
-                          value={field.label}
-                          onChange={(e) => updateEditTemplateField(idx, 'label', e.target.value)}
-                          placeholder="Question Label"
-                          className="w-full px-3 py-1.5 bg-theme-background/40 border border-theme-border/30 rounded-lg text-theme-text-primary text-xs"
-                        />
-                      </div>
-
-                      <div className="w-36">
-                        <select
-                          value={field.type}
-                          onChange={(e) => updateEditTemplateField(idx, 'type', e.target.value)}
-                          className="w-full px-2 py-1.5 bg-theme-background/40 border border-theme-border/30 rounded-lg text-theme-text-primary text-xs"
-                        >
-                          <option value="text">Short Text</option>
-                          <option value="email">Email</option>
-                          <option value="number">Number</option>
-                          <option value="textarea">Paragraph</option>
-                          <option value="scale">Scale (1-5)</option>
-                          <option value="select">Single Choice</option>
-                          <option value="multiselect">Multiple Choice</option>
-                          <option value="checkbox">Checkbox (Yes toggle)</option>
-                        </select>
-                      </div>
-
-                      <label className="flex items-center gap-1 text-[11px] text-theme-text-secondary cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={field.required}
-                          onChange={(e) => updateEditTemplateField(idx, 'required', e.target.checked)}
-                          className="accent-accent"
-                        />
-                        Required
-                      </label>
-
-                      <button
-                        type="button"
-                        onClick={() => removeEditTemplateField(idx)}
-                        disabled={templateEditFields.length <= 1}
-                        className="p-1.5 hover:bg-danger/10 rounded-lg text-danger transition-all cursor-pointer disabled:opacity-30"
-                        title="Remove Question"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-
-                    {(field.type === 'select' || field.type === 'multiselect') && (
-                      <div className="pl-0.5 space-y-1">
-                        <label className="block text-[10px] font-medium text-theme-text-secondary">
-                          {field.type === 'multiselect' ? 'Choices (respondent can pick one or more)' : 'Choices (respondent picks exactly one)'}
-                        </label>
-                        <input
-                          type="text"
-                          value={(field.options || []).join(', ')}
-                          onChange={(e) => updateEditTemplateField(idx, 'options', e.target.value.split(',').map(o => o.trim()).filter(Boolean))}
-                          placeholder="e.g. Workshop, Guest Lecture, Seminar/Conference"
-                          className="w-full px-3 py-1.5 bg-theme-background/40 border border-theme-border/30 rounded-lg text-theme-text-primary text-xs"
-                        />
-                      </div>
-                    )}
-                  </div>
+                  <FormFieldEditor
+                    key={field.id}
+                    field={field}
+                    onChange={(key, value) => updateEditTemplateField(idx, key, value)}
+                    onRemove={() => removeEditTemplateField(idx)}
+                    canRemove={templateEditFields.length > 1}
+                    allowCheckbox
+                    eventLinked
+                  />
                 ))}
               </div>
 
