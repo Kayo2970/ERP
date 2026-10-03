@@ -45,7 +45,8 @@ export function EventPassEmailModal({
   const [template, setTemplate] = usePassEmailTemplate(isOpen);
 
   const [selectedPassIds, setSelectedPassIds] = useState<string[]>([]);
-  const [previewPassIndex, setPreviewPassIndex] = useState(0);
+  // Preview follows a pass id (not an index) so list refreshes never jump to another person
+  const [previewPassId, setPreviewPassId] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [successToast, setSuccessToast] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
@@ -56,11 +57,19 @@ export function EventPassEmailModal({
     return Boolean(p.attendeeEmail);
   });
 
-  // Auto select all eligible on open / filter change
+  // Nobody is pre-selected: recipients are chosen on purpose. Reset only when the dialog opens or the event
+  // filter changes — never because the passes list was refreshed in the background.
   React.useEffect(() => {
-    setSelectedPassIds(eventPasses.map((p) => p.id));
-    setPreviewPassIndex(0);
-  }, [activeEventId, passes]);
+    setSelectedPassIds([]);
+    setPreviewPassId(null);
+  }, [isOpen, activeEventId]);
+
+  // A background refresh can only drop selections whose pass vanished; it never adds or re-selects anyone
+  const eligibleKey = eventPasses.map((p) => p.id).join('|');
+  React.useEffect(() => {
+    const ids = new Set(eventPasses.map((p) => p.id));
+    setSelectedPassIds((prev) => (prev.every((id) => ids.has(id)) ? prev : prev.filter((id) => ids.has(id))));
+  }, [eligibleKey]);
 
   const toggleSelectAll = () => {
     if (selectedPassIds.length === eventPasses.length) {
@@ -79,7 +88,7 @@ export function EventPassEmailModal({
   };
 
   // Compute the designed email preview for the highlighted recipient
-  const previewPass = eventPasses[previewPassIndex] || eventPasses[0];
+  const previewPass = eventPasses.find((p) => p.id === previewPassId) || eventPasses[0];
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://portal-leads.msruas.ac.in';
   const previewEmail = previewPass
     ? buildPassEmail(previewPass, origin, { forPreview: true, subjectTemplate: template.subject, bodyTemplate: template.body })
@@ -91,6 +100,8 @@ export function EventPassEmailModal({
       setErrorMessage('No recipients selected with a valid email address.');
       return;
     }
+
+    if (!window.confirm(`Send ${targets.length} email${targets.length === 1 ? '' : 's'}?\n\n${targets.slice(0, 8).map((t) => `• ${t.attendeeName} <${t.attendeeEmail}>`).join('\n')}${targets.length > 8 ? `\n…and ${targets.length - 8} more` : ''}`)) return;
 
     setIsSending(true);
     setErrorMessage('');
@@ -225,7 +236,7 @@ export function EventPassEmailModal({
                     No issued passes with email addresses found.
                   </div>
                 ) : (
-                  eventPasses.map((pass, idx) => {
+                  eventPasses.map((pass) => {
                     const isChecked = selectedPassIds.includes(pass.id);
                     return (
                       <div
@@ -252,10 +263,10 @@ export function EventPassEmailModal({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setPreviewPassIndex(idx);
+                            setPreviewPassId(pass.id);
                           }}
                           className={`text-[10px] px-2 py-0.5 rounded-md font-bold transition-all ${
-                            previewPassIndex === idx
+                            previewPass?.id === pass.id
                               ? 'bg-accent text-white'
                               : 'text-slate-400 hover:text-white'
                           }`}
