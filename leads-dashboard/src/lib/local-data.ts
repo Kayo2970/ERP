@@ -400,6 +400,8 @@ export function isPassValidOn(pass: EventPassItem, isoDay: string): boolean {
 export interface PassTheme {
   backgroundUrl?: string;   // /api/files/... full-bleed poster artwork
   backgroundKey?: string;   // storageKey of the above
+  walletBackgroundUrl?: string; // 690x1010 portrait crop of the artwork, fetched by WalletWallet (public URL)
+  walletBackgroundKey?: string;
   logoUrl?: string;
   logoKey?: string;
   backgroundColor?: string; // fallback / tint colour behind the artwork (hex)

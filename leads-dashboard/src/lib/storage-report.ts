@@ -88,6 +88,7 @@ export async function buildStorageReport(): Promise<StorageReport> {
     try {
       const theme = JSON.parse(await fs.readFile(path.join(UPLOADS_DIR, f.key), 'utf8'));
       if (theme.backgroundKey) referenced.add(theme.backgroundKey);
+      if (theme.walletBackgroundKey) referenced.add(theme.walletBackgroundKey);
       if (theme.logoKey) referenced.add(theme.logoKey);
     } catch {
       /* unreadable theme file — leave its artwork unreferenced */

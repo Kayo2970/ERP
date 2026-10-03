@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Info, RotateCw } from 'lucide-react';
 import styles from './apple-wallet-pass.module.css';
+import { AppleWalletPosterPreview } from './apple-wallet-poster-preview';
 import type { PassTheme } from '@/lib/local-data';
 import { passThemeStyle } from '@/lib/pass-theme-style';
 
@@ -22,6 +23,9 @@ export interface AppleWalletPassPreviewProps {
   logoUrl?: string;
   passColor?: string;
   theme?: PassTheme;
+  /** 'poster' = iOS 27 layout used when the event has background artwork; 'classic' = older iOS. */
+  layout?: 'poster' | 'classic';
+  validDaysCount?: number;
 }
 
 export function AppleWalletPassPreview({
@@ -38,6 +42,8 @@ export function AppleWalletPassPreview({
   logoUrl = '/card/leads-logo.png',
   passColor = '#0f1a2e',
   theme,
+  layout = 'poster',
+  validDaysCount = 0,
 }: AppleWalletPassPreviewProps) {
   const [isFlipped, setIsFlipped] = useState(false);
 
@@ -47,6 +53,27 @@ export function AppleWalletPassPreview({
   const baseBackground = passColor ? `linear-gradient(180deg, ${passColor} 0%, #060c18 100%)` : undefined;
   const frontStyle: React.CSSProperties = passThemeStyle(theme, baseBackground) || {};
   const backStyle: React.CSSProperties = passThemeStyle(theme, baseBackground) || {};
+
+  if (layout === 'poster' && theme?.walletBackgroundUrl) {
+    return (
+      <div className={styles.walletContainer} style={{ height: 'auto' }}>
+        <AppleWalletPosterPreview
+          attendeeName={attendeeName}
+          guestCategory={guestCategory}
+          passType={passType}
+          roomOrVenue={roomOrVenue}
+          eventName={eventName}
+          validity={displayValidity || ''}
+          serialNumber={displaySerial}
+          validDaysCount={validDaysCount}
+          logoText={logoText}
+          logoUrl={theme.logoUrl || logoUrl}
+          backgroundUrl={theme.walletBackgroundUrl}
+          baseColor={theme.backgroundColor || passColor}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className={styles.walletContainer}>

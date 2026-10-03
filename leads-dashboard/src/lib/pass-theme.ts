@@ -44,6 +44,25 @@ export async function toJpegDataUrl(dataUrl: string, maxSide: number, maxBytes =
   return dataUrl;
 }
 
+/** Portrait 690×1010 cover crop (Apple poster / WalletWallet backgroundURL spec), JPEG ≤ ~900 KB. */
+async function toWalletPortraitJpeg(dataUrl: string): Promise<string> {
+  const base64 = dataUrl.split(',')[1] || '';
+  const img = await loadImage(Buffer.from(base64, 'base64'));
+  const W = 690, H = 1010;
+  const scale = Math.max(W / img.width, H / img.height);
+  const dw = img.width * scale, dh = img.height * scale;
+  const canvas = createCanvas(W, H);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+  ctx.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  for (const quality of [88, 78, 68, 55, 42]) {
+    const buf = canvas.toBuffer('image/jpeg', quality);
+    if (buf.length <= 900_000 || quality === 42) return `data:image/jpeg;base64,${buf.toString('base64')}`;
+  }
+  return dataUrl;
+}
+
 async function toPngDataUrl(dataUrl: string, maxSide: number): Promise<string> {
   const base64 = dataUrl.split(',')[1] || '';
   const img = await loadImage(Buffer.from(base64, 'base64'));
@@ -80,12 +99,23 @@ export async function updatePassTheme(eventId: string, update: PassThemeUpdate):
     await deleteStoredFile(theme.backgroundKey);
     delete theme.backgroundKey;
     delete theme.backgroundUrl;
+    if (theme.walletBackgroundKey) await deleteStoredFile(theme.walletBackgroundKey);
+    delete theme.walletBackgroundKey;
+    delete theme.walletBackgroundUrl;
   } else if (update.background) {
-    const jpeg = await toJpegDataUrl(update.background.dataUrl, 1600);
+    // Two renditions of one upload: landscape (portal + emailed boarding pass) and portrait (Wallet poster).
+    // The filename carries a timestamp so every re-upload gets a NEW public URL — WalletWallet caches by URL.
+    const stamp = Date.now();
+    const landscape = await toJpegDataUrl(update.background.dataUrl, 1600);
+    const portrait = await toWalletPortraitJpeg(update.background.dataUrl);
     if (theme.backgroundKey) await deleteStoredFile(theme.backgroundKey);
-    const stored = await saveBase64File(CATEGORY, eventId, 0, `background-${Date.now()}.jpg`, jpeg);
+    if (theme.walletBackgroundKey) await deleteStoredFile(theme.walletBackgroundKey);
+    const stored = await saveBase64File(CATEGORY, eventId, 0, `background-${stamp}.jpg`, landscape);
+    const wallet = await saveBase64File(CATEGORY, eventId, 2, `wallet-${stamp}.jpg`, portrait);
     theme.backgroundKey = stored.storageKey;
     theme.backgroundUrl = stored.url;
+    theme.walletBackgroundKey = wallet.storageKey;
+    theme.walletBackgroundUrl = wallet.url;
   }
 
   if (update.logo === null && theme.logoKey) {
@@ -104,29 +134,12 @@ export async function updatePassTheme(eventId: string, update: PassThemeUpdate):
   return theme;
 }
 
-/** Stored theme image as a data URL (what WalletWallet accepts), downsized to fit its 1MB cap. */
-export async function themeImageDataUrl(key?: string, kind: 'background' | 'logo' = 'background'): Promise<string | undefined> {
-  if (!key) return undefined;
-  try {
-    const buf = await readStoredFile(key);
-    const mime = kind === 'logo' ? 'image/png' : 'image/jpeg';
-    const raw = `data:${mime};base64,${buf.toString('base64')}`;
-    return buf.length > 900_000 ? await toJpegDataUrl(raw, 1400) : raw;
-  } catch {
-    return undefined;
-  }
-}
-
 import type { EventPassItem } from '@/lib/local-data';
 import type { WalletEventPassData } from '@/lib/wallet/walletwallet-client';
 
 /** Everything the Wallet API needs for one pass, including the event's themed artwork + colours. */
 export async function walletDataForPass(pass: EventPassItem): Promise<WalletEventPassData> {
   const theme = await getPassTheme(pass.eventId);
-  const [themeBackgroundDataUrl, themeLogoDataUrl] = await Promise.all([
-    themeImageDataUrl(theme.backgroundKey, 'background'),
-    themeImageDataUrl(theme.logoKey, 'logo'),
-  ]);
   return {
     serialNumber: pass.serialNumber,
     walletSerial: pass.walletSerialNumber,
@@ -141,7 +154,8 @@ export async function walletDataForPass(pass: EventPassItem): Promise<WalletEven
     validDays: pass.validDays,
     passColor: pass.passColor,
     themeColor: theme.backgroundColor,
-    themeBackgroundDataUrl,
-    themeLogoDataUrl,
+    // Public URLs (not data URIs): WalletWallet fetches + re-hosts them once, like the LEADS logo
+    themeBackgroundUrl: theme.walletBackgroundUrl,
+    themeLogoUrl: theme.logoUrl,
   };
 }

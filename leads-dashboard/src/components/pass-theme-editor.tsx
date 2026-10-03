@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ImagePlus, Trash2, Save, Palette } from 'lucide-react';
 import { DEFAULT_PASS_THEME, PassTheme, authHeaders } from '@/lib/local-data';
 import { passThemeStyle } from '@/lib/pass-theme-style';
+import { AppleWalletPosterPreview } from './apple-wallet-poster-preview';
 
 interface Props {
   eventId: string;
@@ -109,7 +110,9 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
       setPendingLogo(undefined);
       onThemeChange?.(data);
       setMessage(
-        data.walletUpdated
+        data.walletErrors?.length
+          ? `Saved, but WalletWallet rejected the update: ${data.walletErrors[0]} (background/logo need a Pro key and a publicly reachable portal URL).`
+          : data.walletUpdated
           ? `Saved. ${data.walletUpdated} wallet pass(es) updated live.`
           : 'Saved. New passes, emails and wallet cards will use this look.'
       );
@@ -146,7 +149,36 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
         <Palette className="h-3.5 w-3.5 text-accent" /> Pass look for “{eventName}”
       </div>
 
-      {/* Live boarding-pass preview */}
+      {/* Wallet preview: exactly what iOS 27 draws from the portrait 690×1010 crop WalletWallet receives */}
+      <div className="flex flex-col sm:flex-row gap-4 items-start">
+        <div className="shrink-0">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Apple / Google Wallet (iOS 27 poster)</div>
+          <div style={{ zoom: 0.8 }}>
+            <AppleWalletPosterPreview
+              attendeeName="Attendee Name"
+              guestCategory="VIP Dignitary"
+              passType="VIP Pass"
+              roomOrVenue="Main Auditorium"
+              eventName={eventName}
+              validity="10 Oct – 12 Oct 2026"
+              serialNumber="LEADS-EVT-2026-XXXXXX"
+              validDaysCount={3}
+              logoUrl={merged.logoUrl || '/card/leads-logo.png'}
+              backgroundUrl={pendingBg || draft.walletBackgroundUrl}
+              baseColor={val.bg}
+            />
+          </div>
+        </div>
+        <ul className="text-[10.5px] text-slate-500 space-y-1.5 list-disc pl-4 pt-5">
+          <li>Artwork is cropped to <strong>portrait 690×1010</strong> (centre crop) — keep faces/logos in the middle.</li>
+          <li>Apple dims the image and prints <strong>white text</strong> over it: top = logo, middle = details, bottom = QR. Avoid busy detail there.</li>
+          <li>Older iPhones / Android show the classic card with your base colour; the artwork shows on iOS 27+.</li>
+          <li>The image is sent to WalletWallet as a public URL on this portal and re-hosted by them once; re-uploading creates a new URL and updates installed passes.</li>
+        </ul>
+      </div>
+
+      {/* Live boarding-pass preview (email + portal ticket) */}
+      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 -mb-1">Emailed boarding pass &amp; portal card</div>
       <div
         className="relative rounded-2xl overflow-hidden border border-white/10 shadow-lg"
         style={{ ...passThemeStyle(merged, `linear-gradient(145deg, ${val.bg} 0%, #030712 100%)`), aspectRatio: '1200 / 460' }}
@@ -230,7 +262,7 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
         <Save className="h-3.5 w-3.5" /> {saving ? 'Saving…' : 'Save pass look'}
       </button>
       <p className="text-[10.5px] text-slate-500">
-        Applies to the portal keycard, the emailed boarding pass and the Apple/Google Wallet pass. Wallet cards use the artwork + base colour (Apple controls wallet text colours).
+        Applies to the portal keycard, the emailed boarding pass and the Apple/Google Wallet pass. Text/label colours below affect the portal card and email only — Apple draws wallet text in white.
       </p>
       {message && <p className="text-[11px] font-semibold text-accent">{message}</p>}
     </div>

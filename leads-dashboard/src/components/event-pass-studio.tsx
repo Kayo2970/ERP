@@ -183,6 +183,7 @@ export function EventPassStudio({
   const [attendeeOrg, setAttendeeOrg] = useState('');
   const [brandHeader, setBrandHeader] = useState('LEADS Next Gen Centre');
   const [validityDate, setValidityDate] = useState('');
+  const [walletLayout, setWalletLayout] = useState<'poster' | 'classic'>('poster');
   const [passTheme, setPassTheme] = useState<PassTheme | undefined>(undefined);
   // null = all days of the selected event (default); otherwise the explicit subset this single pass is valid on
   const [selectedValidDays, setSelectedValidDays] = useState<string[] | null>(null);
@@ -1204,6 +1205,20 @@ export function EventPassStudio({
           )}
 
           {/* VIEW 2: 98% PIXEL-ACCURATE NATIVE APPLE WALLET PREVIEW */}
+          {previewMode === 'apple-wallet' && passTheme?.walletBackgroundUrl && (
+            <div className="flex items-center gap-1 rounded-full border border-white/15 p-0.5 text-[10px] font-bold">
+              {(['poster', 'classic'] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setWalletLayout(m)}
+                  className={`px-3 py-1 rounded-full cursor-pointer transition-all ${walletLayout === m ? 'bg-accent text-white' : 'text-slate-400 hover:text-white'}`}
+                >
+                  {m === 'poster' ? 'iOS 27 poster' : 'Older iOS (classic)'}
+                </button>
+              ))}
+            </div>
+          )}
           {previewMode === 'apple-wallet' && (
             <AppleWalletPassPreview
               attendeeName={attendeeName}
@@ -1218,6 +1233,8 @@ export function EventPassStudio({
               logoText={brandHeader}
               passColor={passColor}
               theme={passTheme}
+              layout={walletLayout}
+              validDaysCount={effectiveValidDays.length}
             />
           )}
 

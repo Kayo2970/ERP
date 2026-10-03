@@ -36,6 +36,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     // Push the new look to every pass already added to a wallet (best effort, never fails the save)
     let walletUpdated = 0;
+    const walletErrors: string[] = [];
     try {
       const apiKey = await getWalletWalletApiKey();
       if (apiKey) {
@@ -49,13 +50,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
             walletUpdated += 1;
           } catch (e: any) {
             console.warn('[pass-theme] wallet update failed for', pass.serialNumber, e?.message);
+            if (walletErrors.length < 3) walletErrors.push(e?.message || 'Wallet update failed');
           }
         }
       }
     } catch (e: any) {
       console.warn('[pass-theme] wallet sync skipped:', e?.message);
     }
-    return NextResponse.json({ ...theme, walletUpdated });
+    return NextResponse.json({ ...theme, walletUpdated, walletErrors });
   } catch (err: any) {
     return apiError(err, 'pass-theme-put', 500);
   }
