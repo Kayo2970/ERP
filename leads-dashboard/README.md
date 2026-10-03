@@ -82,9 +82,15 @@ pm2 restart leads-dashboard
 - **Faculty-Only Proofreaders**: Proofreader selection is restricted to Faculty division members; within that, only Centre Head, Advisor, or Head of Design.
 
 #### 8. Event Passes & Gate QR Scanner (`/dashboard/event-passes`)
-- **Digital Event Passes**: High-resolution event pass cards with unique serial numbers, security QR codes, and automated email dispatch with pass attachments.
-- **Gate QR Scanner**: Integrated in-app camera scanner for event security and coordinators with authenticated instant validation.
-- **Pass Governance**: Re-send pass emails, revoke invalid passes, or delete records.
+- **Digital Event Passes**: Event pass cards with unique serial numbers and a QR code. Only events created in the Events module can be selected (synced holidays/festivals are hidden). Per-pass text and label colours can be set in the Studio.
+- **Multi-Day Passes (one pass, one QR)**: A pass is valid on a chosen set of event days (day picker in the Studio; `ValidFrom`/`ValidTo` columns in the bulk CSV). Attendance is recorded once per day; the pass page shows "Checked In (n/m days)".
+- **Gate QR Scanner**: In-app camera scanner. Days come from the pass itself, check-in is allowed only on a valid day, cancelled and expired passes are refused, and check-in is enforced server-side (`POST /api/events/all/passes/checkin`) so concurrent scanners cannot overwrite each other.
+- **Invitee Pass Page** (`/pass/[serial]`): the full "LEADS Executive Key Card" folder animation (folder opens, card slides out, flips), a Skip animation option, reduced-motion support, and Add to Wallet / Calendar / Share actions. The public API returns no email, phone or notes.
+- **Emailed Boarding-Pass Ticket**: A server-rendered 1200 × 460 PNG (QR, name, event, venue, valid days) is inlined in pass emails and the mail-merge (`@pass_image`). The ticket card is 1160 × 420 (main area 870 px, white tear-off stub 290 px with a 220 × 220 QR).
+- **Email Buttons**: Add to Apple Wallet, Add to Google Wallet, Add to Calendar and View Digital Pass point at this portal. The wallet pass is created **once, on the first click**, and cached (one WalletWallet call yields both Apple and Google; simultaneous clicks share one call; a failure backs off 60 s). Calendar files are built locally.
+- **Pass Look (per event)**: Background artwork, logo and colours applied to the portal card, the emailed ticket and the Wallet pass. The **email ticket can have its own design** (separate 1160 × 420 artwork, colours and darkening, with a downloadable safe-zone template). The Wallet receives a portrait 690 × 1010 crop as a **public HTTPS URL**; with a background, iOS 27 uses Apple's poster layout (one header, up to four primary and two footer fields, white text), with a live poster preview in the Studio. Background, logo and footer fields need a WalletWallet Pro key.
+- **30-Day Retention**: 30 days after an event ends, pass links (page, wallet, calendar, ticket image) show a "Thank you for being part of <event>… follow us" page with the centre's social links, and a daily scheduler deletes cached wallet files and theme images. Wallet passes already on phones are not revoked.
+- **Pass Governance**: Re-send pass emails, revoke invalid passes (also revoked in the wallet), or delete records (cached files are removed too).
 
 #### 9. Digital Visiting Card & Wallet Passes (`/dashboard/visiting-card` & `/card/[slug]`)
 - **Public Visiting Card**: Dynamic `/card/[slug]` landing page featuring member profile, designation, direct phone/LinkedIn links, and instant VCF vCard download.
@@ -147,6 +153,8 @@ pm2 restart leads-dashboard
 
 #### 19. Backup & Restore (`/dashboard/backup`)
 - **Snapshot Manager**: Export and restore AES-256 encrypted JSON database snapshots with rollback protection.
+- **Server Storage Panel**: Upload usage per category, files no record points to (orphans, ignoring anything under an hour old), largest files, and one-click cleanup of orphans and old pre-restore snapshots.
+- **Delete Means Delete**: Deleting an event also removes its passes, reports, designs, tasks and forms with their files (finance records are kept); deleting a member removes their avatar, card photo, wallet file and tokens; removed task attachments and reimbursement receipts are deleted from disk.
 
 #### 20. Email Management & Client (`/dashboard/email`)
 - **SMTP Engine**: Diagnostic testing, live queue monitoring, test email delivery, and dispatch logs.
@@ -157,6 +165,7 @@ pm2 restart leads-dashboard
 
 #### 21. System & Account Settings (`/dashboard/settings`)
 - **Profile & Security**: Avatar upload, OTP-verified email updates, password change, and Super User Emergency System Lockdown.
+- **Integrations (Super User)**: The WalletWallet API key (with a **Check key** button) and the centre's social account URLs used on thank-you pages.
 
 ---
 
