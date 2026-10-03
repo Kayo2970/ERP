@@ -47,7 +47,7 @@ import { AppleWalletPassPreview } from './apple-wallet-pass-preview';
 import { EventPassBulkModal } from './event-pass-bulk-modal';
 import { PassThemeEditor } from './pass-theme-editor';
 import { EventPassKeycard } from './event-pass-keycard';
-import { PassFontControls, PassQrControls, PassSection, PassColorControls, PassTextColorControls, PassValidityPicker, PASS_COLOR_PRESETS, PASS_GRADIENT_PRESETS } from './pass-design-controls';
+import { EventTitleToggle, PassFontControls, PassQrControls, PassSection, PassColorControls, PassTextColorControls, PassValidityPicker, PASS_COLOR_PRESETS, PASS_GRADIENT_PRESETS } from './pass-design-controls';
 
 export { PASS_COLOR_PRESETS, PASS_GRADIENT_PRESETS };
 import { EventPassEmailModal } from './event-pass-email-modal';
@@ -802,7 +802,7 @@ export function EventPassStudio({
             />
             <PassTextColorControls textColor={textColor} setTextColor={setTextColor} labelColor={labelColor} setLabelColor={setLabelColor} />
 
-              <PassFontControls fontScale={fontScale} setFontScale={setFontScale} showEventTitle={showEventTitle} setShowEventTitle={setShowEventTitle} />
+              <PassFontControls fontScale={fontScale} setFontScale={setFontScale} showEventTitle={showEventTitle} setShowEventTitle={setShowEventTitle} eventDefault={activeTheme?.showEventTitle} />
             </PassSection>
 
             {/* Event artwork & logo (applies to portal card, emailed ticket and wallet pass) */}
@@ -959,6 +959,11 @@ export function EventPassStudio({
               altText={qr.altText}
               qr={qr}
             />
+          )}
+          {previewMode === 'apple-wallet' && (
+            <div className="w-full max-w-[340px]">
+              <EventTitleToggle value={showEventTitle} onChange={setShowEventTitle} eventDefault={activeTheme?.showEventTitle} />
+            </div>
           )}
 
 

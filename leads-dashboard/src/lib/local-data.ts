@@ -419,6 +419,8 @@ export interface PassTheme {
   foregroundColor?: string; // value text colour (hex)
   labelColor?: string;      // small-caps label colour (hex)
   overlay?: number;         // 0..0.9 darkening layer over the artwork for legibility
+  /** Event default for printing the event title on the wallet poster (a pass can override). Unset = auto: only when there is no artwork. */
+  showEventTitle?: boolean;
   updatedAt?: string;
 }
 

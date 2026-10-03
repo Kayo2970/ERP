@@ -108,6 +108,8 @@ export interface PassThemeUpdate {
   foregroundColor?: string;
   labelColor?: string;
   overlay?: number;
+  /** Event default for the wallet poster title; `null` clears it back to Auto. */
+  showEventTitle?: boolean | null;
   /** New artwork (data URL), or null to remove the current one. */
   background?: { dataUrl: string } | null;
   logo?: { dataUrl: string } | null;
@@ -123,6 +125,8 @@ export async function updatePassTheme(eventId: string, update: PassThemeUpdate):
   if (typeof update.overlay === 'number' && Number.isFinite(update.overlay)) {
     theme.overlay = Math.min(0.9, Math.max(0, update.overlay));
   }
+  if (update.showEventTitle === null) delete theme.showEventTitle;
+  else if (typeof update.showEventTitle === 'boolean') theme.showEventTitle = update.showEventTitle;
   for (const k of ['emailBackgroundColor', 'emailForegroundColor', 'emailLabelColor'] as const) {
     const v = update[k];
     if (v === null) delete theme[k];
@@ -193,7 +197,7 @@ export async function walletDataForPass(pass: EventPassItem): Promise<WalletEven
   const theme = await getPassTheme(pass.eventId);
   // Version the poster URL by everything that changes how it looks, so WalletWallet re-fetches after a design edit
   const version = createHash('sha1')
-    .update(JSON.stringify([pass.eventName, pass.passColor, pass.passGradient, pass.textColor, pass.labelColor, pass.fontScale, pass.showEventTitle, pass.qrInWallet, pass.qrDark, pass.qrLight, pass.qrEyeColor, pass.qrShape, pass.qrLogo, pass.qrAltText, theme.updatedAt, theme.walletBackgroundUrl, theme.overlay]))
+    .update(JSON.stringify([pass.eventName, pass.passColor, pass.passGradient, pass.textColor, pass.labelColor, pass.fontScale, pass.showEventTitle, theme.showEventTitle, pass.qrInWallet, pass.qrDark, pass.qrLight, pass.qrEyeColor, pass.qrShape, pass.qrLogo, pass.qrAltText, theme.updatedAt, theme.walletBackgroundUrl, theme.overlay]))
     .digest('hex')
     .slice(0, 10);
   return {

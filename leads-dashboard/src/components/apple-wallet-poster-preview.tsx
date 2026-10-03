@@ -45,6 +45,8 @@ export function AppleWalletPosterPreview(props: ApplePosterPreviewProps) {
     barcodeFormat = 'QR', altText = 'serial', passUrl, qr: qrOpts,
   } = props;
   const inWallet = Boolean(qrOpts?.inWallet);
+  // A pass-level choice wins; otherwise the event's default; otherwise auto (server decides)
+  const effectiveShowTitle = showEventTitle ?? theme?.showEventTitle;
 
   const [art, setArt] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -52,7 +54,7 @@ export function AppleWalletPosterPreview(props: ApplePosterPreviewProps) {
   const lastUrl = useRef('');
 
   // Re-render the artwork (debounced) whenever the design changes
-  const draftKey = JSON.stringify([inWallet ? qrOpts : null, serialNumber, eventName, passColor, passGradient, textColor, labelColor, fontScale, showEventTitle, theme?.walletBackgroundUrl, theme?.backgroundUrl, theme?.overlay, theme?.foregroundColor, theme?.labelColor, theme?.backgroundColor]);
+  const draftKey = JSON.stringify([inWallet ? qrOpts : null, serialNumber, eventName, passColor, passGradient, textColor, labelColor, fontScale, effectiveShowTitle, theme?.walletBackgroundUrl, theme?.backgroundUrl, theme?.overlay, theme?.foregroundColor, theme?.labelColor, theme?.backgroundColor]);
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -62,7 +64,7 @@ export function AppleWalletPosterPreview(props: ApplePosterPreviewProps) {
           method: 'POST',
           headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
-            eventName, passColor, passGradient, textColor, labelColor, fontScale, showEventTitle,
+            eventName, passColor, passGradient, textColor, labelColor, fontScale, showEventTitle: effectiveShowTitle,
             qr: inWallet && qrOpts ? { url: passUrl || `https://portal-leads.msruas.ac.in/pass/${serialNumber}`, options: qrOpts, caption: qrOpts.altText === 'none' ? undefined : qrOpts.altText === 'name' ? attendeeName : serialNumber } : undefined,
             theme: theme ? { walletBackgroundUrl: theme.walletBackgroundUrl, backgroundUrl: theme.backgroundUrl, overlay: theme.overlay, foregroundColor: theme.foregroundColor, labelColor: theme.labelColor, backgroundColor: theme.backgroundColor } : {},
           }),

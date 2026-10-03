@@ -5,6 +5,7 @@ import { ImagePlus, Trash2, Save, Palette } from 'lucide-react';
 import { DEFAULT_PASS_THEME, PassTheme, authHeaders } from '@/lib/local-data';
 import { passThemeStyle } from '@/lib/pass-theme-style';
 import { AppleWalletPosterPreview } from './apple-wallet-poster-preview';
+import { EventTitleToggle } from './pass-design-controls';
 
 interface Props {
   eventId: string;
@@ -151,6 +152,8 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
           foregroundColor: val.fg,
           labelColor: val.label,
           overlay: val.overlay,
+          // Event default for the wallet poster title; null (Auto) clears a previous choice
+          showEventTitle: draft.showEventTitle ?? null,
           emailUseBackground: !emailOwn,
           emailOverlay: em.overlay,
           // Email colours are only stored when explicitly chosen; otherwise the ticket follows the general colours
@@ -193,6 +196,7 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
     val.bg !== (theme.backgroundColor || DEFAULT_PASS_THEME.backgroundColor) ||
     val.fg !== (theme.foregroundColor || DEFAULT_PASS_THEME.foregroundColor) ||
     val.label !== (theme.labelColor || DEFAULT_PASS_THEME.labelColor) ||
+    draft.showEventTitle !== theme.showEventTitle ||
     val.overlay !== (typeof theme.overlay === 'number' ? theme.overlay : DEFAULT_PASS_THEME.overlay);
 
   const colourField = (label: string, key: 'backgroundColor' | 'foregroundColor' | 'labelColor', value: string) => (
@@ -231,6 +235,9 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
               theme={{ ...merged, walletBackgroundUrl: pendingBg || draft.walletBackgroundUrl }}
               passColor={val.bg}
             />
+          </div>
+          <div className="mt-3 max-w-[300px]">
+            <EventTitleToggle scope="event" value={draft.showEventTitle} onChange={(v) => setDraft((d) => ({ ...d, showEventTitle: v }))} />
           </div>
         </div>
         <ul className="text-[10.5px] text-slate-500 space-y-1.5 list-disc pl-4 pt-5">

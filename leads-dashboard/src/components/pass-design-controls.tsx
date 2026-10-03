@@ -357,14 +357,46 @@ const chip = (on: boolean) =>
     on ? 'border-accent bg-accent/15 text-accent' : 'border-slate-300 dark:border-white/15 text-slate-500 dark:text-slate-400 hover:border-accent/50'
   }`;
 
+/**
+ * "Event title on the wallet pass": Auto prints the title only when the artwork doesn't already carry it.
+ * Used by the event's Pass look editor (the event default), the Studio / Edit Pass (per pass) and the wallet previews.
+ */
+export function EventTitleToggle({
+  value, onChange, eventDefault, scope = 'pass',
+}: {
+  value: boolean | undefined;
+  onChange: (v: boolean | undefined) => void;
+  eventDefault?: boolean;
+  scope?: 'event' | 'pass';
+}) {
+  const defaultName = eventDefault === undefined ? 'Auto' : eventDefault ? 'Always show' : 'Hide';
+  return (
+    <div>
+      <span className={label}>Event title on the wallet pass</span>
+      <div className="flex flex-wrap gap-2">
+        {([[scope === 'pass' ? `Event default (${defaultName})` : 'Auto', undefined], ['Always show', true], ['Hide', false]] as Array<[string, boolean | undefined]>).map(([name, v]) => (
+          <button key={name} type="button" onClick={() => onChange(v)} className={chip(value === v)}>{name}</button>
+        ))}
+      </div>
+      <p className="text-[10.5px] text-slate-500 mt-1">
+        {scope === 'event'
+          ? 'Default for every pass of this event. Auto prints the title only when your artwork doesn\'t already contain it.'
+          : 'Auto follows the event default. Auto itself prints the title only when your event artwork doesn\'t already contain it.'}
+      </p>
+    </div>
+  );
+}
+
 /** Text size of the designed artwork (wallet poster, emailed ticket, portal card) and whether the poster prints the event title. */
 export function PassFontControls({
-  fontScale, setFontScale, showEventTitle, setShowEventTitle,
+  fontScale, setFontScale, showEventTitle, setShowEventTitle, eventDefault,
 }: {
   fontScale: number;
   setFontScale: (n: number) => void;
   showEventTitle: boolean | undefined;
   setShowEventTitle: (v: boolean | undefined) => void;
+  /** The event's own default (shown as a hint; a pass value overrides it). */
+  eventDefault?: boolean;
 }) {
   const sizes: Array<[string, number]> = [['Small', 0.85], ['Normal', 1], ['Large', 1.15], ['X-Large', 1.3]];
   return (
@@ -389,15 +421,7 @@ export function PassFontControls({
         </div>
         <p className="text-[10.5px] text-slate-500 mt-1">Applies to the event title, guest name and details on the portal card, the emailed ticket and the wallet pass artwork. Apple draws its own small field row on the wallet pass.</p>
       </div>
-      <div>
-        <span className={label}>Event title on the wallet pass</span>
-        <div className="flex flex-wrap gap-2">
-          {([['Auto', undefined], ['Always show', true], ['Hide', false]] as Array<[string, boolean | undefined]>).map(([name, v]) => (
-            <button key={name} type="button" onClick={() => setShowEventTitle(v)} className={chip(showEventTitle === v)}>{name}</button>
-          ))}
-        </div>
-        <p className="text-[10.5px] text-slate-500 mt-1">Auto prints the title only when your event artwork doesn&apos;t already contain it.</p>
-      </div>
+      <EventTitleToggle value={showEventTitle} onChange={setShowEventTitle} eventDefault={eventDefault} />
     </div>
   );
 }
