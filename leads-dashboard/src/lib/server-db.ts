@@ -593,6 +593,9 @@ function ensureFeedbackFormTemplateSeeded(): Promise<void> {
           await writeCollectionFile('formTemplates', [builtIn, ...jsonContent]);
           return;
         }
+        // An admin edited (customized) or deleted this built-in from Manage Templates — never overwrite that.
+        if (jsonContent[existingIdx]?.customized || jsonContent[existingIdx]?.deleted) return;
+
         // Already present, but this is a built-in/managed template (not
         // something an admin hand-edits) — a database seeded before a
         // field-definition change shipped (e.g. "Type of Event" becoming a

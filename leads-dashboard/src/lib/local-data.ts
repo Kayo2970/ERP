@@ -431,6 +431,58 @@ export const DEFAULT_PASS_THEME: Required<Pick<PassTheme, 'backgroundColor' | 'f
 
 export type PassEmailStatus = 'Not Sent' | 'Email Sent' | 'Email Received' | 'Pass Viewed';
 
+export type PassBarcodeFormat = 'QR' | 'PDF417' | 'Aztec' | 'Code128';
+export type PassQrShape = 'square' | 'rounded' | 'dots';
+
+/** Everything about a pass's QR that a designer can change. */
+export interface PassQrOptions {
+  format: PassBarcodeFormat;
+  altText: 'serial' | 'name' | 'none';
+  dark: string;
+  light: string;
+  /** Colour of the three corner eyes; '' = same as the dots. */
+  eye: string;
+  shape: PassQrShape;
+  /** LEADS logo in the centre of the QR. */
+  logo: boolean;
+  /** Draw the styled QR into the wallet artwork instead of Apple/Google's native black-on-white barcode. */
+  inWallet: boolean;
+}
+
+export const DEFAULT_QR_OPTIONS: PassQrOptions = {
+  format: 'QR', altText: 'serial', dark: '#0B1B2E', light: '#ffffff', eye: '', shape: 'square', logo: true, inWallet: false,
+};
+
+type PassQrFields = Pick<EventPassItem, 'qrFormat' | 'qrAltText' | 'qrDark' | 'qrLight' | 'qrEyeColor' | 'qrShape' | 'qrLogo' | 'qrInWallet'>;
+
+export function qrOptionsFromPass(p: Partial<PassQrFields>): PassQrOptions {
+  return {
+    format: p.qrFormat || DEFAULT_QR_OPTIONS.format,
+    altText: p.qrAltText || DEFAULT_QR_OPTIONS.altText,
+    dark: p.qrDark || DEFAULT_QR_OPTIONS.dark,
+    light: p.qrLight || DEFAULT_QR_OPTIONS.light,
+    eye: p.qrEyeColor || '',
+    shape: p.qrShape || DEFAULT_QR_OPTIONS.shape,
+    logo: p.qrLogo !== false,
+    inWallet: Boolean(p.qrInWallet),
+  };
+}
+
+/** Pass fields for the options; defaults are stored as undefined so a PATCH can clear a previous choice. */
+export function qrFieldsFromOptions(o: PassQrOptions): PassQrFields {
+  const d = DEFAULT_QR_OPTIONS;
+  return {
+    qrFormat: o.format !== d.format ? o.format : undefined,
+    qrAltText: o.altText !== d.altText ? o.altText : undefined,
+    qrDark: o.dark.toLowerCase() !== d.dark.toLowerCase() ? o.dark : undefined,
+    qrLight: o.light.toLowerCase() !== d.light.toLowerCase() ? o.light : undefined,
+    qrEyeColor: o.eye || undefined,
+    qrShape: o.shape !== d.shape ? o.shape : undefined,
+    qrLogo: o.logo ? undefined : false,
+    qrInWallet: o.inWallet ? true : undefined,
+  };
+}
+
 export interface EventPassItem {
   id: string;
   serialNumber: string;
@@ -462,6 +514,20 @@ export interface EventPassItem {
   /** Optional per-pass text/label colours (hex). Override the event theme; unset = auto. */
   textColor?: string;
   labelColor?: string;
+  /** Text size multiplier for the designed artwork (wallet poster, ticket). 1 = normal. */
+  fontScale?: number;
+  /** Print the event title on the wallet poster artwork. Unset = auto (only when the event has no artwork of its own). */
+  showEventTitle?: boolean;
+  /** QR customisation: wallet barcode format, caption under it, and QR colours on the portal card / ticket. */
+  qrFormat?: PassBarcodeFormat;
+  qrAltText?: 'serial' | 'name' | 'none';
+  qrDark?: string;
+  qrLight?: string;
+  qrEyeColor?: string;
+  qrShape?: PassQrShape;
+  /** false hides the centre logo (default shown). */
+  qrLogo?: boolean;
+  qrInWallet?: boolean;
   attendance?: PassAttendanceRecord[];
   qrPayload: string;
   walletAppleUrl?: string;
@@ -999,6 +1065,29 @@ export interface FormField {
   type: 'text' | 'email' | 'textarea' | 'select' | 'checkbox' | 'multiselect' | 'number' | 'scale';
   options?: string[];
   required: boolean;
+  /**
+   * Pre-filled answer shown on the public form (respondents can still change it). `string` for text-like
+   * fields, a single option for 'select', `string[]` for 'multiselect', `true` for a ticked 'checkbox'.
+   */
+  defaultValue?: string | string[] | boolean;
+  /** Take the default from the linked event instead of a typed value (text-like fields only). */
+  defaultSource?: 'event_name' | 'event_date' | 'event_venue';
+}
+
+export interface FormEventInfo {
+  name?: string;
+  date?: string;
+  venue?: string;
+}
+
+/** The value a public form should start this field with (typed default or the linked event's detail). */
+export function resolveFieldDefault(field: FormField, event?: FormEventInfo | null): string | string[] | boolean | undefined {
+  if (field.defaultSource) {
+    const v = field.defaultSource === 'event_name' ? event?.name : field.defaultSource === 'event_date' ? event?.date : event?.venue;
+    if (v) return v;
+    // No linked event (or it lacks that detail): fall back to a typed value if there is one
+  }
+  return field.defaultValue;
 }
 
 export interface PublicFormItem {
@@ -1043,6 +1132,10 @@ export interface FormTemplateItem {
   fields: FormField[];
   createdBy: string;
   createdAt: string;
+  /** Built-in template the admin has edited (saved copy overrides the in-code one). */
+  customized?: boolean;
+  /** Built-in template the admin has deleted (hidden until restored). Only meaningful on built-in ids. */
+  deleted?: boolean;
 }
 
 export interface FormSubmissionItem {
@@ -3073,9 +3166,10 @@ export async function updateEventPass(
     const res = await fetch(`/api/events/${updated.eventId}/passes`, {
       method: 'PATCH',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
+      // JSON drops `undefined`, so a cleared option (e.g. text colour back to auto) is sent as null and removed server-side
       body: JSON.stringify({
         passId: updated.id,
-        ...updates,
+        ...Object.fromEntries(Object.entries(updates).map(([k, v]) => [k, v === undefined ? null : v])),
       }),
     });
     if (res.ok) {
@@ -6007,7 +6101,16 @@ export function getFormTemplates(): FormTemplateItem[] {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
           const custom = parsed.filter((p: any) => !initialFormTemplates.some(it => it.id === p.id));
-          list = [...initialFormTemplates, ...custom];
+          // Built-ins: an edited copy (customized) replaces the in-code one; a deleted marker hides it
+          const builtIns = initialFormTemplates
+            .map((b) => {
+              const saved = parsed.find((p: any) => p?.id === b.id);
+              if (saved?.deleted) return null;
+              if (saved?.customized && Array.isArray(saved.fields)) return { ...b, ...saved };
+              return b;
+            })
+            .filter(Boolean) as FormTemplateItem[];
+          list = [...builtIns, ...custom];
         }
       } catch (e) {
         console.error(e);
@@ -6019,7 +6122,15 @@ export function getFormTemplates(): FormTemplateItem[] {
 
 export function saveFormTemplates(templates: FormTemplateItem[]): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem('leads_form_templates', JSON.stringify(templates));
+  // Keep built-in override rows (edited copies / deleted markers) that aren't part of the merged list passed in
+  let keep: FormTemplateItem[] = [];
+  try {
+    const prev = JSON.parse(localStorage.getItem('leads_form_templates') || '[]');
+    if (Array.isArray(prev)) {
+      keep = prev.filter((r: any) => initialFormTemplates.some((b) => b.id === r?.id) && (r.deleted || r.customized) && !templates.some((t) => t.id === r.id));
+    }
+  } catch { /* ignore */ }
+  localStorage.setItem('leads_form_templates', JSON.stringify([...templates, ...keep]));
   markLocalWrite('leads_form_templates');
 }
 
@@ -6037,37 +6148,83 @@ export function addFormTemplate(template: Omit<FormTemplateItem, 'id' | 'created
   return newTemplate;
 }
 
+/** Saved rows that override built-ins (customized copies and deleted markers) must survive getFormTemplates(). */
+function readSavedTemplateRows(): FormTemplateItem[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const parsed = JSON.parse(localStorage.getItem('leads_form_templates') || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function upsertSavedTemplate(row: FormTemplateItem): void {
+  const rows = readSavedTemplateRows();
+  const idx = rows.findIndex((r) => r.id === row.id);
+  if (idx >= 0) rows[idx] = row;
+  else rows.unshift(row);
+  saveFormTemplates(rows);
+}
+
+export function isBuiltInTemplate(id: string): boolean {
+  return initialFormTemplates.some((t) => t.id === id);
+}
+
+/** Built-ins the admin deleted (hidden), so they can be restored from Manage Templates. */
+export function getDeletedBuiltInTemplates(): FormTemplateItem[] {
+  const rows = readSavedTemplateRows();
+  return initialFormTemplates.filter((b) => rows.some((r) => r.id === b.id && r.deleted));
+}
+
 export function deleteFormTemplate(id: string, actorName: string): boolean {
   const current = getFormTemplates();
   const target = current.find(t => t.id === id);
   if (!target) return false;
 
-  const updated = current.filter(t => t.id !== id);
-  saveFormTemplates(updated);
-  serverDelete('/api/form-templates', id);
+  if (isBuiltInTemplate(id)) {
+    // Hide instead of removing: the server re-seeds a missing built-in, a marker row survives that
+    const marker: FormTemplateItem = { ...(initialFormTemplates.find((t) => t.id === id) as FormTemplateItem), deleted: true, customized: false };
+    upsertSavedTemplate(marker);
+    serverPatch('/api/form-templates', id, { deleted: true, customized: false });
+  } else {
+    saveFormTemplates(current.filter(t => t.id !== id));
+    serverDelete('/api/form-templates', id);
+  }
   logAuditEvent('FORM_TEMPLATE_DELETED', actorName, `Deleted form template "${target.name}"`);
   return true;
 }
 
+/** Bring back a deleted built-in or discard edits to one (restores the original in-code version). */
+export function restoreBuiltInTemplate(id: string, actorName: string): boolean {
+  const original = initialFormTemplates.find((t) => t.id === id);
+  if (!original) return false;
+  upsertSavedTemplate({ ...original, customized: false, deleted: false });
+  serverPatch('/api/form-templates', id, { ...original, customized: false, deleted: false });
+  logAuditEvent('FORM_TEMPLATE_UPDATED', actorName, `Restored built-in form template "${original.name}"`);
+  return true;
+}
+
 /**
- * Edit a custom (user-saved) template's name, description, or fields.
- * Built-in templates (anything in initialFormTemplates, e.g. the Feedback
- * Form Template) are refused — getFormTemplates() always serves the in-code
- * copy for those ids and silently discards any saved override, and the
- * Feedback Form Template is additionally re-synced from local-data.ts by
- * server-db.ts's ensureFeedbackFormTemplateSeeded on every boot, so an edit
- * here would appear to save and then quietly revert.
+ * Edit a template's name, description or fields. Custom templates are updated in place. Built-in templates are
+ * saved as an edited copy (`customized`) that replaces the in-code version until "Reset to original".
  */
 export function updateFormTemplate(
   id: string,
   changes: Partial<Pick<FormTemplateItem, 'name' | 'description' | 'fields'>>,
   actorName: string
 ): FormTemplateItem | null {
-  if (initialFormTemplates.some(t => t.id === id)) return null;
-
   const current = getFormTemplates();
   const idx = current.findIndex(t => t.id === id);
   if (idx === -1) return null;
+
+  if (isBuiltInTemplate(id)) {
+    const updated: FormTemplateItem = { ...current[idx], ...changes, customized: true, deleted: false };
+    upsertSavedTemplate(updated);
+    serverPatch('/api/form-templates', id, updated);
+    logAuditEvent('FORM_TEMPLATE_UPDATED', actorName, `Edited built-in form template "${updated.name}"`);
+    return updated;
+  }
 
   const updated: FormTemplateItem = { ...current[idx], ...changes };
   const next = [...current];

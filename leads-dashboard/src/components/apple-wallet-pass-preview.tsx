@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { Info, RotateCw } from 'lucide-react';
 import styles from './apple-wallet-pass.module.css';
 import { AppleWalletPosterPreview } from './apple-wallet-poster-preview';
-import type { PassTheme } from '@/lib/local-data';
+import type { PassBarcodeFormat, PassQrOptions, PassTheme } from '@/lib/local-data';
 import { passThemeStyle } from '@/lib/pass-theme-style';
 
 export interface AppleWalletPassPreviewProps {
@@ -26,6 +26,15 @@ export interface AppleWalletPassPreviewProps {
   /** 'poster' = iOS 27 layout used when the event has background artwork; 'classic' = older iOS. */
   layout?: 'poster' | 'classic';
   validDaysCount?: number;
+  validDays?: string[];
+  passGradient?: string;
+  textColor?: string;
+  labelColor?: string;
+  fontScale?: number;
+  showEventTitle?: boolean;
+  barcodeFormat?: PassBarcodeFormat;
+  altText?: 'serial' | 'name' | 'none';
+  qr?: PassQrOptions;
 }
 
 export function AppleWalletPassPreview({
@@ -44,6 +53,15 @@ export function AppleWalletPassPreview({
   theme,
   layout = 'poster',
   validDaysCount = 0,
+  validDays,
+  passGradient,
+  textColor,
+  labelColor,
+  fontScale,
+  showEventTitle,
+  barcodeFormat,
+  altText,
+  qr,
 }: AppleWalletPassPreviewProps) {
   const [isFlipped, setIsFlipped] = useState(false);
 
@@ -54,7 +72,7 @@ export function AppleWalletPassPreview({
   const frontStyle: React.CSSProperties = passThemeStyle(theme, baseBackground) || {};
   const backStyle: React.CSSProperties = passThemeStyle(theme, baseBackground) || {};
 
-  if (layout === 'poster' && theme?.walletBackgroundUrl) {
+  if (layout === 'poster') {
     return (
       <div className={styles.walletContainer} style={{ height: 'auto' }}>
         <AppleWalletPosterPreview
@@ -66,10 +84,18 @@ export function AppleWalletPassPreview({
           validity={displayValidity || ''}
           serialNumber={displaySerial}
           validDaysCount={validDaysCount}
-          logoText={logoText}
-          logoUrl={theme.logoUrl || logoUrl}
-          backgroundUrl={theme.walletBackgroundUrl}
-          baseColor={theme.backgroundColor || passColor}
+          validDays={validDays}
+          logoUrl={theme?.logoUrl || logoUrl}
+          theme={theme}
+          passColor={passColor}
+          passGradient={passGradient}
+          textColor={textColor}
+          labelColor={labelColor}
+          fontScale={fontScale}
+          showEventTitle={showEventTitle}
+          barcodeFormat={barcodeFormat}
+          altText={altText}
+          qr={qr}
         />
       </div>
     );

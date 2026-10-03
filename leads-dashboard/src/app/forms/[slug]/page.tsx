@@ -3,7 +3,7 @@
 import React, { useState, useEffect, use } from 'react';
 import { CheckCircle2, ChevronLeft, Send, Sparkles, AlertTriangle, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
-import { getForms, addSubmission, PublicFormItem } from '@/lib/local-data';
+import { getForms, getEvents, addSubmission, PublicFormItem, FormEventInfo, resolveFieldDefault, formatEventDateRange } from '@/lib/local-data';
 import { TermsModal } from '@/components/terms-modal';
 import { PrivacyPolicyModal } from '@/components/privacy-policy-modal';
 import { GhostFibers } from '@/components/ui/ghost-fibers';
@@ -47,9 +47,20 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
         return;
       }
       setForm(matchedForm);
+      // Linked-event details for "default = event name / date / venue": live from the public API when we have it,
+      // else (staff previewing from the local cache) from the locally cached event.
+      let eventInfo: FormEventInfo | undefined = (matchedForm as any).eventInfo;
+      if (!eventInfo && matchedForm.eventId) {
+        const ev = getEvents().find(e => e.id === matchedForm.eventId);
+        if (ev) eventInfo = { name: ev.title, date: ev.datesTBD ? undefined : formatEventDateRange(ev), venue: ev.location || undefined };
+      }
+      if (!eventInfo && matchedForm.eventName) eventInfo = { name: matchedForm.eventName };
       const initialData: Record<string, any> = {};
       matchedForm.fields.forEach(f => {
-        initialData[f.id] = f.type === 'multiselect' ? [] : '';
+        const def = resolveFieldDefault(f, eventInfo);
+        if (f.type === 'multiselect') initialData[f.id] = Array.isArray(def) ? def : [];
+        else if (f.type === 'checkbox') initialData[f.id] = def === true;
+        else initialData[f.id] = def === undefined || def === null || Array.isArray(def) || typeof def === 'boolean' ? '' : String(def);
       });
       setFormData(initialData);
       setLoading(false);

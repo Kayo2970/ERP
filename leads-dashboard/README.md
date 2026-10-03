@@ -83,6 +83,11 @@ pm2 restart leads-dashboard
 
 #### 8. Event Passes & Gate QR Scanner (`/dashboard/event-passes`)
 - **Digital Event Passes**: Event pass cards with unique serial numbers and a QR code. Only events created in the Events module can be selected (synced holidays/festivals are hidden). Per-pass text and label colours can be set in the Studio.
+- **What you design is what is issued**: the Studio preview and the Edit Pass dialog render the very same keycard component as the public `/pass/<serial>` page (folder, extracting card, QR), including the event's pass look.
+- **Full pass editing**: *Edit* on an issued pass changes everything — attendee details, event (dates/venue follow), pass type and category, venue, valid days, status, notes, gradient/solid colours and text/label colours — with a live preview and wallet re-sync.
+- **Designer drop-downs**: the Studio and Edit Pass are grouped into *1 · Event & guest details*, *2 · Colours & text* (solid/gradient, text colours, font size), *3 · Event artwork & logo* and *4 · QR code* (shape square/rounded/dots, dot/background/corner-eye colours, centre logo, wallet barcode type and caption, optional *styled QR inside the wallet pass* which replaces Apple's native barcode). **Email is mandatory** (single, edit and bulk CSV) because the pass is delivered there.
+- **Wallet pass = designed poster**: the Apple/Google Wallet pass uses a poster rendered by the portal (`/api/pass/<serial>/wallet-poster`, same renderer as the Studio's Apple Wallet preview) with your artwork/colours/font size and a dark fade so Apple's field row stays readable. Apple's own elements (logo, header, barcode panel, one row of short fields) are positioned as on a real iPhone pass in the preview (`lib/wallet-poster-spec.ts`).
+- **Wallet loading bar**: *Add to Apple/Google Wallet* (pass page and email buttons → `/pass/<serial>/wallet?to=apple|google`) shows a progress bar that climbs to ~95% in 5 s, creeps slowly, and jumps to 100% when the pass is ready (it is created once, then cached).
 - **Multi-Day Passes (one pass, one QR)**: A pass is valid on a chosen set of event days (day picker in the Studio; `ValidFrom`/`ValidTo` columns in the bulk CSV). Attendance is recorded once per day; the pass page shows "Checked In (n/m days)".
 - **Gate QR Scanner**: In-app camera scanner. Days come from the pass itself, check-in is allowed only on a valid day, cancelled and expired passes are refused, and check-in is enforced server-side (`POST /api/events/all/passes/checkin`) so concurrent scanners cannot overwrite each other.
 - **Invitee Pass Page** (`/pass/[serial]`): the full "LEADS Executive Key Card" folder animation (folder opens, card slides out, flips), a Skip animation option, reduced-motion support, and Add to Wallet / Calendar / Share actions. The public API returns no email, phone or notes.
@@ -120,6 +125,9 @@ pm2 restart leads-dashboard
 - **Interactive Form Builder**: Custom form engine for student signups, feedback collection, and event registrations.
 - **Instant QR Code & Poster Download**: Generates high-res printable poster PNG cards with branding header and scannable QR code.
 - **Official Word (DOCX) Export**: Built-in Feedback Form template generates field-for-field filled copies matching `Feedback_Events.docx`.
+- **Paged Submissions**: the received-responses table shows 10 / 15 / 20 rows per page with page navigation and a "Showing a–b of N" counter (same pattern as the Members directory); CSV export still includes everything.
+- **Manage Templates**: every template, including the built-in Event Registration and Feedback templates, can be edited and deleted. Edited built-ins are badged "Edited" with a Reset button; deleted built-ins are listed under "Deleted built-in templates" with a Restore button.
+- **Default Values**: any question can have a default answer (typed, a chosen option, ticked choices, a scale value, or a ticked checkbox). Short-text questions can instead be filled from the **linked event's name, date or venue**, which stays current if the event is renamed or rescheduled. Respondents can still change the pre-filled answer.
 
 #### 13. Analytics & Reports (`/dashboard/reports`)
 - **Executive Report Generator**: Styled PDF report generation and CSV data exports for scorecards, event post-mortems, and financial audits.

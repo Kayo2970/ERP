@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import QRCode from 'qrcode';
+import { drawStyledQr } from '@/lib/qr-style';
+import type { PassQrShape } from '@/lib/local-data';
 import styles from './interactive-keycard.module.css';
 import type { PassTheme } from '@/lib/local-data';
 import { passThemeStyle } from '@/lib/pass-theme-style';
@@ -26,6 +27,13 @@ export interface InteractiveKeycardProps {
   issuingAuthority?: string;
   cardUrl?: string;
   qrUrl?: string;
+  /** Event pass design: text size multiplier and QR colours. */
+  fontScale?: number;
+  qrDark?: string;
+  qrLight?: string;
+  qrEye?: string;
+  qrShape?: PassQrShape;
+  qrLogo?: boolean;
   onSaveContact?: () => void;
   saveContactLabel?: string;
   onAddToAppleWallet?: () => void;
@@ -34,6 +42,8 @@ export interface InteractiveKeycardProps {
   walletError?: string;
   showActions?: boolean;
   autoOpen?: boolean;
+  /** After opening, pull the card forward automatically (used by design previews so the card face is visible). */
+  autoExtract?: boolean;
 
   // Event Pass Specific Props
   isEventPass?: boolean;
@@ -64,6 +74,12 @@ export function InteractiveKeycardHolder({
   issuingAuthority = 'LEADS Next Gen Centre',
   cardUrl,
   qrUrl = '/card/leads-qr-code.png',
+  fontScale = 1,
+  qrDark = '#0B1B2E',
+  qrLight = '#ffffff',
+  qrEye = '',
+  qrShape = 'square',
+  qrLogo = true,
   onSaveContact,
   saveContactLabel = 'Save Contact',
   onAddToAppleWallet,
@@ -72,6 +88,7 @@ export function InteractiveKeycardHolder({
   walletError,
   showActions = true,
   autoOpen = false,
+  autoExtract = false,
 
   // Event Pass Specific Props
   isEventPass,
@@ -181,48 +198,18 @@ export function InteractiveKeycardHolder({
 
       try {
         const qrCanvas = document.createElement('canvas');
-        await QRCode.toCanvas(qrCanvas, targetUrl, {
-          width: 360,
-          margin: 2,
-          color: { dark: '#0B1B2E', light: '#ffffff' },
-          errorCorrectionLevel: 'H',
-        });
-
+        qrCanvas.width = qrCanvas.height = 360;
         const ctx = qrCanvas.getContext('2d');
-        if (ctx) {
-          const logo = new Image();
-          logo.onload = () => {
-            if (!isMounted) return;
-            const size = qrCanvas.width;
-            const logoSize = Math.round(size * 0.22);
-            const pad = Math.round(logoSize * 0.16);
-            const boxSize = logoSize + pad * 2;
-            const boxX = (size - boxSize) / 2;
-            const boxY = (size - boxSize) / 2;
-            const radius = Math.round(boxSize * 0.15);
-
-            ctx.fillStyle = '#ffffff';
-            ctx.beginPath();
-            ctx.moveTo(boxX + radius, boxY);
-            ctx.arcTo(boxX + boxSize, boxY, boxX + boxSize, boxY + boxSize, radius);
-            ctx.arcTo(boxX + boxSize, boxY + boxSize, boxX, boxY + boxSize, radius);
-            ctx.arcTo(boxX, boxY + boxSize, boxX, boxY, radius);
-            ctx.arcTo(boxX, boxY, boxX + boxSize, boxY, radius);
-            ctx.closePath();
-            ctx.fill();
-
-            ctx.drawImage(logo, (size - logoSize) / 2, (size - logoSize) / 2, logoSize, logoSize);
-            if (isMounted) {
-              setDynamicQrUrl(qrCanvas.toDataURL('image/png'));
-            }
-          };
-          logo.onerror = () => {
-            if (isMounted) setDynamicQrUrl(qrCanvas.toDataURL('image/png'));
-          };
-          logo.src = '/card/leads-logo-clean.png';
-        } else {
+        if (!ctx) return;
+        const draw = (logo?: HTMLImageElement) => {
+          drawStyledQr(ctx, targetUrl, 0, 0, 360, { dark: qrDark, light: qrLight, eye: qrEye || undefined, shape: qrShape, logo });
           if (isMounted) setDynamicQrUrl(qrCanvas.toDataURL('image/png'));
-        }
+        };
+        if (!qrLogo) return draw();
+        const logo = new Image();
+        logo.onload = () => draw(logo);
+        logo.onerror = () => draw();
+        logo.src = '/card/leads-logo-clean.png';
       } catch (err) {
         console.warn('[InteractiveKeycard] QR generation warning:', err);
       }
@@ -230,7 +217,7 @@ export function InteractiveKeycardHolder({
 
     generateQr();
     return () => { isMounted = false; };
-  }, [cardUrl, qrUrl]);
+  }, [cardUrl, qrUrl, qrDark, qrLight, qrEye, qrShape, qrLogo]);
 
   useEffect(() => {
     // Respect reduced-motion preferences: skip the cover/extract choreography entirely
@@ -241,6 +228,16 @@ export function InteractiveKeycardHolder({
     }, 350);
     return () => clearTimeout(timer);
   }, [autoOpen]);
+
+  useEffect(() => {
+    if (!autoExtract || stageState !== 'opened') return;
+    const t = setTimeout(() => {
+      setIsFlipped(false);
+      setStageState('extracting');
+      setTimeout(() => setStageState('extracted'), CARD_EXTRACT_DURATION);
+    }, 450);
+    return () => clearTimeout(t);
+  }, [autoExtract, stageState]);
 
   const handleHolderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest(`.${styles.passCard}`) || (e.target as HTMLElement).closest(`.${styles.coverBack}`)) {
@@ -516,10 +513,13 @@ export function InteractiveKeycardHolder({
                   /* EVENT PASS LUXURY TURNSTILE CREDENTIAL (MATCHES STUDIO DESIGN) */
                   <div
                     className={`${styles.passFace} ${styles.eventPassFront}`}
-                    style={passThemeStyle(
-                      theme,
-                      passGradient || (passColor ? `linear-gradient(145deg, ${passColor} 0%, #030712 100%)` : undefined)
-                    )}
+                    style={{
+                      ...(passThemeStyle(
+                        theme,
+                        passGradient || (passColor ? `linear-gradient(145deg, ${passColor} 0%, #030712 100%)` : undefined)
+                      ) || {}),
+                      ['--pass-font-scale' as string]: String(fontScale || 1),
+                    } as React.CSSProperties}
                   >
                     {/* Luxury Holographic Foil Shimmer */}
                     <div className={styles.holographicFoil} />

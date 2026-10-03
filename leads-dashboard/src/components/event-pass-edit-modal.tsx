@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Save,
@@ -12,23 +12,36 @@ import {
   Calendar,
   MapPin,
   Palette,
+  Eye,
   CheckCircle2,
   AlertCircle,
   Smartphone,
   Sparkles,
 } from 'lucide-react';
 import {
+  EventItem,
   EventPassItem,
   EventPassType,
   EventGuestCategory,
+  PassQrOptions,
+  DEFAULT_QR_OPTIONS,
+  qrFieldsFromOptions,
+  qrOptionsFromPass,
+  PassTheme,
+  authHeaders,
+  expandDateRange,
+  formatValidDaysLabel,
   updateEventPass,
 } from '@/lib/local-data';
-import { PASS_COLOR_PRESETS } from './event-pass-studio';
+import { EventPassKeycard } from './event-pass-keycard';
+import { AppleWalletPassPreview } from './apple-wallet-pass-preview';
+import { PassColorControls, PassFontControls, PassQrControls, PassSection, PassTextColorControls, PassValidityPicker } from './pass-design-controls';
 
 interface EventPassEditModalProps {
   isOpen: boolean;
   onClose: () => void;
   pass: EventPassItem | null;
+  events?: EventItem[];
   currentUserName: string;
   onPassUpdated: (updatedPass: EventPassItem) => void;
 }
@@ -61,6 +74,7 @@ export function EventPassEditModal({
   isOpen,
   onClose,
   pass,
+  events = [],
   currentUserName,
   onPassUpdated,
 }: EventPassEditModalProps) {
@@ -73,6 +87,23 @@ export function EventPassEditModal({
   const [attendeePhone, setAttendeePhone] = useState('');
   const [status, setStatus] = useState<'Active' | 'Checked In' | 'Cancelled'>('Active');
   const [passColor, setPassColor] = useState('#0b1526');
+  const [colorMode, setColorMode] = useState<'gradient' | 'solid'>('solid');
+  const [passGradient, setPassGradient] = useState('linear-gradient(145deg, #0d2342 0%, #030712 100%)');
+  const [gradientEndColor, setGradientEndColor] = useState('#030712');
+  const [textColor, setTextColor] = useState('');
+  const [labelColor, setLabelColor] = useState('');
+  const [eventId, setEventId] = useState('');
+  const [validityDate, setValidityDate] = useState('');
+  const [selectedValidDays, setSelectedValidDays] = useState<string[] | null>(null);
+  const [theme, setTheme] = useState<PassTheme | undefined>(undefined);
+  const skipDayReset = useRef(true);
+  const [fontScale, setFontScale] = useState(1);
+  const [showEventTitle, setShowEventTitle] = useState<boolean | undefined>(undefined);
+  const [qr, setQr] = useState<PassQrOptions>(DEFAULT_QR_OPTIONS);
+  const patchQr = (patch: Partial<PassQrOptions>) => setQr((q) => ({ ...q, ...patch }));
+  const [previewMode, setPreviewMode] = useState<'pass' | 'wallet'>('pass');
+  const [open, setOpen] = useState<Record<string, boolean>>({ details: true });
+  const toggle = (k: string) => setOpen((o) => ({ ...o, [k]: !o[k] }));
   const [notes, setNotes] = useState('');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -93,18 +124,98 @@ export function EventPassEditModal({
       setAttendeePhone(pass.attendeePhone || '');
       setStatus(pass.status || 'Active');
       setPassColor(pass.passColor || '#0b1526');
+      const grad = pass.passGradient;
+      setColorMode(grad ? 'gradient' : 'solid');
+      if (grad) {
+        setPassGradient(grad);
+        const hexes = grad.match(/#[0-9a-fA-F]{6}/g) || [];
+        if (hexes[0]) setPassColor(hexes[0]);
+        if (hexes[1]) setGradientEndColor(hexes[1]);
+      }
+      setTextColor(pass.textColor || '');
+      setLabelColor(pass.labelColor || '');
+      setFontScale(pass.fontScale || 1);
+      setShowEventTitle(pass.showEventTitle);
+      setQr(qrOptionsFromPass(pass));
+      setOpen({ details: true });
+      setEventId(pass.eventId);
+      setValidityDate(pass.validityDate || '');
+      setSelectedValidDays(pass.validDays && pass.validDays.length > 0 ? pass.validDays : null);
+      skipDayReset.current = true;
       setNotes(pass.notes || '');
       setErrorMsg('');
       setSuccessInfo(null);
     }
   }, [pass, isOpen]);
 
+  const selectedEvent = events.find((e) => e.id === eventId);
+  const eventChanged = !!pass && eventId !== pass.eventId;
+
+  // Picking a different event resets the valid-day selection to that event's days
+  useEffect(() => {
+    if (skipDayReset.current) {
+      skipDayReset.current = false;
+      return;
+    }
+    setSelectedValidDays(null);
+  }, [eventId]);
+
+  // The event's own pass look (artwork, colours) — same data the public pass page uses
+  useEffect(() => {
+    if (!isOpen || !eventId || eventId === 'standalone' || eventId.startsWith('custom-')) {
+      setTheme(undefined);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/events/${eventId}/pass-theme`, { headers: authHeaders() })
+      .then((r) => (r.ok ? r.json() : undefined))
+      .then((t) => {
+        if (!cancelled) setTheme(t);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [eventId, isOpen]);
+
   if (!isOpen || !pass) return null;
+
+  const eventDays = selectedEvent && !selectedEvent.datesTBD ? expandDateRange(selectedEvent.startDate, selectedEvent.endDate) : [];
+  const originalDays = pass.validDays || [];
+  const dayChoices = eventDays.length > 0 ? eventDays : originalDays;
+  const effectiveValidDays = selectedValidDays
+    ? selectedValidDays.filter((d) => dayChoices.includes(d) || dayChoices.length === 0)
+    : eventChanged && eventDays.length > 0
+    ? eventDays
+    : originalDays.length > 0
+    ? originalDays
+    : eventDays.length > 1
+    ? eventDays
+    : validityDate
+    ? [validityDate]
+    : [];
+  const eventDateLabel = selectedEvent
+    ? selectedEvent.datesTBD
+      ? 'Dates TBD'
+      : `${selectedEvent.startDate}${selectedEvent.endDate && selectedEvent.endDate !== selectedEvent.startDate ? ` – ${selectedEvent.endDate}` : ''}`
+    : pass.eventDate;
+  const displayValidity = effectiveValidDays.length > 0 ? formatValidDaysLabel(effectiveValidDays) : validityDate || eventDateLabel || "";
+  const toggleValidDay = (d: string) => {
+    const base = selectedValidDays ?? effectiveValidDays;
+    const next = base.includes(d) ? base.filter((x) => x !== d) : [...base, d].sort();
+    setSelectedValidDays(next.length === 0 ? base : next);
+  };
+  const resolvedEventName = selectedEvent?.title || pass.eventName;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!attendeeName.trim()) {
       setErrorMsg('Attendee name is required.');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(attendeeEmail.trim())) {
+      setOpen((o) => ({ ...o, details: true }));
+      setErrorMsg('A valid email address is required — the pass is sent there.');
       return;
     }
 
@@ -121,10 +232,26 @@ export function EventPassEditModal({
           passType,
           attendeeOrg: attendeeOrg.trim() || undefined,
           roomOrVenue: roomOrVenue.trim() || undefined,
-          attendeeEmail: attendeeEmail.trim() || undefined,
+          attendeeEmail: attendeeEmail.trim(),
           attendeePhone: attendeePhone.trim() || undefined,
           status,
           passColor,
+          passGradient: colorMode === 'gradient' ? passGradient : undefined,
+          textColor: textColor || undefined,
+          labelColor: labelColor || undefined,
+          fontScale: fontScale !== 1 ? fontScale : undefined,
+          showEventTitle,
+          ...qrFieldsFromOptions(qr),
+          validDays: effectiveValidDays.length > 0 ? effectiveValidDays : undefined,
+          validityDate: displayValidity,
+          ...(eventChanged && selectedEvent
+            ? {
+                eventId: selectedEvent.id,
+                eventName: selectedEvent.title,
+                eventDate: eventDateLabel,
+                eventVenue: selectedEvent.location || pass.eventVenue,
+              }
+            : {}),
           notes: notes.trim() || undefined,
         },
         currentUserName
@@ -152,7 +279,7 @@ export function EventPassEditModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl bg-slate-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="relative w-full max-w-6xl bg-slate-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="p-5 border-b border-white/10 flex items-center justify-between bg-slate-950/60">
           <div className="flex items-center gap-3">
@@ -180,7 +307,8 @@ export function EventPassEditModal({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 flex-1">
+        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto flex-1 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_540px] gap-6">
+          <div className="space-y-4 min-w-0">
           {/* Live Wallet Sync Notice Banner */}
           <div className="p-3 rounded-xl bg-gradient-to-r from-sky-500/10 via-indigo-500/10 to-transparent border border-sky-500/20 flex items-start gap-2.5">
             <Smartphone className="h-4 w-4 text-sky-400 shrink-0 mt-0.5" />
@@ -206,6 +334,30 @@ export function EventPassEditModal({
               </span>
             </div>
           )}
+
+          <PassSection title="1 · Event & guest details" hint="Who the pass is for, event, venue, valid days" icon={<Ticket className="h-4 w-4" />} open={!!open.details} onToggle={() => toggle('details')}>
+          {/* Event */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
+              <Calendar className="h-3.5 w-3.5 text-accent" />
+              Event
+            </label>
+            <select
+              value={eventId}
+              onChange={(e) => setEventId(e.target.value)}
+              className="w-full bg-slate-950/80 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-accent"
+            >
+              {!events.some((e) => e.id === pass.eventId) && (
+                <option value={pass.eventId} className="bg-slate-900 text-white">{pass.eventName} (current)</option>
+              )}
+              {events.map((ev) => (
+                <option key={ev.id} value={ev.id} className="bg-slate-900 text-white">{ev.title}</option>
+              ))}
+            </select>
+            {eventChanged && (
+              <p className="mt-1 text-[10px] text-amber-400">Moving this pass to another event — name, dates and venue follow the new event.</p>
+            )}
+          </div>
 
           {/* Row 1: Attendee Name & Category */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -332,10 +484,11 @@ export function EventPassEditModal({
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
                 <Mail className="h-3.5 w-3.5 text-accent" />
-                Attendee Email
+                Attendee Email <span className="text-rose-400">*</span>
               </label>
               <input
                 type="email"
+                required
                 value={attendeeEmail}
                 onChange={(e) => setAttendeeEmail(e.target.value)}
                 placeholder="guest@domain.com"
@@ -358,33 +511,19 @@ export function EventPassEditModal({
             </div>
           </div>
 
-          {/* Color Theme Selector */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-2 flex items-center gap-1.5">
-              <Palette className="h-3.5 w-3.5 text-accent" />
-              Pass Color / Theme Preset
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {PASS_COLOR_PRESETS.map((preset) => (
-                <button
-                  key={preset.hex}
-                  type="button"
-                  onClick={() => setPassColor(preset.hex)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-[11px] font-semibold transition-all ${
-                    passColor === preset.hex
-                      ? 'border-accent bg-accent/20 text-white shadow-lg shadow-accent/20 scale-105'
-                      : 'border-white/10 bg-slate-950/60 text-slate-400 hover:border-white/20 hover:text-white'
-                  }`}
-                >
-                  <span
-                    className="w-3.5 h-3.5 rounded-full border border-white/30"
-                    style={{ backgroundColor: preset.hex }}
-                  />
-                  <span>{preset.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+          {/* Validity */}
+          {(dayChoices.length > 0 || validityDate) && (
+            <PassValidityPicker
+              eventDays={dayChoices}
+              effectiveValidDays={effectiveValidDays}
+              selectedValidDays={selectedValidDays}
+              setSelectedValidDays={setSelectedValidDays}
+              toggleValidDay={toggleValidDay}
+              validityDate={validityDate}
+              setValidityDate={setValidityDate}
+              displayValidity={displayValidity}
+            />
+          )}
 
           {/* Notes */}
           <div>
@@ -399,6 +538,30 @@ export function EventPassEditModal({
               className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-accent resize-none"
             />
           </div>
+
+          </PassSection>
+
+          <PassSection title="2 · Colours & text" hint="Solid or custom gradient, text colours, font size" icon={<Palette className="h-4 w-4" />} open={!!open.colours} onToggle={() => toggle('colours')}>
+          {/* Design */}
+          <PassColorControls
+            colorMode={colorMode}
+            setColorMode={setColorMode}
+            passColor={passColor}
+            setPassColor={setPassColor}
+            passGradient={passGradient}
+            setPassGradient={setPassGradient}
+            gradientEndColor={gradientEndColor}
+            setGradientEndColor={setGradientEndColor}
+            activeTheme={theme}
+          />
+          <PassTextColorControls textColor={textColor} setTextColor={setTextColor} labelColor={labelColor} setLabelColor={setLabelColor} />
+
+            <PassFontControls fontScale={fontScale} setFontScale={setFontScale} showEventTitle={showEventTitle} setShowEventTitle={setShowEventTitle} />
+          </PassSection>
+
+          <PassSection title="3 · QR code" hint="Barcode type, caption and QR colours" icon={<Smartphone className="h-4 w-4" />} open={!!open.qr} onToggle={() => toggle('qr')}>
+            <PassQrControls value={qr} onChange={patchQr} />
+          </PassSection>
 
           {/* Footer Actions */}
           <div className="pt-3 border-t border-white/10 flex items-center justify-end gap-3">
@@ -428,6 +591,75 @@ export function EventPassEditModal({
               )}
             </button>
           </div>
+          </div>
+
+          {/* Live preview: exactly the pass the recipient receives */}
+          <aside className="lg:sticky lg:top-0 self-start space-y-2 min-w-0 overflow-x-auto">
+            <p className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
+              <Eye className="h-3.5 w-3.5 text-accent" /> Live preview — the issued pass
+            </p>
+            <div className="flex items-center gap-1 rounded-full border border-white/15 p-0.5 text-[10px] font-bold w-fit">
+              {([['pass', 'Issued Pass'], ['wallet', 'Apple Wallet']] as const).map(([m, name]) => (
+                <button key={m} type="button" onClick={() => setPreviewMode(m)} className={`px-3 py-1 rounded-full cursor-pointer ${previewMode === m ? 'bg-accent text-white' : 'text-slate-400 hover:text-white'}`}>{name}</button>
+              ))}
+            </div>
+            {previewMode === 'pass' ? (
+            <EventPassKeycard
+              key={pass.id}
+              pass={{
+                attendeeName: attendeeName || 'Guest / Attendee Name',
+                passType,
+                guestCategory,
+                serialNumber: pass.serialNumber,
+                eventName: resolvedEventName,
+                eventDate: eventDateLabel,
+                eventVenue: selectedEvent?.location || pass.eventVenue,
+                roomOrVenue: roomOrVenue || undefined,
+                attendeeOrg: attendeeOrg || undefined,
+                validityDate: displayValidity,
+                validDays: effectiveValidDays,
+                passColor,
+                passGradient: colorMode === 'gradient' ? passGradient : undefined,
+                textColor: textColor || undefined,
+                labelColor: labelColor || undefined,
+                fontScale,
+                qrDark: qr.dark,
+                qrLight: qr.light,
+                qrEyeColor: qr.eye || undefined,
+                qrShape: qr.shape,
+                qrLogo: qr.logo,
+              }}
+              theme={theme}
+              autoOpen
+              autoExtract
+              showActions={false}
+            />
+            ) : (
+              <AppleWalletPassPreview
+                attendeeName={attendeeName}
+                guestCategory={guestCategory}
+                passType={passType}
+                roomOrVenue={roomOrVenue || selectedEvent?.location || pass.eventVenue}
+                eventName={resolvedEventName}
+                eventDate={eventDateLabel}
+                validityDate={displayValidity}
+                serialNumber={pass.serialNumber}
+                passColor={passColor}
+                theme={theme}
+                layout="poster"
+                validDaysCount={effectiveValidDays.length}
+              validDays={effectiveValidDays}
+                passGradient={colorMode === 'gradient' ? passGradient : undefined}
+                textColor={textColor || undefined}
+                labelColor={labelColor || undefined}
+                fontScale={fontScale}
+                showEventTitle={showEventTitle}
+                barcodeFormat={qr.format}
+                altText={qr.altText}
+              qr={qr}
+              />
+            )}
+          </aside>
         </form>
       </div>
     </div>

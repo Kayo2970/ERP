@@ -210,7 +210,9 @@ export function EventPassBulkModal({
             validFrom,
             validTo,
             notes,
-            isValid: true,
+            // Email is mandatory: the pass is delivered there
+            isValid: Boolean(email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)),
+            error: email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? undefined : 'Valid email required',
           });
         }
 
@@ -220,6 +222,8 @@ export function EventPassBulkModal({
         }
 
         setParsedRows(rows);
+        const skipped = rows.filter((r) => !r.isValid).length;
+        if (skipped > 0) setErrorMessage(`${skipped} row${skipped === 1 ? '' : 's'} without a valid email will be skipped — email is required to deliver each pass.`);
       } catch (err) {
         console.error(err);
         setErrorMessage('Failed to parse CSV file. Please check file format.');
@@ -428,7 +432,7 @@ export function EventPassBulkModal({
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                     {parsedRows.map((row, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-white/5">
+                      <tr key={idx} className={`hover:bg-slate-50 dark:hover:bg-white/5 ${row.isValid ? '' : 'opacity-60 bg-rose-500/5'}`}>
                         <td className="py-2 px-3 font-bold text-slate-900 dark:text-white">
                           {row.attendeeName}
                         </td>
@@ -444,7 +448,7 @@ export function EventPassBulkModal({
                           📍 {row.roomOrVenue}
                         </td>
                         <td className="py-2 px-3 text-slate-400 text-[10px]">
-                          {row.email || row.phone || '—'}
+                          {row.isValid ? row.email : <span className="text-rose-400 font-bold">⚠ {row.error} — skipped</span>}
                         </td>
                       </tr>
                     ))}
@@ -466,7 +470,7 @@ export function EventPassBulkModal({
           </button>
           <button
             type="button"
-            disabled={isProcessing || parsedRows.length === 0}
+            disabled={isProcessing || parsedRows.filter((r) => r.isValid).length === 0}
             onClick={handleExecuteBulkCreation}
             className="px-6 py-2.5 bg-accent hover:bg-accent/90 text-white font-extrabold rounded-xl text-xs transition-all shadow-lg shadow-accent/25 flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
