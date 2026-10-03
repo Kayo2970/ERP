@@ -534,6 +534,13 @@ export interface EventPassItem {
   walletGoogleSaveUrl?: string;
   /** Serial assigned by WalletWallet when the wallet pass was created (used for live updates / revoke). */
   walletSerialNumber?: string;
+  /** First time the Apple/Google pass was served to a guest (after that, edits are pushed in place instead of re-issuing). */
+  walletInstalledAt?: string;
+  /** Edited after the wallet pass was created but before any guest took it: rebuilt on the next Add. */
+  walletStale?: boolean;
+  /** Last successful wallet create/update, and the last error text (cleared on success). */
+  walletSyncedAt?: string;
+  walletLastError?: string;
   /** Set by the retention scheduler once cached wallet/theme files were removed (event end + 30 days). */
   archivedAt?: string;
 
@@ -3129,7 +3136,7 @@ export async function updateEventPass(
   passId: string,
   updates: Partial<EventPassItem>,
   actorName: string
-): Promise<{ pass: EventPassItem; walletUpdated?: boolean; walletError?: string } | null> {
+): Promise<{ pass: EventPassItem; walletUpdated?: boolean; walletAction?: 'none' | 'queued' | 'updated'; walletError?: string } | null> {
   const passes = getEventPasses();
   const idx = passes.findIndex((p) => p.id === passId || p.serialNumber === passId);
   if (idx === -1) return null;
@@ -3160,6 +3167,7 @@ export async function updateEventPass(
   saveEventPasses(passes);
 
   let walletUpdated = false;
+  let walletAction: 'none' | 'queued' | 'updated' = 'none';
   let walletError: string | undefined;
 
   try {
@@ -3175,6 +3183,7 @@ export async function updateEventPass(
     if (res.ok) {
       const data = await res.json();
       if (data.walletUpdated) walletUpdated = true;
+      if (data.walletAction) walletAction = data.walletAction;
       if (data.walletNotice) walletError = data.walletNotice;
     }
   } catch (err: any) {
@@ -3188,7 +3197,7 @@ export async function updateEventPass(
     `Updated pass details for "${updated.serialNumber}" (${updated.attendeeName})`
   );
 
-  return { pass: updated, walletUpdated, walletError };
+  return { pass: updated, walletUpdated, walletAction, walletError };
 }
 
 

@@ -214,6 +214,7 @@ export async function walletDataForPass(pass: EventPassItem): Promise<WalletEven
     validityDate: pass.validityDate,
     validDays: pass.validDays,
     passColor: pass.passColor,
+    passGradient: pass.passGradient,
     themeColor: theme.backgroundColor,
     // Public URLs (not data URIs): WalletWallet fetches + re-hosts them once, like the LEADS logo
     themeBackgroundUrl: theme.walletBackgroundUrl,
