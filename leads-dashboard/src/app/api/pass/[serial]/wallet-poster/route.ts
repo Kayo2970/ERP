@@ -14,6 +14,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ seri
   const found = await lookupPassBySerial(serial);
   if (!found || found.archived || found.pass.status === 'Cancelled') return new NextResponse('Not found', { status: 404 });
   const { pass } = found;
+  const theme = await getPassTheme(pass.eventId);
   const buf = await renderWalletPosterJpeg(
     {
       eventName: pass.eventName,
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ seri
       textColor: pass.textColor,
       labelColor: pass.labelColor,
       fontScale: pass.fontScale,
-      showEventTitle: pass.showEventTitle,
+      showEventTitle: pass.showEventTitle ?? theme.showEventTitle,
       qr: pass.qrInWallet
         ? {
             url: `${getAppBaseUrl(req)}/pass/${pass.serialNumber}`,
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ seri
           }
         : undefined,
     },
-    await getPassTheme(pass.eventId)
+    theme
   );
   return new NextResponse(new Uint8Array(buf), {
     headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=300' },

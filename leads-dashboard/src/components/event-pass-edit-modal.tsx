@@ -35,7 +35,7 @@ import {
 } from '@/lib/local-data';
 import { EventPassKeycard } from './event-pass-keycard';
 import { AppleWalletPassPreview } from './apple-wallet-pass-preview';
-import { PassColorControls, PassFontControls, PassQrControls, PassSection, PassTextColorControls, PassValidityPicker } from './pass-design-controls';
+import { EventTitleToggle, PassColorControls, PassFontControls, PassQrControls, PassSection, PassTextColorControls, PassValidityPicker } from './pass-design-controls';
 
 interface EventPassEditModalProps {
   isOpen: boolean;
@@ -615,7 +615,7 @@ export function EventPassEditModal({
           />
           <PassTextColorControls textColor={textColor} setTextColor={setTextColor} labelColor={labelColor} setLabelColor={setLabelColor} />
 
-            <PassFontControls fontScale={fontScale} setFontScale={setFontScale} showEventTitle={showEventTitle} setShowEventTitle={setShowEventTitle} />
+            <PassFontControls fontScale={fontScale} setFontScale={setFontScale} showEventTitle={showEventTitle} setShowEventTitle={setShowEventTitle} eventDefault={theme?.showEventTitle} />
           </PassSection>
 
           <PassSection title="3 · QR code" hint="Barcode type, caption and QR colours" icon={<Smartphone className="h-4 w-4" />} open={!!open.qr} onToggle={() => toggle('qr')}>
@@ -717,6 +717,9 @@ export function EventPassEditModal({
                 altText={qr.altText}
               qr={qr}
               />
+            )}
+            {previewMode === 'wallet' && (
+              <EventTitleToggle value={showEventTitle} onChange={setShowEventTitle} eventDefault={theme?.showEventTitle} />
             )}
           </aside>
         </form>
