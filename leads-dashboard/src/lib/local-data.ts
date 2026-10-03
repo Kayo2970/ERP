@@ -310,6 +310,8 @@ export type EventGuestCategory =
   | 'Other'
   | string;
 
+import { passEmailButtonsHtml } from '@/lib/pass-email-buttons';
+
 export interface PassAttendanceRecord {
   day: string; // e.g. "Day 1", "Day 2", "2026-10-13"
   date?: string;
@@ -3158,14 +3160,11 @@ export async function dispatchPassEmail(
         </table>
       </div>
 
-      <div style="text-align: center; margin-bottom: 24px;">
-        <a href="${passUrl}" style="display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #0284c7, #2563eb); color: #ffffff; text-decoration: none; font-weight: bold; font-size: 14px; border-radius: 10px; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4);">
-          View Verified Digital Pass &rarr;
-        </a>
-        <p style="margin: 10px 0 0 0; font-size: 11px; color: #64748b;">
-          Includes Apple Wallet / Google Wallet pass &amp; QR turnstile code
-        </p>
-      </div>
+      <!-- Wallet / calendar / pass buttons: our own URLs, wallet pass is created once on first click and cached -->
+      ${passEmailButtonsHtml(origin, pass.serialNumber)}
+      <p style="margin: 0 0 24px 0; font-size: 11px; color: #64748b; text-align: center;">
+        One pass, one QR &mdash; present it at official event turnstiles on every valid day.
+      </p>
 
       <p style="margin: 0; font-size: 12px; color: #64748b; text-align: center; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 16px;">
         Please present your digital pass or QR code at official event turnstiles upon arrival.<br/>

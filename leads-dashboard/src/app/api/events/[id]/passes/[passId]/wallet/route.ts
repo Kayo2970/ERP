@@ -1,88 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getWalletWalletApiKey } from '@/lib/wallet/walletwallet-config';
-import { createEventWalletPass } from '@/lib/wallet/walletwallet-client';
-import { readCollection, mutateCollection } from '@/lib/server-db';
-import { saveBase64File } from '@/lib/file-storage';
-import { EventPassItem } from '@/lib/local-data';
-import { walletDataForPass } from '@/lib/pass-theme';
+import { getAppBaseUrl } from '@/lib/app-url';
+import { getOrCreateWalletPass, WalletUnavailableError } from '@/lib/wallet/pass-cache';
+import { lookupPassBySerial } from '@/lib/pass-lookup';
+import { readCollection } from '@/lib/server-db';
+import type { EventPassItem } from '@/lib/local-data';
 
 export const dynamic = 'force-dynamic';
 
+/** Pass-page "Add to Apple/Google Wallet" buttons. Same single-creation cache as the email buttons. */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; passId: string }> }
 ) {
   try {
-    const { id: eventId, passId } = await params;
-    const passes = await readCollection<EventPassItem>('event_passes');
-    const pass = passes.find((p) => p.id === passId || p.serialNumber === passId);
-
-    if (!pass) {
-      return NextResponse.json({ error: 'Pass not found' }, { status: 404 });
-    }
-
-    if (pass.status === 'Cancelled') {
-      return NextResponse.json({ error: 'This pass has been cancelled.' }, { status: 410 });
-    }
-
-    // 1. VPS Server Cache Check — if already generated and saved for this pass on disk, return cached URLs instantly
-    if ((pass as any).walletAppleUrl && (pass as any).walletGoogleSaveUrl) {
-      return NextResponse.json({
-        appleUrl: (pass as any).walletAppleUrl,
-        googleSaveUrl: (pass as any).walletGoogleSaveUrl,
-        cached: true,
-      });
-    }
-
-    const apiKey = await getWalletWalletApiKey();
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'Wallet passes are temporarily unavailable (API key not configured).' },
-        { status: 503 }
-      );
-    }
-
-    const origin = request.headers.get('origin') || 'https://portal-leads.msruas.ac.in';
-    const passUrl = `${origin}/pass/${pass.serialNumber}`;
-
-    // 2. Generate via WalletWallet API
-    const walletPass = await createEventWalletPass(apiKey, await walletDataForPass(pass), passUrl);
-
-    // 3. Save .pkpass file onto VPS server disk
-    let appleUrl = '';
-    if (walletPass.applePass) {
-      const dataUrl = `data:application/vnd.apple.pkpass;base64,${walletPass.applePass}`;
-      const stored = await saveBase64File('event-passes', pass.id, 0, `${pass.serialNumber}.pkpass`, dataUrl);
-      appleUrl = stored.url;
-    }
-
-    const googleSaveUrl = walletPass.googleSaveUrl || '';
-
-    // 4. Save to VPS server database collection so future requests take 0 API calls
-    await mutateCollection<EventPassItem>('event_passes', (current = []) => {
-      const idx = current.findIndex((p) => p.id === pass.id || p.serialNumber === pass.serialNumber);
-      if (idx === -1) return current;
-      const copy = [...current];
-      copy[idx] = {
-        ...copy[idx],
-        walletAppleUrl: appleUrl,
-        walletGoogleSaveUrl: googleSaveUrl,
-        walletSerialNumber: walletPass.serialNumber,
-      } as any;
-      return copy;
-    });
-
-    return NextResponse.json({
-      appleUrl,
-      googleSaveUrl,
-      shareUrl: walletPass.shareUrl,
-      cached: false,
-    });
+    const { passId } = await params;
+    const pass = (await readCollection<EventPassItem>('event_passes')).find((p) => p.id === passId || p.serialNumber === passId);
+    if (!pass) return NextResponse.json({ error: 'Pass not found' }, { status: 404 });
+    const found = await lookupPassBySerial(pass.serialNumber);
+    if (found?.archived) return NextResponse.json({ error: 'This pass has expired.' }, { status: 410 });
+    const wallet = await getOrCreateWalletPass(pass.id, getAppBaseUrl(request));
+    return NextResponse.json({ appleUrl: wallet.appleUrl, googleSaveUrl: wallet.googleSaveUrl, cached: wallet.cached });
   } catch (error: any) {
-    console.error('Error generating event wallet pass:', error);
-    return NextResponse.json(
-      { error: error?.message || 'Failed to generate wallet pass.' },
-      { status: 500 }
-    );
+    const status = error instanceof WalletUnavailableError ? 503 : 500;
+    return NextResponse.json({ error: error?.message || 'Failed to generate wallet pass.' }, { status });
   }
 }
