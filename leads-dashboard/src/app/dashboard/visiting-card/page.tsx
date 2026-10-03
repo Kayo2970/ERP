@@ -52,9 +52,6 @@ export default function VisitingCardPage() {
   // Wallet Setup (Super User only). Apple + Google passes are both issued
   // through a single WalletWallet API key (https://walletwallet.dev) —
   // see docs/wallet-setup.md.
-  const [walletStatus, setWalletStatus] = useState<any>(null);
-  const [walletWalletApiKey, setWalletWalletApiKey] = useState('');
-  const [isSavingWallet, setIsSavingWallet] = useState(false);
 
   // Whether Apple/Google Wallet buttons are actually live right now — every
   // member can see this (unlike walletStatus above, which needs Super User),
@@ -102,14 +99,8 @@ export default function VisitingCardPage() {
 
   useEffect(() => {
     if (!user) return;
-    fetchWalletStatus();
     fetchWalletAvailability();
   }, [user]);
-
-  const fetchWalletStatus = async () => {
-    const res = await fetch('/api/admin/wallet-settings', { headers: authHeaders() });
-    if (res.ok) setWalletStatus(await res.json());
-  };
 
   const fetchWalletAvailability = async () => {
     const res = await fetch('/api/wallet-availability', { headers: authHeaders() });
@@ -290,31 +281,6 @@ export default function VisitingCardPage() {
       triggerError(err?.message || 'Failed to save visiting card settings.');
     } finally {
       setIsSavingCard(false);
-    }
-  };
-
-  const handleSaveWalletSettings = async () => {
-    if (!walletWalletApiKey.trim()) {
-      triggerError('Enter a WalletWallet API key first.');
-      return;
-    }
-    setIsSavingWallet(true);
-    try {
-      const res = await fetch('/api/admin/wallet-settings', {
-        method: 'PATCH',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ walletwallet: { apiKey: walletWalletApiKey.trim() } }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        triggerError(data.error || 'Failed to save wallet settings.');
-        return;
-      }
-      setWalletWalletApiKey('');
-      await Promise.all([fetchWalletStatus(), fetchWalletAvailability()]);
-      triggerSuccess('Wallet credentials saved.');
-    } finally {
-      setIsSavingWallet(false);
     }
   };
 
@@ -693,44 +659,10 @@ export default function VisitingCardPage() {
           subtitle={user?.name}
         />
 
-        {isWalletAdmin && (
-          <div className="glass-panel rounded-2xl p-6 xl:col-span-12 space-y-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-bold text-theme-text-primary">Wallet Setup (Super User)</h3>
-                <p className="text-xs text-theme-text-secondary">
-                  Apple &amp; Google Wallet passes are both issued through{' '}
-                  <a href="https://walletwallet.dev" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
-                    WalletWallet
-                  </a>{' '}
-                  — no Apple/Google developer certificates needed. Sign up, grab an API key, paste it below.
-                  See <code className="text-accent">docs/wallet-setup.md</code> for details.
-                </p>
-              </div>
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${walletStatus?.walletWalletConfigured ? 'bg-success/15 text-success' : 'bg-theme-border/30 text-theme-text-secondary'}`}>
-                {walletStatus?.walletWalletConfigured ? 'Configured' : 'Not configured'}
-              </span>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-2.5 text-xs max-w-lg">
-              <input
-                type="password"
-                value={walletWalletApiKey}
-                onChange={(e) => setWalletWalletApiKey(e.target.value)}
-                placeholder="ww_live_..."
-                className="flex-1 px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
-              />
-              <button
-                type="button"
-                onClick={handleSaveWalletSettings}
-                disabled={isSavingWallet}
-                className="flex items-center justify-center gap-2 px-5 py-2.5 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/20 cursor-pointer disabled:opacity-50 shrink-0"
-              >
-                <Save className="h-4 w-4" />
-                {isSavingWallet ? 'Saving…' : 'Save'}
-              </button>
-            </div>
-          </div>
+        {user?.tier === 1 && (
+          <p className="xl:col-span-12 text-[11px] text-theme-text-secondary">
+            The WalletWallet API key now lives in <a href="/dashboard/settings" className="text-accent hover:underline">Settings → Integrations</a> (Super User).
+          </p>
         )}
       </div>
 

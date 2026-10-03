@@ -23,8 +23,8 @@ the QR code and Save Contact, both of which already work everywhere.)
 
 1. Sign up at https://walletwallet.dev and generate an API key
    (`ww_live_...`). The free tier covers 1,000 passes/month.
-2. In the ERP: **sidebar → Visiting Card → Wallet Setup** (visible
-   to a Tier-1 Super User only), paste the key in, click **Save**.
+2. In the ERP: **Settings → Integrations** (Tier-1 Super User only), paste the key in,
+   click **Save**, then **Check key**. (It used to live under Visiting Card → Wallet Setup.)
 
 That's it — "Add to Apple Wallet" and "Add to Google Wallet" appear on
 every published card immediately, no redeploy needed.
@@ -192,3 +192,17 @@ Event passes (Event Passes → Studio → *Customise pass background & colours*)
   Older iOS and Google Wallet show the classic card (base colour + fields).
 - **Plan:** background, logo, footer fields and custom colour require a WalletWallet **Pro** key.
 - Request bodies are capped at 2 MB, another reason to send URLs instead of embedded images.
+
+
+## Event pass emails: buttons, caching and retention
+
+- Pass emails carry four buttons — Add to Apple Wallet, Add to Google Wallet, Add to Calendar, View Digital Pass —
+  that point at this portal (`/api/pass/<serial>/wallet/apple|google`, `/calendar`, `/pass/<serial>`), not at
+  WalletWallet. **Nothing is created when the email is sent.** The first click creates the wallet pass (one
+  WalletWallet call that yields both Apple and Google) and caches the `.pkpass` on disk plus the Google link on the
+  pass record; every later click is served from the cache. Concurrent clicks share one creation, and a failed creation
+  backs off for a minute. Calendar files are built locally (no WalletWallet call).
+- **30 days after the event ends** (latest valid day / event end date) a pass is archived: all its URLs (page, wallet
+  buttons, calendar, ticket image) turn into a "Thank you for being part of <event>… follow us" page with the centre's
+  social links (Settings → Integrations → Centre social accounts), and the daily `pass-retention-scheduler` deletes the
+  cached wallet files and the event's pass-theme images. Wallet passes already on guests' phones are not revoked.
