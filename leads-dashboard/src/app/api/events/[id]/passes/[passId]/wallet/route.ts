@@ -4,6 +4,7 @@ import { createEventWalletPass } from '@/lib/wallet/walletwallet-client';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { saveBase64File } from '@/lib/file-storage';
 import { EventPassItem } from '@/lib/local-data';
+import { walletDataForPass } from '@/lib/pass-theme';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,6 +19,10 @@ export async function GET(
 
     if (!pass) {
       return NextResponse.json({ error: 'Pass not found' }, { status: 404 });
+    }
+
+    if (pass.status === 'Cancelled') {
+      return NextResponse.json({ error: 'This pass has been cancelled.' }, { status: 410 });
     }
 
     // 1. VPS Server Cache Check — if already generated and saved for this pass on disk, return cached URLs instantly
@@ -41,22 +46,7 @@ export async function GET(
     const passUrl = `${origin}/pass/${pass.serialNumber}`;
 
     // 2. Generate via WalletWallet API
-    const walletPass = await createEventWalletPass(
-      apiKey,
-      {
-        serialNumber: pass.serialNumber,
-        eventName: pass.eventName,
-        eventDate: pass.eventDate,
-        eventVenue: pass.eventVenue,
-        attendeeName: pass.attendeeName,
-        guestCategory: pass.guestCategory,
-        roomOrVenue: pass.roomOrVenue,
-        passType: pass.passType,
-        validityDate: pass.validityDate,
-        passColor: pass.passColor,
-      },
-      passUrl
-    );
+    const walletPass = await createEventWalletPass(apiKey, await walletDataForPass(pass), passUrl);
 
     // 3. Save .pkpass file onto VPS server disk
     let appleUrl = '';
@@ -77,6 +67,7 @@ export async function GET(
         ...copy[idx],
         walletAppleUrl: appleUrl,
         walletGoogleSaveUrl: googleSaveUrl,
+        walletSerialNumber: walletPass.serialNumber,
       } as any;
       return copy;
     });

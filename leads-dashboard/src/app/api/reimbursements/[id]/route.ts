@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection, readCollection } from '@/lib/server-db';
+import { purgeRemovedAttachments } from '@/lib/cascade-delete';
 import { deleteStoredFilesForRecord } from '@/lib/file-storage';
 import { requireSession, requirePermission } from '@/lib/session';
 import {
@@ -58,13 +59,16 @@ export async function PATCH(
     // client-bundled sample/seed records that was never POSTed — create it instead of
     // 404ing and silently dropping the edit (that used to leave the sample data stuck
     // forever, since polling clients would then keep re-hydrating the stale sample).
+    let previousReceipts: any[] | undefined;
     const updated = await mutateCollection('reimbursements', (current) => {
       const idx = current.findIndex((item: any) => item.id === id);
       if (idx === -1) return [...current, { id, ...updates }];
+      previousReceipts = current[idx].receiptFiles;
       const next = [...current];
       next[idx] = { ...next[idx], ...updates };
       return next;
     });
+    if (Array.isArray(updates.receiptFiles)) await purgeRemovedAttachments(previousReceipts, updates.receiptFiles);
     return NextResponse.json(updated.find((r: any) => r.id === id));
   } catch (err: any) {
     return apiError(err, 'reimbursements-id-api-patch', 400);

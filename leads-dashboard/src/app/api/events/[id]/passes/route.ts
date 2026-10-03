@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { requireSession } from '@/lib/session';
 import { apiError } from '@/lib/api-error';
-import { EventPassItem } from '@/lib/local-data';
+import { EventPassItem, mergeAttendance } from '@/lib/local-data';
 import { getWalletWalletApiKey } from '@/lib/wallet/walletwallet-config';
 import { updateEventWalletPass } from '@/lib/wallet/walletwallet-client';
+import { walletDataForPass } from '@/lib/pass-theme';
 
 export async function GET(
   request: Request,
@@ -80,6 +81,10 @@ export async function PATCH(
         ...existing,
         ...updates,
         status: newStatus,
+        // Merge per-day attendance instead of overwriting so concurrent scanners can't clobber each other
+        ...(Array.isArray(updates.attendance)
+          ? { attendance: mergeAttendance(existing.attendance, updates.attendance) }
+          : {}),
         ...(newStatus === 'Checked In' && existing.status !== 'Checked In'
           ? {
               checkedInAt: updates.checkedInAt || now,
@@ -119,26 +124,12 @@ export async function PATCH(
 
     try {
       const apiKey = await getWalletWalletApiKey();
-      if (apiKey && updatedPass) {
+      const target = updatedPass as EventPassItem | null;
+      // Only passes that were actually added to a wallet have something to update
+      if (apiKey && target && target.walletSerialNumber) {
         const origin = request.headers.get('origin') || 'https://portal-leads.msruas.ac.in';
-        const passUrl = `${origin}/pass/${(updatedPass as EventPassItem).serialNumber}`;
-
-        await updateEventWalletPass(
-          apiKey,
-          {
-            serialNumber: (updatedPass as EventPassItem).serialNumber,
-            eventName: (updatedPass as EventPassItem).eventName,
-            eventDate: (updatedPass as EventPassItem).eventDate,
-            eventVenue: (updatedPass as EventPassItem).eventVenue,
-            attendeeName: (updatedPass as EventPassItem).attendeeName,
-            guestCategory: (updatedPass as EventPassItem).guestCategory,
-            roomOrVenue: (updatedPass as EventPassItem).roomOrVenue,
-            passType: (updatedPass as EventPassItem).passType,
-            validityDate: (updatedPass as EventPassItem).validityDate,
-            passColor: (updatedPass as EventPassItem).passColor,
-          },
-          passUrl
-        );
+        const passUrl = `${origin}/pass/${target.serialNumber}`;
+        await updateEventWalletPass(apiKey, await walletDataForPass(target), passUrl);
         walletUpdated = true;
       }
     } catch (walletErr: any) {
@@ -221,7 +212,8 @@ export async function PUT(
       valid: true,
       pass: matched,
       status: matched.status,
-      isAlreadyCheckedIn: matched.status === 'Checked In',
+      isAlreadyCheckedIn: (matched.attendance || []).length > 0,
+      isCancelled: matched.status === 'Cancelled',
       attendance: matched.attendance || [],
     });
   } catch (err: any) {
