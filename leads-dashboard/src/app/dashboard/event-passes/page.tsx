@@ -647,27 +647,6 @@ export default function EventPassesPage() {
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-slate-200/90 dark:border-white/10 text-theme-text-secondary text-[11px] uppercase tracking-wider">
-                      <th className="py-3 px-3 w-8">
-                        <input
-                          type="checkbox"
-                          aria-label="Select all passes in this view"
-                          checked={deepFilteredPasses.length > 0 && deepFilteredPasses.every((p) => selectedPassIds.has(p.id))}
-                          ref={(el) => {
-                            if (el) {
-                              const n = deepFilteredPasses.filter((p) => selectedPassIds.has(p.id)).length;
-                              el.indeterminate = n > 0 && n < deepFilteredPasses.length;
-                            }
-                          }}
-                          onChange={(e) =>
-                            setSelectedPassIds((prev) => {
-                              const next = new Set(prev);
-                              deepFilteredPasses.forEach((p) => (e.target.checked ? next.add(p.id) : next.delete(p.id)));
-                              return next;
-                            })
-                          }
-                          className="h-4 w-4 accent-sky-500 cursor-pointer"
-                        />
-                      </th>
                       <th className="py-3 px-4">Serial ID</th>
                       <th className="py-3 px-4">Attendee &amp; Category</th>
                       <th className="py-3 px-4">Room / Venue</th>
@@ -1166,6 +1145,27 @@ export default function EventPassesPage() {
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-slate-200/90 dark:border-white/10 text-theme-text-secondary text-[11px] uppercase tracking-wider">
+                      <th className="py-3 px-3 w-8">
+                        <input
+                          type="checkbox"
+                          aria-label="Select all passes in this view"
+                          checked={deepFilteredPasses.length > 0 && deepFilteredPasses.every((p) => selectedPassIds.has(p.id))}
+                          ref={(el) => {
+                            if (el) {
+                              const n = deepFilteredPasses.filter((p) => selectedPassIds.has(p.id)).length;
+                              el.indeterminate = n > 0 && n < deepFilteredPasses.length;
+                            }
+                          }}
+                          onChange={(e) =>
+                            setSelectedPassIds((prev) => {
+                              const next = new Set(prev);
+                              deepFilteredPasses.forEach((p) => (e.target.checked ? next.add(p.id) : next.delete(p.id)));
+                              return next;
+                            })
+                          }
+                          className="h-4 w-4 accent-sky-500 cursor-pointer"
+                        />
+                      </th>
                       <th className="py-3 px-4">Serial ID</th>
                       <th className="py-3 px-4">Attendee &amp; Details</th>
                       <th className="py-3 px-4">Room / Venue</th>
