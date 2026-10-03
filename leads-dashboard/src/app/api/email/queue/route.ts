@@ -5,6 +5,13 @@ import {
   cancelTaskEmailQueue,
   cancelAllTaskEmailQueues
 } from '@/lib/task-email-queue';
+import {
+  getBufferedEmails,
+  flushBufferedEmail,
+  cancelBufferedEmail,
+  flushAllBufferedEmails,
+  cancelAllBufferedEmails
+} from '@/lib/email-service';
 import { requireSession } from '@/lib/session';
 import { getAccessLevelSettingsServer, canManageEmailSettings } from '@/lib/permissions-server';
 import { apiError } from '@/lib/api-error';
@@ -16,8 +23,15 @@ export async function GET(request: Request) {
     if (!canManageEmailSettings(actor, settings)) {
       return NextResponse.json({ error: 'You do not have permission to view the email queue.' }, { status: 403 });
     }
-    const queues = getPendingTaskQueues();
-    return NextResponse.json({ count: queues.length, queues });
+    const [bufferedEmails, taskQueues] = await Promise.all([
+      getBufferedEmails(),
+      getPendingTaskQueues(),
+    ]);
+    return NextResponse.json({
+      count: bufferedEmails.length + taskQueues.length,
+      bufferedEmails,
+      queues: taskQueues,
+    });
   } catch (err: any) {
     return apiError(err, 'email-queue-api-get', 500);
   }
@@ -31,12 +45,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'You do not have permission to manage the email queue.' }, { status: 403 });
     }
     const body = await request.json();
-    const { email } = body;
-    if (!email) {
-      return NextResponse.json({ error: 'Email address is required' }, { status: 400 });
+    const { id, email, all } = body;
+
+    if (all) {
+      const [bufferedCount] = await Promise.all([
+        flushAllBufferedEmails(),
+      ]);
+      return NextResponse.json({ success: true, message: `Successfully flushed all ${bufferedCount} buffered emails` });
     }
-    await flushTaskEmailDigest(email);
-    return NextResponse.json({ success: true, message: `Successfully flushed task queue for ${email}` });
+
+    if (id) {
+      const dispatched = await flushBufferedEmail(id);
+      if (dispatched) {
+        return NextResponse.json({ success: true, message: `Successfully flushed and dispatched buffered email ${id}` });
+      }
+      return NextResponse.json({ error: `Buffered email ${id} not found or already sent` }, { status: 404 });
+    }
+
+    if (email) {
+      await flushTaskEmailDigest(email);
+      return NextResponse.json({ success: true, message: `Successfully flushed task queue for ${email}` });
+    }
+
+    return NextResponse.json({ error: 'id or email parameter is required' }, { status: 400 });
   } catch (err: any) {
     return apiError(err, 'email-queue-api-post', 500);
   }
@@ -50,24 +81,35 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'You do not have permission to manage the email queue.' }, { status: 403 });
     }
     const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
     const email = searchParams.get('email');
     const all = searchParams.get('all');
 
     if (all === 'true') {
-      const count = cancelAllTaskEmailQueues();
-      return NextResponse.json({ success: true, count, message: `Cancelled all ${count} queued email buffers` });
+      const [bufferedCount, taskCount] = await Promise.all([
+        cancelAllBufferedEmails(),
+        cancelAllTaskEmailQueues(),
+      ]);
+      return NextResponse.json({ success: true, count: bufferedCount + taskCount, message: `Cancelled all ${bufferedCount + taskCount} queued emails` });
     }
 
-    if (!email) {
-      return NextResponse.json({ error: 'Email parameter or all=true is required' }, { status: 400 });
+    if (id) {
+      const cancelled = await cancelBufferedEmail(id);
+      if (cancelled) {
+        return NextResponse.json({ success: true, message: `Cancelled buffered email ${id}` });
+      }
+      return NextResponse.json({ error: `Buffered email ${id} not found` }, { status: 404 });
     }
 
-    const cancelled = cancelTaskEmailQueue(email);
-    if (cancelled) {
-      return NextResponse.json({ success: true, message: `Cancelled queued email buffer for ${email}` });
-    } else {
+    if (email) {
+      const cancelled = cancelTaskEmailQueue(email);
+      if (cancelled) {
+        return NextResponse.json({ success: true, message: `Cancelled queued email buffer for ${email}` });
+      }
       return NextResponse.json({ error: `No active queue found for ${email}` }, { status: 404 });
     }
+
+    return NextResponse.json({ error: 'id, email or all=true parameter is required' }, { status: 400 });
   } catch (err: any) {
     return apiError(err, 'email-queue-api-delete', 500);
   }

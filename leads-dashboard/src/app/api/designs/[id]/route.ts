@@ -181,9 +181,9 @@ export async function PATCH(
         });
 
         await mutateCollection('designs', (current) => (current || []).map((d: any) =>
-          d.id === id ? { ...d, designerDecisionEmailSent: log.status === 'SENT', designerDecisionEmailError: log.errorMessage } : d
+          d.id === id ? { ...d, designerDecisionEmailSent: log.status === 'SENT' || log.status === 'BUFFERED', designerDecisionEmailError: log.errorMessage } : d
         ));
-        mergedRecord = { ...mergedRecord, designerDecisionEmailSent: log.status === 'SENT', designerDecisionEmailError: log.errorMessage };
+        mergedRecord = { ...mergedRecord, designerDecisionEmailSent: log.status === 'SENT' || log.status === 'BUFFERED', designerDecisionEmailError: log.errorMessage };
       } catch (emailErr: any) {
         console.error('[designs-api] Designer decision email dispatch failed:', emailErr);
         const message = emailErr?.message || 'Failed to notify the designer of the review decision.';
@@ -231,9 +231,9 @@ export async function PATCH(
           });
 
           await mutateCollection('designs', (current) => (current || []).map((d: any) =>
-            d.id === id ? { ...d, styleApprovalEmailSent: log.status === 'SENT', styleApprovalEmailError: log.errorMessage } : d
+            d.id === id ? { ...d, styleApprovalEmailSent: log.status === 'SENT' || log.status === 'BUFFERED', styleApprovalEmailError: log.errorMessage } : d
           ));
-          mergedRecord = { ...mergedRecord, styleApprovalEmailSent: log.status === 'SENT', styleApprovalEmailError: log.errorMessage };
+          mergedRecord = { ...mergedRecord, styleApprovalEmailSent: log.status === 'SENT' || log.status === 'BUFFERED', styleApprovalEmailError: log.errorMessage };
         } else {
           const noRecipientsMsg = 'No Centre Head, Advisor, or GG Campus Head of Events found in the Directory to send the approved design to.';
           await mutateCollection('designs', (current) => (current || []).map((d: any) =>
@@ -285,9 +285,9 @@ export async function PATCH(
           });
 
           await mutateCollection('designs', (current) => (current || []).map((d: any) =>
-            d.id === id ? { ...d, captionApprovalEmailSent: log.status === 'SENT', captionApprovalEmailError: log.errorMessage } : d
+            d.id === id ? { ...d, captionApprovalEmailSent: log.status === 'SENT' || log.status === 'BUFFERED', captionApprovalEmailError: log.errorMessage } : d
           ));
-          mergedRecord = { ...mergedRecord, captionApprovalEmailSent: log.status === 'SENT', captionApprovalEmailError: log.errorMessage };
+          mergedRecord = { ...mergedRecord, captionApprovalEmailSent: log.status === 'SENT' || log.status === 'BUFFERED', captionApprovalEmailError: log.errorMessage };
         } else {
           const noRecipientsMsg = 'No Centre Head, Advisor, or GG Campus Head of Events found in the Directory to send the approved captions to.';
           await mutateCollection('designs', (current) => (current || []).map((d: any) =>

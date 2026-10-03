@@ -78,5 +78,5 @@ export async function createActivationTokenAndSendEmail(
     category: 'ACCOUNT_ACTIVATION',
   });
 
-  return { token, activationLink, emailSent: emailLog.status === 'SENT', emailError: emailLog.errorMessage };
+  return { token, activationLink, emailSent: emailLog.status === 'SENT' || emailLog.status === 'BUFFERED', emailError: emailLog.errorMessage };
 }

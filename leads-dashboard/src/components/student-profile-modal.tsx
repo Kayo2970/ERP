@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -10,21 +11,24 @@ import {
   ExternalLink,
   TrendingUp
 } from 'lucide-react';
-import { getStudentProfile, formatEventDateRange, StudentProfileData } from '@/lib/local-data';
+import { getStudentProfile, formatEventDateRange, StudentProfileData, Member, isFacultyMember } from '@/lib/local-data';
 import Link from 'next/link';
 
 interface StudentProfileModalProps {
   memberIdOrName: string | null;
+  member?: Member | null;
   onClose: () => void;
 }
 
-export function StudentProfileModal({ memberIdOrName, onClose }: StudentProfileModalProps) {
+export function StudentProfileModal({ memberIdOrName, member: propMember, onClose }: StudentProfileModalProps) {
   const [activeTab, setActiveTab] = useState<'tasks' | 'events' | 'ratings'>('tasks');
-  const profile: StudentProfileData | null = memberIdOrName ? getStudentProfile(memberIdOrName) : null;
+  const targetId = memberIdOrName || propMember?.id || '';
+  const profile: StudentProfileData | null = targetId ? getStudentProfile(targetId, propMember || undefined) : null;
 
-  if (!memberIdOrName || !profile) return null;
+  if (!targetId || !profile) return null;
 
   const { member, stats, tasks, assignedEvents, ratings } = profile;
+  const isFaculty = isFacultyMember(member) || member.division === 'Faculty' || member.division === 'Advisory Board';
 
   return (
     <div
@@ -47,6 +51,7 @@ export function StudentProfileModal({ memberIdOrName, onClose }: StudentProfileM
                 <h2 className="text-lg md:text-xl font-bold text-theme-text-primary">{member.name}</h2>
                 <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
                   member.division === 'Advisory Board' ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' :
+                  member.division === 'Faculty' ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30' :
                   member.division === 'Core Committee' ? 'bg-accent/15 text-accent border-accent/30' :
                   member.division === 'Alumni' ? 'bg-purple-500/15 text-purple-400 border-purple-500/30' :
                   'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
@@ -58,11 +63,26 @@ export function StudentProfileModal({ memberIdOrName, onClose }: StudentProfileM
                     {member.batch}
                   </span>
                 )}
+                <span className="text-[10px] bg-sky-500/15 text-sky-400 border border-sky-500/30 px-2 py-0.5 rounded-full font-bold">
+                  Tier {member.tier}
+                </span>
               </div>
-              <p className="text-xs text-theme-text-secondary mt-0.5 flex items-center gap-1.5">
+              <p className="text-xs text-theme-text-secondary mt-1 flex items-center gap-1.5 flex-wrap">
                 <span className="font-semibold text-theme-text-primary">{member.role}</span>
+                {member.department && (
+                  <>
+                    <span>&middot;</span>
+                    <span>{member.department}</span>
+                  </>
+                )}
                 <span>&middot;</span>
-                <span>{member.email}</span>
+                <span className="text-accent">{member.email}</span>
+                {member.phone && (
+                  <>
+                    <span>&middot;</span>
+                    <span>{member.phone}</span>
+                  </>
+                )}
               </p>
             </div>
           </div>
@@ -86,11 +106,13 @@ export function StudentProfileModal({ memberIdOrName, onClose }: StudentProfileM
             <div className="mt-2">
               <div className="flex items-baseline gap-1">
                 <span className="text-xl font-black text-theme-text-primary">
-                  {stats.averageRating.toFixed(1)}
+                  {ratings.length > 0 ? stats.averageRating.toFixed(1) : isFaculty ? 'Oversight' : '5.0'}
                 </span>
-                <span className="text-[10px] text-theme-text-secondary">/ 5.0</span>
+                {ratings.length > 0 && <span className="text-[10px] text-theme-text-secondary">/ 5.0</span>}
               </div>
-              <span className="text-[9px] text-theme-text-secondary">{ratings.length > 0 ? `${ratings.length} task reviews` : 'No reviews yet'}</span>
+              <span className="text-[9px] text-theme-text-secondary">
+                {ratings.length > 0 ? `${ratings.length} task reviews` : isFaculty ? 'Faculty / Advisory' : 'Baseline score'}
+              </span>
             </div>
           </div>
 
@@ -104,7 +126,9 @@ export function StudentProfileModal({ memberIdOrName, onClose }: StudentProfileM
                 <span className="text-xl font-black text-theme-text-primary">{stats.completedTasks}</span>
                 <span className="text-[10px] text-theme-text-secondary">/ {stats.totalTasks} total</span>
               </div>
-              <span className="text-[9px] text-theme-text-secondary">{stats.completionRate}% completion rate</span>
+              <span className="text-[9px] text-theme-text-secondary">
+                {stats.totalTasks > 0 ? `${stats.completionRate}% completion rate` : 'No active tasks'}
+              </span>
             </div>
           </div>
 
@@ -208,7 +232,7 @@ export function StudentProfileModal({ memberIdOrName, onClose }: StudentProfileM
             <div className="space-y-2.5">
               {tasks.length === 0 ? (
                 <div className="text-center py-8 text-theme-text-secondary text-xs bg-theme-border/5 rounded-2xl border border-theme-border/20">
-                  No task deliverables currently assigned to this student.
+                  No task deliverables currently assigned to this member.
                 </div>
               ) : (
                 tasks.map(task => (

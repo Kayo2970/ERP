@@ -44,6 +44,7 @@ import {
   addTask,
   updateTask,
   updateTaskStatus,
+  updateTaskStatusAsync,
   deleteTask,
   submitTaskEdit,
   approveTask,
@@ -81,6 +82,7 @@ import { RequestApprovalModal } from '@/components/request-approval-modal';
 import { DelegateTaskModal } from '@/components/delegate-task-modal';
 import { FileDropzone, FilePreviewRow } from '@/components/ui/file-dropzone';
 import { SearchableSelect } from '@/components/searchable-select';
+import { TaskErrorToast } from '@/components/task-error-toast';
 
 const COMMITTEE_PRESETS = ['Food', 'Stage', 'Organizing', 'Hospitality', 'Design', 'Photography', 'Others'] as const;
 
@@ -181,6 +183,14 @@ export default function TasksPage() {
   const [editingTask, setEditingTask] = useState<TaskItem | null>(null);
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
+  // Optimistic completion animation and rollback state
+  const [animatingTaskIds, setAnimatingTaskIds] = useState<Set<string>>(new Set());
+  const [disappearingTaskIds, setDisappearingTaskIds] = useState<Set<string>>(new Set());
+  const [bottomErrorToast, setBottomErrorToast] = useState<{
+    isOpen: boolean;
+    message: string;
+    taskId?: string;
+  }>({ isOpen: false, message: '' });
   const [extensionTask, setExtensionTask] = useState<TaskItem | null>(null);
   const [extensionReasonInput, setExtensionReasonInput] = useState('');
   const [rejectingTaskId, setRejectingTaskId] = useState<string | null>(null);
@@ -752,10 +762,60 @@ export default function TasksPage() {
     }
   };
 
+  const handleOptimisticComplete = async (taskId: string) => {
+    setCompletingTaskId(null);
+
+    // 1. Immediately trigger the celebratory completed visual state on client
+    setAnimatingTaskIds(prev => new Set(prev).add(taskId));
+
+    // After 420ms of celebratory animation, initiate smooth collapse / slide-out
+    setTimeout(() => {
+      setDisappearingTaskIds(prev => new Set(prev).add(taskId));
+    }, 420);
+
+    // 2. Perform backend completion at server end
+    const res = await updateTaskStatusAsync(taskId, 'Completed', user?.name || 'User');
+
+    if (res.success) {
+      // Confirmed on server! Clean up animation state and refresh list
+      setTimeout(() => {
+        setAnimatingTaskIds(prev => {
+          const next = new Set(prev);
+          next.delete(taskId);
+          return next;
+        });
+        setDisappearingTaskIds(prev => {
+          const next = new Set(prev);
+          next.delete(taskId);
+          return next;
+        });
+        setTasks(getTasks());
+        triggerSuccess('Task marked as Completed.');
+      }, 550);
+    } else {
+      // Failed on server! Roll back visual state cleanly and show bottom-right error toast
+      setAnimatingTaskIds(prev => {
+        const next = new Set(prev);
+        next.delete(taskId);
+        return next;
+      });
+      setDisappearingTaskIds(prev => {
+        const next = new Set(prev);
+        next.delete(taskId);
+        return next;
+      });
+      setTasks(getTasks());
+      setBottomErrorToast({
+        isOpen: true,
+        message: res.error || 'Error in updation of the task, please try again.',
+        taskId,
+      });
+    }
+  };
+
   const handleConfirmComplete = () => {
     if (!completingTaskId) return;
-    handleStatusChange(completingTaskId, 'Completed');
-    setCompletingTaskId(null);
+    handleOptimisticComplete(completingTaskId);
   };
 
   const handleHolidayApprovalResponse = (id: string, approved: boolean) => {
@@ -1199,24 +1259,41 @@ export default function TasksPage() {
               </summary>
 
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pt-4">
-                {group.tasks.map((task) => (
-            <div
-              key={task.id}
-              id={`task-${task.id}`}
-              className={`glass-panel rounded-2xl p-6 flex flex-col justify-between hover:bg-theme-border/10 transition-all border space-y-4 ${
-                task.id === highlightTaskId ? 'border-accent ring-2 ring-accent/50' : 'border-theme-card-border/50'
-              }`}
-            >
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full capitalize ${getStatusBadge(task.status)}`}>
-                    {task.status}
-                  </span>
-                  <span className="text-[11px] text-theme-text-secondary font-medium flex items-center gap-1.5">
-                    <Calendar className="h-3.5 w-3.5 text-accent" />
-                    Due: {task.dueDate}
-                  </span>
-                </div>
+                {group.tasks.map((task) => {
+                  const isAnimatingComplete = animatingTaskIds.has(task.id);
+                  const isDisappearing = disappearingTaskIds.has(task.id);
+
+                  return (
+                    <div
+                      key={task.id}
+                      id={`task-${task.id}`}
+                      className={`glass-panel rounded-2xl p-6 flex flex-col justify-between hover:bg-theme-border/10 border space-y-4 transition-all duration-500 ease-out ${
+                        isDisappearing
+                          ? 'opacity-0 scale-95 -translate-y-4 pointer-events-none max-h-0 py-0 my-0 overflow-hidden'
+                          : isAnimatingComplete
+                          ? 'ring-2 ring-emerald-500/80 bg-emerald-500/10 border-emerald-500/50 shadow-xl shadow-emerald-500/20'
+                          : task.id === highlightTaskId
+                          ? 'border-accent ring-2 ring-accent/50'
+                          : 'border-theme-card-border/50'
+                      }`}
+                    >
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          {isAnimatingComplete ? (
+                            <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 animate-pulse">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 animate-bounce" />
+                              Completed!
+                            </span>
+                          ) : (
+                            <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full capitalize ${getStatusBadge(task.status)}`}>
+                              {task.status}
+                            </span>
+                          )}
+                          <span className="text-[11px] text-theme-text-secondary font-medium flex items-center gap-1.5">
+                            <Calendar className="h-3.5 w-3.5 text-accent" />
+                            Due: {task.dueDate}
+                          </span>
+                        </div>
                 
                 {(task.approvalStatus === 'pending_create' || task.approvalStatus === 'pending_edit') && canSeeTaskApprovalMeta(task) && (
                   <div className="flex items-center justify-between gap-2 p-2.5 bg-warning/10 border border-warning/25 rounded-xl text-[11px]">
@@ -2150,12 +2227,18 @@ export default function TasksPage() {
                       {task.workflowType === 'design_caption_draft' || task.workflowType === 'design_caption_review' || task.workflowType === 'design_social_posting' ? (
                         <span className="text-[11px] text-theme-text-secondary italic">Use the caption panel above to complete this task</span>
                       ) : canChangeTaskStatus(task, user) ? (
-                        <button
-                          onClick={() => setCompletingTaskId(task.id)}
-                          className="px-2.5 py-1 bg-success hover:bg-success/90 text-white font-semibold rounded-lg transition-all text-[11px] cursor-pointer"
-                        >
-                          Complete
-                        </button>
+                        isAnimatingComplete ? (
+                          <span className="px-3 py-1 bg-emerald-500 text-white font-extrabold rounded-lg text-[11px] flex items-center gap-1.5 shadow-md shadow-emerald-500/30 animate-pulse">
+                            <Check className="h-3.5 w-3.5 stroke-[3]" /> Done!
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleOptimisticComplete(task.id)}
+                            className="px-2.5 py-1 bg-success hover:bg-success/90 text-white font-semibold rounded-lg transition-all text-[11px] cursor-pointer active:scale-95"
+                          >
+                            Complete
+                          </button>
+                        )
                       ) : (
                         <span className="text-[11px] text-theme-text-secondary italic">In progress — {task.assignee}</span>
                       )}
@@ -2240,10 +2323,11 @@ export default function TasksPage() {
                 )}
               </div>
             </div>
-                ))}
-              </div>
-            </details>
-          ))}
+          );
+        })}
+      </div>
+    </details>
+  ))}
         </div>
       )}
 
@@ -2845,6 +2929,20 @@ export default function TasksPage() {
           </div>
         </div>
       )}
+
+      {/* Small Right-Side Bottom Error Toast with Try Again */}
+      <TaskErrorToast
+        isOpen={bottomErrorToast.isOpen}
+        message={bottomErrorToast.message}
+        onRetry={() => {
+          if (bottomErrorToast.taskId) {
+            const retryId = bottomErrorToast.taskId;
+            setBottomErrorToast({ isOpen: false, message: '' });
+            handleOptimisticComplete(retryId);
+          }
+        }}
+        onDismiss={() => setBottomErrorToast({ isOpen: false, message: '' })}
+      />
 
     </div>
   );

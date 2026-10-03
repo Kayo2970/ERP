@@ -64,7 +64,7 @@ export async function runTaskDeadlineReminderCheck(): Promise<{ checked: number;
         bodyHtml,
         category: 'TASK_DEADLINE_REMINDER',
       });
-      if (result.status === 'SENT') anySent = true;
+      if (result.status === 'SENT' || result.status === 'BUFFERED') anySent = true;
     }
 
     if (anySent) {

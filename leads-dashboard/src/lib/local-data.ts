@@ -293,7 +293,9 @@ export type EventPassType =
   | 'Student Delegate'
   | 'Keynote Speaker'
   | 'Press / Media'
-  | 'Organizer';
+  | 'Organizer'
+  | 'Other'
+  | string;
 
 export type EventGuestCategory =
   | 'Student'
@@ -304,7 +306,20 @@ export type EventGuestCategory =
   | 'Alumni'
   | 'Press / Media'
   | 'Organizer / Crew'
-  | 'Special Guest';
+  | 'Special Guest'
+  | 'Other'
+  | string;
+
+export interface PassAttendanceRecord {
+  day: string; // e.g. "Day 1", "Day 2", "2026-10-13"
+  date?: string;
+  timestamp: string;
+  scannedBy: string;
+  checkedInBy?: string;
+  session?: string;
+}
+
+export type PassEmailStatus = 'Not Sent' | 'Email Sent' | 'Email Received' | 'Pass Viewed';
 
 export interface EventPassItem {
   id: string;
@@ -331,7 +346,18 @@ export interface EventPassItem {
   checkedInAt?: string;
   checkedInBy?: string;
   passColor?: string;
+  passGradient?: string;
+  attendance?: PassAttendanceRecord[];
   qrPayload: string;
+
+  // Email delivery & pass viewing analytics
+  emailStatus?: PassEmailStatus;
+  emailSentAt?: string;
+  emailReceivedAt?: string;
+  passViewed?: boolean;
+  passViewedAt?: string;
+  lastPassViewedAt?: string;
+  passViewCount?: number;
 }
 
 export interface TaskItem {
@@ -1336,6 +1362,19 @@ function markLocalWrite(key: string): void {
   lastLocalWriteAt[key] = Date.now();
 }
 
+// In-flight optimistic task mutations so background polls to /api/data
+// never overwrite or resurrect a task while its server update is still resolving.
+const pendingTaskOptimisticUpdates = new Map<string, { updates: Partial<TaskItem>; previousTask?: TaskItem; timestamp: number }>();
+
+export function registerOptimisticTaskUpdate(id: string, updates: Partial<TaskItem>, previousTask?: TaskItem): void {
+  pendingTaskOptimisticUpdates.set(id, { updates, previousTask, timestamp: Date.now() });
+  markLocalWrite('leads_tasks');
+}
+
+export function clearOptimisticTaskUpdate(id: string): void {
+  pendingTaskOptimisticUpdates.delete(id);
+}
+
 // How long to distrust a sync poll's response for a collection after we
 // wrote to it locally. The mutation's own POST/PATCH/DELETE is fire-and-forget
 // (never awaited by its caller), so comparing the poll's *start* time against
@@ -1365,8 +1404,23 @@ function hydrateIfStale(key: string, serverArray: unknown, requestStartedAt: num
   if (!Array.isArray(serverArray)) return;
   const writtenAt = lastLocalWriteAt[key];
   if (writtenAt !== undefined && requestStartedAt - writtenAt < STALE_HYDRATE_SUPPRESSION_MS) return;
+
+  let arrayToPersist: any = serverArray;
+  // If hydrating tasks, merge any active in-flight optimistic updates so a background poll
+  // cannot temporarily revert an in-flight task completion or edit before the server write settles.
+  if (key === 'leads_tasks' && pendingTaskOptimisticUpdates.size > 0) {
+    const now = Date.now();
+    arrayToPersist = (serverArray as any[]).map((task: any) => {
+      const pending = pendingTaskOptimisticUpdates.get(task.id);
+      if (pending && now - pending.timestamp < 45000) {
+        return { ...task, ...pending.updates };
+      }
+      return task;
+    });
+  }
+
   try {
-    localStorage.setItem(key, JSON.stringify(serverArray));
+    localStorage.setItem(key, JSON.stringify(arrayToPersist));
   } catch (e) {
     console.warn(`[hydrateIfStale] Failed to write ${key} to localStorage:`, e);
   }
@@ -2747,6 +2801,9 @@ export function addEventPass(
     issuedAt,
     status: 'Active',
     qrPayload,
+    emailStatus: 'Not Sent',
+    passViewed: false,
+    passViewCount: 0,
   };
 
   passes.unshift(newPass);
@@ -2771,17 +2828,32 @@ export function addEventPass(
 export function updateEventPassStatus(
   passId: string,
   status: 'Active' | 'Checked In' | 'Cancelled',
-  actorName: string
+  actorName: string,
+  attendanceRecords?: PassAttendanceRecord[] | PassAttendanceRecord
 ): EventPassItem | null {
   const passes = getEventPasses();
   const idx = passes.findIndex((p) => p.id === passId || p.serialNumber === passId);
   if (idx === -1) return null;
 
   const now = new Date().toISOString();
+  const currentAttendance = [...(passes[idx].attendance || [])];
+  if (attendanceRecords) {
+    const toAdd = Array.isArray(attendanceRecords) ? attendanceRecords : [attendanceRecords];
+    toAdd.forEach((rec) => {
+      const existingIdx = currentAttendance.findIndex((a) => a.day.toLowerCase() === rec.day.toLowerCase());
+      if (existingIdx >= 0) {
+        currentAttendance[existingIdx] = rec;
+      } else {
+        currentAttendance.push(rec);
+      }
+    });
+  }
+
   passes[idx] = {
     ...passes[idx],
     status,
     ...(status === 'Checked In' ? { checkedInAt: now, checkedInBy: actorName } : {}),
+    ...(currentAttendance.length > 0 ? { attendance: currentAttendance } : {}),
   };
 
   saveEventPasses(passes);
@@ -2789,13 +2861,21 @@ export function updateEventPassStatus(
   fetch(`/api/events/${passes[idx].eventId}/passes`, {
     method: 'PATCH',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ passId: passes[idx].id, status, checkedInBy: actorName, checkedInAt: now }),
+    body: JSON.stringify({
+      passId: passes[idx].id,
+      status,
+      checkedInBy: actorName,
+      checkedInAt: now,
+      attendance: currentAttendance,
+    }),
   }).catch((err) => console.warn('Failed to sync pass status update with server:', err));
 
   logAuditEvent(
     'EVENT_PASS_STATUS_CHANGED' as any,
     actorName,
-    `Marked pass "${passes[idx].serialNumber}" (${passes[idx].attendeeName}) as ${status}`
+    `Marked pass "${passes[idx].serialNumber}" (${passes[idx].attendeeName}) as ${status}${
+      attendanceRecords ? ` for ${Array.isArray(attendanceRecords) ? attendanceRecords.map((a) => a.day).join(', ') : attendanceRecords.day}` : ''
+    }`
   );
 
   return passes[idx];
@@ -2904,9 +2984,69 @@ export async function dispatchPassEmail(
 
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://portal-leads.msruas.ac.in';
   const passUrl = `${origin}/pass/${pass.serialNumber}`;
+  const trackPixelUrl = `${origin}/api/pass/${pass.serialNumber}/track`;
 
   const subject = `Your Official Pass for ${pass.eventName} — ${pass.passType}`;
   const bodyText = `Dear ${pass.attendeeName},\n\nWe are delighted to welcome you to ${pass.eventName}. Your official credential has been issued by the LEADS Next Gen Centre.\n\n• Pass Tier: ${pass.passType}\n• Guest Category: ${pass.guestCategory || 'Guest Attendee'}\n• Assigned Venue / Room: ${pass.roomOrVenue || pass.eventVenue || 'Main Auditorium'}\n• Event Date & Validity: ${pass.validityDate || pass.eventDate || '2026'}\n• Pass Serial ID: ${pass.serialNumber}\n\nYou can access your verified digital pass, save it to Apple Wallet / Google Wallet, or view check-in details via the link below:\n${passUrl}\n\nPlease present your digital pass or QR code at official event turnstiles upon arrival.\n\nWarm regards,\nLEADS Next Gen Centre • RUAS`;
+
+  const bodyHtml = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #0f172a; color: #f8fafc; border-radius: 16px;">
+      <div style="text-align: center; margin-bottom: 24px;">
+        <span style="display: inline-block; padding: 4px 12px; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; color: #38bdf8; background: rgba(56, 189, 248, 0.15); border-radius: 20px; border: 1px solid rgba(56, 189, 248, 0.3);">
+          Official Event Pass
+        </span>
+        <h1 style="margin: 16px 0 8px 0; font-size: 22px; color: #ffffff;">${pass.eventName}</h1>
+        <p style="margin: 0; color: #94a3b8; font-size: 14px;">LEADS Next Gen Centre • RUAS</p>
+      </div>
+
+      <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+        <p style="margin: 0 0 12px 0; font-size: 16px; color: #f1f5f9;">Dear <strong>${pass.attendeeName}</strong>,</p>
+        <p style="margin: 0 0 16px 0; font-size: 14px; color: #cbd5e1; line-height: 1.5;">
+          We are delighted to confirm your credential for <strong>${pass.eventName}</strong>. Your pass is ready and verified for gate turnstile entry.
+        </p>
+        
+        <table style="width: 100%; font-size: 13px; color: #cbd5e1; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 6px 0; color: #94a3b8;">Pass Tier:</td>
+            <td style="padding: 6px 0; font-weight: bold; color: #38bdf8;">${pass.passType}</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; color: #94a3b8;">Category:</td>
+            <td style="padding: 6px 0; font-weight: bold; color: #ffffff;">${pass.guestCategory || 'Guest Attendee'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; color: #94a3b8;">Venue / Room:</td>
+            <td style="padding: 6px 0; color: #ffffff;">${pass.roomOrVenue || pass.eventVenue || 'Main Auditorium'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; color: #94a3b8;">Date / Validity:</td>
+            <td style="padding: 6px 0; color: #ffffff;">${pass.validityDate || pass.eventDate || '2026'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; color: #94a3b8;">Serial ID:</td>
+            <td style="padding: 6px 0; font-family: monospace; font-weight: bold; color: #f59e0b;">${pass.serialNumber}</td>
+          </tr>
+        </table>
+      </div>
+
+      <div style="text-align: center; margin-bottom: 24px;">
+        <a href="${passUrl}" style="display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #0284c7, #2563eb); color: #ffffff; text-decoration: none; font-weight: bold; font-size: 14px; border-radius: 10px; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4);">
+          View Verified Digital Pass &rarr;
+        </a>
+        <p style="margin: 10px 0 0 0; font-size: 11px; color: #64748b;">
+          Includes Apple Wallet / Google Wallet pass &amp; QR turnstile code
+        </p>
+      </div>
+
+      <p style="margin: 0; font-size: 12px; color: #64748b; text-align: center; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 16px;">
+        Please present your digital pass or QR code at official event turnstiles upon arrival.<br/>
+        &copy; 2026 LEADS Next Gen Centre &bull; MSRUAS
+      </p>
+
+      <!-- Invisible Open Tracking Pixel -->
+      <img src="${trackPixelUrl}" width="1" height="1" alt="" style="display:none;width:1px;height:1px;border:none;outline:none;" />
+    </div>
+  `;
 
   try {
     const res = await fetch('/api/email/send', {
@@ -2918,6 +3058,7 @@ export async function dispatchPassEmail(
         to: recipient,
         subject,
         bodyText,
+        bodyHtml,
         category: 'EVENT_INVITATION',
         badgeText: 'Official Event Pass',
         badgeColor: '#0284c7',
@@ -2935,6 +3076,33 @@ export async function dispatchPassEmail(
       return { success: false, error: data.error || `HTTP ${res.status} error during dispatch.` };
     }
 
+    // Record 'Email Sent' state
+    const now = new Date().toISOString();
+    const newStatus: PassEmailStatus = pass.emailStatus === 'Pass Viewed' ? 'Pass Viewed' : 'Email Sent';
+    
+    // Update local cache
+    const passes = getEventPasses();
+    const idx = passes.findIndex(p => p.id === pass.id);
+    if (idx >= 0) {
+      passes[idx] = {
+        ...passes[idx],
+        emailStatus: newStatus,
+        emailSentAt: now,
+      };
+      saveEventPasses(passes);
+    }
+
+    // Sync status to backend
+    fetch(`/api/events/${pass.eventId}/passes`, {
+      method: 'PATCH',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        passId: pass.id,
+        emailStatus: newStatus,
+        emailSentAt: now,
+      }),
+    }).catch(err => console.warn('Failed to sync pass email status with server:', err));
+
     logAuditEvent(
       'EVENT_PASS_EMAILED' as any,
       pass.issuedBy || 'Staff',
@@ -2946,6 +3114,40 @@ export async function dispatchPassEmail(
     console.error('Failed to dispatch pass email:', err);
     return { success: false, error: err?.message || 'Network error dispatching email.' };
   }
+}
+
+export function updateEventPassEmailStatus(
+  passId: string,
+  status: PassEmailStatus,
+  timestamp?: string
+): EventPassItem | null {
+  const passes = getEventPasses();
+  const idx = passes.findIndex(p => p.id === passId || p.serialNumber === passId);
+  if (idx === -1) return null;
+
+  const now = timestamp || new Date().toISOString();
+  passes[idx] = {
+    ...passes[idx],
+    emailStatus: status,
+    ...(status === 'Email Sent' ? { emailSentAt: now } : {}),
+    ...(status === 'Email Received' ? { emailReceivedAt: now } : {}),
+    ...(status === 'Pass Viewed' ? { passViewed: true, passViewedAt: passes[idx].passViewedAt || now, lastPassViewedAt: now } : {}),
+  };
+  saveEventPasses(passes);
+
+  fetch(`/api/events/${passes[idx].eventId}/passes`, {
+    method: 'PATCH',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({
+      passId: passes[idx].id,
+      emailStatus: status,
+      ...(status === 'Email Sent' ? { emailSentAt: now } : {}),
+      ...(status === 'Email Received' ? { emailReceivedAt: now } : {}),
+      ...(status === 'Pass Viewed' ? { passViewed: true, passViewedAt: passes[idx].passViewedAt, lastPassViewedAt: now } : {}),
+    }),
+  }).catch(err => console.warn('Failed to sync pass status update with server:', err));
+
+  return passes[idx];
 }
 
 // -------------------------------------------------------------
@@ -3346,6 +3548,16 @@ export function getTasks(): TaskItem[] {
       if (filtered.length !== parsed.length) {
         localStorage.setItem('leads_tasks', JSON.stringify(filtered));
       }
+      if (pendingTaskOptimisticUpdates.size > 0) {
+        const now = Date.now();
+        return filtered.map(t => {
+          const pending = pendingTaskOptimisticUpdates.get(t.id);
+          if (pending && now - pending.timestamp < 45000) {
+            return { ...t, ...pending.updates };
+          }
+          return t;
+        });
+      }
       return filtered;
     } catch (e) {
       console.error(e);
@@ -3645,7 +3857,81 @@ export function allotSocialMediaTask(
 }
 
 export function updateTaskStatus(id: string, status: TaskItem['status'], actorName?: string): TaskItem | null {
+  registerOptimisticTaskUpdate(id, { status });
   return updateTask(id, { status }, actorName || 'User');
+}
+
+export async function updateTaskStatusAsync(
+  id: string,
+  status: TaskItem['status'],
+  actorName: string = 'User'
+): Promise<{ success: boolean; task?: TaskItem; error?: string }> {
+  const tasks = getTasks();
+  const idx = tasks.findIndex(t => t.id === id);
+  if (idx === -1) return { success: false, error: 'Task not found' };
+
+  const previousTask = { ...tasks[idx] };
+  const previousStatus = previousTask.status;
+
+  // Optimistic update locally
+  const optimisticTask: TaskItem = { ...tasks[idx], status };
+  tasks[idx] = optimisticTask;
+
+  // Register in optimistic registry to shield against background sync polls
+  registerOptimisticTaskUpdate(id, { status }, previousTask);
+  saveTasks(tasks);
+
+  try {
+    const url = `/api/tasks/${id}`;
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(optimisticTask),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || errData.message || `Server error (${res.status})`);
+    }
+
+    const serverResult = await res.json().catch(() => optimisticTask);
+
+    // Server confirmed! Clear optimistic lock
+    clearOptimisticTaskUpdate(id);
+
+    // Save final confirmed version
+    const currentTasks = getTasks();
+    const currIdx = currentTasks.findIndex(t => t.id === id);
+    if (currIdx !== -1) {
+      currentTasks[currIdx] = { ...currentTasks[currIdx], ...serverResult };
+      saveTasks(currentTasks);
+    }
+
+    logAuditEvent('TASK_STATUS_CHANGED', actorName, `Marked task "${previousTask.title}" as ${status}`);
+
+    // If marked Completed and it was a social media post task, spawn follow-on event report request task
+    if (status === 'Completed' && previousStatus !== 'Completed') {
+      if (previousTask.workflowType === 'event_social_post' && previousTask.eventId) {
+        spawnEventReportRequestTask(previousTask.eventId, previousTask.event, actorName);
+      }
+    }
+
+    return { success: true, task: currentTasks[currIdx] || optimisticTask };
+  } catch (err: any) {
+    console.error(`[updateTaskStatusAsync] Failed to complete task ${id} on server:`, err);
+    // Revert optimistic update
+    clearOptimisticTaskUpdate(id);
+    const rollbackTasks = getTasks();
+    const rollbackIdx = rollbackTasks.findIndex(t => t.id === id);
+    if (rollbackIdx !== -1) {
+      rollbackTasks[rollbackIdx] = previousTask;
+      saveTasks(rollbackTasks);
+    }
+    return {
+      success: false,
+      error: err?.message || 'Error in updation of the task, please try again.'
+    };
+  }
 }
 
 /**
@@ -4475,10 +4761,12 @@ export interface StudentProfileData {
   };
 }
 
-export function getStudentProfile(memberIdOrName: string): StudentProfileData | null {
-  const members = getMembers();
-  const member = members.find(m => m.id === memberIdOrName || m.name.toLowerCase() === memberIdOrName.toLowerCase());
-  if (!member || isFacultyMember(member)) return null;
+export function getStudentProfile(memberIdOrName: string, passedMember?: Member): StudentProfileData | null {
+  const member = passedMember || (() => {
+    const members = getMembers();
+    return members.find(m => m.id === memberIdOrName || m.name.toLowerCase() === memberIdOrName.toLowerCase());
+  })();
+  if (!member) return null;
 
   const events = getEvents();
   const assignedEvents: { event: EventItem; committee: EventCommittee }[] = [];

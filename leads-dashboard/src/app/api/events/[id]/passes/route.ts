@@ -222,6 +222,7 @@ export async function PUT(
       pass: matched,
       status: matched.status,
       isAlreadyCheckedIn: matched.status === 'Checked In',
+      attendance: matched.attendance || [],
     });
   } catch (err: any) {
     return apiError(err, 'event-passes-verify', 500);

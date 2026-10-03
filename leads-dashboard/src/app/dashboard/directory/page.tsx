@@ -90,6 +90,7 @@ export default function DirectoryPage() {
   const [isSettingPassword, setIsSettingPassword] = useState(false);
   const [setPasswordError, setSetPasswordError] = useState('');
   const [selectedStudentForProfile, setSelectedStudentForProfile] = useState<string | null>(null);
+  const [selectedMemberForProfile, setSelectedMemberForProfile] = useState<Member | null>(null);
   const [rejectingMemberId, setRejectingMemberId] = useState<string | null>(null);
   const [rejectionReasonInput, setRejectionReasonInput] = useState('');
   const [approvalRequestMember, setApprovalRequestMember] = useState<Member | null>(null);
@@ -1606,9 +1607,12 @@ export default function DirectoryPage() {
                             </button>
                           )}
                           <button
-                            onClick={() => setSelectedStudentForProfile(member.id)}
+                            onClick={() => {
+                              setSelectedStudentForProfile(member.id);
+                              setSelectedMemberForProfile(member);
+                            }}
                             className="p-1.5 text-accent hover:bg-accent/10 rounded-lg transition-all cursor-pointer flex items-center gap-1"
-                            title="View Student Profile & Outcomes"
+                            title="View Member Profile & Outcomes"
                           >
                             <Eye className="h-4 w-4" />
                             <span className="text-[11px] font-semibold hidden sm:inline">Profile</span>
@@ -2372,10 +2376,14 @@ export default function DirectoryPage() {
         onCancel={() => setIsBulkDeleteModalOpen(false)}
       />
 
-      {/* Student Profile Modal */}
+      {/* Member Profile Modal */}
       <StudentProfileModal
         memberIdOrName={selectedStudentForProfile}
-        onClose={() => setSelectedStudentForProfile(null)}
+        member={selectedMemberForProfile}
+        onClose={() => {
+          setSelectedStudentForProfile(null);
+          setSelectedMemberForProfile(null);
+        }}
       />
 
       {/* Floating Bulk Actions Toolbar */}

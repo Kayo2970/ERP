@@ -156,9 +156,9 @@ export async function PATCH(
           });
 
           await mutateCollection('eventReports', (current) => (current || []).map((r: any) =>
-            r.id === id ? { ...r, emailSent: log.status === 'SENT', emailError: log.errorMessage } : r
+            r.id === id ? { ...r, emailSent: log.status === 'SENT' || log.status === 'BUFFERED', emailError: log.errorMessage } : r
           ));
-          mergedRecord = { ...mergedRecord, emailSent: log.status === 'SENT', emailError: log.errorMessage };
+          mergedRecord = { ...mergedRecord, emailSent: log.status === 'SENT' || log.status === 'BUFFERED', emailError: log.errorMessage };
         } else {
           await mutateCollection('eventReports', (current) => (current || []).map((r: any) =>
             r.id === id ? { ...r, emailSent: false, emailError: 'No Centre Head, Advisor, Super User, GG Campus Head of Events, or President found in the Directory to send the approved report to.' } : r

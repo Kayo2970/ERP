@@ -109,6 +109,23 @@ const PASS_TYPES: {
     colorClass: 'bg-indigo-500/15 border-indigo-400/40 text-indigo-300',
     badge: 'CREW / ORGANIZER',
   },
+  {
+    type: 'Other',
+    label: 'Other / Custom',
+    colorClass: 'bg-teal-500/15 border-teal-400/40 text-teal-300',
+    badge: 'CUSTOM PASS',
+  },
+];
+
+export const PASS_GRADIENT_PRESETS = [
+  { name: 'Deep Sapphire', value: 'linear-gradient(145deg, #0d2342 0%, #030712 100%)', baseColor: '#0d2342', endColor: '#030712' },
+  { name: 'Royal Emerald', value: 'linear-gradient(145deg, #063024 0%, #021a14 100%)', baseColor: '#063024', endColor: '#021a14' },
+  { name: 'Ruby Crimson', value: 'linear-gradient(145deg, #3e0f1e 0%, #150207 100%)', baseColor: '#3e0f1e', endColor: '#150207' },
+  { name: 'Obsidian Gold', value: 'linear-gradient(145deg, #1f1f23 0%, #78350f 100%)', baseColor: '#18181b', endColor: '#78350f' },
+  { name: 'Amethyst Night', value: 'linear-gradient(145deg, #2b124c 0%, #0d0617 100%)', baseColor: '#2b124c', endColor: '#0d0617' },
+  { name: 'Ocean Cyan', value: 'linear-gradient(145deg, #0369a1 0%, #082f49 100%)', baseColor: '#0369a1', endColor: '#082f49' },
+  { name: 'Sunset Bronze', value: 'linear-gradient(145deg, #7c2d12 0%, #1c1917 100%)', baseColor: '#7c2d12', endColor: '#1c1917' },
+  { name: 'Titanium Slate', value: 'linear-gradient(145deg, #334155 0%, #0f172a 100%)', baseColor: '#1e293b', endColor: '#0f172a' },
 ];
 
 const GUEST_CATEGORIES: { category: EventGuestCategory; label: string; icon: string }[] = [
@@ -121,6 +138,7 @@ const GUEST_CATEGORIES: { category: EventGuestCategory; label: string; icon: str
   { category: 'Organizer / Crew', label: 'Organizer / Crew', icon: '🛡️' },
   { category: 'Press / Media', label: 'Press / Media', icon: '📸' },
   { category: 'Special Guest', label: 'Special Guest', icon: '✨' },
+  { category: 'Other', label: 'Other / Custom', icon: '🏷️' },
 ];
 
 const ROOM_PRESETS = [
@@ -148,8 +166,13 @@ export function EventPassStudio({
   const [customEventTitle, setCustomEventTitle] = useState('');
   const [attendeeName, setAttendeeName] = useState('');
   const [guestCategory, setGuestCategory] = useState<EventGuestCategory>('VIP Dignitary');
+  const [customGuestCategory, setCustomGuestCategory] = useState('');
   const [passType, setPassType] = useState<EventPassType>('VIP Pass');
-  const [passColor, setPassColor] = useState<string>('#0b1526');
+  const [customPassType, setCustomPassType] = useState('');
+  const [passColor, setPassColor] = useState<string>('#0d2342');
+  const [colorMode, setColorMode] = useState<'gradient' | 'solid'>('gradient');
+  const [passGradient, setPassGradient] = useState<string>('linear-gradient(145deg, #0d2342 0%, #030712 100%)');
+  const [gradientEndColor, setGradientEndColor] = useState<string>('#030712');
   const [roomOrVenue, setRoomOrVenue] = useState('');
   const [attendeeEmail, setAttendeeEmail] = useState('');
   const [attendeePhone, setAttendeePhone] = useState('');
@@ -207,10 +230,43 @@ export function EventPassStudio({
   const displayRoom = roomOrVenue.trim() || selectedEvent?.location || 'Main Auditorium';
   const displayValidity = validityDate.trim() || formattedEventDate;
 
+  const handleDirectDownloadTemplate = () => {
+    const targetEvt = selectedEvent || events[0];
+    const formattedDate = targetEvt
+      ? targetEvt.datesTBD
+        ? 'Dates TBD'
+        : `${targetEvt.startDate}${targetEvt.endDate ? ` – ${targetEvt.endDate}` : ''}`
+      : '2026';
+
+    const headers = 'AttendeeName,GuestCategory,PassType,RoomOrVenue,Email,Mobile,Organization,CustomValidity,Notes\n';
+    const sample1 = `Dr. Meera Swaminathan,Keynote Speaker,Keynote Speaker,Main Auditorium - VIP Box,meera.s@domain.com,+91 98765 43210,IISc Bangalore,${formattedDate},Invited Speaker\n`;
+    const sample2 = `Alex Chen,VIP Dignitary,VIP Pass,Main Auditorium - Front Row,alex.chen@techcorp.com,+91 98450 11223,TechCorp Singapore,${formattedDate},Executive Sponsor\n`;
+    const sample3 = `Rohan Sharma,Student,Student Delegate,Seminar Hall A - Room 102,rohan.s@msruas.ac.in,+91 91234 56789,RUAS FET,${formattedDate},Student Project Lead\n`;
+    const sample4 = `Priya Nambiar,Faculty,Executive Delegate,Seminar Hall B - Room 204,priya.n@msruas.ac.in,+91 99887 76655,RUAS FMC,${formattedDate},Session Chair\n`;
+    const sample5 = `Dr. Arjun Menon,Other,Other,Executive Boardroom,arjun.m@leads-centre.org,+91 98111 22334,Special Invitee,${formattedDate},Trustee & Guest of Honour`;
+
+    const blob = new Blob([headers + sample1 + sample2 + sample3 + sample4 + sample5], {
+      type: 'text/csv;charset=utf-8;',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute(
+      'download',
+      `leads_event_passes_template_${(targetEvt?.title || 'event').toLowerCase().replace(/[^a-z0-9]/g, '_')}.csv`
+    );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleIssuePass = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!attendeeName.trim()) return;
     if (eventMode === 'custom' && !customEventTitle.trim()) return;
+
+    const resolvedGuest = guestCategory === 'Other' ? (customGuestCategory.trim() || 'Guest Invitee') : guestCategory;
+    const resolvedPass = passType === 'Other' ? (customPassType.trim() || 'Custom Pass') : passType;
 
     setIsSubmitting(true);
     try {
@@ -220,16 +276,17 @@ export function EventPassStudio({
         eventDate: formattedEventDate,
         eventVenue: resolvedEventVenue,
         attendeeName: attendeeName.trim(),
-        guestCategory,
+        guestCategory: resolvedGuest as any,
         roomOrVenue: displayRoom,
         attendeeEmail: attendeeEmail.trim() || undefined,
         attendeePhone: attendeePhone.trim() || undefined,
         attendeeOrg: attendeeOrg.trim() || undefined,
-        passType,
-        accessTier: passType === 'VIP Pass' ? 'All Access VIP' : 'General Admission',
+        passType: resolvedPass as any,
+        accessTier: resolvedPass === 'VIP Pass' ? 'All Access VIP' : 'General Admission',
         validityDate: displayValidity,
         seatOrZone: displayRoom,
         passColor,
+        passGradient: colorMode === 'gradient' ? passGradient : undefined,
         notes: notes.trim() || undefined,
         issuedBy: currentUserName,
         issuedByEmail: currentUserEmail,
@@ -308,6 +365,14 @@ export function EventPassStudio({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleDirectDownloadTemplate}
+            className="px-3.5 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/35 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+            title="Download formatted CSV template for bulk pass generation"
+          >
+            <Download className="h-3.5 w-3.5" /> Download CSV Template
+          </button>
           <button
             type="button"
             onClick={() => setIsBulkModalOpen(true)}
@@ -515,6 +580,19 @@ export function EventPassStudio({
                   );
                 })}
               </div>
+
+              {guestCategory === 'Other' && (
+                <div className="pt-1.5 animate-in fade-in duration-200">
+                  <input
+                    type="text"
+                    required
+                    value={customGuestCategory}
+                    onChange={(e) => setCustomGuestCategory(e.target.value)}
+                    placeholder="Specify custom guest category (e.g. Session Chair, Exhibitor, Key Sponsor, Trustee)"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900/60 border border-accent/50 rounded-xl text-slate-900 dark:text-white font-semibold focus:outline-none focus:border-accent text-xs"
+                  />
+                </div>
+              )}
             </div>
 
             {/* 4. Pass Type / Tier Pills */}
@@ -542,61 +620,173 @@ export function EventPassStudio({
                   );
                 })}
               </div>
+
+              {passType === 'Other' && (
+                <div className="pt-1.5 animate-in fade-in duration-200">
+                  <input
+                    type="text"
+                    required
+                    value={customPassType}
+                    onChange={(e) => setCustomPassType(e.target.value)}
+                    placeholder="Specify custom pass type (e.g. Workshop Delegate, Volunteer Pass, Vendor Credential)"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900/60 border border-sky-500/50 rounded-xl text-slate-900 dark:text-white font-semibold focus:outline-none focus:border-sky-400 text-xs"
+                  />
+                </div>
+              )}
             </div>
 
-            {/* 4.5. Pass Color Customization (Live on Card & Apple Wallet) */}
-            <div className="space-y-2 p-3.5 rounded-2xl bg-slate-50/70 dark:bg-white/5 border border-slate-200 dark:border-white/10">
+            {/* 4.5. Pass Color & Gradient Customization */}
+            <div className="space-y-3 p-3.5 rounded-2xl bg-slate-50/70 dark:bg-white/5 border border-slate-200 dark:border-white/10">
               <div className="flex items-center justify-between">
                 <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
                   <Palette className="h-3.5 w-3.5 text-accent" />
-                  <span>Pass Color Theme</span>
+                  <span>Pass Color &amp; Gradient Customization</span>
                 </label>
-                <div className="flex items-center gap-1.5">
-                  <div
-                    className="w-4 h-4 rounded-full border border-white/30 shadow-inner"
-                    style={{ backgroundColor: passColor }}
-                  />
-                  <span className="font-mono text-[10px] text-slate-400 font-bold uppercase">
-                    {passColor}
-                  </span>
+                <div className="flex items-center gap-1 bg-slate-200/80 dark:bg-white/10 p-0.5 rounded-lg text-[10px] font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setColorMode('gradient')}
+                    className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                      colorMode === 'gradient'
+                        ? 'bg-accent text-white shadow-sm'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Gradient
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setColorMode('solid')}
+                    className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                      colorMode === 'solid'
+                        ? 'bg-accent text-white shadow-sm'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Solid
+                  </button>
                 </div>
               </div>
 
-              {/* Color Presets & Custom Native Picker */}
-              <div className="flex flex-wrap items-center gap-2">
-                {PASS_COLOR_PRESETS.map((cp) => {
-                  const isSelected = passColor.toLowerCase() === cp.hex.toLowerCase();
-                  return (
-                    <button
-                      type="button"
-                      key={cp.hex}
-                      onClick={() => setPassColor(cp.hex)}
-                      title={cp.name}
-                      className={`h-7 w-7 rounded-xl transition-all cursor-pointer relative flex items-center justify-center border ${
-                        isSelected
-                          ? 'scale-110 ring-2 ring-accent border-white shadow-md'
-                          : 'border-white/20 hover:scale-105 opacity-85 hover:opacity-100'
-                      }`}
-                      style={{ backgroundColor: cp.hex }}
-                    >
-                      {isSelected && <Sparkles className="h-3 w-3 text-white drop-shadow" />}
-                    </button>
-                  );
-                })}
+              {colorMode === 'gradient' ? (
+                <div className="space-y-2.5">
+                  <div className="text-[10.5px] text-slate-500 dark:text-slate-400">
+                    Select a luxury dual-tone gradient preset or customize both gradient stops:
+                  </div>
+                  {/* Gradient Presets */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                    {PASS_GRADIENT_PRESETS.map((gp) => {
+                      const isSelected = passGradient === gp.value;
+                      return (
+                        <button
+                          type="button"
+                          key={gp.name}
+                          onClick={() => {
+                            setPassGradient(gp.value);
+                            setPassColor(gp.baseColor);
+                            setGradientEndColor(gp.endColor);
+                          }}
+                          className={`px-2.5 py-1.5 rounded-xl border text-left transition-all cursor-pointer relative overflow-hidden flex items-center justify-between ${
+                            isSelected
+                              ? 'ring-2 ring-accent border-white shadow-md'
+                              : 'border-white/15 opacity-85 hover:opacity-100'
+                          }`}
+                          style={{ background: gp.value }}
+                        >
+                          <span className="text-[10px] font-extrabold text-white drop-shadow truncate">
+                            {gp.name}
+                          </span>
+                          {isSelected && <Sparkles className="h-3 w-3 text-white drop-shadow shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
 
-                {/* Custom Color Input */}
-                <div className="flex items-center gap-1.5 ml-auto">
-                  <label className="relative cursor-pointer flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 border border-slate-300 dark:border-white/15 text-[10px] font-bold text-slate-700 dark:text-slate-200 transition-all">
-                    <span>Custom</span>
-                    <input
-                      type="color"
-                      value={passColor}
-                      onChange={(e) => setPassColor(e.target.value)}
-                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                    />
-                  </label>
+                  {/* Dual Tone Color Pickers */}
+                  <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-slate-200/80 dark:border-white/10">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300">Start Color:</span>
+                      <label className="relative cursor-pointer flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-200 dark:bg-white/10 border border-slate-300 dark:border-white/15 text-[10px] font-bold text-slate-700 dark:text-slate-200">
+                        <div className="w-3.5 h-3.5 rounded-full border border-white/40 shadow-inner" style={{ backgroundColor: passColor }} />
+                        <span>{passColor}</span>
+                        <input
+                          type="color"
+                          value={passColor}
+                          onChange={(e) => {
+                            const newStart = e.target.value;
+                            setPassColor(newStart);
+                            setPassGradient(`linear-gradient(145deg, ${newStart} 0%, ${gradientEndColor} 100%)`);
+                          }}
+                          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                        />
+                      </label>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300">End Color:</span>
+                      <label className="relative cursor-pointer flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-200 dark:bg-white/10 border border-slate-300 dark:border-white/15 text-[10px] font-bold text-slate-700 dark:text-slate-200">
+                        <div className="w-3.5 h-3.5 rounded-full border border-white/40 shadow-inner" style={{ backgroundColor: gradientEndColor }} />
+                        <span>{gradientEndColor}</span>
+                        <input
+                          type="color"
+                          value={gradientEndColor}
+                          onChange={(e) => {
+                            const newEnd = e.target.value;
+                            setGradientEndColor(newEnd);
+                            setPassGradient(`linear-gradient(145deg, ${passColor} 0%, ${newEnd} 100%)`);
+                          }}
+                          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                        />
+                      </label>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="text-[10.5px] text-slate-500 dark:text-slate-400">
+                    Solid pass theme (applied directly to digital card &amp; Apple Wallet pass):
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {PASS_COLOR_PRESETS.map((cp) => {
+                      const isSelected = passColor.toLowerCase() === cp.hex.toLowerCase();
+                      return (
+                        <button
+                          type="button"
+                          key={cp.hex}
+                          onClick={() => {
+                            setPassColor(cp.hex);
+                            setPassGradient(`linear-gradient(145deg, ${cp.hex} 0%, #030712 100%)`);
+                          }}
+                          title={cp.name}
+                          className={`h-7 w-7 rounded-xl transition-all cursor-pointer relative flex items-center justify-center border ${
+                            isSelected
+                              ? 'scale-110 ring-2 ring-accent border-white shadow-md'
+                              : 'border-white/20 hover:scale-105 opacity-85 hover:opacity-100'
+                          }`}
+                          style={{ backgroundColor: cp.hex }}
+                        >
+                          {isSelected && <Sparkles className="h-3 w-3 text-white drop-shadow" />}
+                        </button>
+                      );
+                    })}
+
+                    <div className="flex items-center gap-1.5 ml-auto">
+                      <label className="relative cursor-pointer flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 border border-slate-300 dark:border-white/15 text-[10px] font-bold text-slate-700 dark:text-slate-200 transition-all">
+                        <span>Custom</span>
+                        <input
+                          type="color"
+                          value={passColor}
+                          onChange={(e) => {
+                            setPassColor(e.target.value);
+                            setPassGradient(`linear-gradient(145deg, ${e.target.value} 0%, #030712 100%)`);
+                          }}
+                          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 5. Room / Venue / Hall Allocation */}
@@ -780,7 +970,10 @@ export function EventPassStudio({
                 <div
                   className={`${styles.passFace} ${styles.passFront}`}
                   style={{
-                    backgroundImage: `linear-gradient(145deg, ${passColor}ee 0%, #060c18fa 100%), url('/card/dark-blue-leather.jpg')`,
+                    background:
+                      colorMode === 'gradient' && passGradient
+                        ? passGradient
+                        : `linear-gradient(145deg, ${passColor}ee 0%, #060c18fa 100%)`,
                   }}
                 >
                   {/* Lanyard Cut */}
@@ -800,7 +993,7 @@ export function EventPassStudio({
                       </div>
                     </div>
                     <span className={`${styles.passTypePill} ${currentPassMeta.colorClass}`}>
-                      {currentPassMeta.badge}
+                      {passType === 'Other' ? (customPassType.trim() || 'CUSTOM PASS') : currentPassMeta.badge}
                     </span>
                   </div>
 
@@ -821,7 +1014,7 @@ export function EventPassStudio({
                     <div className={styles.guestBox}>
                       <div className={styles.guestCategoryTag}>
                         <Tag className="h-2.5 w-2.5" />
-                        <span>{guestCategory}</span>
+                        <span>{guestCategory === 'Other' ? (customGuestCategory.trim() || 'Other Guest') : guestCategory}</span>
                       </div>
                       <div className={styles.attendeeNameText}>
                         {attendeeName.trim() || 'Guest / Attendee Name'}

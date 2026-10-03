@@ -224,6 +224,7 @@ export async function flushTaskEmailDigest(recipientEmail: string) {
     bodyText,
     bodyHtml,
     category: 'TASK_ASSIGNMENT',
+    immediate: true,
   });
 
   // Mark task records in DB with emailNotifiedAt timestamp

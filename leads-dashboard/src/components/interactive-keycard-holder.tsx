@@ -41,6 +41,8 @@ export interface InteractiveKeycardProps {
   roomOrVenue?: string;
   attendeeOrg?: string;
   brandHeader?: string;
+  passColor?: string;
+  passGradient?: string;
 }
 
 export function InteractiveKeycardHolder({
@@ -75,6 +77,8 @@ export function InteractiveKeycardHolder({
   roomOrVenue,
   attendeeOrg,
   brandHeader,
+  passColor,
+  passGradient,
 }: InteractiveKeycardProps) {
   const [stageState, setStageState] = useState<'init' | 'entered' | 'opened' | 'extracting' | 'extracted' | 'tucking' | 'closing'>('init');
   const [activeTab, setActiveTab] = useState<'card' | 'creds' | 'bookfold'>('card');
@@ -499,7 +503,16 @@ export function InteractiveKeycardHolder({
                 {/* FRONT FACE */}
                 {isEvent ? (
                   /* EVENT PASS LUXURY TURNSTILE CREDENTIAL (MATCHES STUDIO DESIGN) */
-                  <div className={`${styles.passFace} ${styles.eventPassFront}`}>
+                  <div
+                    className={`${styles.passFace} ${styles.eventPassFront}`}
+                    style={
+                      passGradient
+                        ? { background: passGradient }
+                        : passColor
+                        ? { background: `linear-gradient(145deg, ${passColor} 0%, #030712 100%)` }
+                        : undefined
+                    }
+                  >
                     {/* Luxury Holographic Foil Shimmer */}
                     <div className={styles.holographicFoil} />
 

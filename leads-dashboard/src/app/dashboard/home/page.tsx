@@ -13,7 +13,9 @@ import {
   Crown,
   Award,
   Users,
-  Sparkles
+  Sparkles,
+  Check,
+  CheckCircle2
 } from 'lucide-react';
 import {
   getTasks,
@@ -22,6 +24,7 @@ import {
   getRatings,
   getAnnouncements,
   updateTaskStatus,
+  updateTaskStatusAsync,
   getStudentLeaderboard,
   getEffectiveEventStatus,
   formatEventDateRange,
@@ -39,6 +42,7 @@ import { canViewTaskExtended, canViewEvent, canApprovePendingEvent } from '@/lib
 import { getRatingColor } from '@/lib/design-tokens';
 import { StudentProfileModal } from '@/components/student-profile-modal';
 import { GanttTimeline } from '@/components/gantt-timeline';
+import { TaskErrorToast } from '@/components/task-error-toast';
 
 export default function DashboardHome() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
@@ -56,6 +60,14 @@ export default function DashboardHome() {
   const [hasRatings, setHasRatings] = useState(false);
   const [selectedStudentForProfile, setSelectedStudentForProfile] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+  // Optimistic completion animation and rollback state
+  const [animatingTaskIds, setAnimatingTaskIds] = useState<Set<string>>(new Set());
+  const [disappearingTaskIds, setDisappearingTaskIds] = useState<Set<string>>(new Set());
+  const [bottomErrorToast, setBottomErrorToast] = useState<{
+    isOpen: boolean;
+    message: string;
+    taskId?: string;
+  }>({ isOpen: false, message: '' });
 
   useEffect(() => {
     const refreshData = () => {
@@ -111,9 +123,51 @@ export default function DashboardHome() {
     if (updated) setTasks(getTasks());
   };
 
-  const handleComplete = (id: string) => {
-    updateTaskStatus(id, 'Completed');
-    setTasks(getTasks());
+  const handleComplete = async (id: string) => {
+    // 1. Immediately trigger the celebratory completed visual state on client
+    setAnimatingTaskIds(prev => new Set(prev).add(id));
+
+    // After 420ms of celebratory animation, initiate smooth collapse / slide-out
+    setTimeout(() => {
+      setDisappearingTaskIds(prev => new Set(prev).add(id));
+    }, 420);
+
+    // 2. Perform backend completion at server end
+    const res = await updateTaskStatusAsync(id, 'Completed', user?.name || 'User');
+
+    if (res.success) {
+      setTimeout(() => {
+        setAnimatingTaskIds(prev => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        setDisappearingTaskIds(prev => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        setTasks(getTasks());
+      }, 550);
+    } else {
+      // Revert on failure
+      setAnimatingTaskIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      setDisappearingTaskIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      setTasks(getTasks());
+      setBottomErrorToast({
+        isOpen: true,
+        message: res.error || 'Error in updation of the task, please try again.',
+        taskId: id,
+      });
+    }
   };
 
   const handleRequestExtension = (id: string) => {
@@ -474,68 +528,114 @@ export default function DashboardHome() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-theme-border/20">
-                  {displayedTasks.slice(0, 5).map(task => (
-                    <tr key={task.id} className="hover:bg-theme-border/10 transition-all">
-                      <td className="py-3 pr-2 font-medium text-theme-text-primary">{task.title}</td>
-                      <td className="py-3 pr-2 text-theme-text-secondary">{task.event || 'Standalone'}</td>
-                      <td className="py-3 pr-2 text-theme-text-secondary">{task.dueDate}</td>
-                      <td className="py-3 pr-2">
-                        <span className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                          task.status === 'Assigned' 
-                             ? 'bg-accent/15 text-accent border border-accent/20' 
-                             : task.status === 'In Progress' 
-                               ? 'bg-warning/15 text-warning border border-warning/20' 
-                               : task.status === 'Completed'
-                                 ? 'bg-success/15 text-success border border-success/20'
-                                 : 'bg-danger/15 text-danger border border-danger/20'
-                        }`}>
-                          {task.status}
-                        </span>
-                      </td>
-                      <td className="py-3 text-right">
-                        {/* Acknowledgment is personal — gated on isTaskAssignee
-                            (am I literally the one this was allotted to?), not
-                            just this row being visible to a broad viewer like
-                            leadership, and checked against hasAcknowledgedTask
-                            rather than status alone so a group/committee task
-                            already In Progress from a DIFFERENT member's
-                            acknowledgment still prompts this viewer for their
-                            own if they haven't given it yet. */}
-                        {task.approvalStatus === 'pending_create' || task.approvalStatus === 'pending_edit' ? (
-                          <span className="text-[10px] text-warning font-medium">Pending approval</span>
-                        ) : task.approvalStatus === 'rejected' ? (
-                          <span className="text-[10px] text-danger font-medium">Rejected</span>
-                        ) : task.status !== 'Completed' && isTaskAssignee(task, user) && !hasAcknowledgedTask(task, user) ? (
-                          <button
-                            onClick={() => handleAcknowledge(task.id)}
-                            className="px-2.5 py-1 bg-accent hover:bg-primary-light text-white text-[10px] font-semibold rounded-lg transition-all cursor-pointer"
-                          >
-                            Acknowledge
-                          </button>
-                        ) : task.status === 'In Progress' ? (
-                          <div className="flex justify-end gap-1.5">
-                            <button
-                              onClick={() => handleComplete(task.id)}
-                              className="px-2.5 py-1 bg-success hover:bg-success/90 text-white text-[10px] font-semibold rounded-lg transition-all cursor-pointer"
-                            >
-                              Complete
-                            </button>
-                            <button
-                              onClick={() => handleRequestExtension(task.id)}
-                              className="px-2 py-1 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-[10px] font-semibold rounded-lg transition-all cursor-pointer"
-                              title="Request Deadline Extension"
-                            >
-                              Extend
-                            </button>
+                  {displayedTasks.slice(0, 5).map(task => {
+                    const isAnimating = animatingTaskIds.has(task.id);
+                    const isDisappearing = disappearingTaskIds.has(task.id);
+
+                    return (
+                      <tr 
+                        key={task.id} 
+                        className={`transition-all duration-500 ${
+                          isDisappearing
+                            ? 'opacity-0 -translate-x-4 max-h-0 py-0 pointer-events-none'
+                            : isAnimating
+                              ? 'bg-emerald-500/15 border-emerald-500/30'
+                              : 'hover:bg-theme-border/10'
+                        }`}
+                      >
+                        <td className="py-3 pr-2 font-medium text-theme-text-primary">
+                          <div className="flex items-center gap-2">
+                            {isAnimating && (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 animate-bounce shrink-0" />
+                            )}
+                            <span className={isAnimating ? 'line-through text-emerald-300 transition-all' : ''}>
+                              {task.title}
+                            </span>
                           </div>
-                        ) : task.status === 'Assigned' ? (
-                          <span className="text-[10px] text-theme-text-secondary">Awaiting acknowledgment</span>
-                        ) : (
-                          <span className="text-[10px] text-theme-text-secondary">Closed</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="py-3 pr-2 text-theme-text-secondary">{task.event || 'Standalone'}</td>
+                        <td className="py-3 pr-2 text-theme-text-secondary">{task.dueDate}</td>
+                        <td className="py-3 pr-2">
+                          <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full transition-all duration-300 ${
+                            isAnimating
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-sm shadow-emerald-500/20'
+                              : task.status === 'Assigned' 
+                                 ? 'bg-accent/15 text-accent border border-accent/20' 
+                                 : task.status === 'In Progress' 
+                                   ? 'bg-warning/15 text-warning border border-warning/20' 
+                                   : task.status === 'Completed'
+                                     ? 'bg-success/15 text-success border border-success/20'
+                                     : 'bg-danger/15 text-danger border border-danger/20'
+                          }`}>
+                            {isAnimating ? (
+                              <>
+                                <Check className="w-2.5 h-2.5" />
+                                <span>Completed!</span>
+                              </>
+                            ) : (
+                              task.status
+                            )}
+                          </span>
+                        </td>
+                        <td className="py-3 text-right">
+                          {/* Acknowledgment is personal — gated on isTaskAssignee
+                              (am I literally the one this was allotted to?), not
+                              just this row being visible to a broad viewer like
+                              leadership, and checked against hasAcknowledgedTask
+                              rather than status alone so a group/committee task
+                              already In Progress from a DIFFERENT member's
+                              acknowledgment still prompts this viewer for their
+                              own if they haven't given it yet. */}
+                          {task.approvalStatus === 'pending_create' || task.approvalStatus === 'pending_edit' ? (
+                            <span className="text-[10px] text-warning font-medium">Pending approval</span>
+                          ) : task.approvalStatus === 'rejected' ? (
+                            <span className="text-[10px] text-danger font-medium">Rejected</span>
+                          ) : task.status !== 'Completed' && isTaskAssignee(task, user) && !hasAcknowledgedTask(task, user) ? (
+                            <button
+                              onClick={() => handleAcknowledge(task.id)}
+                              className="px-2.5 py-1 bg-accent hover:bg-primary-light text-white text-[10px] font-semibold rounded-lg transition-all cursor-pointer"
+                            >
+                              Acknowledge
+                            </button>
+                          ) : task.status === 'In Progress' || isAnimating ? (
+                            <div className="flex justify-end gap-1.5">
+                              <button
+                                onClick={() => handleComplete(task.id)}
+                                disabled={isAnimating}
+                                className={`px-2.5 py-1 text-white text-[10px] font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                                  isAnimating 
+                                    ? 'bg-emerald-600 scale-95 shadow-md shadow-emerald-500/30' 
+                                    : 'bg-success hover:bg-success/90'
+                                }`}
+                              >
+                                {isAnimating ? (
+                                  <>
+                                    <Check className="w-2.5 h-2.5" />
+                                    <span>Done!</span>
+                                  </>
+                                ) : (
+                                  'Complete'
+                                )}
+                              </button>
+                              {!isAnimating && (
+                                <button
+                                  onClick={() => handleRequestExtension(task.id)}
+                                  className="px-2 py-1 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-[10px] font-semibold rounded-lg transition-all cursor-pointer"
+                                  title="Request Deadline Extension"
+                                >
+                                  Extend
+                                </button>
+                              )}
+                            </div>
+                          ) : task.status === 'Assigned' ? (
+                            <span className="text-[10px] text-theme-text-secondary">Awaiting acknowledgment</span>
+                          ) : (
+                            <span className="text-[10px] text-theme-text-secondary">Closed</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -655,6 +755,14 @@ export default function DashboardHome() {
       <StudentProfileModal
         memberIdOrName={selectedStudentForProfile}
         onClose={() => setSelectedStudentForProfile(null)}
+      />
+
+      {/* Bottom Right Error Toast with Try Again */}
+      <TaskErrorToast
+        isOpen={bottomErrorToast.isOpen}
+        message={bottomErrorToast.message}
+        onClose={() => setBottomErrorToast(prev => ({ ...prev, isOpen: false }))}
+        onRetry={bottomErrorToast.taskId ? () => handleComplete(bottomErrorToast.taskId!) : undefined}
       />
 
     </div>

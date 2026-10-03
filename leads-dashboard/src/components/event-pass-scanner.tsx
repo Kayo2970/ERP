@@ -17,8 +17,11 @@ import {
   Clock,
   MapPin,
   Sparkles,
+  Calendar,
+  Check,
+  Plus,
 } from 'lucide-react';
-import { EventPassItem, updateEventPassStatus, authHeaders } from '@/lib/local-data';
+import { EventPassItem, PassAttendanceRecord, updateEventPassStatus, authHeaders } from '@/lib/local-data';
 
 interface EventPassScannerProps {
   currentUserName: string;
@@ -40,6 +43,12 @@ export function EventPassScanner({
   } | null>(null);
 
   const [checkInSuccess, setCheckInSuccess] = useState(false);
+
+  // Multi-day Attendance State
+  const [availableDays, setAvailableDays] = useState<string[]>(['Day 1', 'Day 2', 'Day 3']);
+  const [selectedDays, setSelectedDays] = useState<string[]>([]);
+  const [customDayInput, setCustomDayInput] = useState('');
+  const [showAddCustomDay, setShowAddCustomDay] = useState(false);
 
   // Live Camera State
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -334,9 +343,51 @@ export function EventPassScanner({
     };
   }, [stopCamera]);
 
-  const handleCheckIn = () => {
-    if (!verificationResult?.pass) return;
-    const updated = updateEventPassStatus(verificationResult.pass.id, 'Checked In', currentUserName);
+  // Synchronize available days & selected days whenever a pass is verified
+  useEffect(() => {
+    if (verificationResult?.pass) {
+      const pass = verificationResult.pass;
+      const daysSet = new Set<string>();
+
+      // 1. Load any previously saved attendance records
+      if (pass.attendance && pass.attendance.length > 0) {
+        pass.attendance.forEach((a) => {
+          if (a.day) daysSet.add(a.day);
+        });
+      }
+
+      // 2. Default day set (Day 1, Day 2, Day 3)
+      ['Day 1', 'Day 2', 'Day 3'].forEach((d) => daysSet.add(d));
+
+      const daysList = Array.from(daysSet);
+      setAvailableDays(daysList);
+
+      // Pre-select first unattended day
+      const attendedSet = new Set((pass.attendance || []).map((a) => a.day.toLowerCase()));
+      const firstUnattended = daysList.find((d) => !attendedSet.has(d.toLowerCase()));
+      setSelectedDays(firstUnattended ? [firstUnattended] : []);
+    } else {
+      setSelectedDays([]);
+    }
+  }, [verificationResult?.pass?.id]);
+
+  const handleCheckInDays = (daysToCheckIn: string[]) => {
+    if (!verificationResult?.pass || daysToCheckIn.length === 0) return;
+    const now = new Date().toISOString();
+    const newRecords: PassAttendanceRecord[] = daysToCheckIn.map((d) => ({
+      day: d,
+      timestamp: now,
+      scannedBy: currentUserName,
+      checkedInBy: currentUserName,
+    }));
+
+    const updated = updateEventPassStatus(
+      verificationResult.pass.id,
+      'Checked In',
+      currentUserName,
+      newRecords
+    );
+
     if (updated) {
       setVerificationResult({
         ...verificationResult,
@@ -345,8 +396,27 @@ export function EventPassScanner({
         isAlreadyCheckedIn: true,
       });
       setCheckInSuccess(true);
+      setSelectedDays([]);
       if (onPassCheckedIn) onPassCheckedIn(updated);
     }
+  };
+
+  const handleAddCustomDay = () => {
+    const trimmed = customDayInput.trim();
+    if (!trimmed) return;
+    if (!availableDays.some((d) => d.toLowerCase() === trimmed.toLowerCase())) {
+      setAvailableDays((prev) => [...prev, trimmed]);
+    }
+    if (!selectedDays.some((d) => d.toLowerCase() === trimmed.toLowerCase())) {
+      setSelectedDays((prev) => [...prev, trimmed]);
+    }
+    setCustomDayInput('');
+    setShowAddCustomDay(false);
+  };
+
+  const handleCheckIn = () => {
+    if (!verificationResult?.pass) return;
+    handleCheckInDays(selectedDays.length > 0 ? selectedDays : ['Day 1']);
   };
 
   return (
@@ -509,97 +579,266 @@ export function EventPassScanner({
       {/* VERIFICATION RESULT CARD */}
       {verificationResult && (
         <div className="animate-in fade-in zoom-in-95 duration-200">
-          {verificationResult.valid && verificationResult.pass ? (
-            <div
-              className={`p-6 rounded-2xl border space-y-4 ${
-                verificationResult.isAlreadyCheckedIn
-                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-200'
-                  : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
-              }`}
-            >
-              {/* Header Status */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {verificationResult.isAlreadyCheckedIn ? (
-                    <>
-                      <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0" />
-                      <span className="font-bold text-amber-300 text-sm">
-                        {checkInSuccess ? 'Checked In Successfully!' : 'Pass Already Checked In'}
+          {verificationResult.valid && verificationResult.pass ? (() => {
+            const pass = verificationResult.pass;
+            const attendance = pass.attendance || [];
+            const attendedMap = new Map(attendance.map((a) => [a.day.toLowerCase(), a]));
+            const pendingDays = availableDays.filter((d) => !attendedMap.has(d.toLowerCase()));
+            const isAllAttended = availableDays.length > 0 && pendingDays.length === 0;
+
+            return (
+              <div
+                className={`p-6 rounded-2xl border space-y-4 ${
+                  isAllAttended
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
+                    : attendance.length > 0
+                    ? 'bg-sky-500/10 border-sky-500/30 text-sky-200'
+                    : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
+                }`}
+              >
+                {/* Header Status */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {isAllAttended ? (
+                      <>
+                        <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
+                        <span className="font-bold text-emerald-300 text-sm">
+                          {checkInSuccess ? 'Checked In Successfully!' : 'Pass Fully Checked In (All Days Attended)'}
+                        </span>
+                      </>
+                    ) : attendance.length > 0 ? (
+                      <>
+                        <Clock className="h-5 w-5 text-sky-400 shrink-0" />
+                        <span className="font-bold text-sky-300 text-sm">
+                          {checkInSuccess
+                            ? 'Checked In Successfully!'
+                            : `Partially Attended (${attendance.length}/${availableDays.length} Days)`}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
+                        <span className="font-bold text-emerald-300 text-sm">Genuine &amp; Verified Pass</span>
+                      </>
+                    )}
+                  </div>
+                  <span className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-black/40 border border-white/10 text-white font-bold">
+                    {pass.serialNumber}
+                  </span>
+                </div>
+
+                {/* Attendee Info Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-xl bg-black/30 border border-white/10 text-white">
+                  <div className="space-y-0.5">
+                    <span className="text-[9px] text-slate-400 uppercase tracking-wider block font-semibold">Attendee</span>
+                    <span className="text-sm font-extrabold block">{pass.attendeeName}</span>
+                    {pass.guestCategory && (
+                      <span className="inline-block text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 mt-0.5">
+                        {pass.guestCategory}
                       </span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
-                      <span className="font-bold text-emerald-300 text-sm">Genuine &amp; Verified Pass</span>
-                    </>
-                  )}
-                </div>
-                <span className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-black/40 border border-white/10 text-white font-bold">
-                  {verificationResult.pass.serialNumber}
-                </span>
-              </div>
+                    )}
+                  </div>
 
-              {/* Attendee Info Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-xl bg-black/30 border border-white/10 text-white">
-                <div className="space-y-0.5">
-                  <span className="text-[9px] text-slate-400 uppercase tracking-wider block font-semibold">Attendee</span>
-                  <span className="text-sm font-extrabold block">{verificationResult.pass.attendeeName}</span>
-                  {verificationResult.pass.guestCategory && (
-                    <span className="inline-block text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 mt-0.5">
-                      {verificationResult.pass.guestCategory}
+                  <div className="space-y-0.5">
+                    <span className="text-[9px] text-slate-400 uppercase tracking-wider block font-semibold">Assigned Room / Venue</span>
+                    <span className="text-xs font-bold text-sky-300 block flex items-center gap-1">
+                      <MapPin className="h-3 w-3 text-sky-400 shrink-0" />
+                      {pass.roomOrVenue || pass.eventVenue || 'Main Auditorium'}
                     </span>
-                  )}
+                    <span className="text-[10.5px] text-slate-300 block">
+                      Tier: {pass.passType}
+                    </span>
+                  </div>
+
+                  <div className="space-y-0.5 pt-2 border-t border-white/10">
+                    <span className="text-[9px] text-slate-400 uppercase tracking-wider block font-semibold">Event</span>
+                    <span className="text-xs font-semibold block truncate">{pass.eventName}</span>
+                  </div>
+
+                  <div className="space-y-0.5 pt-2 border-t border-white/10">
+                    <span className="text-[9px] text-slate-400 uppercase tracking-wider block font-semibold">Validity / Issued</span>
+                    <span className="text-xs text-slate-300 block">
+                      {pass.validityDate || pass.eventDate || '2026'}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="space-y-0.5">
-                  <span className="text-[9px] text-slate-400 uppercase tracking-wider block font-semibold">Assigned Room / Venue</span>
-                  <span className="text-xs font-bold text-sky-300 block flex items-center gap-1">
-                    <MapPin className="h-3 w-3 text-sky-400 shrink-0" />
-                    {verificationResult.pass.roomOrVenue || verificationResult.pass.eventVenue || 'Main Auditorium'}
-                  </span>
-                  <span className="text-[10.5px] text-slate-300 block">
-                    Tier: {verificationResult.pass.passType}
-                  </span>
-                </div>
+                {/* Multi-Day Attendance Roster & Check-In */}
+                <div className="space-y-3 p-4 rounded-xl bg-black/40 border border-white/10 text-white">
+                  <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-sky-400" />
+                      <span className="font-extrabold text-xs text-white">
+                        Multi-Day Attendance Roster
+                      </span>
+                    </div>
+                    <span
+                      className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                        isAllAttended
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          : attendance.length > 0
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                          : 'bg-slate-500/20 text-slate-300 border border-slate-500/30'
+                      }`}
+                    >
+                      {attendance.length} of {availableDays.length} Days Attended
+                    </span>
+                  </div>
 
-                <div className="space-y-0.5 pt-2 border-t border-white/10">
-                  <span className="text-[9px] text-slate-400 uppercase tracking-wider block font-semibold">Event</span>
-                  <span className="text-xs font-semibold block truncate">{verificationResult.pass.eventName}</span>
-                </div>
+                  {/* Day Cards List */}
+                  <div className="space-y-2">
+                    {availableDays.map((day) => {
+                      const record = attendedMap.get(day.toLowerCase());
+                      const isAttended = !!record;
+                      const isSelected = selectedDays.includes(day);
 
-                <div className="space-y-0.5 pt-2 border-t border-white/10">
-                  <span className="text-[9px] text-slate-400 uppercase tracking-wider block font-semibold">Validity / Issued</span>
-                  <span className="text-xs text-slate-300 block">
-                    {verificationResult.pass.validityDate || verificationResult.pass.eventDate || '2026'}
-                  </span>
+                      if (isAttended) {
+                        return (
+                          <div
+                            key={day}
+                            className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300"
+                          >
+                            <div className="flex items-center gap-2">
+                              <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                              <span className="font-extrabold text-xs text-white">{day}</span>
+                              <span className="text-[9.5px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-semibold">
+                                Attended
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-emerald-300/90 flex items-center gap-1 font-medium">
+                              <Clock className="h-3 w-3 shrink-0" />
+                              <span>
+                                {new Date(record.timestamp).toLocaleTimeString([], {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}{' '}
+                                by {record.scannedBy || record.checkedInBy || 'Staff'}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <button
+                          type="button"
+                          key={day}
+                          onClick={() => {
+                            setSelectedDays((prev) =>
+                              prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+                            );
+                          }}
+                          className={`w-full flex items-center justify-between p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                            isSelected
+                              ? 'bg-sky-500/25 border-sky-400 text-white shadow-md ring-1 ring-sky-400/40'
+                              : 'bg-white/5 border-white/10 hover:border-white/25 text-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <div
+                              className={`h-4 w-4 rounded-md border flex items-center justify-center transition-all ${
+                                isSelected ? 'bg-sky-500 border-sky-400 text-white' : 'border-white/30'
+                              }`}
+                            >
+                              {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
+                            </div>
+                            <span className="font-bold text-xs">{day}</span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            {isSelected ? 'Selected for check-in' : 'Click to select'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Add Custom Day or Session */}
+                  <div className="pt-1">
+                    {!showAddCustomDay ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowAddCustomDay(true)}
+                        className="text-[10.5px] text-sky-400 hover:text-sky-300 flex items-center gap-1 font-bold cursor-pointer transition-colors"
+                      >
+                        <Plus className="h-3.5 w-3.5" /> Add Day / Custom Session
+                      </button>
+                    ) : (
+                      <div className="flex gap-2 items-center">
+                        <input
+                          type="text"
+                          value={customDayInput}
+                          onChange={(e) => setCustomDayInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddCustomDay();
+                            }
+                          }}
+                          placeholder="e.g. Day 4, Gala Dinner, Afternoon Session"
+                          className="flex-1 px-3 py-1.5 bg-black/50 border border-white/20 rounded-lg text-white text-xs placeholder-slate-400 focus:outline-none focus:border-sky-400"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddCustomDay}
+                          disabled={!customDayInput.trim()}
+                          className="px-3 py-1.5 bg-sky-500 hover:bg-sky-400 text-white text-xs font-bold rounded-lg cursor-pointer disabled:opacity-50"
+                        >
+                          Add
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowAddCustomDay(false);
+                            setCustomDayInput('');
+                          }}
+                          className="px-2.5 py-1.5 text-slate-400 hover:text-white text-xs cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Multi-Day Check-In Trigger Buttons */}
+                  <div className="pt-2 flex flex-col sm:flex-row gap-2">
+                    {pendingDays.length > 0 ? (
+                      <>
+                        <button
+                          type="button"
+                          disabled={selectedDays.length === 0}
+                          onClick={() => handleCheckInDays(selectedDays)}
+                          className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl transition-all shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 cursor-pointer text-xs uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <CheckCircle2 className="h-4 w-4" />
+                          {selectedDays.length > 1
+                            ? `Check In ${selectedDays.length} Days Simultaneously`
+                            : selectedDays.length === 1
+                            ? `Check In ${selectedDays[0]}`
+                            : 'Select Day(s) to Check In'}
+                        </button>
+
+                        {pendingDays.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleCheckInDays(pendingDays)}
+                            className="py-3 px-4 bg-sky-600/20 hover:bg-sky-600/30 text-sky-200 border border-sky-500/40 font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer text-xs uppercase tracking-wider"
+                            title="Mark all remaining days attended at once"
+                          >
+                            Check In All Remaining ({pendingDays.length} Days)
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      <div className="w-full py-2.5 px-4 bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 font-extrabold rounded-xl text-xs flex items-center justify-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                        Pass Checked In for All Registered Days
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-
-              {/* Check-in timestamp if already checked in */}
-              {verificationResult.pass.checkedInAt && (
-                <div className="text-[11px] text-amber-300/90 flex items-center gap-1.5 font-medium">
-                  <Clock className="h-3.5 w-3.5 shrink-0" /> Checked in at{' '}
-                  {new Date(verificationResult.pass.checkedInAt).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}{' '}
-                  by {verificationResult.pass.checkedInBy || 'Staff'}
-                </div>
-              )}
-
-              {/* Action */}
-              {!verificationResult.isAlreadyCheckedIn && (
-                <button
-                  type="button"
-                  onClick={handleCheckIn}
-                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl transition-all shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 cursor-pointer text-xs uppercase tracking-wider"
-                >
-                  <CheckCircle2 className="h-4 w-4" />
-                  Admit &amp; Mark Checked In
-                </button>
-              )}
-            </div>
-          ) : (
+            );
+          })() : (
             <div className="p-6 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 space-y-2 flex items-center gap-3">
               <XCircle className="h-6 w-6 text-rose-400 shrink-0" />
               <div>

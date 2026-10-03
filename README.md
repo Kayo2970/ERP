@@ -53,6 +53,10 @@ This platform replaces a scattered mix of WhatsApp groups, spreadsheets, and ema
 
 Everything that's changed since this README was last updated (2026-09-15). Full detail is in the git history (`git log`); this is the summary.
 
+### 2026-10-03
+- **Universal 10-Minute Quiet Buffer Queue (`/dashboard/email`)**: Every outgoing email across the ERP (announcements, event passes, passes push, event reports, procurement requests, committee assignments, approvals, direct broadcasts, guest invites, group policies) is routed through a universal 10-minute quiet buffer before SMTP dispatch. Users can review, dispatch immediately, or cancel pending sends directly from the Outbox, Queue, or Payload Inspector. Process restarts recover and reschedule active buffered emails seamlessly.
+- **Dynamic Group Policy Grant Notification Emails (`/dashboard/policies`)**: Implemented the dedicated `GROUP_POLICY_GRANT` email module. Creating or modifying dynamic group policies sends tailored institutional emails to all targeted members detailing who allotted the access, the validity duration / expiration date with countdown, elevated capabilities, and module access permissions granted.
+
 ### 2026-09-29
 - **Governance & Approvals / Email Routing**: Hardened `eventsHeadGg` approver resolution in `findApprovalRecipients()` and `isEventsHeadGgCampus()` so that members holding financial roles (`Finance Head`) can never be mistakenly treated as the GG Campus Events Head or receive institutional event/report/design approval emails, even if their tier was misconfigured.
 - **Analytics & Reports (`/dashboard/reports`)**: Fixed Deliverable Performance Distribution bar chart tooltip contrast on dark mode with a high-contrast custom tooltip component, guaranteed X-axis student names are never clipped, and enhanced the Audited Performance Logs table to surface each student's department context beneath their name.
@@ -337,14 +341,17 @@ Configuration lives in `leads-dashboard/.env`:
 
 #### 18. Dynamic Group Policies (`/dashboard/policies`)
 - **Granular RBAC Engine**: Super User capability grants across 15 privilege keys with division/tier targeting, `Select All` controls, and approval gateways.
+- **Grant Notification Emails**: Automatically sends customized notification emails (`GROUP_POLICY_GRANT`) to targeted members whenever elevated privileges or special temporary access are granted, detailing the granting authority, validity duration / expiration period, specific capabilities, and module access overrides.
 
 #### 19. Backup & Restore (`/dashboard/backup`)
 - **Snapshot Manager**: Export and restore AES-256 encrypted JSON database snapshots with rollback protection.
 
 #### 20. Email Management & Client (`/dashboard/email`)
 - **SMTP Engine**: Diagnostic testing, live queue monitoring, test email delivery, and dispatch logs.
+- **Universal 10-Minute Buffer Queue**: Every outgoing email across all ERP modules is placed in a 10-minute quiet hold before physical SMTP dispatch. Features live 1-second countdown tickers, manual "Dispatch Now", and "Cancel Send" controls for individual or all queued emails.
 - **File Attachments**: The Broadcast Composer can attach files to a single-recipient or division-scope send (same 15MB cap and attachment-note helper as Mail Merge).
 - **Debounced Task-Assignment Digest**: Task assignment emails batch into one digest per recipient over a 10-minute quiet window — now correctly fires for tasks the in-process schedulers create automatically (holiday social-media approval tasks, event-lapse social-media tasks), not just tasks created through the Tasks page, and now survives a mid-debounce server restart (flushed on shutdown instead of dropped).
+- **Group Policy Module**: Full support for `GROUP_POLICY_GRANT` category logging, filtering, and payload inspection.
 
 #### 21. System & Account Settings (`/dashboard/settings`)
 - **Profile & Security**: Avatar upload, OTP-verified email updates, password change, and Super User Emergency System Lockdown.

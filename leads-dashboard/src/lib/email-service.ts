@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { mutateCollection, readCollection } from './server-db';
 import { DirectSendTransport } from './direct-smtp-transport';
 import { getAppBaseUrl } from './app-url';
+import { CAPABILITY_CATALOG, MODULE_CATALOG } from './permissions';
 
 // Referenced as cid:leads-logo in wrapInMasterEmailTemplate — attach this
 // to every sendMail() call so the header logo is embedded, not fetched
@@ -14,15 +15,36 @@ const EMAIL_LOGO_ATTACHMENT = {
   cid: 'leads-logo',
 };
 
+export type EmailCategory =
+  | 'AUTH_OTP'
+  | 'ANNOUNCEMENT'
+  | 'TASK_ASSIGNMENT'
+  | 'TASK_DEADLINE_REMINDER'
+  | 'EVENT_ROSTER'
+  | 'SYSTEM'
+  | 'DIRECT_MESSAGE'
+  | 'GUEST_INVITE'
+  | 'ACCOUNT_ACTIVATION'
+  | 'BIRTHDAY'
+  | 'EVENT_REPORT_APPROVAL'
+  | 'DESIGN_APPROVAL'
+  | 'APPROVAL_REQUEST'
+  | 'EVENT_PASS'
+  | 'EVENT_INVITATION'
+  | 'PROCUREMENT_DECISION'
+  | 'GROUP_POLICY_GRANT';
+
 export interface EmailLog {
   id: string;
   to: string;
   subject: string;
   bodyText: string;
   bodyHtml: string;
-  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'TASK_DEADLINE_REMINDER' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION' | 'BIRTHDAY' | 'EVENT_REPORT_APPROVAL' | 'DESIGN_APPROVAL' | 'APPROVAL_REQUEST' | 'EVENT_PASS' | 'EVENT_INVITATION' | 'PROCUREMENT_DECISION';
-  status: 'SENT' | 'FAILED';
+  category: EmailCategory;
+  status: 'SENT' | 'FAILED' | 'BUFFERED' | 'CANCELLED';
   sentAt: string;
+  bufferedUntil?: string; // ISO timestamp when the 10-minute quiet buffer elapses
+  attachmentsMeta?: Array<{ filename: string; contentType?: string }>;
   // Diagnostics for "shows SENT but never arrives" — a resolved sendMail()
   // only means the SMTP server ACCEPTED the message for delivery, not that
   // it reached the recipient's inbox. These surface what the server
@@ -39,13 +61,14 @@ export interface SendEmailPayload {
   bodyHtml?: string;
   badgeText?: string;
   badgeColor?: string;
-  category: 'AUTH_OTP' | 'ANNOUNCEMENT' | 'TASK_ASSIGNMENT' | 'TASK_DEADLINE_REMINDER' | 'EVENT_ROSTER' | 'SYSTEM' | 'DIRECT_MESSAGE' | 'GUEST_INVITE' | 'ACCOUNT_ACTIVATION' | 'BIRTHDAY' | 'EVENT_REPORT_APPROVAL' | 'DESIGN_APPROVAL' | 'APPROVAL_REQUEST' | 'EVENT_PASS' | 'EVENT_INVITATION' | 'PROCUREMENT_DECISION';
+  category: EmailCategory;
   // Files attached to the outgoing message, e.g. an approved event report
   // or design asset read straight off disk via file-storage.ts's
   // readStoredFile(). Not persisted on the EmailLog entry (only the fact
   // that an email was sent/failed is), since the file itself already lives
   // in data/uploads and re-storing it on every log entry would duplicate it.
   attachments?: Array<{ filename: string; content: Buffer; contentType?: string }>;
+  immediate?: boolean; // if true, bypasses the 10-minute quiet buffer (e.g. for urgent security OTPs or manual flush)
 }
 
 export interface EmailSettings {
@@ -412,32 +435,77 @@ export async function testEmailConnection(testRecipient: string, draftSettings?:
   }
 }
 
-export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog> {
-  let badgeTextToUse: string | undefined = payload.badgeText;
-  if (!badgeTextToUse) {
-    if (payload.category === 'ANNOUNCEMENT') badgeTextToUse = 'Official Announcement';
-    else if (payload.category === 'TASK_ASSIGNMENT') badgeTextToUse = 'Task Assignment';
-    else if (payload.category === 'TASK_DEADLINE_REMINDER') badgeTextToUse = 'Deadline Reminder';
-    else if (payload.category === 'EVENT_ROSTER') badgeTextToUse = 'Event Roster';
-    else if (payload.category === 'ACCOUNT_ACTIVATION') badgeTextToUse = 'Account Notice';
-    else if (payload.category === 'BIRTHDAY') badgeTextToUse = 'Greetings';
-    else if (payload.category === 'EVENT_PASS' || payload.category === 'EVENT_INVITATION') badgeTextToUse = 'Official Event Pass';
-    else badgeTextToUse = undefined;
+export const BUFFER_DELAY_MS = 10 * 60 * 1000; // 10 minutes quiet buffer
+
+interface BufferedEmailEntry {
+  id: string;
+  payload: SendEmailPayload;
+  queuedAt: string;
+  bufferedUntil: string;
+  timer: NodeJS.Timeout | null;
+}
+
+const bufferedEmails = new Map<string, BufferedEmailEntry>();
+let bufferQueueRestored = false;
+
+function escapeHtml(text: string): string {
+  return (text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+async function restoreBufferedQueue(): Promise<void> {
+  if (bufferQueueRestored) return;
+  bufferQueueRestored = true;
+  try {
+    const list = await readCollection<EmailLog>('emails');
+    const bufferedList = (list || []).filter(item => item.status === 'BUFFERED');
+    const now = Date.now();
+    for (const item of bufferedList) {
+      if (bufferedEmails.has(item.id)) continue;
+      const untilMs = item.bufferedUntil ? new Date(item.bufferedUntil).getTime() : 0;
+      const remainingMs = Math.max(0, untilMs - now);
+      if (remainingMs === 0) {
+        // Expired while server was offline/restarting — dispatch immediately
+        sendBufferedEmailNow(item.id).catch(err => {
+          console.error(`[email-service] Failed to send expired buffered email ${item.id}:`, err);
+        });
+      } else {
+        const timer = setTimeout(() => {
+          sendBufferedEmailNow(item.id).catch(err => {
+            console.error(`[email-service] Failed to send scheduled buffered email ${item.id}:`, err);
+          });
+        }, remainingMs);
+        bufferedEmails.set(item.id, {
+          id: item.id,
+          payload: {
+            to: item.to,
+            subject: item.subject,
+            bodyText: item.bodyText,
+            bodyHtml: item.bodyHtml,
+            category: item.category,
+          },
+          queuedAt: item.sentAt || new Date().toISOString(),
+          bufferedUntil: item.bufferedUntil || new Date(now + remainingMs).toISOString(),
+          timer,
+        });
+      }
+    }
+  } catch (err) {
+    console.error('[email-service] Failed to restore buffered emails from DB:', err);
   }
+}
 
-  const defaultFormattedHtml = wrapInMasterEmailTemplate({
-    pageTitle: payload.subject,
-    headerTitle: payload.subject,
-    badgeText: badgeTextToUse,
-    badgeColor: payload.badgeColor,
-    bodyContentHtml: `<div style="white-space: pre-wrap; font-size: 14px; line-height: 1.7; color: #1e293b;">${payload.bodyText}</div>`
-  });
-
-  const bodyHtml = payload.bodyHtml || defaultFormattedHtml;
-  // Reassigned inside the try block below for bulk categories, so the stored
-  // email log (newEmail, further down) reflects exactly what was sent,
-  // unsubscribe line included — not just the pre-unsubscribe template.
-  let finalBodyHtml = bodyHtml;
+async function executeSmtpSend(payload: SendEmailPayload): Promise<{
+  status: 'SENT' | 'FAILED';
+  errorMessage?: string;
+  smtpResponse?: string;
+  rejectedRecipients?: string[];
+}> {
+  let finalBodyHtml = payload.bodyHtml || payload.bodyText;
   let finalBodyText = payload.bodyText;
   let status: 'SENT' | 'FAILED' = 'FAILED';
   let errorMessage: string | undefined;
@@ -447,7 +515,6 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
   try {
     const { transporter: t, settings } = await buildTransporter();
     const from = `${settings.fromName || 'LEADS Next Gen Centre'} <${settings.fromEmail || 'leads@msruas.ac.in'}>`;
-
     const domain = (settings.fromEmail || 'leadsnextgencentre.online').split('@')[1] || 'leadsnextgencentre.online';
     const messageId = `<${Date.now()}.${Math.random().toString(36).substring(2, 9)}@${domain}>`;
 
@@ -466,10 +533,6 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
       headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
     }
 
-    // A List-Unsubscribe header alone is invisible unless the mail client
-    // happens to surface it — bulk mail (announcements, event rosters, guest
-    // invites) also gets a plain, visible unsubscribe line in the email body
-    // itself, in both the HTML and plain-text versions actually sent.
     if (isBulkCategory && unsubscribeAddress) {
       const unsubscribeMailto = `mailto:${unsubscribeAddress}?subject=Unsubscribe`;
       const unsubscribeHtml = `<div style="text-align:center;padding:12px 20px 4px;font-size:10px;color:#94a3b8;">Don't want these emails? <a href="${unsubscribeMailto}" style="color:#0284c7;">Unsubscribe</a>.</div>`;
@@ -510,18 +573,50 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
     console.error(`[email-service] Failed to send to ${payload.to}:`, errorMessage);
   }
 
+  return { status, errorMessage, smtpResponse, rejectedRecipients };
+}
+
+async function sendImmediateEmail(payload: SendEmailPayload): Promise<EmailLog> {
+  let badgeTextToUse: string | undefined = payload.badgeText;
+  if (!badgeTextToUse) {
+    if (payload.category === 'ANNOUNCEMENT') badgeTextToUse = 'Official Announcement';
+    else if (payload.category === 'TASK_ASSIGNMENT') badgeTextToUse = 'Task Assignment';
+    else if (payload.category === 'TASK_DEADLINE_REMINDER') badgeTextToUse = 'Deadline Reminder';
+    else if (payload.category === 'EVENT_ROSTER') badgeTextToUse = 'Event Roster';
+    else if (payload.category === 'ACCOUNT_ACTIVATION') badgeTextToUse = 'Account Notice';
+    else if (payload.category === 'BIRTHDAY') badgeTextToUse = 'Greetings';
+    else if (payload.category === 'EVENT_PASS' || payload.category === 'EVENT_INVITATION') badgeTextToUse = 'Official Event Pass';
+    else if (payload.category === 'GROUP_POLICY_GRANT') badgeTextToUse = 'Special Access Granted';
+    else badgeTextToUse = undefined;
+  }
+
+  const defaultFormattedHtml = wrapInMasterEmailTemplate({
+    pageTitle: payload.subject,
+    headerTitle: payload.subject,
+    badgeText: badgeTextToUse,
+    badgeColor: payload.badgeColor,
+    bodyContentHtml: `<div style="white-space: pre-wrap; font-size: 14px; line-height: 1.7; color: #1e293b;">${payload.bodyText}</div>`
+  });
+
+  const bodyHtml = payload.bodyHtml || defaultFormattedHtml;
+  const result = await executeSmtpSend({
+    ...payload,
+    bodyHtml,
+  });
+
   const newEmail: EmailLog = {
     id: `email-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     to: payload.to,
     subject: payload.subject,
-    bodyText: finalBodyText,
-    bodyHtml: finalBodyHtml,
+    bodyText: payload.bodyText,
+    bodyHtml,
     category: payload.category,
-    status,
+    status: result.status,
     sentAt: new Date().toISOString(),
-    errorMessage,
-    smtpResponse,
-    rejectedRecipients,
+    errorMessage: result.errorMessage,
+    smtpResponse: result.smtpResponse,
+    rejectedRecipients: result.rejectedRecipients,
+    attachmentsMeta: payload.attachments?.map(a => ({ filename: a.filename, contentType: a.contentType })),
   };
 
   try {
@@ -531,6 +626,407 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
   }
 
   return newEmail;
+}
+
+export async function sendBufferedEmailNow(id: string): Promise<EmailLog | null> {
+  await restoreBufferedQueue();
+  const entry = bufferedEmails.get(id);
+  if (entry?.timer) {
+    clearTimeout(entry.timer);
+  }
+  bufferedEmails.delete(id);
+
+  const currentLogs = await readCollection<EmailLog>('emails');
+  const target = currentLogs.find(l => l.id === id);
+  if (!target || target.status === 'CANCELLED') {
+    return null;
+  }
+
+  const payloadToSend: SendEmailPayload = entry?.payload || {
+    to: target.to,
+    subject: target.subject,
+    bodyText: target.bodyText,
+    bodyHtml: target.bodyHtml,
+    category: target.category,
+  };
+
+  const sendResult = await executeSmtpSend(payloadToSend);
+
+  const updatedLog: EmailLog = {
+    ...target,
+    status: sendResult.status,
+    sentAt: new Date().toISOString(),
+    smtpResponse: sendResult.smtpResponse,
+    errorMessage: sendResult.errorMessage,
+    rejectedRecipients: sendResult.rejectedRecipients,
+  };
+
+  await mutateCollection<EmailLog>('emails', (current) => {
+    return (current || []).map(item => item.id === id ? updatedLog : item);
+  });
+
+  return updatedLog;
+}
+
+export const flushBufferedEmail = sendBufferedEmailNow;
+
+export async function cancelBufferedEmail(id: string): Promise<boolean> {
+  await restoreBufferedQueue();
+  const entry = bufferedEmails.get(id);
+  if (entry?.timer) {
+    clearTimeout(entry.timer);
+  }
+  bufferedEmails.delete(id);
+
+  let found = false;
+  await mutateCollection<EmailLog>('emails', (current) => {
+    return (current || []).map(item => {
+      if (item.id === id) {
+        found = true;
+        return {
+          ...item,
+          status: 'CANCELLED',
+          errorMessage: 'Cancelled by administrator before 10-minute dispatch',
+        };
+      }
+      return item;
+    });
+  });
+
+  return found;
+}
+
+export async function flushAllBufferedEmails(): Promise<number> {
+  await restoreBufferedQueue();
+  const ids = Array.from(bufferedEmails.keys());
+  for (const id of ids) {
+    await sendBufferedEmailNow(id);
+  }
+  return ids.length;
+}
+
+export async function cancelAllBufferedEmails(): Promise<number> {
+  await restoreBufferedQueue();
+  const ids = Array.from(bufferedEmails.keys());
+  for (const id of ids) {
+    await cancelBufferedEmail(id);
+  }
+  return ids.length;
+}
+
+export async function getBufferedEmails(): Promise<Array<{
+  id: string;
+  to: string;
+  subject: string;
+  category: EmailCategory;
+  queuedAt: string;
+  bufferedUntil: string;
+  remainingMs: number;
+  remainingSeconds: number;
+  hasAttachments: boolean;
+  attachmentCount: number;
+}>> {
+  await restoreBufferedQueue();
+  const now = Date.now();
+  return Array.from(bufferedEmails.values()).map(entry => {
+    const untilMs = new Date(entry.bufferedUntil).getTime();
+    const remainingMs = Math.max(0, untilMs - now);
+    return {
+      id: entry.id,
+      to: entry.payload.to,
+      subject: entry.payload.subject,
+      category: entry.payload.category,
+      queuedAt: entry.queuedAt,
+      bufferedUntil: entry.bufferedUntil,
+      remainingMs,
+      remainingSeconds: Math.ceil(remainingMs / 1000),
+      hasAttachments: Boolean(entry.payload.attachments && entry.payload.attachments.length > 0),
+      attachmentCount: entry.payload.attachments?.length || 0,
+    };
+  });
+}
+
+/**
+ * Universal Outgoing Email Dispatcher
+ *
+ * ALL outgoing emails across the LEADS ERP (announcements, passes, invitations,
+ * group policy grants, approvals, direct broadcasts, reports, etc.) enter the
+ * 10-minute quiet buffer before being dispatched to recipients.
+ *
+ * Only explicit urgent bypasses (payload.immediate = true or 5-min AUTH_OTP security codes)
+ * bypass the quiet buffer.
+ */
+export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog> {
+  await restoreBufferedQueue();
+
+  // If immediate flag is true OR it's a 5-min security OTP, send immediately via SMTP
+  if (payload.immediate || payload.category === 'AUTH_OTP') {
+    return sendImmediateEmail(payload);
+  }
+
+  // Otherwise, all emails go through the 10-minute quiet buffer!
+  const id = `email-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const queuedAt = new Date().toISOString();
+  const bufferedUntil = new Date(Date.now() + BUFFER_DELAY_MS).toISOString();
+
+  let badgeTextToUse: string | undefined = payload.badgeText;
+  if (!badgeTextToUse) {
+    if (payload.category === 'ANNOUNCEMENT') badgeTextToUse = 'Official Announcement';
+    else if (payload.category === 'TASK_ASSIGNMENT') badgeTextToUse = 'Task Assignment';
+    else if (payload.category === 'TASK_DEADLINE_REMINDER') badgeTextToUse = 'Deadline Reminder';
+    else if (payload.category === 'EVENT_ROSTER') badgeTextToUse = 'Event Roster';
+    else if (payload.category === 'ACCOUNT_ACTIVATION') badgeTextToUse = 'Account Notice';
+    else if (payload.category === 'BIRTHDAY') badgeTextToUse = 'Greetings';
+    else if (payload.category === 'EVENT_PASS' || payload.category === 'EVENT_INVITATION') badgeTextToUse = 'Official Event Pass';
+    else if (payload.category === 'GROUP_POLICY_GRANT') badgeTextToUse = 'Special Access Granted';
+    else badgeTextToUse = undefined;
+  }
+
+  const defaultFormattedHtml = wrapInMasterEmailTemplate({
+    pageTitle: payload.subject,
+    headerTitle: payload.subject,
+    badgeText: badgeTextToUse,
+    badgeColor: payload.badgeColor,
+    bodyContentHtml: `<div style="white-space: pre-wrap; font-size: 14px; line-height: 1.7; color: #1e293b;">${payload.bodyText}</div>`
+  });
+
+  const finalBodyHtml = payload.bodyHtml || defaultFormattedHtml;
+  const finalBodyText = payload.bodyText;
+
+  const newEmail: EmailLog = {
+    id,
+    to: payload.to,
+    subject: payload.subject,
+    bodyText: finalBodyText,
+    bodyHtml: finalBodyHtml,
+    category: payload.category,
+    status: 'BUFFERED',
+    sentAt: queuedAt,
+    bufferedUntil,
+    attachmentsMeta: payload.attachments?.map(a => ({ filename: a.filename, contentType: a.contentType })),
+  };
+
+  try {
+    await mutateCollection<EmailLog>('emails', (current) => [newEmail, ...(current || [])]);
+  } catch (err) {
+    console.error('[email-service] Failed to persist buffered email to database:', err);
+  }
+
+  const timer = setTimeout(() => {
+    sendBufferedEmailNow(id).catch(err => {
+      console.error(`[email-service] Error sending buffered email ${id}:`, err);
+    });
+  }, BUFFER_DELAY_MS);
+
+  bufferedEmails.set(id, {
+    id,
+    payload: {
+      ...payload,
+      bodyHtml: finalBodyHtml,
+      bodyText: finalBodyText,
+    },
+    queuedAt,
+    bufferedUntil,
+    timer,
+  });
+
+  return newEmail;
+}
+
+export function generateGroupPolicyGrantEmailTemplate(
+  memberName: string,
+  policy: {
+    tag: string;
+    name: string;
+    description?: string;
+    capabilities?: string[];
+    moduleAccess?: Partial<Record<string, { view?: 'OWN' | 'ALL'; edit?: 'OWN' | 'ALL' | 'NONE' }>>;
+    expiresAt?: string;
+    createdBy?: string;
+  },
+  allottedByName: string
+): { subject: string; bodyText: string; bodyHtml: string } {
+  const baseUrl = getAppBaseUrl();
+  const dashboardUrl = `${baseUrl}/dashboard`;
+
+  let validityText = 'Permanent Administrative Grant (Ongoing until revoked)';
+  let durationBadge = 'Permanent Access';
+  let isTimeLimited = false;
+
+  if (policy.expiresAt) {
+    isTimeLimited = true;
+    const expiryDate = new Date(policy.expiresAt);
+    const now = new Date();
+    const diffMs = expiryDate.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    const formattedDate = expiryDate.toLocaleString('en-US', {
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    if (diffDays > 0) {
+      validityText = `Valid until ${formattedDate} (${diffDays} day${diffDays === 1 ? '' : 's'} remaining)`;
+      durationBadge = `Time-Limited (${diffDays} day${diffDays === 1 ? '' : 's'})`;
+    } else {
+      validityText = `Valid until ${formattedDate}`;
+      durationBadge = 'Time-Limited Access';
+    }
+  }
+
+  // Resolve capability items
+  const capabilitiesList = (policy.capabilities || []).map(capKey => {
+    const found = CAPABILITY_CATALOG.find(c => c.key === capKey);
+    return {
+      key: capKey,
+      label: found?.label || capKey,
+      module: found?.module || 'General',
+      description: found?.description || '',
+    };
+  });
+
+  // Resolve module access items
+  const moduleAccessList: Array<{ module: string; view?: string; edit?: string }> = [];
+  if (policy.moduleAccess) {
+    for (const [key, grant] of Object.entries(policy.moduleAccess)) {
+      if (grant && (grant.view || grant.edit)) {
+        const foundMod = MODULE_CATALOG.find(m => m.key === key);
+        moduleAccessList.push({
+          module: foundMod?.label || key,
+          view: grant.view,
+          edit: grant.edit,
+        });
+      }
+    }
+  }
+
+  const subject = `[LEADS Special Access] ${policy.name} (${policy.tag})`;
+
+  const capsText = capabilitiesList.length > 0
+    ? capabilitiesList.map(c => `  - ${c.label} [${c.module}]: ${c.description}`).join('\n')
+    : '  - No specific capability tags assigned';
+
+  const modAccessText = moduleAccessList.length > 0
+    ? moduleAccessList.map(m => `  - ${m.module}: View=${m.view || 'Default'}, Edit=${m.edit || 'Default'}`).join('\n')
+    : '';
+
+  const bodyText = `Dear ${memberName},\n\n` +
+    `You have been allotted special access privileges in the LEADS Next Gen Centre ERP under Group Policy: "${policy.name}" (${policy.tag}).\n\n` +
+    `AUTHORITY & GRANT DETAILS:\n` +
+    `- Allotted By: ${allottedByName}\n` +
+    `- Access Duration: ${validityText}\n` +
+    (policy.description ? `- Policy Purpose: ${policy.description}\n` : '') +
+    `\nPRIVILEGES & PERMISSIONS ALLOTTED:\n` +
+    `${capsText}\n` +
+    (modAccessText ? `\nMODULE ACCESS PERMISSIONS:\n${modAccessText}\n` : '') +
+    `\nPlease access your elevated dashboard here:\n${dashboardUrl}\n\n` +
+    `Security Note: If you believe this access was allotted in error, please immediately contact your Centre Administrator.\n\n` +
+    `Regards,\nLEADS Access Management & Information Security`;
+
+  const capsHtml = capabilitiesList.map(c => `
+    <div style="padding: 10px 14px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px;">
+      <div style="font-weight: 700; color: #0f172a; font-size: 13px;">${escapeHtml(c.label)}</div>
+      <div style="font-size: 11px; color: #64748b; margin-top: 2px;">
+        <span style="display: inline-block; padding: 2px 6px; background: #f1f5f9; border-radius: 4px; font-weight: 600; color: #475569; margin-right: 6px;">${escapeHtml(c.module)}</span>
+        ${escapeHtml(c.description)}
+      </div>
+    </div>
+  `).join('');
+
+  const modAccessHtml = moduleAccessList.map(m => `
+    <div style="padding: 8px 12px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 6px; font-size: 12px;">
+      <strong style="color: #0f172a;">${escapeHtml(m.module)}:</strong>
+      <span style="color: #0284c7; margin-left: 6px;">View: ${m.view || 'Default'}</span> &middot;
+      <span style="color: #10b981; margin-left: 4px;">Edit: ${m.edit || 'Default'}</span>
+    </div>
+  `).join('');
+
+  const bodyContentHtml = `
+    <p style="margin-top: 0; color: #0f172a; font-size: 15px; font-weight: 600; line-height: 1.5;">
+      Dear ${escapeHtml(memberName)},
+    </p>
+    <p style="color: #334155; font-size: 13px; line-height: 1.6;">
+      You have been granted special access permissions in the LEADS Next Gen Centre ERP under Group Policy: <strong>${escapeHtml(policy.name)}</strong> (<code style="background: #f1f5f9; padding: 2px 5px; border-radius: 4px; color: #6366f1;">${escapeHtml(policy.tag)}</code>).
+    </p>
+
+    <!-- Authority & Validity Notice Card -->
+    <div style="background: ${isTimeLimited ? '#fffbeb' : '#f8fafc'}; border: 1px solid ${isTimeLimited ? '#fde68a' : '#e2e8f0'}; border-radius: 12px; padding: 14px 18px; margin: 18px 0;">
+      <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+        <tr>
+          <td style="padding: 4px 0; color: #64748b; width: 130px; font-weight: 600;">Allotted By:</td>
+          <td style="padding: 4px 0; color: #0f172a; font-weight: 700;">${escapeHtml(allottedByName)}</td>
+        </tr>
+        <tr>
+          <td style="padding: 4px 0; color: #64748b; font-weight: 600;">Grant Duration:</td>
+          <td style="padding: 4px 0; color: ${isTimeLimited ? '#b45309' : '#0f172a'}; font-weight: 700;">
+            ${isTimeLimited ? '⏰ ' : '🛡️ '}${escapeHtml(validityText)}
+          </td>
+        </tr>
+        ${policy.description ? `
+        <tr>
+          <td style="padding: 4px 0; color: #64748b; font-weight: 600;">Description:</td>
+          <td style="padding: 4px 0; color: #475569;">${escapeHtml(policy.description)}</td>
+        </tr>
+        ` : ''}
+      </table>
+    </div>
+
+    <!-- Privileges & Capabilities -->
+    <div style="margin: 20px 0 16px;">
+      <h4 style="margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: #475569;">
+        Special Privileges & Capabilities Allotted:
+      </h4>
+      ${capsHtml || '<p style="font-size: 12px; color: #94a3b8; font-style: italic;">No capability tags attached.</p>'}
+    </div>
+
+    ${moduleAccessList.length > 0 ? `
+    <div style="margin: 16px 0;">
+      <h4 style="margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: #475569;">
+        Module View & Edit Permissions:
+      </h4>
+      ${modAccessHtml}
+    </div>
+    ` : ''}
+
+    <!-- Call to action button -->
+    <div style="text-align: center; margin: 28px 0 16px;">
+      <a href="${dashboardUrl}" target="_blank" style="display: inline-block; background: #6366f1; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 10px; font-weight: 700; font-size: 13px; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);">
+        Open LEADS Dashboard &rarr;
+      </a>
+    </div>
+
+    <p style="margin: 16px 0 0; font-size: 11px; color: #64748b; text-align: center; line-height: 1.5;">
+      Security Notice: This elevated privilege was provisioned by ${escapeHtml(allottedByName)} via LEADS Group Policy Management. If you believe this grant was allotted in error, please report this immediately to your Centre Administrator.
+    </p>
+  `;
+
+  const bodyHtml = wrapInMasterEmailTemplate({
+    pageTitle: subject,
+    headerTitle: `Special Access Permission Allotted`,
+    headerSubtitle: isTimeLimited ? `Temporary Elevated Privileges Assigned` : `Administrative Privileges Granted`,
+    badgeText: isTimeLimited ? `SPECIAL ACCESS (${durationBadge.toUpperCase()})` : `PRIVILEGE GRANT`,
+    badgeColor: isTimeLimited ? `#d97706` : `#6366f1`,
+    bodyContentHtml,
+  });
+
+  return { subject, bodyText, bodyHtml };
+}
+
+export function resolvePolicyRecipients(policy: any, members: any[]): Array<{ id: string; name: string; email: string }> {
+  if (!policy || policy.enabled === false) return [];
+  const activeMembers = (members || []).filter((m: any) => m.status !== 'Terminated' && m.email);
+  return activeMembers.filter((m: any) => {
+    if (Array.isArray(policy.targetMemberIds) && policy.targetMemberIds.includes(m.id)) return true;
+    if (Array.isArray(policy.targetDivisions) && policy.targetDivisions.length > 0 && policy.targetDivisions.includes(m.division)) return true;
+    if (Array.isArray(policy.targetTiers) && policy.targetTiers.length > 0 && policy.targetTiers.includes(m.tier)) return true;
+    if (policy.targetDesignationKeyword && typeof policy.targetDesignationKeyword === 'string' && policy.targetDesignationKeyword.trim()) {
+      const kw = policy.targetDesignationKeyword.trim().toLowerCase();
+      if ((m.role || '').toLowerCase().includes(kw)) return true;
+    }
+    return false;
+  }).map((m: any) => ({ id: m.id, name: m.name, email: m.email }));
 }
 
 export function generateOtpEmailTemplate(name: string, otp: string): { subject: string; bodyText: string; bodyHtml: string } {

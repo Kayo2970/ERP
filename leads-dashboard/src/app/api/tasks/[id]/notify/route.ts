@@ -64,7 +64,7 @@ export async function POST(
         badgeColor: '#0284c7',
         category: 'TASK_ASSIGNMENT',
       });
-      if (log.status === 'SENT') sent++; else failed.push(recipient.email);
+      if (log.status === 'SENT' || log.status === 'BUFFERED') sent++; else failed.push(recipient.email);
     }
 
     return NextResponse.json({ success: sent > 0, sent, total: recipients.length, failed });

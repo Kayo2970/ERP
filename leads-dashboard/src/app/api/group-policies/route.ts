@@ -32,7 +32,31 @@ export async function POST(request: Request) {
       }
       return [item, ...current];
     });
-    const created = updated.find((p: any) => p.id === item.id);
+    const created = updated.find((p: any) => p.id === item.id) || item;
+
+    // Dispatches group policy grant notification emails to targeted members (queued via 10-minute buffer)
+    if (created && created.enabled !== false) {
+      try {
+        const { resolvePolicyRecipients, generateGroupPolicyGrantEmailTemplate, dispatchEmail } = await import('@/lib/email-service');
+        const members = await readCollection('members');
+        const recipients = resolvePolicyRecipients(created, members);
+        for (const r of recipients) {
+          const template = generateGroupPolicyGrantEmailTemplate(r.name, created, actor.name || 'Centre Administration');
+          await dispatchEmail({
+            to: r.email,
+            subject: template.subject,
+            bodyText: template.bodyText,
+            bodyHtml: template.bodyHtml,
+            category: 'GROUP_POLICY_GRANT',
+            badgeText: 'Special Access Granted',
+            badgeColor: created.expiresAt ? '#d97706' : '#6366f1',
+          });
+        }
+      } catch (emailErr) {
+        console.error('[group-policies-api-post] Failed to queue policy grant email:', emailErr);
+      }
+    }
+
     return NextResponse.json(created, { status: 201 });
   } catch (err: any) {
     return apiError(err, 'group-policies-api-post', 400);

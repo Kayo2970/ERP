@@ -52,6 +52,19 @@ interface PendingQueueItem {
   }>;
 }
 
+interface BufferedEmailItem {
+  id: string;
+  to: string;
+  subject: string;
+  category: string;
+  queuedAt: string;
+  bufferedUntil: string;
+  remainingMs: number;
+  remainingSeconds: number;
+  hasAttachments: boolean;
+  attachmentCount: number;
+}
+
 export default function EmailManagementPage() {
   const [user, setUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'outbox' | 'queue' | 'composer' | 'settings'>('outbox');
@@ -94,12 +107,13 @@ export default function EmailManagementPage() {
   // Outbox & Audit Logs State
   const [outboxLogs, setOutboxLogs] = useState<EmailLog[]>([]);
   const [logSearchQuery, setLogSearchQuery] = useState('');
-  const [logStatusFilter, setLogStatusFilter] = useState<'ALL' | 'SENT' | 'FAILED'>('ALL');
+  const [logStatusFilter, setLogStatusFilter] = useState<'ALL' | 'SENT' | 'FAILED' | 'BUFFERED' | 'CANCELLED'>('ALL');
   const [logCategoryFilter, setLogCategoryFilter] = useState<string>('ALL');
   const [selectedLog, setSelectedLog] = useState<EmailLog | null>(null);
 
   // Pending Buffer Queues State
   const [pendingQueues, setPendingQueues] = useState<PendingQueueItem[]>([]);
+  const [bufferedEmails, setBufferedEmails] = useState<BufferedEmailItem[]>([]);
   const [isFlushingQueue, setIsFlushingQueue] = useState<string | null>(null);
 
   // Toast notifications
@@ -170,10 +184,34 @@ export default function EmailManagementPage() {
       if (res.ok) {
         const data = await res.json();
         setPendingQueues(data.queues || []);
+        setBufferedEmails(data.bufferedEmails || []);
       }
     } catch (e) {
       console.error(e);
     }
+  };
+
+  // Live countdown timer for buffered outgoing emails
+  useEffect(() => {
+    if (bufferedEmails.length === 0) return;
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setBufferedEmails(prev =>
+        prev.map(item => {
+          const untilMs = new Date(item.bufferedUntil).getTime();
+          const rem = Math.max(0, Math.ceil((untilMs - now) / 1000));
+          return { ...item, remainingSeconds: rem };
+        })
+      );
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [bufferedEmails.length]);
+
+  const formatCountdown = (totalSeconds: number): string => {
+    if (totalSeconds <= 0) return '00m:00s (Dispatching now)';
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${String(mins).padStart(2, '0')}m:${String(secs).padStart(2, '0')}s remaining`;
   };
 
   const [isCancellingQueue, setIsCancellingQueue] = useState<string | null>(null);
@@ -187,11 +225,36 @@ export default function EmailManagementPage() {
         const data = await res.json();
         triggerToast('success', data.message || 'Queued email buffer cancelled.');
         fetchQueues();
+        fetchLogs();
       } else {
         triggerToast('error', 'Failed to cancel queue.');
       }
     } catch (err: any) {
       triggerToast('error', err?.message || 'Error cancelling queue');
+    } finally {
+      setIsCancellingQueue(null);
+    }
+  };
+
+  const handleCancelBufferedEmail = async (id: string) => {
+    setIsCancellingQueue(id);
+    try {
+      const res = await fetch(`/api/email/queue?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
+      if (res.ok) {
+        triggerToast('success', 'Email cancelled and discarded from buffer queue.');
+        fetchQueues();
+        fetchLogs();
+        if (selectedLog && selectedLog.id === id) {
+          setSelectedLog(prev => prev ? { ...prev, status: 'CANCELLED' } : null);
+        }
+      } else {
+        triggerToast('error', 'Failed to cancel buffered email.');
+      }
+    } catch (err: any) {
+      triggerToast('error', err?.message || 'Error cancelling email');
     } finally {
       setIsCancellingQueue(null);
     }
@@ -214,6 +277,53 @@ export default function EmailManagementPage() {
       }
     } catch (err: any) {
       triggerToast('error', err?.message || 'Error flushing queue');
+    } finally {
+      setIsFlushingQueue(null);
+    }
+  };
+
+  const handleFlushBufferedEmail = async (id: string) => {
+    setIsFlushingQueue(id);
+    try {
+      const res = await fetch('/api/email/queue', {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ id }),
+      });
+      if (res.ok) {
+        triggerToast('success', 'Email dispatched immediately via SMTP.');
+        fetchQueues();
+        fetchLogs();
+        if (selectedLog && selectedLog.id === id) {
+          setSelectedLog(prev => prev ? { ...prev, status: 'SENT' } : null);
+        }
+      } else {
+        triggerToast('error', 'Failed to dispatch buffered email.');
+      }
+    } catch (err: any) {
+      triggerToast('error', err?.message || 'Error dispatching email');
+    } finally {
+      setIsFlushingQueue(null);
+    }
+  };
+
+  const handleFlushAll = async () => {
+    setIsFlushingQueue('ALL');
+    try {
+      const res = await fetch('/api/email/queue', {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ all: true }),
+      });
+      if (res.ok) {
+        triggerToast('success', 'All buffered emails dispatched immediately.');
+        fetchQueues();
+        fetchLogs();
+      } else {
+        triggerToast('error', 'Failed to flush all queues.');
+      }
+    } catch (err: any) {
+      triggerToast('error', err?.message || 'Error flushing all queues');
     } finally {
       setIsFlushingQueue(null);
     }
@@ -403,7 +513,9 @@ export default function EmailManagementPage() {
 
   const totalLogs = outboxLogs.length;
   const sentCount = outboxLogs.filter(l => l.status === 'SENT').length;
+  const bufferedCount = outboxLogs.filter(l => l.status === 'BUFFERED').length;
   const failedCount = outboxLogs.filter(l => l.status === 'FAILED').length;
+  const totalQueueCount = pendingQueues.length + bufferedEmails.length;
 
   const isSuperUser = user && (user.tier === 1 || user.role === 'Super User' || user.id === 'm1' || user.email?.toLowerCase() === 'kayo2970@gmail.com');
 
@@ -488,8 +600,8 @@ export default function EmailManagementPage() {
           }`}
         >
           <Clock className="h-4 w-4" />
-          Sending Queue & Buffers ({pendingQueues.length})
-          {pendingQueues.length > 0 && (
+          Sending Queue & Buffers ({totalQueueCount})
+          {totalQueueCount > 0 && (
             <span className="h-2 w-2 rounded-full bg-amber-400 animate-ping absolute top-1 right-1" />
           )}
         </button>
@@ -546,15 +658,20 @@ export default function EmailManagementPage() {
           </div>
 
           {/* Outbox Metrics Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="p-4 bg-theme-border/10 rounded-2xl border border-theme-border/20 space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-theme-text-secondary">Total Sent Emails</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-theme-text-secondary">Total Messages</span>
               <h4 className="text-2xl font-bold text-theme-text-primary">{totalLogs}</h4>
             </div>
 
             <div className="p-4 bg-success/10 rounded-2xl border border-success/20 space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-success">Successful Handshakes</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-success">Delivered / Sent</span>
               <h4 className="text-2xl font-bold text-success">{sentCount}</h4>
+            </div>
+
+            <div className="p-4 bg-amber-500/10 rounded-2xl border border-amber-500/20 space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">10m Buffered Queue</span>
+              <h4 className="text-2xl font-bold text-amber-400">{bufferedCount}</h4>
             </div>
 
             <div className="p-4 bg-danger/10 rounded-2xl border border-danger/20 space-y-1">
@@ -586,6 +703,8 @@ export default function EmailManagementPage() {
                 >
                   <option value="ALL">All Statuses</option>
                   <option value="SENT">Sent Successfully</option>
+                  <option value="BUFFERED">Buffered (10-min window)</option>
+                  <option value="CANCELLED">Cancelled</option>
                   <option value="FAILED">Delivery Failed</option>
                 </select>
               </div>
@@ -596,9 +715,15 @@ export default function EmailManagementPage() {
                 className="px-3 py-1.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-xs text-theme-text-primary focus:outline-none"
               >
                 <option value="ALL">All Categories</option>
+                <option value="GROUP_POLICY_GRANT">Group Policy Grants</option>
+                <option value="TASK_ASSIGNMENT">Task Assignments</option>
+                <option value="EVENT_PASS">Event Passes</option>
                 <option value="ANNOUNCEMENT">Announcements</option>
                 <option value="DIRECT_MESSAGE">Direct Messages</option>
                 <option value="SYSTEM">System Broadcasts</option>
+                <option value="EVENT_REPORT_APPROVAL">Report Approvals</option>
+                <option value="DESIGN_APPROVAL">Design Approvals</option>
+                <option value="PROCUREMENT_DECISION">Procurement Decisions</option>
               </select>
             </div>
           </div>
@@ -627,12 +752,17 @@ export default function EmailManagementPage() {
                   {filteredLogs.map(log => (
                     <tr key={log.id} className="hover:bg-theme-border/10 transition-colors">
                       <td className="p-3.5">
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1 ${
                           log.status === 'SENT' 
                             ? 'bg-success/15 text-success border border-success/20' 
+                            : log.status === 'BUFFERED'
+                            ? 'bg-amber-500/15 text-amber-400 border border-amber-500/25'
+                            : log.status === 'CANCELLED'
+                            ? 'bg-theme-border/30 text-theme-text-secondary border border-theme-border/40'
                             : 'bg-danger/15 text-danger border border-danger/20'
                         }`}>
-                          {log.status === 'SENT' ? 'DELIVERED / SENT' : 'FAILED'}
+                          {log.status === 'BUFFERED' && <Clock className="h-2.5 w-2.5 animate-spin" />}
+                          {log.status === 'SENT' ? 'DELIVERED / SENT' : log.status === 'BUFFERED' ? 'BUFFERED (10-MIN HOLD)' : log.status === 'CANCELLED' ? 'CANCELLED' : 'FAILED'}
                         </span>
                       </td>
                       <td className="p-3.5 font-semibold text-theme-text-primary">{log.to}</td>
@@ -664,26 +794,39 @@ export default function EmailManagementPage() {
 
       {/* TAB 2: SENDING QUEUE & BUFFERS */}
       {activeTab === 'queue' && (
-        <div className="glass-panel p-6 rounded-3xl space-y-5 border border-theme-card-border">
+        <div className="glass-panel p-6 rounded-3xl space-y-6 border border-theme-card-border">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h3 className="text-base font-bold text-theme-text-primary flex items-center gap-2">
                 <Clock className="h-4 w-4 text-accent" />
-                Active Sending Queues & Debounced Buffers
+                Active Sending Queues & 10-Minute Buffers
               </h3>
-              <p className="text-xs text-theme-text-secondary">Inspect task assignment digest queues currently held in the 10-minute quiet buffer before dispatch.</p>
+              <p className="text-xs text-theme-text-secondary">
+                All outgoing emails across the ERP wait in a 10-minute quiet buffer before SMTP handoff.
+              </p>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
-              {pendingQueues.length > 0 && (
-                <button
-                  onClick={() => handleCancelQueue()}
-                  disabled={Boolean(isCancellingQueue)}
-                  className="px-3 py-1.5 bg-danger/15 hover:bg-danger/25 text-danger border border-danger/30 text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 disabled:opacity-50"
-                >
-                  <X className="h-3.5 w-3.5" />
-                  Cancel All Queues
-                </button>
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              {totalQueueCount > 0 && (
+                <>
+                  <button
+                    onClick={() => handleCancelQueue()}
+                    disabled={Boolean(isCancellingQueue)}
+                    className="px-3 py-1.5 bg-danger/15 hover:bg-danger/25 text-danger border border-danger/30 text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 disabled:opacity-50"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Cancel All Queues
+                  </button>
+
+                  <button
+                    onClick={handleFlushAll}
+                    disabled={Boolean(isFlushingQueue)}
+                    className="px-3 py-1.5 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/20 cursor-pointer flex items-center gap-1.5 shrink-0 disabled:opacity-50"
+                  >
+                    <Play className="h-3.5 w-3.5" />
+                    Dispatch All Now
+                  </button>
+                </>
               )}
 
               <button
@@ -696,61 +839,161 @@ export default function EmailManagementPage() {
             </div>
           </div>
 
-          {pendingQueues.length === 0 ? (
+          {/* Universal Buffer Explanatory Notice */}
+          <div className="p-4 bg-accent/10 border border-accent/20 rounded-2xl flex items-start gap-3">
+            <Clock className="h-5 w-5 text-accent shrink-0 mt-0.5" />
+            <div className="text-xs space-y-1">
+              <span className="font-bold text-theme-text-primary block">Universal 10-Minute Quiet Buffer Active</span>
+              <p className="text-theme-text-secondary leading-relaxed">
+                No email is dispatched immediately upon button click. Every outgoing message (announcements, passes, invitations, group policy grants, approvals, direct broadcasts, and task digests) is held for 10 minutes. This allows you to verify, cancel, or immediately dispatch before it reaches recipient inboxes.
+              </p>
+            </div>
+          </div>
+
+          {bufferedEmails.length === 0 && pendingQueues.length === 0 ? (
             <EmptyState
               icon={CheckCircle2}
               title="No pending email queues"
-              description="All task assignment digests and notifications have been flushed and dispatched."
+              description="All outgoing emails, task digests, and notifications have completed their 10-minute buffer and been dispatched."
             />
           ) : (
-            <div className="space-y-4">
-              {pendingQueues.map(q => (
-                <div key={q.email} className="p-5 bg-theme-background/30 border border-theme-card-border rounded-2xl space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-theme-border/20 pb-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-theme-text-primary">{q.assigneeName}</span>
-                        <span className="text-xs text-accent font-mono">({q.email})</span>
-                      </div>
-                      <span className="text-[10px] text-amber-400 font-semibold flex items-center gap-1 mt-1">
-                        <Clock className="h-3 w-3" /> 10-Minute Buffer Active ({q.taskCount} queued task notifications)
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={() => handleCancelQueue(q.email)}
-                        disabled={isCancellingQueue === q.email}
-                        className="px-3 py-2 bg-danger/15 hover:bg-danger/25 text-danger border border-danger/30 text-xs font-bold rounded-xl transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1 shrink-0"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                        {isCancellingQueue === q.email ? 'Cancelling...' : 'Cancel Queue'}
-                      </button>
-
-                      <button
-                        onClick={() => handleFlushQueue(q.email)}
-                        disabled={isFlushingQueue === q.email}
-                        className="px-4 py-2 bg-accent hover:bg-primary-light text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-accent/20 cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shrink-0"
-                      >
-                        <Play className="h-3.5 w-3.5" />
-                        {isFlushingQueue === q.email ? 'Flushing Email...' : 'Dispatch Digest Now'}
-                      </button>
-                    </div>
+            <div className="space-y-6">
+              {/* SECTION 1: BUFFERED OUTGOING EMAILS */}
+              {bufferedEmails.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between border-b border-theme-border/20 pb-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-theme-text-secondary flex items-center gap-2">
+                      <Mail className="h-3.5 w-3.5 text-accent" />
+                      Buffered Outgoing Emails ({bufferedEmails.length})
+                    </span>
+                    <span className="text-[11px] text-theme-text-secondary">
+                      Auto-sending when timer reaches 00m:00s
+                    </span>
                   </div>
 
-                  <div className="space-y-2">
-                    <span className="text-[11px] font-bold text-theme-text-secondary block">Queued Tasks in Digest Payload:</span>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {q.tasks.map(t => (
-                        <div key={t.id} className="p-2.5 bg-theme-background/60 rounded-xl border border-theme-border/20 text-xs">
-                          <span className="font-bold text-theme-text-primary block">{t.title}</span>
-                          <span className="text-[10px] text-theme-text-secondary block">Context: {t.event || 'LEADS Operations'} &middot; Due: {t.dueDate}</span>
+                  <div className="space-y-3">
+                    {bufferedEmails.map(b => (
+                      <div key={b.id} className="p-5 bg-theme-background/30 border border-theme-card-border rounded-2xl space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-theme-border/20 pb-3">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-bold text-sm text-theme-text-primary">{b.to}</span>
+                              <span className="px-2 py-0.5 bg-accent/10 text-accent rounded-md font-mono text-[10px]">
+                                {b.category}
+                              </span>
+                              {b.hasAttachments && (
+                                <span className="px-2 py-0.5 bg-purple-500/10 text-purple-400 rounded-md text-[10px] font-semibold flex items-center gap-1">
+                                  <Paperclip className="h-3 w-3" /> {b.attachmentCount} Attachment{b.attachmentCount === 1 ? '' : 's'}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 text-[11px] text-theme-text-secondary flex-wrap">
+                              <span className="text-amber-400 font-semibold flex items-center gap-1">
+                                <Clock className="h-3 w-3 animate-spin" />
+                                {formatCountdown(b.remainingSeconds)}
+                              </span>
+                              <span>&middot;</span>
+                              <span>Queued: {new Date(b.queuedAt).toLocaleTimeString()}</span>
+                              <span>&middot;</span>
+                              <span>Dispatch at: {new Date(b.bufferedUntil).toLocaleTimeString()}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              onClick={() => handleCancelBufferedEmail(b.id)}
+                              disabled={isCancellingQueue === b.id}
+                              className="px-3 py-2 bg-danger/15 hover:bg-danger/25 text-danger border border-danger/30 text-xs font-bold rounded-xl transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1 shrink-0"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                              {isCancellingQueue === b.id ? 'Cancelling...' : 'Cancel Queue'}
+                            </button>
+
+                            <button
+                              onClick={() => handleFlushBufferedEmail(b.id)}
+                              disabled={isFlushingQueue === b.id}
+                              className="px-4 py-2 bg-accent hover:bg-primary-light text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-accent/20 cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shrink-0"
+                            >
+                              <Play className="h-3.5 w-3.5" />
+                              {isFlushingQueue === b.id ? 'Dispatching...' : 'Dispatch Now'}
+                            </button>
+                          </div>
                         </div>
-                      ))}
-                    </div>
+
+                        <div className="p-3 bg-theme-background/60 rounded-xl border border-theme-border/20 text-xs">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-theme-text-secondary block mb-1">Subject Line</span>
+                          <span className="font-semibold text-theme-text-primary block">{b.subject}</span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              ))}
+              )}
+
+              {/* SECTION 2: TASK ASSIGNMENT DIGEST QUEUES */}
+              {pendingQueues.length > 0 && (
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center justify-between border-b border-theme-border/20 pb-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-theme-text-secondary flex items-center gap-2">
+                      <FileText className="h-3.5 w-3.5 text-accent" />
+                      Task Assignment Digest Queues ({pendingQueues.length})
+                    </span>
+                    <span className="text-[11px] text-theme-text-secondary">
+                      Aggregating multiple tasks into single student digests
+                    </span>
+                  </div>
+
+                  <div className="space-y-4">
+                    {pendingQueues.map(q => (
+                      <div key={q.email} className="p-5 bg-theme-background/30 border border-theme-card-border rounded-2xl space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-theme-border/20 pb-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-sm text-theme-text-primary">{q.assigneeName}</span>
+                              <span className="text-xs text-accent font-mono">({q.email})</span>
+                            </div>
+                            <span className="text-[10px] text-amber-400 font-semibold flex items-center gap-1 mt-1">
+                              <Clock className="h-3 w-3" /> 10-Minute Buffer Active ({q.taskCount} queued task notifications)
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              onClick={() => handleCancelQueue(q.email)}
+                              disabled={isCancellingQueue === q.email}
+                              className="px-3 py-2 bg-danger/15 hover:bg-danger/25 text-danger border border-danger/30 text-xs font-bold rounded-xl transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1 shrink-0"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                              {isCancellingQueue === q.email ? 'Cancelling...' : 'Cancel Queue'}
+                            </button>
+
+                            <button
+                              onClick={() => handleFlushQueue(q.email)}
+                              disabled={isFlushingQueue === q.email}
+                              className="px-4 py-2 bg-accent hover:bg-primary-light text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-accent/20 cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shrink-0"
+                            >
+                              <Play className="h-3.5 w-3.5" />
+                              {isFlushingQueue === q.email ? 'Flushing Email...' : 'Dispatch Digest Now'}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <span className="text-[11px] font-bold text-theme-text-secondary block">Queued Tasks in Digest Payload:</span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {q.tasks.map(t => (
+                              <div key={t.id} className="p-2.5 bg-theme-background/60 rounded-xl border border-theme-border/20 text-xs">
+                                <span className="font-bold text-theme-text-primary block">{t.title}</span>
+                                <span className="text-[10px] text-theme-text-secondary block">Context: {t.event || 'LEADS Operations'} &middot; Due: {t.dueDate}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1373,8 +1616,15 @@ export default function EmailManagementPage() {
                 </div>
                 <div>
                   <span className="text-[10px] text-theme-text-secondary block font-medium">Delivery Status:</span>
-                  <span className={`font-bold ${selectedLog.status === 'SENT' ? 'text-success' : 'text-danger'}`}>
-                    {selectedLog.status === 'SENT' ? 'SENT / DELIVERED' : 'FAILED'}
+                  <span className={`font-bold ${
+                    selectedLog.status === 'SENT' ? 'text-success' :
+                    selectedLog.status === 'BUFFERED' ? 'text-amber-500' :
+                    selectedLog.status === 'CANCELLED' ? 'text-theme-text-secondary line-through' :
+                    'text-danger'
+                  }`}>
+                    {selectedLog.status === 'SENT' ? 'SENT / DELIVERED' :
+                     selectedLog.status === 'BUFFERED' ? 'BUFFERED (10-MIN QUIET HOLD)' :
+                     selectedLog.status === 'CANCELLED' ? 'CANCELLED / DISCARDED' : 'FAILED'}
                   </span>
                 </div>
                 <div>
@@ -1382,10 +1632,50 @@ export default function EmailManagementPage() {
                   <span className="font-semibold text-accent">{selectedLog.category}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-theme-text-secondary block font-medium">Dispatched At:</span>
+                  <span className="text-[10px] text-theme-text-secondary block font-medium">
+                    {selectedLog.status === 'BUFFERED' ? 'Queued At:' : 'Dispatched At:'}
+                  </span>
                   <span className="font-mono text-theme-text-primary">{new Date(selectedLog.sentAt).toLocaleString()}</span>
                 </div>
               </div>
+
+              {selectedLog.status === 'BUFFERED' && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <Clock className="h-4 w-4 animate-spin text-amber-500 shrink-0" />
+                    <div>
+                      <span className="text-xs font-bold text-amber-500 block">
+                        Held in 10-Minute Quiet Buffer
+                      </span>
+                      <span className="text-[10px] text-theme-text-secondary">
+                        {selectedLog.bufferedUntil
+                          ? `Scheduled for automatic dispatch at ${new Date(selectedLog.bufferedUntil).toLocaleTimeString()}`
+                          : 'Waiting in buffer queue before SMTP dispatch'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleCancelBufferedEmail(selectedLog.id)}
+                      disabled={isCancellingQueue === selectedLog.id}
+                      className="px-3 py-1.5 bg-danger/15 hover:bg-danger/25 text-danger border border-danger/30 text-xs font-bold rounded-xl transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      {isCancellingQueue === selectedLog.id ? 'Cancelling...' : 'Cancel Send'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleFlushBufferedEmail(selectedLog.id)}
+                      disabled={isFlushingQueue === selectedLog.id}
+                      className="px-3 py-1.5 bg-accent hover:bg-primary-light text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-accent/20 cursor-pointer disabled:opacity-50 flex items-center gap-1"
+                    >
+                      <Play className="h-3.5 w-3.5" />
+                      {isFlushingQueue === selectedLog.id ? 'Dispatching...' : 'Dispatch Now'}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <span className="font-bold text-theme-text-primary block mb-1">Subject:</span>

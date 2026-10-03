@@ -60,7 +60,7 @@ export async function runBirthdayCheck(): Promise<{ checked: number; sent: numbe
       category: 'BIRTHDAY',
     });
 
-    if (result.status === 'SENT') {
+    if (result.status === 'SENT' || result.status === 'BUFFERED') {
       sentCount++;
       await mutateCollection<BirthdayEmailLogEntry>('birthdayEmailLog', (current) => [
         { id: `bday-${today}-${member.id}`, memberId: member.id, date: today, sentAt: new Date().toISOString() },

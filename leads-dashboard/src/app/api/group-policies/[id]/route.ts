@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { mutateCollection } from '@/lib/server-db';
+import { readCollection, mutateCollection } from '@/lib/server-db';
 import { requireSession, requirePermission } from '@/lib/session';
 import { isSuperUser, canAccessGroupPoliciesServer, getAccessLevelSettingsServer } from '@/lib/permissions-server';
 import { apiError } from '@/lib/api-error';
@@ -22,7 +22,32 @@ export async function PATCH(
       next[idx] = { ...next[idx], ...updates };
       return next;
     });
-    return NextResponse.json(updated.find((p: any) => p.id === id));
+    const saved = updated.find((p: any) => p.id === id);
+
+    // If enabled and targeting changed or updated, notify recipients (queued via 10-minute buffer)
+    if (saved && saved.enabled !== false) {
+      try {
+        const { resolvePolicyRecipients, generateGroupPolicyGrantEmailTemplate, dispatchEmail } = await import('@/lib/email-service');
+        const members = await readCollection('members');
+        const recipients = resolvePolicyRecipients(saved, members);
+        for (const r of recipients) {
+          const template = generateGroupPolicyGrantEmailTemplate(r.name, saved, actor.name || 'Centre Administration');
+          await dispatchEmail({
+            to: r.email,
+            subject: template.subject,
+            bodyText: template.bodyText,
+            bodyHtml: template.bodyHtml,
+            category: 'GROUP_POLICY_GRANT',
+            badgeText: 'Special Access Granted',
+            badgeColor: saved.expiresAt ? '#d97706' : '#6366f1',
+          });
+        }
+      } catch (emailErr) {
+        console.error('[group-policies-id-api-patch] Failed to queue policy grant email:', emailErr);
+      }
+    }
+
+    return NextResponse.json(saved);
   } catch (err: any) {
     return apiError(err, 'group-policies-id-api-patch', 400);
   }

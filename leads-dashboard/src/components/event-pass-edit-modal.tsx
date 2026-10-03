@@ -41,6 +41,7 @@ const PASS_TYPES: EventPassType[] = [
   'Guest Pass',
   'Press / Media',
   'Organizer',
+  'Other',
 ];
 
 const GUEST_CATEGORIES: EventGuestCategory[] = [
@@ -53,6 +54,7 @@ const GUEST_CATEGORIES: EventGuestCategory[] = [
   'Press / Media',
   'Organizer / Crew',
   'Special Guest',
+  'Other',
 ];
 
 export function EventPassEditModal({
@@ -227,7 +229,7 @@ export function EventPassEditModal({
                 Guest Category
               </label>
               <select
-                value={guestCategory}
+                value={GUEST_CATEGORIES.includes(guestCategory) ? guestCategory : 'Other'}
                 onChange={(e) => setGuestCategory(e.target.value as EventGuestCategory)}
                 className="w-full bg-slate-950/80 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-accent"
               >
@@ -237,6 +239,15 @@ export function EventPassEditModal({
                   </option>
                 ))}
               </select>
+              {(!GUEST_CATEGORIES.includes(guestCategory) || guestCategory === 'Other') && (
+                <input
+                  type="text"
+                  value={guestCategory === 'Other' ? '' : guestCategory}
+                  onChange={(e) => setGuestCategory((e.target.value || 'Other') as EventGuestCategory)}
+                  placeholder="Specify other guest category"
+                  className="mt-2 w-full bg-slate-950/80 border border-accent/40 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-accent"
+                />
+              )}
             </div>
           </div>
 
@@ -248,7 +259,7 @@ export function EventPassEditModal({
                 Pass Tier / Type
               </label>
               <select
-                value={passType}
+                value={PASS_TYPES.includes(passType) ? passType : 'Other'}
                 onChange={(e) => setPassType(e.target.value as EventPassType)}
                 className="w-full bg-slate-950/80 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-accent"
               >
@@ -258,6 +269,15 @@ export function EventPassEditModal({
                   </option>
                 ))}
               </select>
+              {(!PASS_TYPES.includes(passType) || passType === 'Other') && (
+                <input
+                  type="text"
+                  value={passType === 'Other' ? '' : passType}
+                  onChange={(e) => setPassType((e.target.value || 'Other') as EventPassType)}
+                  placeholder="Specify other pass type"
+                  className="mt-2 w-full bg-slate-950/80 border border-sky-500/40 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-sky-400"
+                />
+              )}
             </div>
 
             <div>

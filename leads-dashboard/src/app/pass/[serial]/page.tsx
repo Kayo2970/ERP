@@ -276,6 +276,8 @@ export default function PublicEventPassPage({
           validityPeriod={pass.validityDate || pass.eventDate || '2026'}
           issuingAuthority={pass.eventName ? `${pass.eventName} • RUAS` : 'LEADS Next Gen Centre • RUAS'}
           brandHeader="LEADS Next Gen Centre"
+          passColor={pass.passColor}
+          passGradient={pass.passGradient}
           cardUrl={passUrl}
           qrUrl="/card/leads-qr-code.png"
           showActions={true}

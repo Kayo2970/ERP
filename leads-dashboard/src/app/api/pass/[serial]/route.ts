@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readCollection } from '@/lib/server-db';
+import { readCollection, mutateCollection } from '@/lib/server-db';
 import { EventPassItem } from '@/lib/local-data';
 
 export const dynamic = 'force-dynamic';
@@ -14,21 +14,59 @@ export async function GET(
       return NextResponse.json({ error: 'Serial is required' }, { status: 400 });
     }
 
-    const passes = await readCollection<EventPassItem>('event_passes');
-    const matched = passes.find(
-      (p) =>
-        p.serialNumber.toLowerCase() === serial.toLowerCase() ||
-        p.id.toLowerCase() === serial.toLowerCase()
-    );
+    const now = new Date().toISOString();
+    let foundPass: EventPassItem | null = null;
 
-    if (!matched) {
-      return NextResponse.json({ error: 'Event pass not found' }, { status: 404 });
+    // Mutate and record "Pass Viewed" state as attendee visits public pass page
+    await mutateCollection<EventPassItem>('event_passes', (current = []) => {
+      const idx = current.findIndex(
+        (p) =>
+          p.serialNumber.toLowerCase() === serial.toLowerCase() ||
+          p.id.toLowerCase() === serial.toLowerCase()
+      );
+
+      if (idx === -1) return current;
+
+      const existing = current[idx];
+      const updatedPass: EventPassItem = {
+        ...existing,
+        emailStatus: 'Pass Viewed',
+        emailReceivedAt: existing.emailReceivedAt || now,
+        passViewed: true,
+        passViewedAt: existing.passViewedAt || now,
+        lastPassViewedAt: now,
+        passViewCount: (existing.passViewCount || 0) + 1,
+      };
+
+      foundPass = updatedPass;
+      const copy = [...current];
+      copy[idx] = updatedPass;
+      return copy;
+    });
+
+    if (!foundPass) {
+      // Fallback read in case mutation couldn't find it (rare race condition)
+      const passes = await readCollection<EventPassItem>('event_passes');
+      const matched = passes.find(
+        (p) =>
+          p.serialNumber.toLowerCase() === serial.toLowerCase() ||
+          p.id.toLowerCase() === serial.toLowerCase()
+      );
+      if (!matched) {
+        return NextResponse.json({ error: 'Event pass not found' }, { status: 404 });
+      }
+      foundPass = matched;
     }
 
+    const finalPass = foundPass as EventPassItem;
+
     return NextResponse.json({
-      pass: matched,
-      status: matched.status,
-      valid: matched.status !== 'Cancelled',
+      pass: finalPass,
+      status: finalPass.status,
+      valid: finalPass.status !== 'Cancelled',
+      emailStatus: finalPass.emailStatus,
+      passViewed: finalPass.passViewed,
+      passViewedAt: finalPass.passViewedAt,
     });
   } catch (err: any) {
     console.error('Error fetching public pass:', err);

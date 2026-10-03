@@ -21,6 +21,7 @@ import {
 } from '@/lib/local-data';
 import { useDropTarget } from '@/components/ui/file-dropzone';
 import { SearchableSelect } from '@/components/searchable-select';
+import { downloadCsv, splitCsvLines, parseCsvLine, toCsvRow } from '@/lib/csv';
 
 interface EventPassBulkModalProps {
   isOpen: boolean;
@@ -54,6 +55,7 @@ const VALID_PASS_TYPES: EventPassType[] = [
   'Guest Pass',
   'Press / Media',
   'Organizer',
+  'Other',
 ];
 
 const VALID_CATEGORIES: EventGuestCategory[] = [
@@ -66,6 +68,7 @@ const VALID_CATEGORIES: EventGuestCategory[] = [
   'Press / Media',
   'Organizer / Crew',
   'Special Guest',
+  'Other',
 ];
 
 export function EventPassBulkModal({
@@ -87,31 +90,36 @@ export function EventPassBulkModal({
   const selectedEvent = events.find((e) => e.id === activeEventId) || events[0];
 
   const handleDownloadTemplate = () => {
-    if (!selectedEvent) return;
+    const eventTitle = selectedEvent?.title || 'LEADS Event 2026';
+    const formattedDate = selectedEvent
+      ? selectedEvent.datesTBD
+        ? 'Dates TBD'
+        : `${selectedEvent.startDate}${selectedEvent.endDate ? ` – ${selectedEvent.endDate}` : ''}`
+      : '2026-10-15 – 2026-10-17';
 
-    const formattedDate = selectedEvent.datesTBD
-      ? 'Dates TBD'
-      : `${selectedEvent.startDate}${selectedEvent.endDate ? ` – ${selectedEvent.endDate}` : ''}`;
+    const headers = [
+      'AttendeeName',
+      'GuestCategory',
+      'PassType',
+      'RoomOrVenue',
+      'Email',
+      'Mobile',
+      'Organization',
+      'CustomValidity',
+      'Notes',
+    ];
 
-    const headers = 'AttendeeName,GuestCategory,PassType,RoomOrVenue,Email,Mobile,Organization,CustomValidity,Notes\n';
-    const sample1 = `Dr. Meera Swaminathan,Keynote Speaker,Keynote Speaker,Main Auditorium - VIP Box,meera.s@domain.com,+91 98765 43210,IISc Bangalore,${formattedDate},Invited Speaker\n`;
-    const sample2 = `Alex Chen,VIP Dignitary,VIP Pass,Main Auditorium - Front Row,alex.chen@techcorp.com,+91 98450 11223,TechCorp Singapore,${formattedDate},Executive Sponsor\n`;
-    const sample3 = `Rohan Sharma,Student,Student Delegate,Seminar Hall A - Room 102,rohan.s@msruas.ac.in,+91 91234 56789,RUAS FET,${formattedDate},Student Project Lead\n`;
-    const sample4 = `Priya Nambiar,Faculty,Executive Delegate,Seminar Hall B - Room 204,priya.n@msruas.ac.in,+91 99887 76655,RUAS FMC,${formattedDate},Session Chair`;
+    const sampleRows = [
+      toCsvRow(['Dr. Meera Swaminathan', 'Keynote Speaker', 'Keynote Speaker', 'Main Auditorium - VIP Box', 'meera.s@domain.com', '+91 98765 43210', 'IISc Bangalore', formattedDate, 'Invited Speaker']),
+      toCsvRow(['Alex Chen', 'VIP Dignitary', 'VIP Pass', 'Main Auditorium - Front Row', 'alex.chen@techcorp.com', '+91 98450 11223', 'TechCorp Singapore', formattedDate, 'Executive Sponsor']),
+      toCsvRow(['Rohan Sharma', 'Student', 'Student Delegate', 'Seminar Hall A - Room 102', 'rohan.s@msruas.ac.in', '+91 91234 56789', 'RUAS FET', formattedDate, 'Student Project Lead']),
+      toCsvRow(['Priya Nambiar', 'Faculty', 'Executive Delegate', 'Seminar Hall B - Room 204', 'priya.n@msruas.ac.in', '+91 99887 76655', 'RUAS FMC', formattedDate, 'Session Chair']),
+      toCsvRow(['Sarah Jenkins', 'Other: Hackathon Judge', 'Other: Special Access', 'Judging Arena - Room 301', 'sarah.j@innovate.org', '+91 97711 22334', 'Innovate Labs', formattedDate, 'Invited Hackathon Jury']),
+    ];
 
-    const blob = new Blob([headers + sample1 + sample2 + sample3 + sample4], {
-      type: 'text/csv;charset=utf-8;',
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute(
-      'download',
-      `leads_event_passes_${selectedEvent.title.toLowerCase().replace(/[^a-z0-9]/g, '_')}.csv`
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const csvContent = [toCsvRow(headers), ...sampleRows].join('\n');
+    const filename = `leads_event_passes_template_${eventTitle.toLowerCase().replace(/[^a-z0-9]/g, '_')}.csv`;
+    downloadCsv(filename, csvContent);
   };
 
   const handleCsvFile = (file: File | undefined) => {
@@ -125,13 +133,14 @@ export function EventPassBulkModal({
       if (!text) return;
 
       try {
-        const lines = text.split('\n');
+        const lines = splitCsvLines(text);
         if (lines.length < 2) {
           setErrorMessage('CSV file is empty or missing data rows.');
           return;
         }
 
-        const headers = lines[0].split(',').map((h) => h.trim().toLowerCase().replace(/[^a-z]/g, ''));
+        const rawHeaderRow = parseCsvLine(lines[0]);
+        const headers = rawHeaderRow.map((h) => h.trim().toLowerCase().replace(/[^a-z]/g, ''));
         const nameIdx = headers.findIndex((h) => h.includes('name') || h.includes('attendee'));
         const catIdx = headers.findIndex((h) => h.includes('category') || h.includes('guesttype'));
         const passIdx = headers.findIndex((h) => h.includes('pass') || h.includes('tier') || h.includes('type'));
@@ -150,36 +159,36 @@ export function EventPassBulkModal({
         const rows: ParsedPassRow[] = [];
 
         for (let i = 1; i < lines.length; i++) {
-          const line = lines[i].trim();
-          if (!line) continue;
+          const line = lines[i];
+          if (!line || !line.trim()) continue;
 
-          const values = line.split(',').map((v) => v.replace(/^"|"$/g, '').trim());
+          const values = parseCsvLine(line);
           if (values.length < 1) continue;
 
-          const rawName = values[nameIdx] || '';
+          const rawName = (values[nameIdx] || '').trim();
           if (!rawName) continue;
 
-          const rawCat = catIdx !== -1 ? values[catIdx] : '';
+          const rawCat = catIdx !== -1 ? (values[catIdx] || '').trim() : '';
           const matchedCategory = VALID_CATEGORIES.find(
             (c) => c.toLowerCase() === rawCat.toLowerCase()
-          ) || 'Guest Attendee' as any;
+          ) || (rawCat || 'Guest Pass');
 
-          const rawPass = passIdx !== -1 ? values[passIdx] : '';
+          const rawPass = passIdx !== -1 ? (values[passIdx] || '').trim() : '';
           const matchedPassType = VALID_PASS_TYPES.find(
             (pt) => pt.toLowerCase() === rawPass.toLowerCase()
-          ) || 'Guest Pass';
+          ) || (rawPass || 'Guest Pass');
 
-          const room = (roomIdx !== -1 ? values[roomIdx] : '') || selectedEvent?.location || 'Main Auditorium';
-          const email = emailIdx !== -1 ? values[emailIdx] : undefined;
-          const phone = phoneIdx !== -1 ? values[phoneIdx] : undefined;
-          const org = orgIdx !== -1 ? values[orgIdx] : undefined;
-          const validity = valIdx !== -1 ? values[valIdx] : undefined;
-          const notes = notesIdx !== -1 ? values[notesIdx] : undefined;
+          const room = (roomIdx !== -1 ? values[roomIdx]?.trim() : '') || selectedEvent?.location || 'Main Auditorium';
+          const email = emailIdx !== -1 && values[emailIdx]?.trim() ? values[emailIdx].trim() : undefined;
+          const phone = phoneIdx !== -1 && values[phoneIdx]?.trim() ? values[phoneIdx].trim() : undefined;
+          const org = orgIdx !== -1 && values[orgIdx]?.trim() ? values[orgIdx].trim() : undefined;
+          const validity = valIdx !== -1 && values[valIdx]?.trim() ? values[valIdx].trim() : undefined;
+          const notes = notesIdx !== -1 && values[notesIdx]?.trim() ? values[notesIdx].trim() : undefined;
 
           rows.push({
             attendeeName: rawName,
-            guestCategory: matchedCategory,
-            passType: matchedPassType,
+            guestCategory: matchedCategory as any,
+            passType: matchedPassType as any,
             roomOrVenue: room,
             email,
             phone,
@@ -238,6 +247,7 @@ export function EventPassBulkModal({
           validityDate: row.validity || formattedDate,
           seatOrZone: row.roomOrVenue,
           passColor: '#0b1526',
+          passGradient: 'linear-gradient(135deg, #0284c7 0%, #0369a1 50%, #075985 100%)',
           notes: row.notes,
           issuedBy: currentUserName,
           issuedByEmail: currentUserEmail,

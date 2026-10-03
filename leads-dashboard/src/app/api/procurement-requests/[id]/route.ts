@@ -157,7 +157,7 @@ export async function PATCH(
             category: 'PROCUREMENT_DECISION',
           });
           const withEmail = await mutateCollection('procurementRequests', (current) => (current || []).map((r: any) =>
-            r.id === id ? { ...r, decisionEmailSent: log.status === 'SENT', decisionEmailError: log.errorMessage } : r
+            r.id === id ? { ...r, decisionEmailSent: log.status === 'SENT' || log.status === 'BUFFERED', decisionEmailError: log.errorMessage } : r
           ));
           mergedRecord = withEmail.find((r: any) => r.id === id) || mergedRecord;
         } catch (emailErr: any) {

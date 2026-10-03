@@ -143,14 +143,17 @@ pm2 restart leads-dashboard
 
 #### 18. Dynamic Group Policies (`/dashboard/policies`)
 - **Granular RBAC Engine**: Super User capability grants across 15 privilege keys with division/tier targeting, `Select All` controls, and approval gateways.
+- **Grant Notification Emails**: Automatically sends customized notification emails (`GROUP_POLICY_GRANT`) to targeted members whenever elevated privileges or special temporary access are granted, detailing the granting authority, validity duration / expiration period, specific capabilities, and module access overrides.
 
 #### 19. Backup & Restore (`/dashboard/backup`)
 - **Snapshot Manager**: Export and restore AES-256 encrypted JSON database snapshots with rollback protection.
 
 #### 20. Email Management & Client (`/dashboard/email`)
 - **SMTP Engine**: Diagnostic testing, live queue monitoring, test email delivery, and dispatch logs.
+- **Universal 10-Minute Buffer Queue**: Every outgoing email across all ERP modules is placed in a 10-minute quiet hold before physical SMTP dispatch. Features live 1-second countdown tickers, manual "Dispatch Now", and "Cancel Send" controls for individual or all queued emails.
 - **File Attachments** on the Broadcast Composer, same as Mail Merge.
 - **Debounced Task-Assignment Digest**: batches task-assignment emails per recipient over a 10-minute window — now fires correctly for tasks created automatically by the in-process schedulers, not just ones created via the Tasks page, and survives a mid-debounce server restart (flushed on shutdown instead of dropped).
+- **Group Policy Module**: Full support for `GROUP_POLICY_GRANT` category logging, filtering, and payload inspection.
 
 #### 21. System & Account Settings (`/dashboard/settings`)
 - **Profile & Security**: Avatar upload, OTP-verified email updates, password change, and Super User Emergency System Lockdown.
