@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { EventPassItem } from '@/lib/local-data';
+import { getPassTheme } from '@/lib/pass-theme';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,6 +66,7 @@ export async function GET(
 
     return NextResponse.json({
       pass: finalPass,
+      theme: await getPassTheme(finalPass.eventId),
       status: finalPass.status,
       valid: finalPass.status !== 'Cancelled',
       emailStatus: finalPass.emailStatus,

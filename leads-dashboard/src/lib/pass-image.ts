@@ -123,7 +123,7 @@ export async function renderBoardingPassPng(
   }
   ctx.fillStyle = label;
   ctx.font = `bold 20px ${fam}`;
-  ctx.fillText('LEADS NEXT GEN CENTRE  •  RUAS'.replace(/^/, ''), textX, 78);
+  ctx.fillText('LEADS NEXT GEN CENTRE  •  RUAS', textX, 78);
   ctx.fillStyle = label;
   ctx.font = `16px ${fam}`;
   ctx.fillText('OFFICIAL EVENT PASS', textX, 102);

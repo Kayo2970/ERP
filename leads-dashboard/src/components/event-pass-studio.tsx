@@ -33,6 +33,7 @@ import {
   EventPassItem,
   EventPassType,
   EventGuestCategory,
+  PassTheme,
   addEventPass,
   getEventPasses,
   dispatchPassEmail,
@@ -42,6 +43,7 @@ import {
 import styles from './event-pass-card.module.css';
 import { AppleWalletPassPreview } from './apple-wallet-pass-preview';
 import { EventPassBulkModal } from './event-pass-bulk-modal';
+import { PassThemeEditor } from './pass-theme-editor';
 import { EventPassEmailModal } from './event-pass-email-modal';
 import { SearchableSelect } from './searchable-select';
 
@@ -181,6 +183,7 @@ export function EventPassStudio({
   const [attendeeOrg, setAttendeeOrg] = useState('');
   const [brandHeader, setBrandHeader] = useState('LEADS Next Gen Centre');
   const [validityDate, setValidityDate] = useState('');
+  const [passTheme, setPassTheme] = useState<PassTheme | undefined>(undefined);
   // null = all days of the selected event (default); otherwise the explicit subset this single pass is valid on
   const [selectedValidDays, setSelectedValidDays] = useState<string[] | null>(null);
   const [notes, setNotes] = useState('');
@@ -913,6 +916,22 @@ export function EventPassStudio({
               </div>
             </div>
 
+            {/* Pass look: background artwork, logo, colours — applies to keycard, email boarding pass & wallet */}
+            {eventMode === 'existing' && selectedEvent && (
+              <details className="rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50/60 dark:bg-white/[0.03] p-3 group">
+                <summary className="cursor-pointer text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                  <Palette className="h-3.5 w-3.5 text-accent" /> Customise pass background &amp; colours
+                </summary>
+                <div className="pt-3">
+                  <PassThemeEditor
+                    eventId={selectedEvent.id}
+                    eventName={selectedEvent.title}
+                    onThemeChange={setPassTheme}
+                  />
+                </div>
+              </details>
+            )}
+
             {/* 7. Contact Details: Mobile & Email */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -1198,6 +1217,7 @@ export function EventPassStudio({
               interactive={true}
               logoText={brandHeader}
               passColor={passColor}
+              theme={passTheme}
             />
           )}
 

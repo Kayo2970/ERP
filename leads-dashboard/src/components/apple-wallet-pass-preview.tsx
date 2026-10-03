@@ -3,6 +3,8 @@
 import React, { useState } from 'react';
 import { Info, RotateCw } from 'lucide-react';
 import styles from './apple-wallet-pass.module.css';
+import type { PassTheme } from '@/lib/local-data';
+import { passThemeStyle } from '@/lib/pass-theme-style';
 
 export interface AppleWalletPassPreviewProps {
   attendeeName: string;
@@ -19,6 +21,7 @@ export interface AppleWalletPassPreviewProps {
   logoText?: string;
   logoUrl?: string;
   passColor?: string;
+  theme?: PassTheme;
 }
 
 export function AppleWalletPassPreview({
@@ -34,23 +37,16 @@ export function AppleWalletPassPreview({
   logoText = 'LEADS Next Gen Centre',
   logoUrl = '/card/leads-logo.png',
   passColor = '#0f1a2e',
+  theme,
 }: AppleWalletPassPreviewProps) {
   const [isFlipped, setIsFlipped] = useState(false);
 
   const displayValidity = validityDate || eventDate;
   const displaySerial = serialNumber || `LEADS-EVT-2026-${(attendeeName || 'GUEST').slice(0, 3).toUpperCase()}-99`;
 
-  const frontStyle: React.CSSProperties = passColor
-    ? {
-        background: `linear-gradient(180deg, ${passColor} 0%, #060c18 100%)`,
-      }
-    : {};
-
-  const backStyle: React.CSSProperties = passColor
-    ? {
-        background: `linear-gradient(180deg, ${passColor} 0%, #060c18 100%)`,
-      }
-    : {};
+  const baseBackground = passColor ? `linear-gradient(180deg, ${passColor} 0%, #060c18 100%)` : undefined;
+  const frontStyle: React.CSSProperties = passThemeStyle(theme, baseBackground) || {};
+  const backStyle: React.CSSProperties = passThemeStyle(theme, baseBackground) || {};
 
   return (
     <div className={styles.walletContainer}>

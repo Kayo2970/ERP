@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import styles from './interactive-keycard.module.css';
+import type { PassTheme } from '@/lib/local-data';
+import { passThemeStyle } from '@/lib/pass-theme-style';
 
 const CARD_EXTRACT_DURATION = 850;
 const CARD_TUCK_DURATION = 800;
@@ -44,6 +46,7 @@ export interface InteractiveKeycardProps {
   brandHeader?: string;
   passColor?: string;
   passGradient?: string;
+  theme?: PassTheme;
 }
 
 export function InteractiveKeycardHolder({
@@ -81,6 +84,7 @@ export function InteractiveKeycardHolder({
   brandHeader,
   passColor,
   passGradient,
+  theme,
 }: InteractiveKeycardProps) {
   const [stageState, setStageState] = useState<'init' | 'entered' | 'opened' | 'extracting' | 'extracted' | 'tucking' | 'closing'>('init');
   const [activeTab, setActiveTab] = useState<'card' | 'creds' | 'bookfold'>('card');
@@ -512,13 +516,10 @@ export function InteractiveKeycardHolder({
                   /* EVENT PASS LUXURY TURNSTILE CREDENTIAL (MATCHES STUDIO DESIGN) */
                   <div
                     className={`${styles.passFace} ${styles.eventPassFront}`}
-                    style={
-                      passGradient
-                        ? { background: passGradient }
-                        : passColor
-                        ? { background: `linear-gradient(145deg, ${passColor} 0%, #030712 100%)` }
-                        : undefined
-                    }
+                    style={passThemeStyle(
+                      theme,
+                      passGradient || (passColor ? `linear-gradient(145deg, ${passColor} 0%, #030712 100%)` : undefined)
+                    )}
                   >
                     {/* Luxury Holographic Foil Shimmer */}
                     <div className={styles.holographicFoil} />

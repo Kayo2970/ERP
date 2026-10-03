@@ -18,7 +18,7 @@ import {
   QrCode,
   Smartphone,
 } from 'lucide-react';
-import { EventPassItem, getPassValidDays, getPassAttendanceSummary, formatValidDaysLabel } from '@/lib/local-data';
+import { EventPassItem, PassTheme, getPassValidDays, getPassAttendanceSummary, formatValidDaysLabel } from '@/lib/local-data';
 import { InteractiveKeycardHolder } from '@/components/interactive-keycard-holder';
 import { CardQrModal } from '@/components/card-qr-modal';
 
@@ -30,6 +30,7 @@ export default function PublicEventPassPage({
   const { serial } = use(params);
 
   const [pass, setPass] = useState<EventPassItem | null>(null);
+  const [theme, setTheme] = useState<PassTheme | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [isQrOpen, setIsQrOpen] = useState(false);
@@ -51,6 +52,7 @@ export default function PublicEventPassPage({
       .then((data) => {
         if (!cancelled && data.pass) {
           setPass(data.pass);
+          setTheme(data.theme);
         } else if (!cancelled) {
           setNotFound(true);
         }
@@ -292,6 +294,7 @@ export default function PublicEventPassPage({
           brandHeader="LEADS Next Gen Centre"
           passColor={pass.passColor}
           passGradient={pass.passGradient}
+          theme={theme}
           cardUrl={passUrl}
           qrUrl="/card/leads-qr-code.png"
           showActions={true}
