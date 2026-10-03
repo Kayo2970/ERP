@@ -12,7 +12,6 @@ import {
   Printer,
   CheckCircle2,
   ShieldCheck,
-  RotateCw,
   Copy,
   MapPin,
   Clock,
@@ -40,11 +39,13 @@ import {
   expandDateRange,
   formatValidDaysLabel,
 } from '@/lib/local-data';
-import styles from './event-pass-card.module.css';
 import { AppleWalletPassPreview } from './apple-wallet-pass-preview';
 import { EventPassBulkModal } from './event-pass-bulk-modal';
 import { PassThemeEditor } from './pass-theme-editor';
-import { passThemeStyle } from '@/lib/pass-theme-style';
+import { EventPassKeycard } from './event-pass-keycard';
+import { PassColorControls, PassTextColorControls, PassValidityPicker, PASS_COLOR_PRESETS, PASS_GRADIENT_PRESETS } from './pass-design-controls';
+
+export { PASS_COLOR_PRESETS, PASS_GRADIENT_PRESETS };
 import { EventPassEmailModal } from './event-pass-email-modal';
 import { SearchableSelect } from './searchable-select';
 
@@ -55,16 +56,6 @@ interface EventPassStudioProps {
   currentUserEmail?: string;
   onPassIssued?: (pass: EventPassItem) => void;
 }
-
-export const PASS_COLOR_PRESETS = [
-  { name: 'Obsidian Black', hex: '#0b1526', ring: 'ring-slate-500' },
-  { name: 'Sapphire Navy', hex: '#0d2342', ring: 'ring-sky-500' },
-  { name: 'Emerald Forest', hex: '#063024', ring: 'ring-emerald-500' },
-  { name: 'Amethyst Purple', hex: '#2b124c', ring: 'ring-purple-500' },
-  { name: 'Burgundy Wine', hex: '#3e0f1e', ring: 'ring-rose-500' },
-  { name: 'Amber Bronze', hex: '#3a2408', ring: 'ring-amber-500' },
-  { name: 'Titanium Slate', hex: '#1e2530', ring: 'ring-slate-400' },
-];
 
 const PASS_TYPES: {
   type: EventPassType;
@@ -120,17 +111,6 @@ const PASS_TYPES: {
     colorClass: 'bg-teal-500/15 border-teal-400/40 text-teal-300',
     badge: 'CUSTOM PASS',
   },
-];
-
-export const PASS_GRADIENT_PRESETS = [
-  { name: 'Deep Sapphire', value: 'linear-gradient(145deg, #0d2342 0%, #030712 100%)', baseColor: '#0d2342', endColor: '#030712' },
-  { name: 'Royal Emerald', value: 'linear-gradient(145deg, #063024 0%, #021a14 100%)', baseColor: '#063024', endColor: '#021a14' },
-  { name: 'Ruby Crimson', value: 'linear-gradient(145deg, #3e0f1e 0%, #150207 100%)', baseColor: '#3e0f1e', endColor: '#150207' },
-  { name: 'Obsidian Gold', value: 'linear-gradient(145deg, #1f1f23 0%, #78350f 100%)', baseColor: '#18181b', endColor: '#78350f' },
-  { name: 'Amethyst Night', value: 'linear-gradient(145deg, #2b124c 0%, #0d0617 100%)', baseColor: '#2b124c', endColor: '#0d0617' },
-  { name: 'Ocean Cyan', value: 'linear-gradient(145deg, #0369a1 0%, #082f49 100%)', baseColor: '#0369a1', endColor: '#082f49' },
-  { name: 'Sunset Bronze', value: 'linear-gradient(145deg, #7c2d12 0%, #1c1917 100%)', baseColor: '#7c2d12', endColor: '#1c1917' },
-  { name: 'Titanium Slate', value: 'linear-gradient(145deg, #334155 0%, #0f172a 100%)', baseColor: '#1e293b', endColor: '#0f172a' },
 ];
 
 const GUEST_CATEGORIES: { category: EventGuestCategory; label: string; icon: string }[] = [
@@ -200,7 +180,6 @@ export function EventPassStudio({
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
 
-  const [isFlipped, setIsFlipped] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [issuedPass, setIssuedPass] = useState<EventPassItem | null>(null);
   const [isDispatchingEmail, setIsDispatchingEmail] = useState(false);
@@ -378,7 +357,6 @@ export function EventPassStudio({
     setEmailDispatchStatus('');
     setShowManualEmailPrompt(false);
     setManualEmailInput('');
-    setIsFlipped(false);
   };
 
   const handlePrint = () => {
@@ -669,188 +647,19 @@ export function EventPassStudio({
               )}
             </div>
 
-            {/* 4.5. Pass Color & Gradient Customization */}
-            <div className="space-y-3 p-3.5 rounded-2xl bg-slate-50/70 dark:bg-white/5 border border-slate-200 dark:border-white/10">
-              <div className="flex items-center justify-between">
-                <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                  <Palette className="h-3.5 w-3.5 text-accent" />
-                  <span>Pass Color &amp; Gradient Customization</span>
-                </label>
-              {activeTheme?.backgroundUrl && (
-                <p className="text-[10.5px] text-sky-400">Event background image is active on the card — the colour/gradient below is only the fallback.</p>
-              )}
-                <div className="flex items-center gap-1 bg-slate-200/80 dark:bg-white/10 p-0.5 rounded-lg text-[10px] font-bold">
-                  <button
-                    type="button"
-                    onClick={() => setColorMode('gradient')}
-                    className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
-                      colorMode === 'gradient'
-                        ? 'bg-accent text-white shadow-sm'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Gradient
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setColorMode('solid')}
-                    className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
-                      colorMode === 'solid'
-                        ? 'bg-accent text-white shadow-sm'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Solid
-                  </button>
-                </div>
-              </div>
-
-              {colorMode === 'gradient' ? (
-                <div className="space-y-2.5">
-                  <div className="text-[10.5px] text-slate-500 dark:text-slate-400">
-                    Select a luxury dual-tone gradient preset or customize both gradient stops:
-                  </div>
-                  {/* Gradient Presets */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                    {PASS_GRADIENT_PRESETS.map((gp) => {
-                      const isSelected = passGradient === gp.value;
-                      return (
-                        <button
-                          type="button"
-                          key={gp.name}
-                          onClick={() => {
-                            setPassGradient(gp.value);
-                            setPassColor(gp.baseColor);
-                            setGradientEndColor(gp.endColor);
-                          }}
-                          className={`px-2.5 py-1.5 rounded-xl border text-left transition-all cursor-pointer relative overflow-hidden flex items-center justify-between ${
-                            isSelected
-                              ? 'ring-2 ring-accent border-white shadow-md'
-                              : 'border-white/15 opacity-85 hover:opacity-100'
-                          }`}
-                          style={{ background: gp.value }}
-                        >
-                          <span className="text-[10px] font-extrabold text-white drop-shadow truncate">
-                            {gp.name}
-                          </span>
-                          {isSelected && <Sparkles className="h-3 w-3 text-white drop-shadow shrink-0" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Dual Tone Color Pickers */}
-                  <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-slate-200/80 dark:border-white/10">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300">Start Color:</span>
-                      <label className="relative cursor-pointer flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-200 dark:bg-white/10 border border-slate-300 dark:border-white/15 text-[10px] font-bold text-slate-700 dark:text-slate-200">
-                        <div className="w-3.5 h-3.5 rounded-full border border-white/40 shadow-inner" style={{ backgroundColor: passColor }} />
-                        <span>{passColor}</span>
-                        <input
-                          type="color"
-                          value={passColor}
-                          onChange={(e) => {
-                            const newStart = e.target.value;
-                            setPassColor(newStart);
-                            setPassGradient(`linear-gradient(145deg, ${newStart} 0%, ${gradientEndColor} 100%)`);
-                          }}
-                          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                        />
-                      </label>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300">End Color:</span>
-                      <label className="relative cursor-pointer flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-200 dark:bg-white/10 border border-slate-300 dark:border-white/15 text-[10px] font-bold text-slate-700 dark:text-slate-200">
-                        <div className="w-3.5 h-3.5 rounded-full border border-white/40 shadow-inner" style={{ backgroundColor: gradientEndColor }} />
-                        <span>{gradientEndColor}</span>
-                        <input
-                          type="color"
-                          value={gradientEndColor}
-                          onChange={(e) => {
-                            const newEnd = e.target.value;
-                            setGradientEndColor(newEnd);
-                            setPassGradient(`linear-gradient(145deg, ${passColor} 0%, ${newEnd} 100%)`);
-                          }}
-                          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                        />
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="text-[10.5px] text-slate-500 dark:text-slate-400">
-                    Solid pass theme (applied directly to digital card &amp; Apple Wallet pass):
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {PASS_COLOR_PRESETS.map((cp) => {
-                      const isSelected = passColor.toLowerCase() === cp.hex.toLowerCase();
-                      return (
-                        <button
-                          type="button"
-                          key={cp.hex}
-                          onClick={() => {
-                            setPassColor(cp.hex);
-                            setPassGradient(`linear-gradient(145deg, ${cp.hex} 0%, #030712 100%)`);
-                          }}
-                          title={cp.name}
-                          className={`h-7 w-7 rounded-xl transition-all cursor-pointer relative flex items-center justify-center border ${
-                            isSelected
-                              ? 'scale-110 ring-2 ring-accent border-white shadow-md'
-                              : 'border-white/20 hover:scale-105 opacity-85 hover:opacity-100'
-                          }`}
-                          style={{ backgroundColor: cp.hex }}
-                        >
-                          {isSelected && <Sparkles className="h-3 w-3 text-white drop-shadow" />}
-                        </button>
-                      );
-                    })}
-
-                    <div className="flex items-center gap-1.5 ml-auto">
-                      <label className="relative cursor-pointer flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 border border-slate-300 dark:border-white/15 text-[10px] font-bold text-slate-700 dark:text-slate-200 transition-all">
-                        <span>Custom</span>
-                        <input
-                          type="color"
-                          value={passColor}
-                          onChange={(e) => {
-                            setPassColor(e.target.value);
-                            setPassGradient(`linear-gradient(145deg, ${e.target.value} 0%, #030712 100%)`);
-                          }}
-                          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                        />
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* 4.6 Text colours */}
-            <div className="space-y-2">
-              <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] flex items-center justify-between">
-                <span>Pass Text Colours</span>
-                {(textColor || labelColor) && (
-                  <button type="button" onClick={() => { setTextColor(''); setLabelColor(''); }} className="text-[10px] text-sky-400 hover:underline">
-                    Reset to auto
-                  </button>
-                )}
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                {([
-                  ['Text (name, event)', textColor, setTextColor, '#ffffff'],
-                  ['Labels & accents', labelColor, setLabelColor, '#38bdf8'],
-                ] as const).map(([lbl, val, set, fallback]) => (
-                  <label key={lbl} className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl border border-slate-300 dark:border-white/15 bg-slate-50 dark:bg-slate-900/60 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                    {lbl}
-                    <input type="color" value={val || fallback} onChange={(e) => set(e.target.value)} className="h-7 w-10 rounded border border-slate-300 dark:border-white/20 bg-transparent cursor-pointer" />
-                  </label>
-                ))}
-              </div>
-              <p className="text-[10.5px] text-slate-500">
-                Applies to the pass card, the public pass page and the emailed ticket. Apple/Google Wallet draws its own white text on poster backgrounds.
-              </p>
-            </div>
+            {/* 4.5. Pass colour, gradient and text colours (shared with Edit Pass) */}
+            <PassColorControls
+              colorMode={colorMode}
+              setColorMode={setColorMode}
+              passColor={passColor}
+              setPassColor={setPassColor}
+              passGradient={passGradient}
+              setPassGradient={setPassGradient}
+              gradientEndColor={gradientEndColor}
+              setGradientEndColor={setGradientEndColor}
+              activeTheme={activeTheme}
+            />
+            <PassTextColorControls textColor={textColor} setTextColor={setTextColor} labelColor={labelColor} setLabelColor={setLabelColor} />
 
             {/* 5. Room / Venue / Hall Allocation */}
             <div className="space-y-1.5">
@@ -903,54 +712,17 @@ export function EventPassStudio({
                 </div>
               </div>
 
-              <div className="space-y-1.5 sm:col-span-2">
-                <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] flex items-center justify-between">
-                  <span>Valid On (one pass, one QR for all selected days)</span>
-                  {selectedValidDays && (
-                    <button
-                      type="button"
-                      onClick={() => setSelectedValidDays(null)}
-                      className="text-[10px] text-sky-400 hover:underline"
-                    >
-                      All event days
-                    </button>
-                  )}
-                </label>
-                {eventDays.length > 1 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {eventDays.map((d) => {
-                      const on = effectiveValidDays.includes(d);
-                      return (
-                        <button
-                          type="button"
-                          key={d}
-                          onClick={() => toggleValidDay(d)}
-                          className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-all cursor-pointer ${
-                            on
-                              ? 'bg-sky-500/20 border-sky-400 text-sky-600 dark:text-sky-200'
-                              : 'bg-slate-50 dark:bg-slate-900/60 border-slate-300 dark:border-white/15 text-slate-500 line-through'
-                          }`}
-                        >
-                          {new Date(`${d}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="relative">
-                    <Calendar className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
-                    <input
-                      type="date"
-                      value={validityDate}
-                      onChange={(e) => setValidityDate(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-300 dark:border-white/15 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:border-accent text-xs"
-                    />
-                  </div>
-                )}
-                <p className="text-[10.5px] text-slate-500">
-                  Valid: <strong>{displayValidity}</strong>
-                  {effectiveValidDays.length > 1 ? ` · ${effectiveValidDays.length} days` : ''}
-                </p>
+              <div className="sm:col-span-2">
+                <PassValidityPicker
+                  eventDays={eventDays}
+                  effectiveValidDays={effectiveValidDays}
+                  selectedValidDays={selectedValidDays}
+                  setSelectedValidDays={setSelectedValidDays}
+                  toggleValidDay={toggleValidDay}
+                  validityDate={validityDate}
+                  setValidityDate={setValidityDate}
+                  displayValidity={displayValidity}
+                />
               </div>
             </div>
 
@@ -1037,7 +809,7 @@ export function EventPassStudio({
                     : 'text-slate-500 dark:text-slate-400 hover:text-white'
                 }`}
               >
-                <Sparkles className="h-3 w-3" /> 3D Luxury
+                <Sparkles className="h-3 w-3" /> Issued Pass
               </button>
               <button
                 type="button"
@@ -1052,200 +824,36 @@ export function EventPassStudio({
               </button>
             </div>
 
-            {previewMode === 'luxury' && (
-              <button
-                type="button"
-                onClick={() => setIsFlipped(!isFlipped)}
-                className="text-[11px] font-bold text-sky-400 hover:text-sky-300 bg-sky-500/15 hover:bg-sky-500/25 px-3 py-1 rounded-full border border-sky-500/30 flex items-center gap-1.5 transition-all cursor-pointer"
-              >
-                <RotateCw className="h-3 w-3" />
-                {isFlipped ? 'Front' : 'Back'}
-              </button>
-            )}
           </div>
 
-          {/* VIEW 1: 3D PHOTOREALISTIC LUXURY PASS CARD */}
+          {/* VIEW 1: THE ACTUAL ISSUED PASS — the same component the recipient's /pass page renders */}
           {previewMode === 'luxury' && (
-            <div className={`${styles.passContainer} printableBadge`}>
-              <div
-                className={`${styles.passCardInner} ${isFlipped ? styles.isFlipped : ''}`}
-                onClick={() => setIsFlipped(!isFlipped)}
-              >
-                {/* FRONT FACE */}
-                <div
-                  className={`${styles.passFace} ${styles.passFront}`}
-                  style={{
-                    background:
-                      colorMode === 'gradient' && passGradient
-                        ? passGradient
-                        : `linear-gradient(145deg, ${passColor}ee 0%, #060c18fa 100%)`,
-                    // Event artwork (live draft) + darkening overlay sits behind the card; gradient is the fallback
-                    ...(activeTheme?.backgroundUrl ? passThemeStyle(activeTheme) : {}),
-                    ...((textColor || activeTheme?.foregroundColor) ? { ['--pass-fg' as any]: textColor || activeTheme?.foregroundColor } : {}),
-                    ...((labelColor || activeTheme?.labelColor) ? { ['--pass-label' as any]: labelColor || activeTheme?.labelColor } : {}),
-                  }}
-                >
-                  {/* Lanyard Cut */}
-                  <div className={styles.lanyardSlot} />
-
-                  {/* Header */}
-                  <div className={styles.passHeader}>
-                    <div className={styles.brandWrap}>
-                      <img
-                        src="/card/leads-logo.png"
-                        alt="LEADS Logo"
-                        className={styles.leadsLogo}
-                      />
-                      <div className={styles.brandText}>
-                        <span className={styles.brandTitle}>{brandHeader}</span>
-                        <span className={styles.brandSubtitle}>RUAS Executive Credential</span>
-                      </div>
-                    </div>
-                    <span className={`${styles.passTypePill} ${currentPassMeta.colorClass}`}>
-                      {passType === 'Other' ? (customPassType.trim() || 'CUSTOM PASS') : currentPassMeta.badge}
-                    </span>
-                  </div>
-
-                  {/* Body Content */}
-                  <div className={styles.passBody}>
-                    {/* Event Info */}
-                    <div className={styles.eventRow}>
-                      <div className={styles.eventTitleText}>
-                        {resolvedEventTitle}
-                      </div>
-                      <div className={styles.eventDateText}>
-                        <Calendar className="h-3 w-3 text-sky-400 shrink-0" />
-                        <span>{displayValidity}</span>
-                      </div>
-                    </div>
-
-                    {/* Guest Identity Box */}
-                    <div className={styles.guestBox}>
-                      <div className={styles.guestCategoryTag}>
-                        <Tag className="h-2.5 w-2.5" />
-                        <span>{guestCategory === 'Other' ? (customGuestCategory.trim() || 'Other Guest') : guestCategory}</span>
-                      </div>
-                      <div className={styles.attendeeNameText}>
-                        {attendeeName.trim() || 'Guest / Attendee Name'}
-                      </div>
-
-                      <div className={styles.metaGrid}>
-                        <div className={styles.metaItem}>
-                          <span className={styles.metaLabel}>Assigned Room / Venue</span>
-                          <span className={`${styles.metaVal} ${styles.roomVal}`}>
-                            📍 {displayRoom}
-                          </span>
-                        </div>
-                        <div className={styles.metaItem}>
-                          <span className={styles.metaLabel}>Affiliation / Tier</span>
-                          <span className={styles.metaVal}>
-                            {attendeeOrg.trim() || 'Guest Invitee'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* QR Turnstile Scanner Box */}
-                  <div className={styles.qrModule}>
-                    <div className={styles.qrDetails}>
-                      <span className={styles.serialText}>
-                        {issuedPass ? issuedPass.serialNumber : previewSerial}
-                      </span>
-                      <span className={styles.verifiedPill}>
-                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-                        Scan QR at entry
-                      </span>
-                      <span className="text-[8px] text-slate-500 font-semibold">
-                        Valid at all official event turnstiles
-                      </span>
-                    </div>
-                    <div className={styles.qrImageBox}>
-                      <img
-                        src="/card/leads-qr-code.png"
-                        alt="Verified Turnstile QR"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Footer */}
-                  <div className={styles.passFooter}>
-                    <span>{brandHeader} • RUAS</span>
-                    <div className={styles.flipHint}>
-                      <RotateCw className="h-2.5 w-2.5" />
-                      <span>Tap to flip</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* BACK FACE */}
-                <div
-                  className={`${styles.passFace} ${styles.passBack}`}
-                  style={{
-                    backgroundImage: activeTheme?.backgroundUrl
-                      ? `linear-gradient(rgba(3,7,18,0.82), rgba(3,7,18,0.9)), url("${activeTheme.backgroundUrl}")`
-                      : `linear-gradient(155deg, ${passColor}f2 0%, #080e1afa 100%), url('/card/dark-blue-leather.jpg')`,
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center',
-                  }}
-                >
-                  {/* Lanyard Cut */}
-                  <div className={styles.lanyardSlot} />
-
-                  {/* Back Header */}
-                  <div className={styles.passHeader}>
-                    <div className={styles.brandWrap}>
-                      <span className="text-xs font-black uppercase tracking-wider text-white">
-                        Pass Terms & Protocol
-                      </span>
-                    </div>
-                    <span className="text-[9px] font-bold text-sky-400 bg-sky-500/15 px-2 py-0.5 rounded-full border border-sky-500/30">
-                      RUAS SECURE
-                    </span>
-                  </div>
-
-                  {/* Magnetic Stripe Graphic */}
-                  <div className={styles.magneticStripe} />
-
-                  {/* Back Rules Content */}
-                  <div className={styles.backContent}>
-                    <div className={styles.ruleCard}>
-                      <div className="text-[10px] font-extrabold text-white mb-2 uppercase tracking-wide">
-                        Access & Security Policy
-                      </div>
-                      <div className={styles.ruleItem}>
-                        <span className={styles.dot} />
-                        <span>This pass grants admission to designated event halls, keynotes, and sessions.</span>
-                      </div>
-                      <div className={styles.ruleItem}>
-                        <span className={styles.dot} />
-                        <span>Strictly non-transferable. Must be visibly worn or presented at all check-in turnstiles.</span>
-                      </div>
-                      <div className={styles.ruleItem}>
-                        <span className={styles.dot} />
-                        <span>Real-time session and venue updates will be delivered via your digital pass.</span>
-                      </div>
-                    </div>
-
-                    <div className="p-3 bg-white/5 border border-white/10 rounded-xl space-y-1 text-[9.5px]">
-                      <div className="text-slate-400 font-bold uppercase text-[8px]">Issued Authority</div>
-                      <div className="text-white font-extrabold">{brandHeader} • RUAS</div>
-                      <div className="text-sky-300 font-mono text-[9px]">
-                        Issued By: {currentUserName || 'Staff Reception'}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Back Footer */}
-                  <div className={styles.passFooter}>
-                    <span>Issuing Authority: {brandHeader} • RUAS</span>
-                    <div className={styles.flipHint}>
-                      <RotateCw className="h-2.5 w-2.5" />
-                      <span>Back to front</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <div className="w-full flex flex-col items-center space-y-2">
+              <EventPassKeycard
+                pass={{
+                  attendeeName: attendeeName.trim() || 'Guest / Attendee Name',
+                  passType: (passType === 'Other' ? customPassType.trim() || 'Custom Pass' : passType) as EventPassType,
+                  guestCategory: (guestCategory === 'Other' ? customGuestCategory.trim() || 'Guest Invitee' : guestCategory) as any,
+                  roomOrVenue: displayRoom,
+                  attendeeOrg: attendeeOrg.trim() || undefined,
+                  serialNumber: issuedPass ? issuedPass.serialNumber : previewSerial,
+                  eventName: resolvedEventTitle,
+                  eventDate: formattedEventDate,
+                  validityDate: displayValidity,
+                  validDays: effectiveValidDays,
+                  passColor,
+                  passGradient: colorMode === 'gradient' ? passGradient : undefined,
+                  textColor: textColor || undefined,
+                  labelColor: labelColor || undefined,
+                }}
+                theme={activeTheme}
+                autoOpen
+                autoExtract
+                showActions
+              />
+              <p className="text-[10.5px] text-slate-500 text-center max-w-[360px]">
+                This is the exact pass your recipient opens — folder, card and back. Tap the card to flip it; use Replay to see the opening animation.
+              </p>
             </div>
           )}
 

@@ -1434,6 +1434,7 @@ export default function EventPassesPage() {
           setSelectedEditPass(null);
         }}
         pass={selectedEditPass}
+        events={events}
         currentUserName={user?.name || 'Staff'}
         onPassUpdated={(updated) => {
           setEventPasses(getEventPasses());

@@ -83,6 +83,8 @@ pm2 restart leads-dashboard
 
 #### 8. Event Passes & Gate QR Scanner (`/dashboard/event-passes`)
 - **Digital Event Passes**: Event pass cards with unique serial numbers and a QR code. Only events created in the Events module can be selected (synced holidays/festivals are hidden). Per-pass text and label colours can be set in the Studio.
+- **What you design is what is issued**: the Studio preview and the Edit Pass dialog render the very same keycard component as the public `/pass/<serial>` page (folder, extracting card, QR), including the event's pass look.
+- **Full pass editing**: *Edit* on an issued pass changes everything — attendee details, event (dates/venue follow), pass type and category, venue, valid days, status, notes, gradient/solid colours and text/label colours — with a live preview and wallet re-sync.
 - **Multi-Day Passes (one pass, one QR)**: A pass is valid on a chosen set of event days (day picker in the Studio; `ValidFrom`/`ValidTo` columns in the bulk CSV). Attendance is recorded once per day; the pass page shows "Checked In (n/m days)".
 - **Gate QR Scanner**: In-app camera scanner. Days come from the pass itself, check-in is allowed only on a valid day, cancelled and expired passes are refused, and check-in is enforced server-side (`POST /api/events/all/passes/checkin`) so concurrent scanners cannot overwrite each other.
 - **Invitee Pass Page** (`/pass/[serial]`): the full "LEADS Executive Key Card" folder animation (folder opens, card slides out, flips), a Skip animation option, reduced-motion support, and Add to Wallet / Calendar / Share actions. The public API returns no email, phone or notes.

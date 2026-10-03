@@ -19,7 +19,7 @@ import {
   Smartphone,
 } from 'lucide-react';
 import { EventPassItem, PassTheme, getPassValidDays, getPassAttendanceSummary, formatValidDaysLabel } from '@/lib/local-data';
-import { InteractiveKeycardHolder } from '@/components/interactive-keycard-holder';
+import { EventPassKeycard } from '@/components/event-pass-keycard';
 import { CardQrModal } from '@/components/card-qr-modal';
 
 export default function PublicEventPassPage({
@@ -312,28 +312,10 @@ export default function PublicEventPassPage({
 
       {/* Main 3D Leather Card Holder Presentation */}
       <div className="w-full max-w-2xl flex flex-col items-center justify-center my-2 overflow-visible">
-        <InteractiveKeycardHolder
-          isEventPass={true}
-          memberName={pass.attendeeName}
-          memberRole={`${pass.passType}${pass.guestCategory ? ` • ${pass.guestCategory}` : ''}`}
-          phone=""
-          email=""
-          serialNumber={pass.serialNumber}
-          eventName={pass.eventName}
-          eventDate={pass.eventDate}
-          passType={pass.passType}
-          guestCategory={pass.guestCategory}
-          roomOrVenue={pass.roomOrVenue || pass.eventVenue || 'Main Auditorium'}
-          attendeeOrg={pass.attendeeOrg || ''}
-          accessLevel={`${pass.passType} — ${pass.roomOrVenue || pass.eventVenue || 'Main Auditorium'}`}
-          validityPeriod={validDays.length > 0 ? formatValidDaysLabel(validDays) : pass.validityDate || pass.eventDate || '2026'}
-          issuingAuthority={pass.eventName ? `${pass.eventName} • RUAS` : 'LEADS Next Gen Centre • RUAS'}
-          brandHeader="LEADS Next Gen Centre"
-          passColor={pass.passColor}
-          passGradient={pass.passGradient}
-          theme={{ ...(theme || {}), ...(pass.textColor ? { foregroundColor: pass.textColor } : {}), ...(pass.labelColor ? { labelColor: pass.labelColor } : {}) }}
-          cardUrl={passUrl}
-          qrUrl="/card/leads-qr-code.png"
+        <EventPassKeycard
+          pass={pass}
+          theme={theme}
+          origin={origin}
           showActions={true}
           autoOpen={false}
           walletError={walletError}

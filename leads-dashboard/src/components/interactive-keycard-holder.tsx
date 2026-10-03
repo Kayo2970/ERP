@@ -34,6 +34,8 @@ export interface InteractiveKeycardProps {
   walletError?: string;
   showActions?: boolean;
   autoOpen?: boolean;
+  /** After opening, pull the card forward automatically (used by design previews so the card face is visible). */
+  autoExtract?: boolean;
 
   // Event Pass Specific Props
   isEventPass?: boolean;
@@ -72,6 +74,7 @@ export function InteractiveKeycardHolder({
   walletError,
   showActions = true,
   autoOpen = false,
+  autoExtract = false,
 
   // Event Pass Specific Props
   isEventPass,
@@ -241,6 +244,16 @@ export function InteractiveKeycardHolder({
     }, 350);
     return () => clearTimeout(timer);
   }, [autoOpen]);
+
+  useEffect(() => {
+    if (!autoExtract || stageState !== 'opened') return;
+    const t = setTimeout(() => {
+      setIsFlipped(false);
+      setStageState('extracting');
+      setTimeout(() => setStageState('extracted'), CARD_EXTRACT_DURATION);
+    }, 450);
+    return () => clearTimeout(t);
+  }, [autoExtract, stageState]);
 
   const handleHolderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest(`.${styles.passCard}`) || (e.target as HTMLElement).closest(`.${styles.coverBack}`)) {
