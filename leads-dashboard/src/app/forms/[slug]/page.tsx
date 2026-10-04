@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback, use } from 'react';
 import { CheckCircle2, ChevronLeft, Send, Sparkles, AlertTriangle, ShieldCheck, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 import Link from 'next/link';
-import { getForms, getEvents, addSubmission, PublicFormItem, FormEventInfo, resolveFieldDefault, formatEventDateRange } from '@/lib/local-data';
+import { getForms, getEvents, addSubmission, PublicFormItem, FormEventInfo, resolveFieldDefault, hasLockedDefault, formatEventDateRange } from '@/lib/local-data';
 import { TermsModal } from '@/components/terms-modal';
 import { PrivacyPolicyModal } from '@/components/privacy-policy-modal';
 import { GhostFibers } from '@/components/ui/ghost-fibers';
@@ -61,6 +61,12 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
         setLoading(false);
         return;
       }
+      // "Type of Event" used to be a tick-several list; forms built from the Feedback template back then still
+      // store it that way, so present it as the single choice it now is.
+      matchedForm = {
+        ...matchedForm,
+        fields: matchedForm.fields.map(f => (f.id === 'f_event_type' && f.type === 'multiselect' ? { ...f, type: 'select' as const } : f)),
+      };
       setForm(matchedForm);
       // Linked-event details for "default = event name / date / venue": live from the public API when we have it,
       // else (staff previewing from the local cache) from the locally cached event.
@@ -79,7 +85,7 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
         else initialData[f.id] = def === undefined || def === null || Array.isArray(def) || typeof def === 'boolean' ? '' : String(def);
         // Only lock when there is actually something filled in, so nobody gets stuck on an empty locked field
         const v = initialData[f.id];
-        if (f.lockDefault && (f.type === 'checkbox' ? v === true : Array.isArray(v) ? v.length > 0 : v !== '')) locked.add(f.id);
+        if (hasLockedDefault(f) && (f.type === 'checkbox' ? v === true : Array.isArray(v) ? v.length > 0 : v !== '')) locked.add(f.id);
       });
       setFormData(initialData);
       setLockedIds(locked);

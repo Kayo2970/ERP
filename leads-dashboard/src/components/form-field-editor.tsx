@@ -35,7 +35,6 @@ export function FormFieldEditor({ field, onChange, onRemove, canRemove, allowChe
     // Sensible starting point: a question that looks like "Name of event" starts on the event's name
     const looksLikeEvent = /event/i.test(field.label) && /name|title/i.test(field.label);
     if (eventCapable && looksLikeEvent && eventLinked) onChange('defaultSource', 'event_name');
-    onChange('lockDefault', true);
     onChange('defaultValue', field.type === 'multiselect' ? [] : field.type === 'checkbox' ? true : field.type === 'select' ? field.options?.[0] || '' : '');
   };
 
@@ -177,7 +176,7 @@ export function FormFieldEditor({ field, onChange, onRemove, canRemove, allowChe
             )}
 
             <label className="flex items-center gap-1.5 text-[11px] text-theme-text-primary cursor-pointer w-fit">
-              <input type="checkbox" checked={field.lockDefault === true} onChange={(e) => onChange('lockDefault', e.target.checked ? true : undefined)} className="accent-accent" />
+              <input type="checkbox" checked={field.lockDefault !== false} onChange={(e) => onChange('lockDefault', e.target.checked ? undefined : false)} className="accent-accent" />
               Lock it — respondents see it but can&apos;t edit it
             </label>
           </div>
