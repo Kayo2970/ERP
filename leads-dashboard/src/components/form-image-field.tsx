@@ -36,9 +36,11 @@ interface Props {
   kind: 'header' | 'background';
   value: string;
   onChange: (url: string) => void;
+  /** Hide the built-in thumbnail when the caller shows its own preview. */
+  showPreview?: boolean;
 }
 
-export function FormImageField({ label, hint, kind, value, onChange }: Props) {
+export function FormImageField({ label, hint, kind, value, onChange, showPreview = true }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -79,7 +81,7 @@ export function FormImageField({ label, hint, kind, value, onChange }: Props) {
       </div>
       <p className="text-[10px] text-theme-text-secondary">{hint} Drive images must be shared as &quot;Anyone with the link&quot;.</p>
       {error && <p className="text-[11px] text-danger">{error}</p>}
-      {value && (
+      {value && showPreview && (
         <div className="relative h-24 rounded-xl overflow-hidden border border-theme-card-border">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={value} alt="" className="h-full w-full object-cover" />
