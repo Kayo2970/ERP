@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { FormFieldEditor } from '@/components/form-field-editor';
 import { FormImageField } from '@/components/form-image-field';
+import { FormHeaderFraming, DEFAULT_HEADER_FRAMING, HeaderFraming } from '@/components/form-header-framing';
 import {
   Plus,
   Trash2,
@@ -210,6 +211,7 @@ export default function FormsBuilderPage() {
   const [description, setDescription] = useState('');
   const [headerText, setHeaderText] = useState('');
   const [headerImageUrl, setHeaderImageUrl] = useState('');
+  const [headerFraming, setHeaderFraming] = useState<HeaderFraming>(DEFAULT_HEADER_FRAMING);
   const [backgroundImageUrl, setBackgroundImageUrl] = useState('');
   const [backgroundBlur, setBackgroundBlur] = useState(0);
   const [backgroundDim, setBackgroundDim] = useState(10);
@@ -277,6 +279,7 @@ export default function FormsBuilderPage() {
     setDescription('');
     setHeaderText('');
     setHeaderImageUrl('');
+    setHeaderFraming(DEFAULT_HEADER_FRAMING);
     setBackgroundImageUrl('');
     setBackgroundBlur(0);
     setBackgroundDim(10);
@@ -298,6 +301,12 @@ export default function FormsBuilderPage() {
     setDescription(form.description);
     setHeaderText(form.headerText || '');
     setHeaderImageUrl(form.headerImageUrl || '');
+    setHeaderFraming({
+      posX: form.headerPosX ?? DEFAULT_HEADER_FRAMING.posX,
+      posY: form.headerPosY ?? DEFAULT_HEADER_FRAMING.posY,
+      zoom: form.headerZoom ?? DEFAULT_HEADER_FRAMING.zoom,
+      height: form.headerHeight ?? DEFAULT_HEADER_FRAMING.height,
+    });
     setBackgroundImageUrl(form.backgroundImageUrl || '');
     setBackgroundBlur(form.backgroundBlur ?? 0);
     setBackgroundDim(form.backgroundDim ?? 10);
@@ -457,6 +466,10 @@ export default function FormsBuilderPage() {
         description,
         headerText: headerText.trim() || undefined,
         headerImageUrl: headerImageUrl || undefined,
+        headerPosX: headerImageUrl ? headerFraming.posX : undefined,
+        headerPosY: headerImageUrl ? headerFraming.posY : undefined,
+        headerZoom: headerImageUrl ? headerFraming.zoom : undefined,
+        headerHeight: headerImageUrl ? headerFraming.height : undefined,
         backgroundImageUrl: backgroundImageUrl || undefined,
         backgroundBlur: backgroundImageUrl ? backgroundBlur : undefined,
         backgroundDim: backgroundImageUrl ? backgroundDim : undefined,
@@ -490,6 +503,10 @@ export default function FormsBuilderPage() {
         description,
         headerText: headerText.trim() || undefined,
         headerImageUrl: headerImageUrl || undefined,
+        headerPosX: headerImageUrl ? headerFraming.posX : undefined,
+        headerPosY: headerImageUrl ? headerFraming.posY : undefined,
+        headerZoom: headerImageUrl ? headerFraming.zoom : undefined,
+        headerHeight: headerImageUrl ? headerFraming.height : undefined,
         backgroundImageUrl: backgroundImageUrl || undefined,
         backgroundBlur: backgroundImageUrl ? backgroundBlur : undefined,
         backgroundDim: backgroundImageUrl ? backgroundDim : undefined,
@@ -1320,7 +1337,8 @@ export default function FormsBuilderPage() {
                 />
               </div>
 
-              <FormImageField label="Header Picture (optional)" hint="Wide banner across the top of the form." kind="header" value={headerImageUrl} onChange={setHeaderImageUrl} />
+              <FormImageField label="Header Picture (optional)" hint="Wide banner across the top of the form." kind="header" value={headerImageUrl} onChange={(url) => { setHeaderImageUrl(url); if (url !== headerImageUrl) setHeaderFraming(DEFAULT_HEADER_FRAMING); }} showPreview={false} />
+              {headerImageUrl && <FormHeaderFraming url={headerImageUrl} value={headerFraming} onChange={setHeaderFraming} />}
               <FormImageField label="Background Picture (optional)" hint="Replaces the standard background on this public form only." kind="background" value={backgroundImageUrl} onChange={setBackgroundImageUrl} />
               {backgroundImageUrl && (
                 <div className="space-y-2 p-3 rounded-xl border border-theme-card-border">

@@ -216,7 +216,7 @@ export async function gateTaskAction(user: ServerUser, action: 'CREATE' | 'EDIT'
   return policyOnlyGate(user, [action === 'CREATE' ? 'TASKS_CREATE' : 'TASKS_EDIT'], builtIn);
 }
 
-const FORM_EDIT_KEYS = new Set(['title', 'slug', 'description', 'headerText', 'headerImageUrl', 'backgroundImageUrl', 'backgroundBlur', 'backgroundDim', 'committee', 'fields', 'eventId', 'eventName', 'sourceTemplateId']);
+const FORM_EDIT_KEYS = new Set(['title', 'slug', 'description', 'headerText', 'headerImageUrl', 'headerPosX', 'headerPosY', 'headerZoom', 'headerHeight', 'backgroundImageUrl', 'backgroundBlur', 'backgroundDim', 'committee', 'fields', 'eventId', 'eventName', 'sourceTemplateId']);
 export const formEditKeys = (u: Record<string, unknown>) => Object.keys(u).filter((k) => FORM_EDIT_KEYS.has(k));
 
 /**

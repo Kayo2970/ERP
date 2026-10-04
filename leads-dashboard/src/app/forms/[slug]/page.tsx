@@ -7,6 +7,7 @@ import { getForms, getEvents, addSubmission, PublicFormItem, FormEventInfo, reso
 import { TermsModal } from '@/components/terms-modal';
 import { PrivacyPolicyModal } from '@/components/privacy-policy-modal';
 import { GhostFibers } from '@/components/ui/ghost-fibers';
+import { DEFAULT_HEADER_FRAMING, headerImageStyle } from '@/components/form-header-framing';
 
 export default function PublicFormPage({ params }: { params: Promise<{ slug: string }> }) {
   const resolvedParams = use(params);
@@ -281,9 +282,24 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
           <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#001f53] via-accent to-[#03d8fc]"></div>
 
           {form?.headerImageUrl && (
-            // Full-bleed banner: negative margins cancel the card padding
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={form.headerImageUrl} alt="" className="-mx-6 md:-mx-8 -mt-6 md:-mt-8 !mb-0 w-[calc(100%+3rem)] md:w-[calc(100%+4rem)] max-w-none h-40 object-cover" />
+            // Full-bleed banner: negative margins cancel the card padding; overflow-hidden crops the zoomed picture
+            <div
+              className="-mx-6 md:-mx-8 -mt-6 md:-mt-8 !mb-0 w-[calc(100%+3rem)] md:w-[calc(100%+4rem)] max-w-none overflow-hidden"
+              style={{ height: form.headerHeight ?? DEFAULT_HEADER_FRAMING.height }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={form.headerImageUrl}
+                alt=""
+                className="h-full w-full object-cover"
+                style={headerImageStyle({
+                  posX: form.headerPosX ?? DEFAULT_HEADER_FRAMING.posX,
+                  posY: form.headerPosY ?? DEFAULT_HEADER_FRAMING.posY,
+                  zoom: form.headerZoom ?? DEFAULT_HEADER_FRAMING.zoom,
+                  height: form.headerHeight ?? DEFAULT_HEADER_FRAMING.height,
+                })}
+              />
+            </div>
           )}
 
           {/* Form Header */}

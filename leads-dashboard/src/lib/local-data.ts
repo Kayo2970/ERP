@@ -1132,6 +1132,11 @@ export interface PublicFormItem {
   headerText?: string;
   /** Optional banner picture across the top of the public form (uploaded, or an image link). */
   headerImageUrl?: string;
+  /** How the header picture is framed in the banner: focal point (0-100 each), zoom (100-300 %) and banner height (px). */
+  headerPosX?: number;
+  headerPosY?: number;
+  headerZoom?: number;
+  headerHeight?: number;
   /** Optional picture used instead of the standard animated background on the public form only. */
   backgroundImageUrl?: string;
   /** Blur applied to the background picture, in px (0 = sharp). */
