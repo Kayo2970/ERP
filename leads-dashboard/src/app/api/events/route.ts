@@ -4,7 +4,7 @@ import { dispatchCommitteeRosterEmails } from '@/lib/committee-roster-email';
 import { fanOutAutoApproval, resolveCustomApprovalPanel } from '@/lib/approval-sync';
 import { requireSession } from '@/lib/session';
 import { apiError } from '@/lib/api-error';
-import { gateEventAction } from '@/lib/approval-gate';
+import { gateEventAction, holdEditForApproval, stampPendingCreate, changedKeys, isPendingState } from '@/lib/approval-gate';
 
 const PENDING_APPROVAL_MESSAGE: Record<string, string> = {
   pending_create: 'This event was created and needs sign-off from the Centre Head, Advisor, or GG Campus Events Head before it goes live.',
@@ -69,20 +69,33 @@ export async function POST(request: Request) {
     const item = await request.json();
     // Chain of command: whether this creation needs sign-off is decided HERE from the stored Group Policies — not from
     // the approvalStatus the browser chose to send (a stale policy cache used to let creations go straight through).
-    const exists = (await readCollection<any>('events')).some((e: any) => e.id === item.id);
-    if (!exists && item.approvalStatus !== 'approved') {
+    const stored = (await readCollection<any>('events')).find((e: any) => e.id === item.id);
+    if (!stored) {
+      // never trust an approvalStatus the browser put on a NEW record ("approved" would skip sign-off entirely)
       const gate = await gateEventAction(actor, 'CREATE');
       if (!gate.allowed) {
         return NextResponse.json({ error: "You don't have permission to create events." }, { status: 403 });
       }
-      if (gate.requiresApproval) {
-        item.approvalStatus = 'pending_create';
-        item.approverType = gate.approverType;
-        item.approverMemberId = gate.approverMemberId;
-        item.approverPolicyTagId = gate.approverPolicyTagId;
-        item.approvalPolicyName = gate.policyName;
-        item.submittedBy = actor.name;
-        item.submittedByEmail = actor.email;
+      if (gate.requiresApproval) stampPendingCreate(item, gate, actor);
+    } else {
+      // POST with an existing id replaces the record. It can neither decide a pending item (that is PATCH + approver
+      // check) nor dodge the edit gate, so approval bookkeeping is taken from the stored record and any content change
+      // is run through the same edit gate as PATCH.
+      const bookkeeping = ['approvalStatus', 'pendingChange', 'submittedBy', 'submittedByEmail', 'approverType', 'approverMemberId', 'approverPolicyTagId', 'approvalPolicyName', 'approverName', 'decidedBy', 'decidedAt', 'rejectionReason'];
+      const ignore = new Set([...bookkeeping, 'committees']);
+      const keys = changedKeys(stored, item, ignore);
+      for (const k of bookkeeping) { if (k in stored) item[k] = stored[k]; else delete item[k]; }
+      if (keys.length > 0 && !isPendingState(stored.approvalStatus)) {
+        const gate = await gateEventAction(actor, 'EDIT');
+        if (!gate.allowed) return NextResponse.json({ error: "You don't have permission to edit events." }, { status: 403 });
+        if (gate.requiresApproval) {
+          const upd: Record<string, any> = {};
+          for (const k of keys) upd[k] = item[k];
+          holdEditForApproval(stored, upd, keys, gate, actor);
+          const base = { ...stored };
+          for (const k of Object.keys(item)) delete item[k];
+          Object.assign(item, base, upd);
+        }
       }
     }
     let previous: any = null;

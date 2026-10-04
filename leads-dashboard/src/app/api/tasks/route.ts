@@ -4,6 +4,7 @@ import { enqueueTaskEmailNotification, resolveTaskEmailRecipients } from '@/lib/
 import { fanOutAutoApproval, resolveCustomApprovalPanel } from '@/lib/approval-sync';
 import { requireSession } from '@/lib/session';
 import { apiError } from '@/lib/api-error';
+import { gateTaskAction, taskEditKeys, holdEditForApproval, stampPendingCreate, isSystemTask, isPendingState } from '@/lib/approval-gate';
 
 const PENDING_APPROVAL_MESSAGE: Record<string, string> = {
   pending_create: 'This task needs sign-off from the Centre Head, Advisor, or GG Campus Events Head before it is allotted.',
@@ -26,8 +27,32 @@ export async function POST(request: Request) {
     // approverType computed by the client) when the actor isn't fully
     // trusted — see the fan-out block below — so the gate here is just
     // "must be a real signed-in member," not a hard canCreateTask check.
-    await requireSession(request);
+    const actor = await requireSession(request);
     const item = await request.json();
+    // Chain of command: decided on the server from the stored Group Policies, not from the flags the browser sent.
+    const stored = (await readCollection<any>('tasks')).find((t: any) => t.id === item.id);
+    if (!stored) {
+      if (!isSystemTask(item)) {
+        const gate = await gateTaskAction(actor, 'CREATE');
+        if (gate.requiresApproval) stampPendingCreate(item, gate, actor);
+      }
+    } else {
+      // POST with an existing id replaces the record: it cannot decide a pending task, and content changes go through the edit gate
+      const bookkeeping = ['approvalStatus', 'pendingChange', 'submittedBy', 'submittedByEmail', 'approverType', 'approverMemberId', 'approverPolicyTagId', 'approvalPolicyName', 'approverName', 'decidedBy', 'decidedAt', 'rejectionReason'];
+      const keys = taskEditKeys(item).filter((k) => JSON.stringify(stored[k]) !== JSON.stringify(item[k]));
+      for (const k of bookkeeping) { if (k in stored) item[k] = stored[k]; else delete item[k]; }
+      if (keys.length > 0 && !isPendingState(stored.approvalStatus)) {
+        const gate = await gateTaskAction(actor, 'EDIT');
+        if (gate.requiresApproval) {
+          const upd: Record<string, any> = {};
+          for (const k of keys) upd[k] = item[k];
+          holdEditForApproval(stored, upd, keys, gate, actor);
+          const base = { ...stored };
+          for (const k of Object.keys(item)) delete item[k];
+          Object.assign(item, base, upd);
+        }
+      }
+    }
     const updated = await mutateCollection('tasks', (current) => {
       const idx = current.findIndex((t: any) => t.id === item.id);
       if (idx >= 0) {
