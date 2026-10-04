@@ -1132,6 +1132,10 @@ export interface PublicFormItem {
   headerImageUrl?: string;
   /** Optional picture used instead of the standard animated background on the public form only. */
   backgroundImageUrl?: string;
+  /** Blur applied to the background picture, in px (0 = sharp). */
+  backgroundBlur?: number;
+  /** How much the background picture is darkened, 0-80 (%). */
+  backgroundDim?: number;
   fields: FormField[];
   committee: string;
   createdBy: string;

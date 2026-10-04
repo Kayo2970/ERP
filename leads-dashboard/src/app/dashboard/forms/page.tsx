@@ -211,6 +211,8 @@ export default function FormsBuilderPage() {
   const [headerText, setHeaderText] = useState('');
   const [headerImageUrl, setHeaderImageUrl] = useState('');
   const [backgroundImageUrl, setBackgroundImageUrl] = useState('');
+  const [backgroundBlur, setBackgroundBlur] = useState(0);
+  const [backgroundDim, setBackgroundDim] = useState(10);
   const [committee, setCommittee] = useState('Senior Student Leadership');
   const [eventId, setEventId] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
@@ -276,6 +278,8 @@ export default function FormsBuilderPage() {
     setHeaderText('');
     setHeaderImageUrl('');
     setBackgroundImageUrl('');
+    setBackgroundBlur(0);
+    setBackgroundDim(10);
     setCommittee(user?.committee === 'All Committees' ? 'Senior Student Leadership' : user?.committee || 'Senior Student Leadership');
     setEventId('');
     setSelectedTemplateId('');
@@ -295,6 +299,8 @@ export default function FormsBuilderPage() {
     setHeaderText(form.headerText || '');
     setHeaderImageUrl(form.headerImageUrl || '');
     setBackgroundImageUrl(form.backgroundImageUrl || '');
+    setBackgroundBlur(form.backgroundBlur ?? 0);
+    setBackgroundDim(form.backgroundDim ?? 10);
     setCommittee(form.committee);
     setEventId(form.eventId || '');
     setSelectedTemplateId('');
@@ -452,6 +458,8 @@ export default function FormsBuilderPage() {
         headerText: headerText.trim() || undefined,
         headerImageUrl: headerImageUrl || undefined,
         backgroundImageUrl: backgroundImageUrl || undefined,
+        backgroundBlur: backgroundImageUrl ? backgroundBlur : undefined,
+        backgroundDim: backgroundImageUrl ? backgroundDim : undefined,
         committee,
         fields,
         eventId: eventId || undefined,
@@ -483,6 +491,8 @@ export default function FormsBuilderPage() {
         headerText: headerText.trim() || undefined,
         headerImageUrl: headerImageUrl || undefined,
         backgroundImageUrl: backgroundImageUrl || undefined,
+        backgroundBlur: backgroundImageUrl ? backgroundBlur : undefined,
+        backgroundDim: backgroundImageUrl ? backgroundDim : undefined,
         committee,
         fields,
         eventId: eventId || undefined,
@@ -1312,6 +1322,24 @@ export default function FormsBuilderPage() {
 
               <FormImageField label="Header Picture (optional)" hint="Wide banner across the top of the form." kind="header" value={headerImageUrl} onChange={setHeaderImageUrl} />
               <FormImageField label="Background Picture (optional)" hint="Replaces the standard background on this public form only." kind="background" value={backgroundImageUrl} onChange={setBackgroundImageUrl} />
+              {backgroundImageUrl && (
+                <div className="space-y-2 p-3 rounded-xl border border-theme-card-border">
+                  <label className="flex items-center justify-between gap-3 text-theme-text-secondary">
+                    <span className="w-24 shrink-0">Blur: {backgroundBlur}px</span>
+                    <input type="range" min={0} max={20} step={1} value={backgroundBlur} onChange={(e) => setBackgroundBlur(Number(e.target.value))} className="flex-1 accent-accent" />
+                  </label>
+                  <label className="flex items-center justify-between gap-3 text-theme-text-secondary">
+                    <span className="w-24 shrink-0">Darken: {backgroundDim}%</span>
+                    <input type="range" min={0} max={80} step={5} value={backgroundDim} onChange={(e) => setBackgroundDim(Number(e.target.value))} className="flex-1 accent-accent" />
+                  </label>
+                  <div className="relative h-24 rounded-lg overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={backgroundImageUrl} alt="" className="h-full w-full object-cover scale-110" style={{ filter: `blur(${backgroundBlur}px)` }} />
+                    <div className="absolute inset-0 bg-black" style={{ opacity: backgroundDim / 100 }} />
+                    <span className="absolute inset-0 flex items-center justify-center text-[11px] font-semibold text-white drop-shadow">Live preview</span>
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <label className="block font-medium text-theme-text-secondary">Description / Respondent Instructions</label>
