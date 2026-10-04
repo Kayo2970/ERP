@@ -1103,6 +1103,8 @@ export interface FormField {
   defaultValue?: string | string[] | boolean;
   /** Take the default from the linked event instead of a typed value (text-like fields only). */
   defaultSource?: 'event_name' | 'event_date' | 'event_venue';
+  /** Show the default to respondents but don't let them change it (only applies when the default resolves to something). */
+  lockDefault?: boolean;
 }
 
 export interface FormEventInfo {
