@@ -35,7 +35,7 @@ import {
 } from '@/lib/local-data';
 import { EventPassKeycard } from './event-pass-keycard';
 import { AppleWalletPassPreview } from './apple-wallet-pass-preview';
-import { EventTitleToggle, PassColorControls, PassFontControls, PassQrControls, PassSection, PassTextColorControls, PassValidityPicker } from './pass-design-controls';
+import { CardArtworkToggle, EventTitleToggle, PassColorControls, PassFontControls, PassQrControls, PassSection, PassTextColorControls, PassValidityPicker } from './pass-design-controls';
 
 interface EventPassEditModalProps {
   isOpen: boolean;
@@ -100,6 +100,7 @@ export function EventPassEditModal({
   const [fontScale, setFontScale] = useState(1);
   const [showEventTitle, setShowEventTitle] = useState<boolean | undefined>(undefined);
   const [showPortalTitle, setShowPortalTitle] = useState<boolean | undefined>(undefined);
+  const [showCardArtwork, setShowCardArtwork] = useState<boolean | undefined>(undefined);
   const [qr, setQr] = useState<PassQrOptions>(DEFAULT_QR_OPTIONS);
   const patchQr = (patch: Partial<PassQrOptions>) => setQr((q) => ({ ...q, ...patch }));
   const [previewMode, setPreviewMode] = useState<'pass' | 'wallet'>('pass');
@@ -143,6 +144,7 @@ export function EventPassEditModal({
       setFontScale(pass.fontScale || 1);
       setShowEventTitle(pass.showEventTitle);
       setShowPortalTitle(pass.showPortalTitle);
+      setShowCardArtwork(pass.showCardArtwork);
       setQr(qrOptionsFromPass(pass));
       setOpen({ details: true });
       setEventId(pass.eventId);
@@ -249,6 +251,7 @@ export function EventPassEditModal({
           fontScale: fontScale !== 1 ? fontScale : undefined,
           showEventTitle,
           showPortalTitle,
+          showCardArtwork,
           ...qrFieldsFromOptions(qr),
           validDays: effectiveValidDays.length > 0 ? effectiveValidDays : undefined,
           validityDate: displayValidity,
@@ -687,6 +690,7 @@ export function EventPassEditModal({
                 labelColor: labelColor || undefined,
                 fontScale,
                 showPortalTitle,
+                showCardArtwork,
                 qrDark: qr.dark,
                 qrLight: qr.light,
                 qrEyeColor: qr.eye || undefined,
@@ -724,7 +728,10 @@ export function EventPassEditModal({
               />
             )}
             {previewMode === 'pass' && (
+              <div className="space-y-2">
+              <CardArtworkToggle value={showCardArtwork} onChange={setShowCardArtwork} hasArtwork={!!theme?.backgroundUrl} />
               <EventTitleToggle target="portal" value={showPortalTitle} onChange={(v) => { setShowPortalTitle(v); setPreviewMode('pass'); }} eventDefault={theme?.showPortalTitle} />
+              </div>
             )}
             {previewMode === 'wallet' && (
               <EventTitleToggle value={showEventTitle} onChange={(v) => { setShowEventTitle(v); setPreviewMode('wallet'); }} eventDefault={theme?.showEventTitle} />

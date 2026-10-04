@@ -394,6 +394,33 @@ export function EventTitleToggle({
 }
 
 /** Text size of the designed artwork (wallet poster, emailed ticket, portal card) and whether the poster prints the event title. */
+/** On/off for the event artwork on the portal card — off lets the pass's own colours/gradient show while designing. */
+export function CardArtworkToggle({ value, onChange, hasArtwork }: { value: boolean | undefined; onChange: (v: boolean | undefined) => void; hasArtwork: boolean }) {
+  const on = value !== false;
+  return (
+    <div className="rounded-xl border border-slate-200 dark:border-white/10 p-3">
+      <label className="flex items-center justify-between gap-3 cursor-pointer">
+        <span className="min-w-0">
+          <span className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-200">Event artwork on the card</span>
+          <span className="block text-[10.5px] text-slate-500 mt-0.5">
+            {hasArtwork
+              ? on ? 'On — the event picture covers the card, so colour changes are hidden. Switch off to see your colours.' : 'Off — the card uses the colours / gradient chosen here.'
+              : 'This event has no artwork, so the card already uses your colours.'}
+          </span>
+        </span>
+        <input
+          type="checkbox"
+          checked={on}
+          disabled={!hasArtwork}
+          onChange={(e) => onChange(e.target.checked ? undefined : false)}
+          className="h-5 w-5 accent-sky-500 shrink-0"
+          aria-label="Show event artwork on the card"
+        />
+      </label>
+    </div>
+  );
+}
+
 export function PassFontControls({
   fontScale, setFontScale, showEventTitle, setShowEventTitle, eventDefault, showPortalTitle, setShowPortalTitle, portalDefault,
 }: {
