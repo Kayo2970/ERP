@@ -1126,6 +1126,8 @@ export interface PublicFormItem {
   slug: string;
   title: string;
   description: string;
+  /** Optional banner line shown at the top of the public form. */
+  headerText?: string;
   fields: FormField[];
   committee: string;
   createdBy: string;
