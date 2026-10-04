@@ -47,7 +47,7 @@ import { AppleWalletPassPreview } from './apple-wallet-pass-preview';
 import { EventPassBulkModal } from './event-pass-bulk-modal';
 import { PassThemeEditor } from './pass-theme-editor';
 import { EventPassKeycard } from './event-pass-keycard';
-import { EventTitleToggle, PassFontControls, PassQrControls, PassSection, PassColorControls, PassTextColorControls, PassValidityPicker, PASS_COLOR_PRESETS, PASS_GRADIENT_PRESETS } from './pass-design-controls';
+import { CardArtworkToggle, EventTitleToggle, PassFontControls, PassQrControls, PassSection, PassColorControls, PassTextColorControls, PassValidityPicker, PASS_COLOR_PRESETS, PASS_GRADIENT_PRESETS } from './pass-design-controls';
 
 export { PASS_COLOR_PRESETS, PASS_GRADIENT_PRESETS };
 import { EventPassEmailModal } from './event-pass-email-modal';
@@ -189,6 +189,7 @@ export function EventPassStudio({
   const [fontScale, setFontScale] = useState(1);
   const [showEventTitle, setShowEventTitle] = useState<boolean | undefined>(undefined);
   const [showPortalTitle, setShowPortalTitle] = useState<boolean | undefined>(undefined);
+  const [showCardArtwork, setShowCardArtwork] = useState<boolean | undefined>(undefined);
   const [qr, setQr] = useState<PassQrOptions>(DEFAULT_QR_OPTIONS);
   const patchQr = (patch: Partial<PassQrOptions>) => setQr((q) => ({ ...q, ...patch }));
 
@@ -325,6 +326,7 @@ export function EventPassStudio({
         fontScale: fontScale !== 1 ? fontScale : undefined,
         showEventTitle,
         showPortalTitle,
+        showCardArtwork,
         ...qrFieldsFromOptions(qr),
         notes: notes.trim() || undefined,
         issuedBy: currentUserName,
@@ -905,6 +907,7 @@ export function EventPassStudio({
                   labelColor: labelColor || undefined,
                   fontScale,
                   showPortalTitle,
+                  showCardArtwork,
                   qrDark: qr.dark,
                   qrLight: qr.light,
                   qrEyeColor: qr.eye || undefined,
@@ -919,7 +922,8 @@ export function EventPassStudio({
               <p className="text-[10.5px] text-slate-500 text-center max-w-[360px]">
                 This is the exact pass your recipient opens — folder, card and back. Tap the card to flip it; use Replay to see the opening animation.
               </p>
-              <div className="w-full max-w-[360px]">
+              <div className="w-full max-w-[360px] space-y-2">
+                <CardArtworkToggle value={showCardArtwork} onChange={setShowCardArtwork} hasArtwork={!!activeTheme?.backgroundUrl} />
                 <EventTitleToggle target="portal" value={showPortalTitle} onChange={(v) => { setShowPortalTitle(v); setPreviewMode('luxury'); }} eventDefault={activeTheme?.showPortalTitle} />
               </div>
             </div>

@@ -7,7 +7,7 @@ import { EventPassItem, PassTheme, formatValidDaysLabel, getPassValidDays } from
 export type KeycardPass = Pick<EventPassItem, 'attendeeName' | 'passType' | 'serialNumber'> &
   Partial<Pick<EventPassItem,
     'eventName' | 'eventDate' | 'eventVenue' | 'guestCategory' | 'roomOrVenue' | 'attendeeOrg' | 'validityDate' |
-    'validDays' | 'passColor' | 'passGradient' | 'textColor' | 'labelColor' | 'fontScale' | 'showPortalTitle' | 'qrDark' | 'qrLight' | 'qrEyeColor' | 'qrShape' | 'qrLogo'>>;
+    'validDays' | 'passColor' | 'passGradient' | 'textColor' | 'labelColor' | 'fontScale' | 'showPortalTitle' | 'showCardArtwork' | 'qrDark' | 'qrLight' | 'qrEyeColor' | 'qrShape' | 'qrLogo'>>;
 
 /**
  * THE issued pass design. Used by the public /pass/<serial> page, the Studio's live preview and the Edit Pass
@@ -55,6 +55,8 @@ export function EventPassKeycard({
       qrLogo={pass.qrLogo !== false}
       theme={{
         ...(theme || {}),
+        // artwork off: drop the picture so the pass's own colours/gradient show
+        ...(pass.showCardArtwork === false ? { backgroundUrl: undefined } : {}),
         ...(pass.textColor ? { foregroundColor: pass.textColor } : {}),
         ...(pass.labelColor ? { labelColor: pass.labelColor } : {}),
       }}

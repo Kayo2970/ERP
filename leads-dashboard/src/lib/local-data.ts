@@ -525,6 +525,8 @@ export interface EventPassItem {
   showEventTitle?: boolean;
   /** Same idea for the portal 3D card: show (default) or hide the event title on its front. Pass overrides event. */
   showPortalTitle?: boolean;
+  /** false = paint the portal card with the pass colours/gradient instead of the event artwork (unset = artwork shown). */
+  showCardArtwork?: boolean;
   /** QR customisation: wallet barcode format, caption under it, and QR colours on the portal card / ticket. */
   qrFormat?: PassBarcodeFormat;
   qrAltText?: 'serial' | 'name' | 'none';
