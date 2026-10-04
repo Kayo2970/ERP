@@ -1113,6 +1113,11 @@ export interface FormEventInfo {
   venue?: string;
 }
 
+/** A pre-filled answer is locked (read-only for respondents) unless the builder explicitly turned the lock off. */
+export function hasLockedDefault(field: FormField): boolean {
+  return field.lockDefault !== false && (field.defaultValue !== undefined || field.defaultSource !== undefined);
+}
+
 /** The value a public form should start this field with (typed default or the linked event's detail). */
 export function resolveFieldDefault(field: FormField, event?: FormEventInfo | null): string | string[] | boolean | undefined {
   if (field.defaultSource) {
@@ -1521,12 +1526,9 @@ export const initialFormTemplates: FormTemplateItem[] = [
     createdAt: '2026-01-01',
     fields: [
       { id: 'f_event_name', label: 'Name of Event', type: 'text', required: true },
-      // The original Word form gives this question its own tick-box per
-      // option (☐ MDP ☐ FDP ☐ Workshop ...), not a single-choice dropdown —
-      // an event can legitimately be tagged as more than one type at once
-      // (e.g. a Workshop that's also a Guest Lecture), so this is a
-      // multiselect (choose one or more), matching the source document.
-      { id: 'f_event_type', label: 'Type of Event', type: 'multiselect', options: ['MDP', 'FDP', 'Workshop', 'Guest Lecture', 'Seminar/Conference', 'Other'], required: true },
+      // An event has exactly one type, so this is a single choice (the Word copy
+      // still ticks the matching box — see 'eventtype' in lib/docx-fill.ts).
+      { id: 'f_event_type', label: 'Type of Event', type: 'select', options: ['MDP', 'FDP', 'Workshop', 'Guest Lecture', 'Seminar/Conference', 'Other'], required: true },
       { id: 'f_date', label: 'Date', type: 'text', required: true },
       { id: 'f_duration', label: 'Duration', type: 'text', required: true },
       { id: 'f_resource_persons', label: 'Resource Person(s)', type: 'text', required: true },

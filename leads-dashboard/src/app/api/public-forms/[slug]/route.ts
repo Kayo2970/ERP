@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { readCollection } from '@/lib/server-db';
 import { apiError } from '@/lib/api-error';
-import { formatEventDateRange } from '@/lib/local-data';
+import { getFormEventInfo } from '@/lib/public-form';
 
 /**
  * Deliberately unauthenticated — this is what src/app/forms/[slug]/page.tsx
@@ -33,22 +33,18 @@ export async function GET(
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    const { id, slug: formSlug, title, description, fields, eventName, sourceTemplateId } = match;
+    const {
+      id, slug: formSlug, title, description, fields, eventName, sourceTemplateId,
+      headerText, headerImageUrl, headerPosX, headerPosY, headerZoom, headerHeight,
+      backgroundImageUrl, backgroundBlur, backgroundDim,
+    } = match;
 
-    // Live details of the linked event (so "default = the event's name/date/venue" follows renames/reschedules)
-    let eventInfo: { name?: string; date?: string; venue?: string } | undefined;
-    if (match.eventId) {
-      const events = await readCollection<any>('events');
-      const ev = events.find((e: any) => e.id === match.eventId);
-      if (ev) {
-        eventInfo = {
-          name: ev.title,
-          date: ev.datesTBD ? undefined : formatEventDateRange(ev),
-          venue: ev.location || undefined,
-        };
-      }
-    }
-    return NextResponse.json({ id, slug: formSlug, title, description, fields, eventName, sourceTemplateId, eventInfo });
+    const eventInfo = await getFormEventInfo(match);
+    return NextResponse.json({
+      id, slug: formSlug, title, description, fields, eventName, sourceTemplateId, eventInfo,
+      headerText, headerImageUrl, headerPosX, headerPosY, headerZoom, headerHeight,
+      backgroundImageUrl, backgroundBlur, backgroundDim,
+    });
   } catch (err: any) {
     return apiError(err, 'public-forms-slug-api-get', 500);
   }
