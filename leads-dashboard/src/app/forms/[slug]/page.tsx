@@ -14,6 +14,8 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
 
   const [form, setForm] = useState<PublicFormItem | null>(null);
   const [formData, setFormData] = useState<Record<string, any>>({});
+  // Fields whose pre-filled answer is locked (shown, but the respondent can't change it)
+  const [lockedIds, setLockedIds] = useState<Set<string>>(new Set());
   const [honeypot, setHoneypot] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState(false);
@@ -68,13 +70,18 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
       }
       if (!eventInfo && matchedForm.eventName) eventInfo = { name: matchedForm.eventName };
       const initialData: Record<string, any> = {};
+      const locked = new Set<string>();
       matchedForm.fields.forEach(f => {
         const def = resolveFieldDefault(f, eventInfo);
         if (f.type === 'multiselect') initialData[f.id] = Array.isArray(def) ? def : [];
         else if (f.type === 'checkbox') initialData[f.id] = def === true;
         else initialData[f.id] = def === undefined || def === null || Array.isArray(def) || typeof def === 'boolean' ? '' : String(def);
+        // Only lock when there is actually something filled in, so nobody gets stuck on an empty locked field
+        const v = initialData[f.id];
+        if (f.lockDefault && (f.type === 'checkbox' ? v === true : Array.isArray(v) ? v.length > 0 : v !== '')) locked.add(f.id);
       });
       setFormData(initialData);
+      setLockedIds(locked);
       setLoading(false);
     };
 
@@ -320,14 +327,18 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
               aria-hidden="true"
             />
 
-            {form?.fields.map((field) => (
+            {form?.fields.map((field) => {
+              const locked = lockedIds.has(field.id);
+              const lockedCls = locked ? ' opacity-80 cursor-not-allowed' : '';
+              return (
               <div key={field.id} className="space-y-1.5">
                 <label className="block font-semibold text-theme-text-primary">
                   {field.label} {field.required && <span className="text-danger">*</span>}
+                  {locked && <span className="ml-1.5 text-[10px] font-medium text-theme-text-secondary">🔒 pre-filled</span>}
                 </label>
 
                 {field.type === 'scale' ? (
-                  <div className="space-y-1">
+                  <div className={`space-y-1${lockedCls}`}>
                     <div className="flex items-center gap-2" role="radiogroup" aria-label={field.label}>
                       {[1, 2, 3, 4, 5].map(n => (
                         <label
@@ -344,6 +355,7 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
                             value={n}
                             required={field.required}
                             checked={Number(formData[field.id]) === n}
+                            disabled={locked}
                             onChange={() => handleInputChange(field.id, n)}
                             className="sr-only"
                           />
@@ -362,15 +374,17 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
                     value={formData[field.id] || ''}
                     onChange={(e) => handleInputChange(field.id, e.target.value)}
                     rows={3}
+                    readOnly={locked}
                     placeholder="Enter your response..."
-                    className="w-full px-4 py-3 bg-theme-background/60 border border-theme-border/60 rounded-xl text-theme-text-primary placeholder:text-theme-text-secondary/60 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all text-xs"
+                    className={`w-full px-4 py-3 bg-theme-background/60 border border-theme-border/60 rounded-xl text-theme-text-primary placeholder:text-theme-text-secondary/60 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all text-xs${lockedCls}`}
                   />
                 ) : field.type === 'select' && field.options ? (
                   <select
                     required={field.required}
                     value={formData[field.id] || ''}
+                    disabled={locked}
                     onChange={(e) => handleInputChange(field.id, e.target.value)}
-                    className="w-full px-4 py-3 bg-theme-background/60 border border-theme-border/60 rounded-xl text-theme-text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all text-xs"
+                    className={`w-full px-4 py-3 bg-theme-background/60 border border-theme-border/60 rounded-xl text-theme-text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all text-xs${lockedCls}`}
                   >
                     <option value="">Select an option...</option>
                     {field.options.map(opt => (
@@ -382,6 +396,7 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
                     <input
                       type="checkbox"
                       checked={Boolean(formData[field.id])}
+                      disabled={locked}
                       onChange={(e) => handleInputChange(field.id, e.target.checked)}
                       className="h-4 w-4 rounded border-theme-border/80 bg-theme-background text-accent focus:ring-accent"
                     />
@@ -404,6 +419,7 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
                           <input
                             type="checkbox"
                             checked={checked}
+                            disabled={locked}
                             onChange={() => handleMultiselectToggle(field.id, opt)}
                             className="h-4 w-4 rounded border-theme-border/80 bg-theme-background text-accent focus:ring-accent"
                           />
@@ -417,13 +433,15 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
                     type={field.type === 'email' ? 'email' : field.type === 'number' ? 'number' : 'text'}
                     required={field.required}
                     value={formData[field.id] || ''}
+                    readOnly={locked}
                     onChange={(e) => handleInputChange(field.id, e.target.value)}
                     placeholder={`Enter ${field.label.toLowerCase()}...`}
-                    className="w-full px-4 py-3 bg-theme-background/60 border border-theme-border/60 rounded-xl text-theme-text-primary placeholder:text-theme-text-secondary/60 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all text-xs"
+                    className={`w-full px-4 py-3 bg-theme-background/60 border border-theme-border/60 rounded-xl text-theme-text-primary placeholder:text-theme-text-secondary/60 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all text-xs${lockedCls}`}
                   />
                 )}
               </div>
-            ))}
+              );
+            })}
 
             {submitError && (
               <div className="flex items-center gap-2 px-4 py-3 rounded-xl border border-danger/40 bg-danger/10 text-danger text-xs">
