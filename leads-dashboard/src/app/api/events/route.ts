@@ -4,6 +4,7 @@ import { dispatchCommitteeRosterEmails } from '@/lib/committee-roster-email';
 import { fanOutAutoApproval, resolveCustomApprovalPanel } from '@/lib/approval-sync';
 import { requireSession } from '@/lib/session';
 import { apiError } from '@/lib/api-error';
+import { gateEventAction } from '@/lib/approval-gate';
 
 const PENDING_APPROVAL_MESSAGE: Record<string, string> = {
   pending_create: 'This event was created and needs sign-off from the Centre Head, Advisor, or GG Campus Events Head before it goes live.',
@@ -64,8 +65,26 @@ export async function POST(request: Request) {
     // approverType computed by the client) when the actor isn't fully
     // trusted — see the fan-out block below — so the gate here is just
     // "must be a real signed-in member," not a hard canCreateEvent check.
-    await requireSession(request);
+    const actor = await requireSession(request);
     const item = await request.json();
+    // Chain of command: whether this creation needs sign-off is decided HERE from the stored Group Policies — not from
+    // the approvalStatus the browser chose to send (a stale policy cache used to let creations go straight through).
+    const exists = (await readCollection<any>('events')).some((e: any) => e.id === item.id);
+    if (!exists && item.approvalStatus !== 'approved') {
+      const gate = await gateEventAction(actor, 'CREATE');
+      if (!gate.allowed) {
+        return NextResponse.json({ error: "You don't have permission to create events." }, { status: 403 });
+      }
+      if (gate.requiresApproval) {
+        item.approvalStatus = 'pending_create';
+        item.approverType = gate.approverType;
+        item.approverMemberId = gate.approverMemberId;
+        item.approverPolicyTagId = gate.approverPolicyTagId;
+        item.approvalPolicyName = gate.policyName;
+        item.submittedBy = actor.name;
+        item.submittedByEmail = actor.email;
+      }
+    }
     let previous: any = null;
     const updated = await mutateCollection('events', (current) => {
       const idx = current.findIndex((e: any) => e.id === item.id);

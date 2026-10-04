@@ -104,7 +104,8 @@ export function EventPassEditModal({
   const patchQr = (patch: Partial<PassQrOptions>) => setQr((q) => ({ ...q, ...patch }));
   const [previewMode, setPreviewMode] = useState<'pass' | 'wallet'>('pass');
   const [open, setOpen] = useState<Record<string, boolean>>({ details: true });
-  const toggle = (k: string) => setOpen((o) => ({ ...o, [k]: !o[k] }));
+  // Accordion: opening a section closes the others so the form never grows too tall
+  const toggle = (k: string) => setOpen((o) => ({ [k]: !o[k] }));
   const [notes, setNotes] = useState('');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -220,7 +221,7 @@ export function EventPassEditModal({
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(attendeeEmail.trim())) {
-      setOpen((o) => ({ ...o, details: true }));
+      setOpen({ details: true });
       setErrorMsg('A valid email address is required — the pass is sent there.');
       return;
     }

@@ -24,7 +24,8 @@ import {
   ChevronRight,
   Sparkles,
   LayoutTemplate,
-  History
+  History,
+  Ticket
 } from 'lucide-react';
 import {
   getApprovalRequests,
@@ -58,6 +59,7 @@ import {
   Member,
 } from '@/lib/local-data';
 import { isEventsHeadGgCampus } from '@/lib/permissions';
+import { reconcilePassesFromServer } from '@/lib/local-data';
 import { EmptyState } from '@/components/ui/empty-state';
 
 type Tab = 'inbox' | 'sent' | 'decided';
@@ -69,6 +71,7 @@ const entityIcon = (type: ApprovalRequest['entityType']) => {
   if (type === 'event-report') return FileText;
   if (type === 'announcement') return Megaphone;
   if (type === 'form') return LayoutTemplate;
+  if (type === 'event-pass') return Ticket;
   return Users;
 };
 
@@ -80,6 +83,7 @@ const entityLink = (req: ApprovalRequest) => {
   if (req.entityType === 'event-report') return '/dashboard/event-reports';
   if (req.entityType === 'announcement') return '/dashboard/announcements';
   if (req.entityType === 'form') return '/dashboard/forms';
+  if (req.entityType === 'event-pass') return '/dashboard/event-passes';
   return req.eventId ? `/dashboard/events/${req.eventId}` : '/dashboard/events';
 };
 
@@ -222,7 +226,7 @@ export default function ApprovalsPage() {
   const list = tab === 'inbox' ? pendingInbox : tab === 'decided' ? decidedInbox : sentRequests;
   const pendingInboxCount = pendingInbox.length;
 
-  const directlyResolvable = (type: ApprovalRequest['entityType']) => type === 'task' || type === 'event' || type === 'announcement' || type === 'form' || type === 'event-report';
+  const directlyResolvable = (type: ApprovalRequest['entityType']) => type === 'task' || type === 'event' || type === 'announcement' || type === 'form' || type === 'event-report' || type === 'event-pass';
 
   const handleDecide = (id: string, decision: 'approved' | 'rejected', note?: string) => {
     const req = requests.find(r => r.id === id);
@@ -243,6 +247,10 @@ export default function ApprovalsPage() {
       }
     }
     decideApprovalRequest(id, decision, actorName, note);
+    // Event-pass requests are carried out (or discarded) by the server when it records the decision
+    if (req?.entityType === 'event-pass') {
+      setTimeout(() => { reconcilePassesFromServer(); }, 1500);
+    }
 
     setDecisionNoteFor(null);
     setDecisionNoteInput('');

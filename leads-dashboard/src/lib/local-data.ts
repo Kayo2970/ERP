@@ -541,6 +541,18 @@ export interface EventPassItem {
   walletGoogleSaveUrl?: string;
   /** Serial assigned by WalletWallet when the wallet pass was created (used for live updates / revoke). */
   walletSerialNumber?: string;
+  /**
+   * Group Policy approval gate (same pattern as events): a pass created / edited / deleted by someone whose access comes
+   * only from a policy that requires approval stays in a pending state until the designated approver signs off.
+   * Enforced on the SERVER (lib/approval-gate.ts), not just in the browser.
+   */
+  approvalStatus?: 'pending_create' | 'pending_edit' | 'pending_delete';
+  /** Staged edit awaiting approval (applied on approval). */
+  pendingChanges?: Record<string, unknown>;
+  submittedBy?: string;
+  submittedByEmail?: string;
+  approvalPolicyName?: string;
+  approverName?: string;
   /** First time the Apple/Google pass was served to a guest (after that, edits are pushed in place instead of re-issuing). */
   walletInstalledAt?: string;
   /** Edited after the wallet pass was created but before any guest took it: rebuilt on the next Add. */
@@ -843,9 +855,12 @@ export interface EventReportItem {
  */
 export interface ApprovalRequest {
   id: string;
-  entityType: 'task' | 'committee' | 'event' | 'member' | 'design' | 'event-report' | 'announcement' | 'procurement' | 'form';
+  entityType: 'task' | 'committee' | 'event' | 'member' | 'design' | 'event-report' | 'announcement' | 'procurement' | 'form' | 'event-pass';
   entityId: string;
   entityTitle: string;
+  /** For 'event-pass' requests: what the requester wants to do (issue / edit / delete / dispatch) and the data needed to carry it out once approved. */
+  action?: 'issue' | 'edit' | 'delete' | 'dispatch' | 'reissue';
+  payload?: Record<string, unknown>;
   // Set for 'task' (its parent event, if any) and 'committee' (its owning
   // event) so the UI can deep-link back to where the item actually lives.
   eventId?: string;
@@ -3012,6 +3027,28 @@ export function saveEventPasses(passes: EventPassItem[]): void {
   }
 }
 
+/** Pull the server's copy of every pass (it owns approval state) and tell open screens to re-render. */
+export async function reconcilePassesFromServer(): Promise<void> {
+  if (typeof window === 'undefined') return;
+  try {
+    const res = await fetch('/api/events/all/passes', { headers: authHeaders() });
+    if (!res.ok) return;
+    const rows = await res.json();
+    if (Array.isArray(rows)) {
+      saveEventPasses(rows);
+      window.dispatchEvent(new Event('leads-data-sync'));
+    }
+  } catch {
+    /* offline — keep the local copy */
+  }
+}
+
+/** Surface the outcome of the server-side approval gate (held for approval / refused) to whichever screen is open. */
+export function notifyPassApproval(message: string, kind: 'pending' | 'error'): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('leads-pass-approval', { detail: { message, kind } }));
+}
+
 export function addEventPass(
   passData: Omit<EventPassItem, 'id' | 'serialNumber' | 'issuedAt' | 'status' | 'qrPayload'>
 ): EventPassItem {
@@ -3050,7 +3087,21 @@ export function addEventPass(
     method: 'POST',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(newPass),
-  }).catch((err) => console.warn('Failed to sync event pass creation with server:', err));
+  })
+    .then(async (res) => {
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        await reconcilePassesFromServer();
+        notifyPassApproval(data.error || 'The pass could not be issued.', 'error');
+        return;
+      }
+      const saved = await res.json().catch(() => null);
+      if (saved?.approvalStatus === 'pending_create') {
+        await reconcilePassesFromServer();
+        notifyPassApproval(`Pass for ${saved.attendeeName} is waiting for approval${saved.approverName ? ` from ${saved.approverName}` : ''}. It is not active until approved.`, 'pending');
+      }
+    })
+    .catch((err) => console.warn('Failed to sync event pass creation with server:', err));
 
   logAuditEvent(
     'EVENT_PASS_ISSUED' as any,
@@ -3128,7 +3179,18 @@ export function deleteEventPass(passId: string, actorName: string = 'Staff'): bo
   fetch(`/api/events/${target.eventId}/passes/${target.id}`, {
     method: 'DELETE',
     headers: authHeaders(),
-  }).catch((err) => console.warn('Failed to sync event pass deletion with server:', err));
+  })
+    .then(async (res) => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        await reconcilePassesFromServer();
+        notifyPassApproval(data.error || 'The pass could not be deleted.', 'error');
+      } else if (data.approvalPending) {
+        await reconcilePassesFromServer();
+        notifyPassApproval(`Deleting ${target.attendeeName}'s pass is waiting for approval. The pass stays active until it is approved.`, 'pending');
+      }
+    })
+    .catch((err) => console.warn('Failed to sync event pass deletion with server:', err));
 
   logAuditEvent(
     'EVENT_PASS_DELETED' as any,
@@ -3143,7 +3205,7 @@ export async function updateEventPass(
   passId: string,
   updates: Partial<EventPassItem>,
   actorName: string
-): Promise<{ pass: EventPassItem; walletUpdated?: boolean; walletAction?: 'none' | 'queued' | 'updated'; walletError?: string } | null> {
+): Promise<{ pass: EventPassItem; walletUpdated?: boolean; walletAction?: 'none' | 'queued' | 'updated'; walletError?: string; approvalPending?: boolean; refused?: string } | null> {
   const passes = getEventPasses();
   const idx = passes.findIndex((p) => p.id === passId || p.serialNumber === passId);
   if (idx === -1) return null;
@@ -3176,6 +3238,8 @@ export async function updateEventPass(
   let walletUpdated = false;
   let walletAction: 'none' | 'queued' | 'updated' = 'none';
   let walletError: string | undefined;
+  let approvalPending = false;
+  let refused: string | undefined;
 
   try {
     const res = await fetch(`/api/events/${updated.eventId}/passes`, {
@@ -3187,8 +3251,18 @@ export async function updateEventPass(
         ...Object.fromEntries(Object.entries(updates).map(([k, v]) => [k, v === undefined ? null : v])),
       }),
     });
-    if (res.ok) {
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      refused = data.error || `The change was refused (HTTP ${res.status}).`;
+      await reconcilePassesFromServer();
+      notifyPassApproval(refused as string, 'error');
+    } else {
       const data = await res.json();
+      if (data.approvalPending) {
+        approvalPending = true;
+        await reconcilePassesFromServer();
+        notifyPassApproval(`Your change to ${original.attendeeName}'s pass is waiting for approval${data.approverName ? ` from ${data.approverName}` : ''}. The pass keeps its current design until it is approved.`, 'pending');
+      }
       if (data.walletUpdated) walletUpdated = true;
       if (data.walletAction) walletAction = data.walletAction;
       if (data.walletNotice) walletError = data.walletNotice;
@@ -3204,7 +3278,7 @@ export async function updateEventPass(
     `Updated pass details for "${updated.serialNumber}" (${updated.attendeeName})`
   );
 
-  return { pass: updated, walletUpdated, walletAction, walletError };
+  return { pass: updated, walletUpdated, walletAction, walletError, approvalPending, refused };
 }
 
 
@@ -3312,7 +3386,7 @@ export async function dispatchPassEmail(
   pass: EventPassItem,
   targetEmail?: string,
   template?: { subjectTemplate?: string; bodyTemplate?: string }
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; pending?: boolean }> {
   const recipient = (targetEmail || pass.attendeeEmail || '').trim();
   if (!recipient) {
     return { success: false, error: 'No recipient email address provided.' };
@@ -3348,6 +3422,12 @@ export async function dispatchPassEmail(
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       return { success: false, error: data.error || `HTTP ${res.status} error during dispatch.` };
+    }
+    const sendData = await res.json().catch(() => ({}));
+    if (sendData?.approvalPending) {
+      // Held for the designated approver — nothing was sent, so don't mark the pass as emailed.
+      notifyPassApproval(`Emailing ${pass.attendeeName}'s pass is waiting for approval. It is sent once the approver accepts.`, 'pending');
+      return { success: true, pending: true } as { success: boolean; error?: string; pending?: boolean };
     }
 
     // Record 'Email Sent' state

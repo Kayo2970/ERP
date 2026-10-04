@@ -184,7 +184,8 @@ export function EventPassStudio({
   const [notes, setNotes] = useState('');
   // Designer drop-downs: only the first group is open by default
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({ details: true });
-  const toggleSection = (k: string) => setOpenSections((o) => ({ ...o, [k]: !o[k] }));
+  // Accordion: opening a section closes the others so the page never grows too tall
+  const toggleSection = (k: string) => setOpenSections((o) => ({ [k]: !o[k] }));
   const [fontScale, setFontScale] = useState(1);
   const [showEventTitle, setShowEventTitle] = useState<boolean | undefined>(undefined);
   const [showPortalTitle, setShowPortalTitle] = useState<boolean | undefined>(undefined);
@@ -290,7 +291,7 @@ export function EventPassStudio({
     e.preventDefault();
     if (!attendeeName.trim()) return;
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(attendeeEmail.trim())) {
-      setOpenSections((o) => ({ ...o, details: true }));
+      setOpenSections({ details: true });
       setSuccessToast('');
       return;
     }

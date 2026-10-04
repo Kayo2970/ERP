@@ -3,6 +3,8 @@ import { mutateCollection, readCollection } from '@/lib/server-db';
 import { requireSession, requirePermission } from '@/lib/session';
 import { getAccessLevelSettingsServer, isCentreHead } from '@/lib/permissions-server';
 import { apiError } from '@/lib/api-error';
+import { applyPassDecision } from '@/lib/event-pass-approvals';
+import { getAppBaseUrl } from '@/lib/app-url';
 
 export async function PATCH(
   request: Request,
@@ -47,6 +49,15 @@ export async function PATCH(
     });
 
     const updatedRecord = updated.find((r: any) => r.id === id);
+
+    // Event-pass requests carry a held-back action: carry it out (or discard it) now, once.
+    if (isDecideAction && existing?.entityType === 'event-pass' && existing.status !== 'approved' && existing.status !== 'rejected') {
+      try {
+        await applyPassDecision(existing, updates.status, actor.name || 'Reviewer', getAppBaseUrl(request));
+      } catch (err) {
+        console.error('[approval-requests] applying event-pass decision failed:', err);
+      }
+    }
 
     if (isDecideAction && existing) {
       try {

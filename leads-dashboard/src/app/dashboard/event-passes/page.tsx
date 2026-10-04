@@ -162,7 +162,17 @@ export default function EventPassesPage() {
       setEventPasses(getEventPasses());
     };
     window.addEventListener('leads-data-sync', handleSync);
-    return () => window.removeEventListener('leads-data-sync', handleSync);
+    // Outcome of the server-side Group Policy approval gate (held for approval / refused)
+    const handleApproval = (e: Event) => {
+      const d = (e as CustomEvent).detail as { message: string; kind: 'pending' | 'error' };
+      if (d?.kind === 'error') triggerError(d.message);
+      else if (d?.message) triggerSuccess(`⏳ ${d.message}`);
+    };
+    window.addEventListener('leads-pass-approval', handleApproval);
+    return () => {
+      window.removeEventListener('leads-data-sync', handleSync);
+      window.removeEventListener('leads-pass-approval', handleApproval);
+    };
   }, []);
 
   const canManagePasses = canManageEventPasses(user);
@@ -194,7 +204,9 @@ export default function EventPassesPage() {
     setDispatchingPassId(pass.id);
     const res = await dispatchPassEmail(pass, email);
     setDispatchingPassId(null);
-    if (res.success) {
+    if (res.success && res.pending) {
+      // the approval notice has already been shown by dispatchPassEmail
+    } else if (res.success) {
       setEventPasses(getEventPasses());
       triggerSuccess(`Pass ${pass.serialNumber} dispatched to ${email}!`);
     } else {
@@ -205,7 +217,7 @@ export default function EventPassesPage() {
   // Batch dispatch to all unsent passes in current filter
   const handleBatchDispatchUnsent = async (filteredList: EventPassItem[]) => {
     const unsent = filteredList.filter(
-      (p) => p.attendeeEmail && (!p.emailStatus || p.emailStatus === 'Not Sent')
+      (p) => p.attendeeEmail && p.approvalStatus !== 'pending_create' && (!p.emailStatus || p.emailStatus === 'Not Sent')
     );
     if (unsent.length === 0) {
       triggerError('No unsent passes with attendee email addresses found in this view.');
@@ -1233,6 +1245,14 @@ export default function EventPassesPage() {
                         {/* Attendee Details */}
                         <td className="py-3 px-4">
                           <div className="font-bold text-theme-text-primary text-sm">{pass.attendeeName}</div>
+                          {pass.approvalStatus && (
+                            <div
+                              className="mt-0.5 inline-flex items-center gap-1 rounded-full border border-warning/40 bg-warning/15 px-2 py-0.5 text-[9px] font-bold text-warning"
+                              title={`Submitted by ${pass.submittedBy || 'a member'}${pass.approvalPolicyName ? ` under "${pass.approvalPolicyName}"` : ''}`}
+                            >
+                              ⏳ {pass.approvalStatus === 'pending_create' ? 'Issue' : pass.approvalStatus === 'pending_edit' ? 'Edit' : 'Delete'} awaiting {pass.approverName || 'approval'}
+                            </div>
+                          )}
                           <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
                             {pass.guestCategory && (
                               <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-accent/15 text-accent border border-accent/25">
@@ -1328,7 +1348,7 @@ export default function EventPassesPage() {
                             {canDispatchPass && (
                             <button
                               type="button"
-                              disabled={dispatchingPassId === pass.id}
+                              disabled={dispatchingPassId === pass.id || pass.approvalStatus === 'pending_create'}
                               onClick={() => handleDispatchSinglePass(pass)}
                               className="p-1.5 bg-sky-500/15 hover:bg-sky-500/25 text-sky-400 border border-sky-500/30 rounded-lg text-[10px] font-bold transition-all cursor-pointer disabled:opacity-50"
                               title={
