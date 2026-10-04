@@ -153,7 +153,14 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
     setIsSubmitted(true);
   };
 
-  const backgroundShader = (
+  const backgroundShader = form?.backgroundImageUrl ? (
+    // Custom background picture for this form only; a light scrim keeps the frosted card readable
+    <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={form.backgroundImageUrl} alt="" className="h-full w-full object-cover" />
+      <div className="absolute inset-0 bg-black/10" />
+    </div>
+  ) : (
     <div className="fixed inset-0 pointer-events-none -z-10 opacity-75 dark:opacity-90 overflow-hidden">
       {/* Colourful blobs: the frosted-glass card blurs these so the page reads as vivid but soft */}
       <div className="absolute -top-24 -left-24 h-96 w-96 rounded-full bg-fuchsia-500/60 blur-3xl" />
@@ -264,6 +271,12 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
           
           {/* Top Banner Accent */}
           <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#001f53] via-accent to-[#03d8fc]"></div>
+
+          {form?.headerImageUrl && (
+            // Full-bleed banner: negative margins cancel the card padding
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={form.headerImageUrl} alt="" className="-mx-6 md:-mx-8 -mt-6 md:-mt-8 !mb-0 w-[calc(100%+3rem)] md:w-[calc(100%+4rem)] max-w-none h-40 object-cover" />
+          )}
 
           {/* Form Header */}
           <div className="flex flex-col items-center text-center space-y-2 pt-1">
