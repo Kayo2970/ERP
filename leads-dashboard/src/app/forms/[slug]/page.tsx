@@ -157,8 +157,9 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
     // Custom background picture for this form only; a light scrim keeps the frosted card readable
     <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={form.backgroundImageUrl} alt="" className="h-full w-full object-cover" />
-      <div className="absolute inset-0 bg-black/10" />
+      {/* scale-110 hides the soft edge a CSS blur leaves around the image */}
+      <img src={form.backgroundImageUrl} alt="" className="h-full w-full object-cover scale-110" style={{ filter: `blur(${form.backgroundBlur ?? 0}px)` }} />
+      <div className="absolute inset-0 bg-black" style={{ opacity: (form.backgroundDim ?? 10) / 100 }} />
     </div>
   ) : (
     <div className="fixed inset-0 pointer-events-none -z-10 opacity-75 dark:opacity-90 overflow-hidden">
