@@ -802,7 +802,7 @@ export function EventPassStudio({
             />
             <PassTextColorControls textColor={textColor} setTextColor={setTextColor} labelColor={labelColor} setLabelColor={setLabelColor} />
 
-              <PassFontControls fontScale={fontScale} setFontScale={setFontScale} showEventTitle={showEventTitle} setShowEventTitle={setShowEventTitle} eventDefault={activeTheme?.showEventTitle} />
+              <PassFontControls fontScale={fontScale} setFontScale={setFontScale} showEventTitle={showEventTitle} setShowEventTitle={(v) => { setShowEventTitle(v); setPreviewMode('apple-wallet'); }} eventDefault={activeTheme?.showEventTitle} />
             </PassSection>
 
             {/* Event artwork & logo (applies to portal card, emailed ticket and wallet pass) */}
@@ -962,7 +962,7 @@ export function EventPassStudio({
           )}
           {previewMode === 'apple-wallet' && (
             <div className="w-full max-w-[340px]">
-              <EventTitleToggle value={showEventTitle} onChange={setShowEventTitle} eventDefault={activeTheme?.showEventTitle} />
+              <EventTitleToggle value={showEventTitle} onChange={(v) => { setShowEventTitle(v); setPreviewMode('apple-wallet'); }} eventDefault={activeTheme?.showEventTitle} />
             </div>
           )}
 

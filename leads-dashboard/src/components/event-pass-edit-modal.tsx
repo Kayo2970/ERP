@@ -615,7 +615,7 @@ export function EventPassEditModal({
           />
           <PassTextColorControls textColor={textColor} setTextColor={setTextColor} labelColor={labelColor} setLabelColor={setLabelColor} />
 
-            <PassFontControls fontScale={fontScale} setFontScale={setFontScale} showEventTitle={showEventTitle} setShowEventTitle={setShowEventTitle} eventDefault={theme?.showEventTitle} />
+            <PassFontControls fontScale={fontScale} setFontScale={setFontScale} showEventTitle={showEventTitle} setShowEventTitle={(v) => { setShowEventTitle(v); setPreviewMode('wallet'); }} eventDefault={theme?.showEventTitle} />
           </PassSection>
 
           <PassSection title="3 · QR code" hint="Barcode type, caption and QR colours" icon={<Smartphone className="h-4 w-4" />} open={!!open.qr} onToggle={() => toggle('qr')}>
@@ -719,7 +719,7 @@ export function EventPassEditModal({
               />
             )}
             {previewMode === 'wallet' && (
-              <EventTitleToggle value={showEventTitle} onChange={setShowEventTitle} eventDefault={theme?.showEventTitle} />
+              <EventTitleToggle value={showEventTitle} onChange={(v) => { setShowEventTitle(v); setPreviewMode('wallet'); }} eventDefault={theme?.showEventTitle} />
             )}
           </aside>
         </form>
