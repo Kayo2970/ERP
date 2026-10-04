@@ -205,6 +205,7 @@ export async function walletDataForPass(pass: EventPassItem): Promise<WalletEven
     barcodeFormat: pass.qrFormat,
     barcodeAltText: pass.qrAltText,
     qrInWallet: pass.qrInWallet,
+    hideEventTitle: (pass.showEventTitle ?? theme.showEventTitle) === false,
     attendeeOrg: pass.attendeeOrg,
     serialNumber: pass.serialNumber,
     walletSerial: pass.walletSerialNumber,

@@ -152,6 +152,8 @@ export interface WalletEventPassData {
   barcodeAltText?: 'serial' | 'name' | 'none';
   /** The QR is drawn into the poster artwork: send no native barcode. */
   qrInWallet?: boolean;
+  /** The designer chose Hide for the event title: keep the event name out of the pass's visible texts too. */
+  hideEventTitle?: boolean;
 }
 
 /** Days from now until the pass's last valid day (+1 so it stays valid through that day), 1..3650. */
@@ -312,7 +314,8 @@ export function buildPassBody(
   return {
     organizationName: ORG_NAME,
     logoText: poster ? 'LEADS NGC' : 'LEADS Next Gen Centre',
-    description: `${eventPass.eventName} — ${eventPass.attendeeName}`.slice(0, 200),
+    // iOS shows the description as the title of the "Add pass" sheet, so it follows the Hide choice too
+    description: (eventPass.hideEventTitle ? `${eventPass.attendeeName} — ${eventPass.passType}` : `${eventPass.eventName} — ${eventPass.attendeeName}`).slice(0, 200),
     logoURL: logoUrl,
     iconURL: logoUrl,
     ...themed,

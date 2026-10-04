@@ -379,6 +379,9 @@ export function EventTitleToggle({
         ))}
       </div>
       <p className="text-[10.5px] text-slate-500 mt-1">
+        Controls the title we print on the Apple / Google Wallet artwork (and in the Add-to-Wallet sheet). If your uploaded artwork image already has the title written in it, <strong>Hide cannot remove that</strong> — edit the image itself. The portal card always shows the event name.
+      </p>
+      <p className="text-[10.5px] text-slate-500 mt-1">
         {scope === 'event'
           ? 'Default for every pass of this event. Auto prints the title only when your artwork doesn\'t already contain it.'
           : 'Auto follows the event default. Auto itself prints the title only when your event artwork doesn\'t already contain it.'}
