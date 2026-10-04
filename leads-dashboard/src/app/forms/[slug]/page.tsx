@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, use } from 'react';
-import { CheckCircle2, ChevronLeft, Send, Sparkles, AlertTriangle, ShieldCheck } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback, use } from 'react';
+import { CheckCircle2, ChevronLeft, Send, Sparkles, AlertTriangle, ShieldCheck, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 import Link from 'next/link';
 import { getForms, getEvents, addSubmission, PublicFormItem, FormEventInfo, resolveFieldDefault, formatEventDateRange } from '@/lib/local-data';
 import { TermsModal } from '@/components/terms-modal';
@@ -22,6 +22,18 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
   const [notFound, setNotFound] = useState(false);
   const [isTermsOpen, setIsTermsOpen] = useState(false);
   const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
+  // Zoom for the form card: 1 = normal, "Fit" scales it up/down so the whole card fills the screen
+  const [zoom, setZoom] = useState(1);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const clampZoom = (z: number) => Math.min(2.5, Math.max(0.5, Math.round(z * 100) / 100));
+  const fitToScreen = useCallback(() => {
+    const el = cardRef.current;
+    if (!el) return;
+    // offsetWidth/Height are unaffected by CSS zoom on the element itself, so this is the natural size
+    const w = el.offsetWidth, h = el.offsetHeight;
+    if (!w || !h) return;
+    setZoom(clampZoom(Math.min((window.innerWidth - 32) / w, (window.innerHeight - 32) / h)));
+  }, []);
   const formOpenedAt = React.useRef(Date.now());
 
   // Public form links are opened standalone (shared via QR code, email, etc.)
@@ -143,6 +155,11 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
 
   const backgroundShader = (
     <div className="fixed inset-0 pointer-events-none -z-10 opacity-75 dark:opacity-90 overflow-hidden">
+      {/* Colourful blobs: the frosted-glass card blurs these so the page reads as vivid but soft */}
+      <div className="absolute -top-24 -left-24 h-96 w-96 rounded-full bg-fuchsia-500/60 blur-3xl" />
+      <div className="absolute top-1/3 -right-24 h-[28rem] w-[28rem] rounded-full bg-cyan-400/50 blur-3xl" />
+      <div className="absolute -bottom-24 left-1/4 h-96 w-96 rounded-full bg-amber-400/50 blur-3xl" />
+      <div className="absolute bottom-1/4 -left-16 h-72 w-72 rounded-full bg-emerald-400/40 blur-3xl" />
       <GhostFibers
         lineColor="#361C6A"
         glowColor="#03d8fc"
@@ -239,13 +256,20 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
         </div>
       ) : (
         // Public Form Fill View (Clean light/dark responsive card with GhostFibers background)
-        <div className="glass-panel w-full max-w-xl rounded-3xl p-6 md:p-8 flex flex-col space-y-6 relative overflow-hidden border border-white/20 dark:border-white/15 shadow-2xl backdrop-blur-2xl bg-theme-card/90">
+        <div
+          ref={cardRef}
+          style={{ zoom } as React.CSSProperties}
+          className="glass-panel w-full max-w-xl rounded-3xl p-6 md:p-8 flex flex-col space-y-6 relative overflow-hidden border border-white/30 shadow-2xl backdrop-blur-2xl bg-white/25 dark:bg-white/10"
+        >
           
           {/* Top Banner Accent */}
           <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#001f53] via-accent to-[#03d8fc]"></div>
 
           {/* Form Header */}
           <div className="flex flex-col items-center text-center space-y-2 pt-1">
+            {form?.headerText && (
+              <p className="w-full text-[11px] font-bold uppercase tracking-widest text-accent border-b border-theme-border/40 pb-2">{form.headerText}</p>
+            )}
             <div className="h-11 w-11 bg-accent/15 border border-accent/30 rounded-2xl flex items-center justify-center shadow-lg text-accent">
               <Sparkles className="h-5 w-5" />
             </div>
@@ -410,6 +434,15 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
               <span>Encrypted & Verified &bull; LEADS Next Gen MSRUAS</span>
             </div>
           </form>
+        </div>
+      )}
+
+      {!isSubmitted && (
+        <div className="fixed bottom-4 right-4 z-20 flex items-center gap-1 p-1 rounded-xl border border-white/30 bg-white/25 dark:bg-white/10 backdrop-blur-xl shadow-lg">
+          <button type="button" onClick={() => setZoom((z) => clampZoom(z - 0.1))} title="Zoom out" className="p-2 rounded-lg text-theme-text-primary hover:bg-white/30 cursor-pointer"><ZoomOut className="h-4 w-4" /></button>
+          <button type="button" onClick={fitToScreen} title="Zoom to fit the screen" className="flex items-center gap-1 px-2 py-2 rounded-lg text-[11px] font-semibold text-theme-text-primary hover:bg-white/30 cursor-pointer"><Maximize className="h-4 w-4" />Fit</button>
+          <button type="button" onClick={() => setZoom((z) => clampZoom(z + 0.1))} title="Zoom in" className="p-2 rounded-lg text-theme-text-primary hover:bg-white/30 cursor-pointer"><ZoomIn className="h-4 w-4" /></button>
+          <button type="button" onClick={() => setZoom(1)} title="Reset zoom" className="px-2 py-2 rounded-lg text-[11px] font-semibold text-theme-text-secondary hover:bg-white/30 cursor-pointer">{Math.round(zoom * 100)}%</button>
         </div>
       )}
 

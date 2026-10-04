@@ -207,6 +207,7 @@ export default function FormsBuilderPage() {
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
+  const [headerText, setHeaderText] = useState('');
   const [committee, setCommittee] = useState('Senior Student Leadership');
   const [eventId, setEventId] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
@@ -269,6 +270,7 @@ export default function FormsBuilderPage() {
     setTitle('');
     setSlug('');
     setDescription('');
+    setHeaderText('');
     setCommittee(user?.committee === 'All Committees' ? 'Senior Student Leadership' : user?.committee || 'Senior Student Leadership');
     setEventId('');
     setSelectedTemplateId('');
@@ -285,6 +287,7 @@ export default function FormsBuilderPage() {
     setTitle(form.title);
     setSlug(form.slug);
     setDescription(form.description);
+    setHeaderText(form.headerText || '');
     setCommittee(form.committee);
     setEventId(form.eventId || '');
     setSelectedTemplateId('');
@@ -401,7 +404,7 @@ export default function FormsBuilderPage() {
   };
 
   const updateEditTemplateField = (index: number, key: keyof FormField, value: any) => {
-    setTemplateEditFields(templateEditFields.map((f, i) => i === index ? { ...f, [key]: value } : f));
+    setTemplateEditFields((prev) => prev.map((f, i) => i === index ? { ...f, [key]: value } : f));
   };
 
   const addField = () => {
@@ -414,8 +417,8 @@ export default function FormsBuilderPage() {
   };
 
   const updateField = (index: number, key: keyof FormField, value: any) => {
-    const updated = fields.map((f, i) => i === index ? { ...f, [key]: value } : f);
-    setFields(updated);
+    // Functional update so several onChange calls in one handler (e.g. clearing a default's value + source) all apply
+    setFields((prev) => prev.map((f, i) => i === index ? { ...f, [key]: value } : f));
   };
 
   const handleSaveForm = (e: React.FormEvent) => {
@@ -439,6 +442,7 @@ export default function FormsBuilderPage() {
         title,
         slug: formattedSlug,
         description,
+        headerText: headerText.trim() || undefined,
         committee,
         fields,
         eventId: eventId || undefined,
@@ -467,6 +471,7 @@ export default function FormsBuilderPage() {
         title,
         slug: formattedSlug,
         description,
+        headerText: headerText.trim() || undefined,
         committee,
         fields,
         eventId: eventId || undefined,
@@ -1281,6 +1286,17 @@ export default function FormsBuilderPage() {
                     className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent font-mono"
                   />
                 </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block font-medium text-theme-text-secondary">Form Header (optional)</label>
+                <input
+                  type="text"
+                  value={headerText}
+                  onChange={(e) => setHeaderText(e.target.value)}
+                  placeholder="Banner shown at the very top of the public form, e.g. LEADS Next Gen Centre · Annual Summit 2026"
+                  className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                />
               </div>
 
               <div className="space-y-1.5">
