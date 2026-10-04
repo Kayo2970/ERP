@@ -1,3 +1,4 @@
+import { getPassPublicUrl } from '@/lib/app-url';
 import { NextRequest, NextResponse } from 'next/server';
 import { getPassTheme } from '@/lib/pass-theme';
 import { renderBoardingPassPng, renderThankYouPng } from '@/lib/pass-image';
@@ -24,8 +25,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!pass || pass.status === 'Cancelled') {
       return NextResponse.json({ error: 'Pass not found' }, { status: 404 });
     }
-    const origin = request.nextUrl.origin;
-    const png = await renderBoardingPassPng(pass, `${origin}/pass/${pass.serialNumber}`, await getPassTheme(pass.eventId));
+    const png = await renderBoardingPassPng(pass, getPassPublicUrl(request, pass.serialNumber), await getPassTheme(pass.eventId));
     return new NextResponse(new Uint8Array(png), {
       headers: {
         'Content-Type': 'image/png',

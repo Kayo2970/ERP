@@ -454,7 +454,7 @@ export interface PassQrOptions {
 }
 
 export const DEFAULT_QR_OPTIONS: PassQrOptions = {
-  format: 'QR', altText: 'serial', dark: '#0B1B2E', light: '#ffffff', eye: '', shape: 'square', logo: true, inWallet: false,
+  format: 'QR', altText: 'serial', dark: '#0B1B2E', light: '#ffffff', eye: '', shape: 'square', logo: true, inWallet: true,
 };
 
 type PassQrFields = Pick<EventPassItem, 'qrFormat' | 'qrAltText' | 'qrDark' | 'qrLight' | 'qrEyeColor' | 'qrShape' | 'qrLogo' | 'qrInWallet'>;
@@ -468,7 +468,8 @@ export function qrOptionsFromPass(p: Partial<PassQrFields>): PassQrOptions {
     eye: p.qrEyeColor || '',
     shape: p.qrShape || DEFAULT_QR_OPTIONS.shape,
     logo: p.qrLogo !== false,
-    inWallet: Boolean(p.qrInWallet),
+    // Default ON: the QR you design is the one drawn on the portal card, the emailed ticket AND the wallet pass
+    inWallet: p.qrInWallet !== false,
   };
 }
 
@@ -483,7 +484,7 @@ export function qrFieldsFromOptions(o: PassQrOptions): PassQrFields {
     qrEyeColor: o.eye || undefined,
     qrShape: o.shape !== d.shape ? o.shape : undefined,
     qrLogo: o.logo ? undefined : false,
-    qrInWallet: o.inWallet ? true : undefined,
+    qrInWallet: o.inWallet ? undefined : false,
   };
 }
 

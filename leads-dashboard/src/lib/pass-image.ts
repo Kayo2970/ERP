@@ -11,6 +11,7 @@ import {
   PassTheme,
   DEFAULT_PASS_THEME,
   getPassValidDays,
+  qrOptionsFromPass,
   formatValidDaysLabel,
 } from '@/lib/local-data';
 
@@ -179,18 +180,20 @@ export async function renderBoardingPassPng(
   const qrSize = 220;
   const qrCanvas = createCanvas(600, 600);
   let qrLogo: any;
-  if (pass.qrLogo !== false) {
+  if (qrOptionsFromPass(pass).logo) {
     try {
       qrLogo = await loadImage(path.join(process.cwd(), 'public', 'card', 'leads-logo-clean.png'));
     } catch {
       /* no logo */
     }
   }
+  // Same settings (and defaults) as the portal card and the wallet pass
+  const qrOpts = qrOptionsFromPass(pass);
   drawStyledQr(qrCanvas.getContext('2d'), passUrl, 0, 0, 600, {
-    dark: pass.qrDark || '#000000',
-    light: pass.qrLight || '#ffffff',
-    eye: pass.qrEyeColor,
-    shape: pass.qrShape || 'square',
+    dark: qrOpts.dark,
+    light: qrOpts.light,
+    eye: qrOpts.eye || undefined,
+    shape: qrOpts.shape,
     logo: qrLogo,
   });
   const qr = await loadImage(qrCanvas.toBuffer('image/png'));

@@ -51,3 +51,8 @@ export function getAppBaseUrl(req?: Request | NextRequest | null, customOrigin?:
   // Fallback to primary production domain
   return 'https://portal-leads.msruas.ac.in';
 }
+
+/** The public pass link every surface encodes in its QR (emailed ticket, wallet artwork, wallet barcode): one source of truth. */
+export function getPassPublicUrl(req: Request | NextRequest | null | undefined, serial: string): string {
+  return `${getAppBaseUrl(req)}/pass/${serial}`;
+}

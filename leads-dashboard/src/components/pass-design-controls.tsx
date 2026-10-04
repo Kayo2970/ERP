@@ -527,9 +527,9 @@ export function PassQrControls({ value, onChange }: { value: PassQrOptions; onCh
         <label className="flex items-start gap-2 text-[11px] font-bold text-slate-700 dark:text-slate-200 cursor-pointer">
           <input type="checkbox" checked={value.inWallet} onChange={(e) => onChange({ inWallet: e.target.checked })} className="accent-sky-500 mt-0.5" />
           <span>
-            Use this styled QR inside the Apple / Google Wallet pass
+            Use this exact QR on the Apple / Google Wallet pass too (recommended)
             <span className="block font-medium text-slate-500 dark:text-slate-400 mt-0.5">
-              The QR is drawn into the pass artwork instead of Apple&apos;s native black-on-white barcode. Scanning still works, but the wallet no longer auto-brightens the screen for the barcode or treats it as a native barcode.
+              Keeps your QR identical on the 3D card, the emailed ticket and the wallet pass. It is drawn into the wallet artwork instead of Apple&apos;s native black-on-white barcode — scanning still works, but the wallet no longer auto-brightens the screen for the barcode. Turn this off to use Apple&apos;s native barcode.
             </span>
           </span>
         </label>
