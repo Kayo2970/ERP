@@ -362,29 +362,32 @@ const chip = (on: boolean) =>
  * Used by the event's Pass look editor (the event default), the Studio / Edit Pass (per pass) and the wallet previews.
  */
 export function EventTitleToggle({
-  value, onChange, eventDefault, scope = 'pass',
+  value, onChange, eventDefault, scope = 'pass', target = 'wallet',
 }: {
   value: boolean | undefined;
   onChange: (v: boolean | undefined) => void;
   eventDefault?: boolean;
   scope?: 'event' | 'pass';
+  /** 'wallet' = Apple/Google Wallet artwork; 'portal' = the 3D card on the pass page. */
+  target?: 'wallet' | 'portal';
 }) {
-  const defaultName = eventDefault === undefined ? 'Auto' : eventDefault ? 'Always show' : 'Hide';
+  const portal = target === 'portal';
+  const autoName = portal ? 'Show' : 'Auto';
+  const defaultName = eventDefault === undefined ? autoName : eventDefault ? (portal ? 'Show' : 'Always show') : 'Hide';
   return (
     <div>
-      <span className={label}>Event title on the wallet pass</span>
+      <span className={label}>{portal ? 'Event title on the portal card' : 'Event title on the wallet pass'}</span>
       <div className="flex flex-wrap gap-2">
-        {([[scope === 'pass' ? `Event default (${defaultName})` : 'Auto', undefined], ['Always show', true], ['Hide', false]] as Array<[string, boolean | undefined]>).map(([name, v]) => (
+        {([[scope === 'pass' ? `Event default (${defaultName})` : portal ? 'Show (default)' : 'Auto', undefined], [portal ? 'Show' : 'Always show', true], ['Hide', false]] as Array<[string, boolean | undefined]>).map(([name, v]) => (
           <button key={name} type="button" onClick={() => onChange(v)} className={chip(value === v)}>{name}</button>
         ))}
       </div>
       <p className="text-[10.5px] text-slate-500 mt-1">
-        Controls the title we print on the Apple / Google Wallet artwork (and in the Add-to-Wallet sheet). If your uploaded artwork image already has the title written in it, <strong>Hide cannot remove that</strong> — edit the image itself. The portal card always shows the event name.
-      </p>
-      <p className="text-[10.5px] text-slate-500 mt-1">
-        {scope === 'event'
-          ? 'Default for every pass of this event. Auto prints the title only when your artwork doesn\'t already contain it.'
-          : 'Auto follows the event default. Auto itself prints the title only when your event artwork doesn\'t already contain it.'}
+        {portal ? (
+          <>Controls the event title printed on the front of the 3D card people open from their pass link. The date and guest details stay. {scope === 'event' ? 'This is the default for every pass of the event.' : 'Follows the event default unless you pick Show or Hide here.'}</>
+        ) : (
+          <>Controls the title we print on the Apple / Google Wallet artwork (and in the Add-to-Wallet sheet). If your uploaded artwork image already has the title written in it, <strong>Hide cannot remove that</strong> — edit the image itself. {scope === 'event' ? 'Default for every pass of this event. Auto prints the title only when your artwork doesn\'t already contain it.' : 'Auto follows the event default. Auto itself prints the title only when your event artwork doesn\'t already contain it.'}</>
+        )}
       </p>
     </div>
   );
@@ -392,7 +395,7 @@ export function EventTitleToggle({
 
 /** Text size of the designed artwork (wallet poster, emailed ticket, portal card) and whether the poster prints the event title. */
 export function PassFontControls({
-  fontScale, setFontScale, showEventTitle, setShowEventTitle, eventDefault,
+  fontScale, setFontScale, showEventTitle, setShowEventTitle, eventDefault, showPortalTitle, setShowPortalTitle, portalDefault,
 }: {
   fontScale: number;
   setFontScale: (n: number) => void;
@@ -400,6 +403,9 @@ export function PassFontControls({
   setShowEventTitle: (v: boolean | undefined) => void;
   /** The event's own default (shown as a hint; a pass value overrides it). */
   eventDefault?: boolean;
+  showPortalTitle?: boolean;
+  setShowPortalTitle?: (v: boolean | undefined) => void;
+  portalDefault?: boolean;
 }) {
   const sizes: Array<[string, number]> = [['Small', 0.85], ['Normal', 1], ['Large', 1.15], ['X-Large', 1.3]];
   return (
@@ -425,6 +431,7 @@ export function PassFontControls({
         <p className="text-[10.5px] text-slate-500 mt-1">Applies to the event title, guest name and details on the portal card, the emailed ticket and the wallet pass artwork. Apple draws its own small field row on the wallet pass.</p>
       </div>
       <EventTitleToggle value={showEventTitle} onChange={setShowEventTitle} eventDefault={eventDefault} />
+      {setShowPortalTitle && <EventTitleToggle target="portal" value={showPortalTitle} onChange={setShowPortalTitle} eventDefault={portalDefault} />}
     </div>
   );
 }

@@ -7,7 +7,7 @@ import { EventPassItem, PassTheme, formatValidDaysLabel, getPassValidDays } from
 export type KeycardPass = Pick<EventPassItem, 'attendeeName' | 'passType' | 'serialNumber'> &
   Partial<Pick<EventPassItem,
     'eventName' | 'eventDate' | 'eventVenue' | 'guestCategory' | 'roomOrVenue' | 'attendeeOrg' | 'validityDate' |
-    'validDays' | 'passColor' | 'passGradient' | 'textColor' | 'labelColor' | 'fontScale' | 'qrDark' | 'qrLight' | 'qrEyeColor' | 'qrShape' | 'qrLogo'>>;
+    'validDays' | 'passColor' | 'passGradient' | 'textColor' | 'labelColor' | 'fontScale' | 'showPortalTitle' | 'qrDark' | 'qrLight' | 'qrEyeColor' | 'qrShape' | 'qrLogo'>>;
 
 /**
  * THE issued pass design. Used by the public /pass/<serial> page, the Studio's live preview and the Edit Pass
@@ -29,6 +29,7 @@ export function EventPassKeycard({
   return (
     <InteractiveKeycardHolder
       isEventPass
+      hideEventTitle={(pass.showPortalTitle ?? theme?.showPortalTitle) === false}
       memberName={pass.attendeeName}
       memberRole={`${pass.passType}${pass.guestCategory ? ` • ${pass.guestCategory}` : ''}`}
       phone=""

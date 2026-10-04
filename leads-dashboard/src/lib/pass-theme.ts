@@ -110,6 +110,8 @@ export interface PassThemeUpdate {
   overlay?: number;
   /** Event default for the wallet poster title; `null` clears it back to Auto. */
   showEventTitle?: boolean | null;
+  /** Event default for the portal card's event title; `null` clears it back to Show. */
+  showPortalTitle?: boolean | null;
   /** New artwork (data URL), or null to remove the current one. */
   background?: { dataUrl: string } | null;
   logo?: { dataUrl: string } | null;
@@ -127,6 +129,8 @@ export async function updatePassTheme(eventId: string, update: PassThemeUpdate):
   }
   if (update.showEventTitle === null) delete theme.showEventTitle;
   else if (typeof update.showEventTitle === 'boolean') theme.showEventTitle = update.showEventTitle;
+  if (update.showPortalTitle === null) delete theme.showPortalTitle;
+  else if (typeof update.showPortalTitle === 'boolean') theme.showPortalTitle = update.showPortalTitle;
   for (const k of ['emailBackgroundColor', 'emailForegroundColor', 'emailLabelColor'] as const) {
     const v = update[k];
     if (v === null) delete theme[k];

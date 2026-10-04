@@ -48,6 +48,8 @@ export interface InteractiveKeycardProps {
   // Event Pass Specific Props
   isEventPass?: boolean;
   eventName?: string;
+  /** Event pass: don't print the event title on the card front. */
+  hideEventTitle?: boolean;
   eventDate?: string;
   passType?: string;
   guestCategory?: string;
@@ -93,6 +95,7 @@ export function InteractiveKeycardHolder({
   // Event Pass Specific Props
   isEventPass,
   eventName,
+  hideEventTitle,
   eventDate,
   passType,
   guestCategory,
@@ -540,9 +543,11 @@ export function InteractiveKeycardHolder({
 
                       {/* Event Info Section */}
                       <div className={styles.eventInfoSection}>
-                        <div className={styles.eventTitleHeader}>
-                          {eventName || 'Official LEADS Event'}
-                        </div>
+                        {!hideEventTitle && (
+                          <div className={styles.eventTitleHeader}>
+                            {eventName || 'Official LEADS Event'}
+                          </div>
+                        )}
                         <div className={styles.eventDateBadge}>
                           <span>🗓️</span>
                           <span>{validityPeriod || eventDate || '2026'}</span>

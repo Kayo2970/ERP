@@ -154,6 +154,7 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
           overlay: val.overlay,
           // Event default for the wallet poster title; null (Auto) clears a previous choice
           showEventTitle: draft.showEventTitle ?? null,
+          showPortalTitle: draft.showPortalTitle ?? null,
           emailUseBackground: !emailOwn,
           emailOverlay: em.overlay,
           // Email colours are only stored when explicitly chosen; otherwise the ticket follows the general colours
@@ -197,6 +198,7 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
     val.fg !== (theme.foregroundColor || DEFAULT_PASS_THEME.foregroundColor) ||
     val.label !== (theme.labelColor || DEFAULT_PASS_THEME.labelColor) ||
     draft.showEventTitle !== theme.showEventTitle ||
+    draft.showPortalTitle !== theme.showPortalTitle ||
     val.overlay !== (typeof theme.overlay === 'number' ? theme.overlay : DEFAULT_PASS_THEME.overlay);
 
   const colourField = (label: string, key: 'backgroundColor' | 'foregroundColor' | 'labelColor', value: string) => (
@@ -238,6 +240,9 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
           </div>
           <div className="mt-3 max-w-[300px]">
             <EventTitleToggle scope="event" value={draft.showEventTitle} onChange={(v) => setDraft((d) => ({ ...d, showEventTitle: v }))} />
+          </div>
+          <div className="mt-3 max-w-[300px]">
+            <EventTitleToggle scope="event" target="portal" value={draft.showPortalTitle} onChange={(v) => setDraft((d) => ({ ...d, showPortalTitle: v }))} />
           </div>
         </div>
         <ul className="text-[10.5px] text-slate-500 space-y-1.5 list-disc pl-4 pt-5">

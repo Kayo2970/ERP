@@ -421,6 +421,8 @@ export interface PassTheme {
   overlay?: number;         // 0..0.9 darkening layer over the artwork for legibility
   /** Event default for printing the event title on the wallet poster (a pass can override). Unset = auto: only when there is no artwork. */
   showEventTitle?: boolean;
+  /** Same idea for the portal 3D card: show (default) or hide the event title on its front. Pass overrides event. */
+  showPortalTitle?: boolean;
   updatedAt?: string;
 }
 
@@ -520,6 +522,8 @@ export interface EventPassItem {
   fontScale?: number;
   /** Print the event title on the wallet poster artwork. Unset = auto (only when the event has no artwork of its own). */
   showEventTitle?: boolean;
+  /** Same idea for the portal 3D card: show (default) or hide the event title on its front. Pass overrides event. */
+  showPortalTitle?: boolean;
   /** QR customisation: wallet barcode format, caption under it, and QR colours on the portal card / ticket. */
   qrFormat?: PassBarcodeFormat;
   qrAltText?: 'serial' | 'name' | 'none';
