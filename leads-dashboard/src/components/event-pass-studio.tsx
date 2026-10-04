@@ -187,6 +187,7 @@ export function EventPassStudio({
   const toggleSection = (k: string) => setOpenSections((o) => ({ ...o, [k]: !o[k] }));
   const [fontScale, setFontScale] = useState(1);
   const [showEventTitle, setShowEventTitle] = useState<boolean | undefined>(undefined);
+  const [showPortalTitle, setShowPortalTitle] = useState<boolean | undefined>(undefined);
   const [qr, setQr] = useState<PassQrOptions>(DEFAULT_QR_OPTIONS);
   const patchQr = (patch: Partial<PassQrOptions>) => setQr((q) => ({ ...q, ...patch }));
 
@@ -322,6 +323,7 @@ export function EventPassStudio({
         labelColor: labelColor || undefined,
         fontScale: fontScale !== 1 ? fontScale : undefined,
         showEventTitle,
+        showPortalTitle,
         ...qrFieldsFromOptions(qr),
         notes: notes.trim() || undefined,
         issuedBy: currentUserName,
@@ -802,7 +804,7 @@ export function EventPassStudio({
             />
             <PassTextColorControls textColor={textColor} setTextColor={setTextColor} labelColor={labelColor} setLabelColor={setLabelColor} />
 
-              <PassFontControls fontScale={fontScale} setFontScale={setFontScale} showEventTitle={showEventTitle} setShowEventTitle={(v) => { setShowEventTitle(v); setPreviewMode('apple-wallet'); }} eventDefault={activeTheme?.showEventTitle} />
+              <PassFontControls fontScale={fontScale} setFontScale={setFontScale} showEventTitle={showEventTitle} setShowEventTitle={(v) => { setShowEventTitle(v); setPreviewMode('apple-wallet'); }} eventDefault={activeTheme?.showEventTitle} showPortalTitle={showPortalTitle} setShowPortalTitle={(v) => { setShowPortalTitle(v); setPreviewMode('luxury'); }} portalDefault={activeTheme?.showPortalTitle} />
             </PassSection>
 
             {/* Event artwork & logo (applies to portal card, emailed ticket and wallet pass) */}
@@ -901,6 +903,7 @@ export function EventPassStudio({
                   textColor: textColor || undefined,
                   labelColor: labelColor || undefined,
                   fontScale,
+                  showPortalTitle,
                   qrDark: qr.dark,
                   qrLight: qr.light,
                   qrEyeColor: qr.eye || undefined,
@@ -915,6 +918,9 @@ export function EventPassStudio({
               <p className="text-[10.5px] text-slate-500 text-center max-w-[360px]">
                 This is the exact pass your recipient opens — folder, card and back. Tap the card to flip it; use Replay to see the opening animation.
               </p>
+              <div className="w-full max-w-[360px]">
+                <EventTitleToggle target="portal" value={showPortalTitle} onChange={(v) => { setShowPortalTitle(v); setPreviewMode('luxury'); }} eventDefault={activeTheme?.showPortalTitle} />
+              </div>
             </div>
           )}
 

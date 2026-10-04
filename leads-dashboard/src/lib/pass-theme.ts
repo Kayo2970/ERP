@@ -5,7 +5,7 @@
 import { createHash } from 'crypto';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { saveBase64File, readStoredFile, deleteStoredFile } from '@/lib/file-storage';
-import { PassTheme } from '@/lib/local-data';
+import { PassTheme, qrOptionsFromPass } from '@/lib/local-data';
 
 const CATEGORY = 'pass-themes';
 const THEME_FILE_INDEX = 9;
@@ -110,6 +110,8 @@ export interface PassThemeUpdate {
   overlay?: number;
   /** Event default for the wallet poster title; `null` clears it back to Auto. */
   showEventTitle?: boolean | null;
+  /** Event default for the portal card's event title; `null` clears it back to Show. */
+  showPortalTitle?: boolean | null;
   /** New artwork (data URL), or null to remove the current one. */
   background?: { dataUrl: string } | null;
   logo?: { dataUrl: string } | null;
@@ -127,6 +129,8 @@ export async function updatePassTheme(eventId: string, update: PassThemeUpdate):
   }
   if (update.showEventTitle === null) delete theme.showEventTitle;
   else if (typeof update.showEventTitle === 'boolean') theme.showEventTitle = update.showEventTitle;
+  if (update.showPortalTitle === null) delete theme.showPortalTitle;
+  else if (typeof update.showPortalTitle === 'boolean') theme.showPortalTitle = update.showPortalTitle;
   for (const k of ['emailBackgroundColor', 'emailForegroundColor', 'emailLabelColor'] as const) {
     const v = update[k];
     if (v === null) delete theme[k];
@@ -197,14 +201,14 @@ export async function walletDataForPass(pass: EventPassItem): Promise<WalletEven
   const theme = await getPassTheme(pass.eventId);
   // Version the poster URL by everything that changes how it looks, so WalletWallet re-fetches after a design edit
   const version = createHash('sha1')
-    .update(JSON.stringify([pass.eventName, pass.passColor, pass.passGradient, pass.textColor, pass.labelColor, pass.fontScale, pass.showEventTitle, theme.showEventTitle, pass.qrInWallet, pass.qrDark, pass.qrLight, pass.qrEyeColor, pass.qrShape, pass.qrLogo, pass.qrAltText, theme.updatedAt, theme.walletBackgroundUrl, theme.overlay]))
+    .update(JSON.stringify([pass.eventName, pass.passColor, pass.passGradient, pass.textColor, pass.labelColor, pass.fontScale, pass.showEventTitle, theme.showEventTitle, qrOptionsFromPass(pass), pass.qrDark, pass.qrLight, pass.qrEyeColor, pass.qrShape, pass.qrLogo, pass.qrAltText, theme.updatedAt, theme.walletBackgroundUrl, theme.overlay]))
     .digest('hex')
     .slice(0, 10);
   return {
     posterUrl: `/api/pass/${encodeURIComponent(pass.serialNumber)}/wallet-poster?v=${version}`,
     barcodeFormat: pass.qrFormat,
     barcodeAltText: pass.qrAltText,
-    qrInWallet: pass.qrInWallet,
+    qrInWallet: qrOptionsFromPass(pass).inWallet,
     hideEventTitle: (pass.showEventTitle ?? theme.showEventTitle) === false,
     attendeeOrg: pass.attendeeOrg,
     serialNumber: pass.serialNumber,

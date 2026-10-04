@@ -3,7 +3,7 @@ import { lookupPassBySerial } from '@/lib/pass-lookup';
 import { getPassTheme } from '@/lib/pass-theme';
 import { renderWalletPosterJpeg } from '@/lib/wallet-poster';
 import { qrOptionsFromPass } from '@/lib/local-data';
-import { getAppBaseUrl } from '@/lib/app-url';
+import { getPassPublicUrl } from '@/lib/app-url';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -24,9 +24,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ seri
       labelColor: pass.labelColor,
       fontScale: pass.fontScale,
       showEventTitle: pass.showEventTitle ?? theme.showEventTitle,
-      qr: pass.qrInWallet
+      qr: qrOptionsFromPass(pass).inWallet
         ? {
-            url: `${getAppBaseUrl(req)}/pass/${pass.serialNumber}`,
+            url: getPassPublicUrl(req, pass.serialNumber),
             options: qrOptionsFromPass(pass),
             caption: pass.qrAltText === 'none' ? undefined : pass.qrAltText === 'name' ? pass.attendeeName : pass.serialNumber,
           }

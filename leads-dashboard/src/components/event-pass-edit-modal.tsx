@@ -99,6 +99,7 @@ export function EventPassEditModal({
   const skipDayReset = useRef(true);
   const [fontScale, setFontScale] = useState(1);
   const [showEventTitle, setShowEventTitle] = useState<boolean | undefined>(undefined);
+  const [showPortalTitle, setShowPortalTitle] = useState<boolean | undefined>(undefined);
   const [qr, setQr] = useState<PassQrOptions>(DEFAULT_QR_OPTIONS);
   const patchQr = (patch: Partial<PassQrOptions>) => setQr((q) => ({ ...q, ...patch }));
   const [previewMode, setPreviewMode] = useState<'pass' | 'wallet'>('pass');
@@ -140,6 +141,7 @@ export function EventPassEditModal({
       setLabelColor(pass.labelColor || '');
       setFontScale(pass.fontScale || 1);
       setShowEventTitle(pass.showEventTitle);
+      setShowPortalTitle(pass.showPortalTitle);
       setQr(qrOptionsFromPass(pass));
       setOpen({ details: true });
       setEventId(pass.eventId);
@@ -245,6 +247,7 @@ export function EventPassEditModal({
           labelColor: labelColor || undefined,
           fontScale: fontScale !== 1 ? fontScale : undefined,
           showEventTitle,
+          showPortalTitle,
           ...qrFieldsFromOptions(qr),
           validDays: effectiveValidDays.length > 0 ? effectiveValidDays : undefined,
           validityDate: displayValidity,
@@ -615,7 +618,7 @@ export function EventPassEditModal({
           />
           <PassTextColorControls textColor={textColor} setTextColor={setTextColor} labelColor={labelColor} setLabelColor={setLabelColor} />
 
-            <PassFontControls fontScale={fontScale} setFontScale={setFontScale} showEventTitle={showEventTitle} setShowEventTitle={(v) => { setShowEventTitle(v); setPreviewMode('wallet'); }} eventDefault={theme?.showEventTitle} />
+            <PassFontControls fontScale={fontScale} setFontScale={setFontScale} showEventTitle={showEventTitle} setShowEventTitle={(v) => { setShowEventTitle(v); setPreviewMode('wallet'); }} eventDefault={theme?.showEventTitle} showPortalTitle={showPortalTitle} setShowPortalTitle={(v) => { setShowPortalTitle(v); setPreviewMode('pass'); }} portalDefault={theme?.showPortalTitle} />
           </PassSection>
 
           <PassSection title="3 · QR code" hint="Barcode type, caption and QR colours" icon={<Smartphone className="h-4 w-4" />} open={!!open.qr} onToggle={() => toggle('qr')}>
@@ -682,6 +685,7 @@ export function EventPassEditModal({
                 textColor: textColor || undefined,
                 labelColor: labelColor || undefined,
                 fontScale,
+                showPortalTitle,
                 qrDark: qr.dark,
                 qrLight: qr.light,
                 qrEyeColor: qr.eye || undefined,
@@ -717,6 +721,9 @@ export function EventPassEditModal({
                 altText={qr.altText}
               qr={qr}
               />
+            )}
+            {previewMode === 'pass' && (
+              <EventTitleToggle target="portal" value={showPortalTitle} onChange={(v) => { setShowPortalTitle(v); setPreviewMode('pass'); }} eventDefault={theme?.showPortalTitle} />
             )}
             {previewMode === 'wallet' && (
               <EventTitleToggle value={showEventTitle} onChange={(v) => { setShowEventTitle(v); setPreviewMode('wallet'); }} eventDefault={theme?.showEventTitle} />
