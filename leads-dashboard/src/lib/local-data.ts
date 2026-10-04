@@ -1128,6 +1128,10 @@ export interface PublicFormItem {
   description: string;
   /** Optional banner line shown at the top of the public form. */
   headerText?: string;
+  /** Optional banner picture across the top of the public form (uploaded, or an image link). */
+  headerImageUrl?: string;
+  /** Optional picture used instead of the standard animated background on the public form only. */
+  backgroundImageUrl?: string;
   fields: FormField[];
   committee: string;
   createdBy: string;

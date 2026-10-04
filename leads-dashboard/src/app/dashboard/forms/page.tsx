@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { FormFieldEditor } from '@/components/form-field-editor';
+import { FormImageField } from '@/components/form-image-field';
 import {
   Plus,
   Trash2,
@@ -208,6 +209,8 @@ export default function FormsBuilderPage() {
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
   const [headerText, setHeaderText] = useState('');
+  const [headerImageUrl, setHeaderImageUrl] = useState('');
+  const [backgroundImageUrl, setBackgroundImageUrl] = useState('');
   const [committee, setCommittee] = useState('Senior Student Leadership');
   const [eventId, setEventId] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
@@ -271,6 +274,8 @@ export default function FormsBuilderPage() {
     setSlug('');
     setDescription('');
     setHeaderText('');
+    setHeaderImageUrl('');
+    setBackgroundImageUrl('');
     setCommittee(user?.committee === 'All Committees' ? 'Senior Student Leadership' : user?.committee || 'Senior Student Leadership');
     setEventId('');
     setSelectedTemplateId('');
@@ -288,6 +293,8 @@ export default function FormsBuilderPage() {
     setSlug(form.slug);
     setDescription(form.description);
     setHeaderText(form.headerText || '');
+    setHeaderImageUrl(form.headerImageUrl || '');
+    setBackgroundImageUrl(form.backgroundImageUrl || '');
     setCommittee(form.committee);
     setEventId(form.eventId || '');
     setSelectedTemplateId('');
@@ -443,6 +450,8 @@ export default function FormsBuilderPage() {
         slug: formattedSlug,
         description,
         headerText: headerText.trim() || undefined,
+        headerImageUrl: headerImageUrl || undefined,
+        backgroundImageUrl: backgroundImageUrl || undefined,
         committee,
         fields,
         eventId: eventId || undefined,
@@ -472,6 +481,8 @@ export default function FormsBuilderPage() {
         slug: formattedSlug,
         description,
         headerText: headerText.trim() || undefined,
+        headerImageUrl: headerImageUrl || undefined,
+        backgroundImageUrl: backgroundImageUrl || undefined,
         committee,
         fields,
         eventId: eventId || undefined,
@@ -1298,6 +1309,9 @@ export default function FormsBuilderPage() {
                   className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                 />
               </div>
+
+              <FormImageField label="Header Picture (optional)" hint="Wide banner across the top of the form." kind="header" value={headerImageUrl} onChange={setHeaderImageUrl} />
+              <FormImageField label="Background Picture (optional)" hint="Replaces the standard background on this public form only." kind="background" value={backgroundImageUrl} onChange={setBackgroundImageUrl} />
 
               <div className="space-y-1.5">
                 <label className="block font-medium text-theme-text-secondary">Description / Respondent Instructions</label>
