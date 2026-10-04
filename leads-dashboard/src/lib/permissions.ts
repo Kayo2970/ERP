@@ -423,7 +423,10 @@ export const CAPABILITY_CATALOG: { key: string; label: string; description: stri
   { key: 'EVENT_REPORTS_VIEW_ALL', label: 'View All Event Reports', description: 'See every submitted event report, not just ones this person submitted or is reviewing.', module: 'Event Reports' },
   { key: 'EVENT_REPORTS_DELETE', label: 'Delete Event Reports', description: 'Delete submitted event reports.', module: 'Event Reports' },
   { key: 'MANAGE_GUEST_INVITES', label: 'Manage Mail Merge', description: 'Access the Mail Merge tool (personalized bulk email — formerly "Guest Invites").', module: 'Mail Merge' },
-  { key: 'MANAGE_EVENT_PASSES', label: 'Manage Event Passes & Tickets', description: 'Issue digital and on-the-spot verified luxury passes, manage rosters, and broadcast push alerts.', module: 'Event Passes' },
+  { key: 'MANAGE_EVENT_PASSES', label: 'Manage Event Passes & Tickets', description: 'Open the Pass Studio: issue passes (single and bulk CSV), design each event\'s pass look (artwork, logo, colours, QR style, event-title options for the wallet pass and the 3D card), manage rosters and broadcast push alerts. Includes editing, dispatching and deleting passes.', module: 'Event Passes' },
+  { key: 'EVENT_PASSES_EDIT', label: 'Edit Issued Passes & Wallet Passes', description: 'Edit any aspect of an issued pass (details, event, valid days, colours, text size, QR style, event-title options) and re-issue its Apple / Google Wallet pass — without full Event Passes management.', module: 'Event Passes' },
+  { key: 'EVENT_PASSES_DISPATCH', label: 'Email & Dispatch Event Passes', description: 'Preview and email passes to attendees: single send, bulk "Preview & dispatch", and "Email Unsent Passes".', module: 'Event Passes' },
+  { key: 'EVENT_PASSES_DELETE', label: 'Delete Event Passes', description: 'Delete issued event passes (also removes their stored files and revokes the wallet pass).', module: 'Event Passes' },
   { key: 'SCAN_EVENT_PASSES', label: 'Scan & Admit Turnstile Passes', description: 'Operate turnstile camera QR scanner and check in attendees at venue gates.', module: 'Event Passes' },
   { key: 'MANAGE_BACKUP', label: 'Access Backup & Restore', description: 'Download system backups and restore from an archive.', module: 'Administration' },
   { key: 'MANAGE_EMAIL_SETTINGS', label: 'Access Email Management', description: 'View dispatch logs and manage email settings.', module: 'Administration' },
@@ -474,7 +477,7 @@ export function hasCapability(user: SessionUser, capability: string): boolean {
  */
 export const MODULE_CATALOG: { key: ModuleAccessKey; label: string; description: string; ownershipNote?: string }[] = [
   { key: 'EVENTS', label: 'Events', description: 'Event records and their committees.', ownershipNote: 'Ownership = the event’s creator or a listed committee member.' },
-  { key: 'EVENT_PASSES', label: 'Event Passes & Tickets', description: 'On-the-spot pass studio, attendee rosters, wallet credentials, and turnstile gate scanner.', ownershipNote: 'Ownership = passes issued by the member or for events they manage.' },
+  { key: 'EVENT_PASSES', label: 'Event Passes & Tickets', description: 'Pass studio (issue, design look, QR style, event-title options), issued-pass roster, editing, email dispatch, Apple / Google Wallet credentials, and turnstile gate scanner.', ownershipNote: 'Ownership = passes issued by the member or for events they manage.' },
   { key: 'TASKS', label: 'Tasks', description: 'Assigned task deliverables.', ownershipNote: 'Ownership = the task’s creator or assignee.' },
   { key: 'DIRECTORY', label: 'Members Directory', description: 'The member roster.', ownershipNote: 'Ownership = whoever added the member record. Edit ‘Own’ is one-time, within 24 hours of adding. Edit here only ever affects editing an existing record’s fields — adding a new member or removing one is locked to Centre Head, Advisor, and Super User and cannot be granted through this Edit column.' },
   { key: 'GUEST_DIRECTORY', label: 'Guest Directory', description: 'Visiting-card guest contacts.', ownershipNote: 'Ownership = whoever added the guest record. Edit ‘Own’ is one-time, within 24 hours of adding.' },
@@ -903,10 +906,34 @@ export function canScanEventPasses(user: SessionUser): boolean {
   return canManageEventPasses(user) || hasCapability(user, 'SCAN_EVENT_PASSES') || viewOverride === 'ALL';
 }
 
+/** Edit an issued pass (details, design, QR, wallet re-issue). Managers always can; the capability extends it to others. */
+export function canEditEventPasses(user: SessionUser): boolean {
+  if (!user) return false;
+  return canManageEventPasses(user) || hasCapability(user, 'EVENT_PASSES_EDIT');
+}
+
+/** Email passes to attendees (single, bulk preview & dispatch, "email unsent"). */
+export function canDispatchEventPasses(user: SessionUser): boolean {
+  if (!user) return false;
+  return canManageEventPasses(user) || hasCapability(user, 'EVENT_PASSES_DISPATCH');
+}
+
+/** Delete issued event passes. */
+export function canDeleteEventPasses(user: SessionUser): boolean {
+  if (!user) return false;
+  return canManageEventPasses(user) || hasCapability(user, 'EVENT_PASSES_DELETE');
+}
+
+/** Can open the Issued Event Passes roster (managers, or anyone granted edit / dispatch / delete). */
+export function canViewIssuedEventPasses(user: SessionUser): boolean {
+  if (!user) return false;
+  return canManageEventPasses(user) || canEditEventPasses(user) || canDispatchEventPasses(user) || canDeleteEventPasses(user);
+}
+
 /** Check if user is authorized to see and open the Event Passes navigation module. */
 export function canAccessEventPassesModule(user: SessionUser): boolean {
   if (!user) return false;
-  return canManageEventPasses(user) || canScanEventPasses(user) || hasCapability(user, 'MANAGE_EVENT_PASSES') || hasCapability(user, 'SCAN_EVENT_PASSES') || resolveModuleViewOverride(user, 'EVENT_PASSES') === 'ALL';
+  return canViewIssuedEventPasses(user) || canScanEventPasses(user) || hasCapability(user, 'MANAGE_EVENT_PASSES') || hasCapability(user, 'SCAN_EVENT_PASSES') || resolveModuleViewOverride(user, 'EVENT_PASSES') === 'ALL';
 }
 
 /** Check if user is authorized to view and manage Group Policies (Super User, Centre Head, Events Head GG Campus, or capability). */

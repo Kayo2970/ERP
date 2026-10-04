@@ -46,6 +46,10 @@ import {
 import {
   canManageEventPasses,
   canScanEventPasses,
+  canEditEventPasses,
+  canDispatchEventPasses,
+  canDeleteEventPasses,
+  canViewIssuedEventPasses,
   canAccessEventPassesModule,
 } from '@/lib/permissions';
 import { EventPassStudio } from '@/components/event-pass-studio';
@@ -163,14 +167,21 @@ export default function EventPassesPage() {
 
   const canManagePasses = canManageEventPasses(user);
   const canScanPasses = canScanEventPasses(user);
+  // Finer abilities that a Group Policy can grant without full management
+  const canEditPass = canEditEventPasses(user);
+  const canDispatchPass = canDispatchEventPasses(user);
+  const canDeletePass = canDeleteEventPasses(user);
+  const canViewIssued = canViewIssuedEventPasses(user);
   const canAccessModule = canAccessEventPassesModule(user);
 
   // Auto switch to scanner if user can only scan
   useEffect(() => {
-    if (user && !canManagePasses && canScanPasses) {
+    if (user && !canManagePasses && canViewIssued) {
+      setActiveTab('passes');
+    } else if (user && !canManagePasses && canScanPasses) {
       setActiveTab('scanner');
     }
-  }, [user, canManagePasses, canScanPasses]);
+  }, [user, canManagePasses, canViewIssued, canScanPasses]);
 
   // Dispatch single pass email
   const handleDispatchSinglePass = async (pass: EventPassItem) => {
@@ -514,6 +525,10 @@ export default function EventPassesPage() {
                 <Sparkles className="h-4 w-4" />
                 Passes &amp; Tickets Studio
               </button>
+            </>
+          )}
+          {canViewIssued && (
+            <>
 
               <button
                 type="button"
@@ -801,7 +816,7 @@ export default function EventPassesPage() {
       )}
 
       {/* TAB 2: ISSUED EVENT PASSES DEEP DIVE VIEW */}
-      {activeTab === 'passes' && canManagePasses && (
+      {activeTab === 'passes' && canViewIssued && (
         <div className="space-y-6 animate-in fade-in duration-300">
           {/* Top Event Showcase Banner (when an event or all events is filtered) */}
           <div className="glass-panel rounded-3xl p-6 md:p-8 border border-white/15 bg-gradient-to-br from-slate-900/90 via-slate-900/70 to-slate-950/90 shadow-2xl relative overflow-hidden">
@@ -970,6 +985,7 @@ export default function EventPassesPage() {
 
               {/* Action Buttons */}
               <div className="flex items-center gap-2 flex-wrap">
+                {canDispatchPass && (
                 <button
                   type="button"
                   disabled={isBatchDispatching}
@@ -984,7 +1000,9 @@ export default function EventPassesPage() {
                   )}
                   <span>Email Unsent Passes</span>
                 </button>
+                )}
 
+                {canManagePasses && (
                 <button
                   type="button"
                   onClick={() => {
@@ -996,6 +1014,7 @@ export default function EventPassesPage() {
                   <Bell className="h-3.5 w-3.5" />
                   <span>Broadcast Push</span>
                 </button>
+                )}
               </div>
             </div>
 
@@ -1095,7 +1114,7 @@ export default function EventPassesPage() {
               </span>
             </div>
 
-            {selectedPassIds.size > 0 && (
+            {canDispatchPass && selectedPassIds.size > 0 && (
               <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-sky-500/10 border-y border-sky-500/30 text-xs">
                 <div className="font-bold text-sky-300">
                   {selectedPassIds.size} selected
@@ -1145,7 +1164,7 @@ export default function EventPassesPage() {
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-slate-200/90 dark:border-white/10 text-theme-text-secondary text-[11px] uppercase tracking-wider">
-                      <th className="py-3 px-3 w-8">
+                      {canDispatchPass && <th className="py-3 px-3 w-8">
                         <input
                           type="checkbox"
                           aria-label="Select all passes in this view"
@@ -1165,7 +1184,7 @@ export default function EventPassesPage() {
                           }
                           className="h-4 w-4 accent-sky-500 cursor-pointer"
                         />
-                      </th>
+                      </th>}
                       <th className="py-3 px-4">Serial ID</th>
                       <th className="py-3 px-4">Attendee &amp; Details</th>
                       <th className="py-3 px-4">Room / Venue</th>
@@ -1180,7 +1199,7 @@ export default function EventPassesPage() {
                   <tbody className="divide-y divide-slate-200/50 dark:divide-white/5">
                     {deepFilteredPasses.map((pass) => (
                       <tr key={pass.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
-                        <td className="py-3 px-3 w-8">
+                        {canDispatchPass && (<td className="py-3 px-3 w-8">
                           <input
                             type="checkbox"
                             aria-label={`Select ${pass.attendeeName}`}
@@ -1195,7 +1214,7 @@ export default function EventPassesPage() {
                             }
                             className="h-4 w-4 accent-sky-500 cursor-pointer"
                           />
-                        </td>
+                        </td>)}
 
                         {/* Serial ID */}
                         <td className="py-3 px-4 font-mono font-bold">
@@ -1306,6 +1325,7 @@ export default function EventPassesPage() {
                             </a>
 
                             {/* 1-Click Dispatch Email */}
+                            {canDispatchPass && (
                             <button
                               type="button"
                               disabled={dispatchingPassId === pass.id}
@@ -1323,6 +1343,7 @@ export default function EventPassesPage() {
                                 <Send className="h-3 w-3" />
                               )}
                             </button>
+                            )}
 
                             {/* Admit / Check-in */}
                             {pass.status !== 'Checked In' && (
@@ -1353,7 +1374,7 @@ export default function EventPassesPage() {
                             </button>
 
                             {/* Edit Pass */}
-                            {canManagePasses && (
+                            {canEditPass && (
                               <button
                                 type="button"
                                 onClick={() => {
@@ -1381,7 +1402,7 @@ export default function EventPassesPage() {
                             </button>
 
                             {/* Delete Pass */}
-                            {canManagePasses && (
+                            {canDeletePass && (
                               <button
                                 type="button"
                                 onClick={() => {
