@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { mutateCollection } from '@/lib/server-db';
+import { mutateCollection, readCollection } from '@/lib/server-db';
+import { gateEventAction, eventEditKeys } from '@/lib/approval-gate';
 import { cascadeDeleteEvent } from '@/lib/cascade-delete';
 import { fanOutAutoApproval, cascadeCloseAutoApprovals, deleteLinkedApprovalRequests, resolveCustomApprovalPanel } from '@/lib/approval-sync';
 import { requireSession, requirePermission, ForbiddenError } from '@/lib/session';
@@ -41,6 +42,33 @@ export async function PATCH(
     const settings = await getAccessLevelSettingsServer();
     const { id } = await params;
     const updates = await request.json();
+
+    // Chain of command: a member whose edit right comes only from an approval-required Group Policy cannot change an
+    // event directly, whatever the browser sent — convert the edit into a pending_edit request for the approver.
+    const isDecision = updates.approvalStatus === 'approved' || updates.approvalStatus === 'rejected';
+    const editKeys = eventEditKeys(updates);
+    if (!isDecision && editKeys.length > 0) {
+      const stored = (await readCollection<any>('events')).find((e: any) => e.id === id);
+      if (stored) {
+        const gate = await gateEventAction(actor, 'EDIT');
+        if (!gate.allowed) {
+          return NextResponse.json({ error: "You don't have permission to edit events." }, { status: 403 });
+        }
+        if (gate.requiresApproval && !PENDING_STATES.has(stored.approvalStatus)) {
+          const changes: Record<string, unknown> = {};
+          for (const k of editKeys) changes[k] = updates[k];
+          for (const k of editKeys) delete updates[k];
+          updates.pendingChange = { ...(stored.pendingChange || {}), ...changes };
+          updates.approvalStatus = 'pending_edit';
+          updates.approverType = gate.approverType;
+          updates.approverMemberId = gate.approverMemberId;
+          updates.approverPolicyTagId = gate.approverPolicyTagId;
+          updates.approvalPolicyName = gate.policyName;
+          updates.submittedBy = actor.name;
+          updates.submittedByEmail = actor.email;
+        }
+      }
+    }
     // Upsert: if this id isn't in the server's collection yet (e.g. client-bundled
     // sample/seed data never POSTed), create it instead of 404ing and silently
     // dropping the edit.

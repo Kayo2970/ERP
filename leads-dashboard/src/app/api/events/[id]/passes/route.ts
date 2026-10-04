@@ -6,6 +6,8 @@ import { EventPassItem, mergeAttendance } from '@/lib/local-data';
 import { getAppBaseUrl } from '@/lib/app-url';
 import { syncEditedWalletPass, WalletSyncAction } from '@/lib/wallet/pass-cache';
 import { isPassArchived, PASS_RETENTION_DAYS } from '@/lib/pass-retention';
+import { gateEventPassAction } from '@/lib/approval-gate';
+import { markPassPending, submitPassApproval, PASS_SYSTEM_KEYS } from '@/lib/event-pass-approvals';
 
 /** Edits to these fields change what the wallet pass shows; check-ins, email tracking etc. must not touch the wallet. */
 const WALLET_RELEVANT_KEYS = new Set([
@@ -44,7 +46,24 @@ export async function POST(
       return NextResponse.json({ error: 'Attendee name and pass type are required' }, { status: 400 });
     }
 
-    const updated = await mutateCollection<EventPassItem>('event_passes', (current = []) => {
+    // Chain of command: decided here from the stored Group Policies, never from what the browser claims.
+    const gate = await gateEventPassAction(sessionUser, 'issue');
+    if (!gate.allowed) {
+      return NextResponse.json({ error: "You don't have permission to issue event passes." }, { status: 403 });
+    }
+    // Never trust approval bookkeeping fields coming from the client
+    delete (item as any).approvalStatus; delete (item as any).pendingChanges;
+    delete (item as any).submittedBy; delete (item as any).submittedByEmail;
+    delete (item as any).approvalPolicyName; delete (item as any).approverName;
+    if (gate.requiresApproval) {
+      item.approvalStatus = 'pending_create';
+      item.submittedBy = sessionUser.name;
+      item.submittedByEmail = sessionUser.email;
+      item.approvalPolicyName = gate.policyName;
+      item.approverName = gate.approverName;
+    }
+
+    await mutateCollection<EventPassItem>('event_passes', (current = []) => {
       const idx = current.findIndex((p) => p.id === item.id || p.serialNumber === item.serialNumber);
       if (idx >= 0) {
         const copy = [...current];
@@ -53,6 +72,16 @@ export async function POST(
       }
       return [item, ...current];
     });
+
+    if (gate.requiresApproval) {
+      await submitPassApproval({
+        action: 'issue',
+        pass: item,
+        actor: sessionUser,
+        gate,
+        message: `${sessionUser.name} wants to issue a ${item.passType} pass to ${item.attendeeName} for ${item.eventName}. The pass is held back until you approve${gate.policyName ? ` (policy: ${gate.policyName})` : ''}.`,
+      });
+    }
 
     return NextResponse.json(item, { status: 201 });
   } catch (err: any) {
@@ -72,6 +101,37 @@ export async function PATCH(
 
     if (!targetId) {
       return NextResponse.json({ error: 'passId is required' }, { status: 400 });
+    }
+
+    // Approval bookkeeping is server-owned
+    for (const k of ['approvalStatus', 'pendingChanges', 'submittedBy', 'submittedByEmail', 'approvalPolicyName', 'approverName']) delete (updates as any)[k];
+
+    // Only real edits are gated; scanner check-ins, email tracking and wallet bookkeeping stay open to their own flows.
+    const editKeys = Object.keys(updates).filter((k) => !PASS_SYSTEM_KEYS.has(k));
+    if (editKeys.length > 0) {
+      const gate = await gateEventPassAction(sessionUser, 'edit');
+      if (!gate.allowed) {
+        return NextResponse.json({ error: "You don't have permission to edit event passes." }, { status: 403 });
+      }
+      if (gate.requiresApproval) {
+        const existing = (await readCollection<EventPassItem>('event_passes')).find((p) => p.id === targetId || p.serialNumber === targetId);
+        if (!existing) return NextResponse.json({ error: 'Pass not found' }, { status: 404 });
+        if (existing.approvalStatus) {
+          return NextResponse.json({ error: 'This pass already has a change waiting for approval.' }, { status: 409 });
+        }
+        const changes: Record<string, unknown> = {};
+        for (const k of editKeys) changes[k] = (updates as any)[k];
+        const pending = await markPassPending(existing.id, 'pending_edit', sessionUser, gate, changes);
+        await submitPassApproval({
+          action: 'edit',
+          pass: existing,
+          actor: sessionUser,
+          gate,
+          message: `${sessionUser.name} wants to change ${existing.attendeeName}'s pass (${editKeys.join(', ')}). Nothing changes until you approve${gate.policyName ? ` (policy: ${gate.policyName})` : ''}.`,
+          payload: { fields: editKeys },
+        });
+        return NextResponse.json({ ...(pending || existing), approvalPending: true, walletUpdated: false, walletAction: 'none' });
+      }
     }
 
     let updatedPass: EventPassItem | null = null;

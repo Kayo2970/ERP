@@ -6,6 +6,8 @@ import { renderBoardingPassPng } from '@/lib/pass-image';
 import { getPassTheme } from '@/lib/pass-theme';
 import { requireSession } from '@/lib/session';
 import { apiError } from '@/lib/api-error';
+import { gateEventPassAction } from '@/lib/approval-gate';
+import { submitPassApproval } from '@/lib/event-pass-approvals';
 
 /**
  * Client-supplied attachments arrive as base64 (JSON has no Buffer type) —
@@ -35,7 +37,7 @@ function decodeAttachments(
 // Management page itself is a normal authenticated feature too.
 export async function POST(request: Request) {
   try {
-    await requireSession(request);
+    const sessionUser = await requireSession(request);
     const body = await request.json();
     const {
       scope,
@@ -54,6 +56,26 @@ export async function POST(request: Request) {
     } = body;
 
     const attachments = decodeAttachments(rawAttachments) || [];
+
+    // Event pass emails are an Event Passes action: policy-gated, and held for approval when the policy says so.
+    if (typeof passSerial === 'string' && passSerial) {
+      const gate = await gateEventPassAction(sessionUser, 'dispatch');
+      if (!gate.allowed) {
+        return NextResponse.json({ error: "You don't have permission to email event passes." }, { status: 403 });
+      }
+      if (gate.requiresApproval) {
+        const target = (await readCollection<EventPassItem>('event_passes')).find((p) => p.serialNumber.toLowerCase() === passSerial.toLowerCase());
+        if (!target) return NextResponse.json({ error: 'Pass not found' }, { status: 404 });
+        const to0 = recipientEmail || to;
+        await submitPassApproval({
+          action: 'dispatch', pass: target, actor: sessionUser, gate,
+          uniqueSuffix: String(to0).toLowerCase(),
+          message: `${sessionUser.name} wants to email ${target.attendeeName}'s pass to ${to0}. It is sent only after you approve${gate.policyName ? ` (policy: ${gate.policyName})` : ''}.`,
+          payload: { email: { to: to0, subject, bodyText: bodyText || rawBody || content, bodyHtml, passSerial, category, badgeText, badgeColor } },
+        });
+        return NextResponse.json({ count: 0, dispatched: [], approvalPending: true }, { status: 202 });
+      }
+    }
 
     // Event pass emails: render the boarding-pass image and attach it inline (cid:leads-pass-image)
     if (typeof passSerial === 'string' && passSerial) {
