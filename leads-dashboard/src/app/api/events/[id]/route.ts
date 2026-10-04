@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection, readCollection } from '@/lib/server-db';
-import { gateEventAction, eventEditKeys } from '@/lib/approval-gate';
+import { gateEventAction, eventEditKeys, holdEditForApproval, classifyApprovalUpdate, canDecidePending } from '@/lib/approval-gate';
 import { cascadeDeleteEvent } from '@/lib/cascade-delete';
 import { fanOutAutoApproval, cascadeCloseAutoApprovals, deleteLinkedApprovalRequests, resolveCustomApprovalPanel } from '@/lib/approval-sync';
 import { requireSession, requirePermission, ForbiddenError } from '@/lib/session';
-import { canDeleteEvent, canApprovePendingEvent, getAccessLevelSettingsServer } from '@/lib/permissions-server';
+import { canDeleteEvent, getAccessLevelSettingsServer, isEventsHeadGgCampus } from '@/lib/permissions-server';
 import { apiError } from '@/lib/api-error';
 import { dispatchCommitteeRosterEmails } from '@/lib/committee-roster-email';
 
@@ -43,29 +43,23 @@ export async function PATCH(
     const { id } = await params;
     const updates = await request.json();
 
-    // Chain of command: a member whose edit right comes only from an approval-required Group Policy cannot change an
-    // event directly, whatever the browser sent — convert the edit into a pending_edit request for the approver.
-    const isDecision = updates.approvalStatus === 'approved' || updates.approvalStatus === 'rejected';
-    const editKeys = eventEditKeys(updates);
-    if (!isDecision && editKeys.length > 0) {
-      const stored = (await readCollection<any>('events')).find((e: any) => e.id === id);
-      if (stored) {
+    // Chain of command. Only a record that is genuinely pending can be decided (and only by its approver); a client that
+    // sends approvalStatus "approved" on a record that isn't pending is trying to skip sign-off, so that is stripped.
+    const storedEvent = (await readCollection<any>('events')).find((e: any) => e.id === id);
+    const kind = classifyApprovalUpdate(storedEvent, updates);
+    if (kind === 'decision') {
+      if (!(await canDecidePending(storedEvent, actor, isEventsHeadGgCampus))) {
+        throw new ForbiddenError('You are not authorized to decide this event — it needs sign-off from the designated approver.');
+      }
+    } else {
+      const editKeys = eventEditKeys(updates);
+      if (editKeys.length > 0 && storedEvent) {
         const gate = await gateEventAction(actor, 'EDIT');
         if (!gate.allowed) {
           return NextResponse.json({ error: "You don't have permission to edit events." }, { status: 403 });
         }
-        if (gate.requiresApproval && !PENDING_STATES.has(stored.approvalStatus)) {
-          const changes: Record<string, unknown> = {};
-          for (const k of editKeys) changes[k] = updates[k];
-          for (const k of editKeys) delete updates[k];
-          updates.pendingChange = { ...(stored.pendingChange || {}), ...changes };
-          updates.approvalStatus = 'pending_edit';
-          updates.approverType = gate.approverType;
-          updates.approverMemberId = gate.approverMemberId;
-          updates.approverPolicyTagId = gate.approverPolicyTagId;
-          updates.approvalPolicyName = gate.policyName;
-          updates.submittedBy = actor.name;
-          updates.submittedByEmail = actor.email;
+        if (gate.requiresApproval && !PENDING_STATES.has(storedEvent.approvalStatus)) {
+          holdEditForApproval(storedEvent, updates, editKeys, gate, actor);
         }
       }
     }
@@ -77,13 +71,6 @@ export async function PATCH(
       const idx = current.findIndex((item: any) => item.id === id);
       if (idx === -1) return [...current, { id, ...updates }];
       previous = current[idx];
-
-      const isDecideTransition =
-        PENDING_STATES.has(previous.approvalStatus) &&
-        (updates.approvalStatus === 'approved' || updates.approvalStatus === 'rejected');
-      if (isDecideTransition && !canApprovePendingEvent(previous, actor, settings)) {
-        throw new ForbiddenError('You are not authorized to decide this event — it needs sign-off from the Centre Head, Advisor, or GG Campus Events Head.');
-      }
 
       const next = [...current];
       next[idx] = { ...next[idx], ...updates };

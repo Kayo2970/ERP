@@ -131,3 +131,111 @@ const EVENT_NON_EDIT_KEYS = new Set([
 export function eventEditKeys(updates: Record<string, unknown>): string[] {
   return Object.keys(updates).filter((k) => !EVENT_NON_EDIT_KEYS.has(k));
 }
+
+// ───────────────────────────── shared helpers for Events / Tasks / Forms ─────────────────────────────
+
+const PENDING = new Set(['pending_create', 'pending_edit', 'pending_delete']);
+export function isPendingState(s: unknown): boolean { return typeof s === 'string' && PENDING.has(s); }
+
+/**
+ * A request only counts as a DECISION when the stored record is genuinely pending. Anything else that carries
+ * approvalStatus "approved"/"rejected" is a client trying to self-approve (or a stale write) and is stripped.
+ */
+export function classifyApprovalUpdate(stored: any, updates: Record<string, any>): 'decision' | 'plain' {
+  const wantsDecision = updates.approvalStatus === 'approved' || updates.approvalStatus === 'rejected';
+  if (wantsDecision && stored && isPendingState(stored.approvalStatus)) return 'decision';
+  if (wantsDecision) { delete updates.approvalStatus; delete updates.decidedBy; delete updates.decidedAt; }
+  return 'plain';
+}
+
+/** Whether `actor` is the resolved approver for a pending record (Super User always; never the submitter). */
+export async function canDecidePending(stored: any, actor: ServerUser, extraCentreHeadCheck?: (u: ServerUser) => boolean): Promise<boolean> {
+  if (!actor || !stored) return false;
+  if (actor.tier === 1) return true;
+  if (!isPendingState(stored.approvalStatus)) return false;
+  if (stored.submittedByEmail && actor.email && String(stored.submittedByEmail).toLowerCase() === String(actor.email).toLowerCase()) return false;
+  if (stored.approverType === 'SPECIFIC_MEMBER') return actor.id === stored.approverMemberId;
+  if (stored.approverType === 'POLICY_TAG' && stored.approverPolicyTagId) {
+    const tag = (await readCollection<any>('groupPolicies')).find((p: any) => p.id === stored.approverPolicyTagId);
+    return !!tag && policyTargetsUser(tag, actor);
+  }
+  const settings = await getAccessLevelSettingsServer();
+  const { isCentreHead } = await import('./permissions-server');
+  return isCentreHead(actor, settings) || !!extraCentreHeadCheck?.(actor);
+}
+
+/** Turn a direct edit into a held pending_edit: the proposed fields move into `pendingChange`, the rest of the record is untouched. */
+export function holdEditForApproval(stored: any, updates: Record<string, any>, editKeys: string[], gate: GateDecision, actor: { name?: string; email?: string }) {
+  const changes: Record<string, unknown> = {};
+  for (const k of editKeys) { changes[k] = updates[k]; delete updates[k]; }
+  updates.pendingChange = { ...(stored?.pendingChange || {}), ...changes };
+  updates.approvalStatus = 'pending_edit';
+  updates.approverType = gate.approverType;
+  updates.approverMemberId = gate.approverMemberId;
+  updates.approverPolicyTagId = gate.approverPolicyTagId;
+  updates.approvalPolicyName = gate.policyName;
+  updates.submittedBy = actor.name;
+  updates.submittedByEmail = actor.email;
+}
+
+/** Stamp a brand-new record as pending_create with the approver info. */
+export function stampPendingCreate(item: any, gate: GateDecision, actor: { name?: string; email?: string }) {
+  item.approvalStatus = 'pending_create';
+  item.approverType = gate.approverType;
+  item.approverMemberId = gate.approverMemberId;
+  item.approverPolicyTagId = gate.approverPolicyTagId;
+  item.approvalPolicyName = gate.policyName;
+  item.submittedBy = actor.name;
+  item.submittedByEmail = actor.email;
+}
+
+/** Keys whose value differs between a stored record and a full replacement body (for POST-with-existing-id upserts). */
+export function changedKeys(stored: any, incoming: Record<string, any>, ignore: Set<string>): string[] {
+  return Object.keys(incoming).filter((k) => !ignore.has(k) && JSON.stringify(stored?.[k]) !== JSON.stringify(incoming[k]));
+}
+
+/** Policy-driven requirement only (no 403 when nobody granted anything: those legacy open paths are unchanged). */
+async function policyOnlyGate(user: ServerUser, capabilities: string[], trusted: boolean): Promise<GateDecision> {
+  const g = await evaluateCapabilityGate(user, capabilities, trusted);
+  return g.allowed ? g : { allowed: true, requiresApproval: false };
+}
+
+const TASK_EDIT_KEYS = new Set([
+  'title', 'event', 'eventName', 'eventId', 'eventCommitteeId', 'eventCommitteeName', 'assignee', 'assigneeId', 'assigneeEmail',
+  'assigneeIds', 'assigneeType', 'dueDate', 'taskCategory', 'designCategory', 'briefDescription', 'canvaLink', 'isSocialMediaPost',
+]);
+export const taskEditKeys = (u: Record<string, unknown>) => Object.keys(u).filter((k) => TASK_EDIT_KEYS.has(k));
+/** Tasks the app creates for itself (procurement etc.) are not "someone assigning a task". */
+export const isSystemTask = (t: any) => !!(t && (t.workflowType || t.isProcurement || t.procurementId));
+
+export async function gateTaskAction(user: ServerUser, action: 'CREATE' | 'EDIT'): Promise<GateDecision> {
+  if (!user) return { allowed: true, requiresApproval: false };
+  const settings = await getAccessLevelSettingsServer();
+  const { isCoreCommitteeTier } = await import('./permissions-server');
+  const builtIn = user.tier === 1 || isBaseLeadership(user, settings) || user.tier === 2.5 || isHeadRole(user, settings) || isCoreCommitteeTier(user, settings) || (await hasModuleEditAll(user, 'TASKS'));
+  return policyOnlyGate(user, [action === 'CREATE' ? 'TASKS_CREATE' : 'TASKS_EDIT'], builtIn);
+}
+
+const FORM_EDIT_KEYS = new Set(['title', 'slug', 'description', 'committee', 'fields', 'eventId', 'eventName', 'sourceTemplateId']);
+export const formEditKeys = (u: Record<string, unknown>) => Object.keys(u).filter((k) => FORM_EDIT_KEYS.has(k));
+
+/**
+ * Forms are only ever created/edited/deleted from the Forms page, so the browser's rule is mirrored in full:
+ * Super User / Centre Head / Finance / Design / Events heads act directly; everyone else with access — built-in or via a
+ * policy — goes through sign-off. When the access comes only from an approval-required policy, that policy's approver
+ * is used; otherwise the Centre Head.
+ */
+export async function gateFormAction(user: ServerUser, action: 'CREATE' | 'EDIT' | 'DELETE'): Promise<GateDecision> {
+  if (!user) return { allowed: false, requiresApproval: false };
+  const p = await import('./permissions-server');
+  const settings = await getAccessLevelSettingsServer();
+  const trusted = user.tier === 1 || p.isCentreHead(user, settings) || p.isFinanceHead(user, settings) || p.isDesignHead(user, settings) || p.isHeadOfEvents(user);
+  if (trusted) return { allowed: true, requiresApproval: false };
+  const caps = action === 'DELETE' ? ['FORMS_DELETE', 'BUILD_FORMS'] : ['BUILD_FORMS'];
+  const builtInAccess = action === 'DELETE' ? await p.canDeleteForms(user, settings) || p.canBuildForms(user, settings) : p.canBuildForms(user, settings);
+  const moduleAll = await hasModuleEditAll(user, 'FORMS');
+  const policy = await evaluateCapabilityGate(user, caps, false);
+  if (!builtInAccess && !moduleAll && !policy.allowed) return { allowed: false, requiresApproval: false };
+  if (!builtInAccess && !moduleAll && policy.requiresApproval) return policy;
+  return { allowed: true, requiresApproval: true, approverType: 'CENTER_HEAD', approverName: 'the Centre Head', policyName: 'Public Form Sign-off Requirement' };
+}

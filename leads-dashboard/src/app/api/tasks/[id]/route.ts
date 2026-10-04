@@ -5,8 +5,9 @@ import { enqueueTaskEmailNotification } from '@/lib/task-email-queue';
 import { deleteStoredFilesForRecord } from '@/lib/file-storage';
 import { fanOutAutoApproval, cascadeCloseAutoApprovals, deleteLinkedApprovalRequests, resolveCustomApprovalPanel } from '@/lib/approval-sync';
 import { requireSession, requirePermission, ForbiddenError } from '@/lib/session';
-import { canDeleteTask, canApprovePendingTask, getAccessLevelSettingsServer } from '@/lib/permissions-server';
+import { canDeleteTask, getAccessLevelSettingsServer, isEventsHeadGgCampus } from '@/lib/permissions-server';
 import { apiError } from '@/lib/api-error';
+import { gateTaskAction, taskEditKeys, holdEditForApproval, classifyApprovalUpdate, canDecidePending } from '@/lib/approval-gate';
 
 const PENDING_APPROVAL_MESSAGE: Record<string, string> = {
   pending_create: 'This task needs sign-off from the Centre Head, Advisor, or GG Campus Events Head before it is allotted.',
@@ -30,6 +31,21 @@ export async function PATCH(
     const settings = await getAccessLevelSettingsServer();
     const { id } = await params;
     const updates = await request.json();
+
+    // Chain of command: only a genuinely pending task can be decided (by its approver); a content edit by someone whose
+    // access comes from an approval-required Group Policy is held as pending_edit instead of applying.
+    const storedTask = (await readCollection<any>('tasks')).find((t: any) => t.id === id);
+    if (classifyApprovalUpdate(storedTask, updates) === 'decision') {
+      if (!(await canDecidePending(storedTask, actor, isEventsHeadGgCampus))) {
+        throw new ForbiddenError('You are not authorized to decide this task — it needs sign-off from the designated approver.');
+      }
+    } else {
+      const editKeys = taskEditKeys(updates);
+      if (editKeys.length > 0 && storedTask && !PENDING_STATES.has(storedTask.approvalStatus)) {
+        const gate = await gateTaskAction(actor, 'EDIT');
+        if (gate.requiresApproval) holdEditForApproval(storedTask, updates, editKeys, gate, actor);
+      }
+    }
     // Upsert: if this id isn't in the server's collection yet (e.g. client-bundled
     // sample/seed data never POSTed), create it instead of 404ing and silently
     // dropping the edit.
@@ -38,13 +54,6 @@ export async function PATCH(
       const idx = current.findIndex((item: any) => item.id === id);
       if (idx === -1) return [...current, { id, ...updates }];
       previous = current[idx];
-
-      const isDecideTransition =
-        PENDING_STATES.has(previous.approvalStatus) &&
-        (updates.approvalStatus === 'approved' || updates.approvalStatus === 'rejected');
-      if (isDecideTransition && !canApprovePendingTask(previous, actor, settings)) {
-        throw new ForbiddenError('You are not authorized to decide this task — it needs sign-off from the Centre Head, Advisor, or GG Campus Events Head.');
-      }
 
       const next = [...current];
       next[idx] = { ...next[idx], ...updates };

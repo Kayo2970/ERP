@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { mutateCollection } from '@/lib/server-db';
+import { mutateCollection, readCollection } from '@/lib/server-db';
+import { gateFormAction, formEditKeys, holdEditForApproval, classifyApprovalUpdate, canDecidePending } from '@/lib/approval-gate';
 import { requireSession, ForbiddenError } from '@/lib/session';
 import { getAccessLevelSettingsServer, canBuildForms, canDeleteForms } from '@/lib/permissions-server';
 import { fanOutAutoApproval, cascadeCloseAutoApprovals, deleteLinkedApprovalRequests, resolveCustomApprovalPanel } from '@/lib/approval-sync';
@@ -19,9 +20,25 @@ export async function PATCH(
   try {
     const actor = await requireSession(request);
     const settings = await getAccessLevelSettingsServer();
-    if (!canBuildForms(actor, settings)) throw new ForbiddenError();
     const { id } = await params;
     const updates = await request.json();
+
+    // Chain of command: a genuinely pending form is decided only by its approver (this route used to let any form
+    // builder approve their own submission); edits by non-trusted builders are held as pending_edit.
+    const storedForm = (await readCollection<any>('forms')).find((f: any) => f.id === id);
+    if (classifyApprovalUpdate(storedForm, updates) === 'decision') {
+      if (!(await canDecidePending(storedForm, actor))) {
+        throw new ForbiddenError('You are not authorized to decide this form — it needs sign-off from the designated approver.');
+      }
+    } else {
+      const gate = await gateFormAction(actor, 'EDIT');
+      const isPendingRequest = updates.approvalStatus === 'pending_edit' || updates.approvalStatus === 'pending_delete' || updates.approvalStatus === 'pending_create';
+      if (!gate.allowed && !(isPendingRequest && canBuildForms(actor, settings))) throw new ForbiddenError();
+      const editKeys = formEditKeys(updates);
+      if (editKeys.length > 0 && storedForm && gate.requiresApproval && !PENDING_STATES.has(storedForm.approvalStatus)) {
+        holdEditForApproval(storedForm, updates, editKeys, gate, actor);
+      }
+    }
     // Upsert: if this id isn't in the server's collection yet (e.g. client-bundled
     // sample/seed data never POSTed), create it instead of 404ing and silently
     // dropping the edit.
@@ -83,6 +100,44 @@ export async function DELETE(
     const settings = await getAccessLevelSettingsServer();
     if (!(await canDeleteForms(actor, settings))) throw new ForbiddenError();
     const { id } = await params;
+
+    // Chain of command: a non-trusted user's delete is held as pending_delete; a pending delete is carried out only by its approver.
+    const storedForm = (await readCollection<any>('forms')).find((f: any) => f.id === id);
+    const delGate = await gateFormAction(actor, 'DELETE');
+    if (storedForm && delGate.requiresApproval) {
+      if (storedForm.approvalStatus === 'pending_delete' && (await canDecidePending(storedForm, actor))) {
+        // approver confirming the deletion — fall through
+      } else if (PENDING_STATES.has(storedForm.approvalStatus)) {
+        return NextResponse.json({ error: 'This form already has a change waiting for approval.' }, { status: 409 });
+      } else {
+        const held: Record<string, any> = {
+          approvalStatus: 'pending_delete',
+          approverType: delGate.approverType,
+          approverMemberId: delGate.approverMemberId,
+          approverPolicyTagId: delGate.approverPolicyTagId,
+          approvalPolicyName: delGate.policyName,
+          submittedBy: actor.name,
+          submittedByEmail: actor.email,
+        };
+        const updatedRows = await mutateCollection('forms', (current) => current.map((f: any) => (f.id === id ? { ...f, ...held } : f)));
+        const result = updatedRows.find((f: any) => f.id === id);
+        if (result) {
+          try {
+            const customPanel = result.approverType && result.approverType !== 'CENTER_HEAD'
+              ? await resolveCustomApprovalPanel(result.approverType, result.approverMemberId, result.approverPolicyTagId)
+              : undefined;
+            await fanOutAutoApproval({
+              entityType: 'form', entityId: result.id, entityTitle: result.title, eventId: result.eventId,
+              requesterId: result.submittedBy || '', requesterName: result.submittedBy || 'A member', requesterEmail: result.submittedByEmail,
+              message: PENDING_APPROVAL_MESSAGE.pending_delete, customPanel,
+            });
+          } catch (approvalErr) {
+            console.error('[forms-api] Approval fan-out failed:', approvalErr);
+          }
+        }
+        return NextResponse.json({ success: true, approvalPending: true }, { status: 202 });
+      }
+    }
     let found = false;
     let deletedSlug: string | undefined;
     await mutateCollection('forms', (current) => {

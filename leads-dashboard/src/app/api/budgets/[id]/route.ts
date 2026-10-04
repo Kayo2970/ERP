@@ -30,20 +30,19 @@ export async function PATCH(
     // Figure out which stage this PATCH is actioning from the body shape —
     // see decideBudget()/verifyBudgetByCentreHead()/updateBudget() in
     // local-data.ts, the only client write paths that hit this route.
-    const isVerifyStage = updates.centreHeadVerified === true;
-    const isDecideStage = (updates.status === 'Approved' || updates.status === 'Rejected') && 'decidedBy' in updates;
-    const isEditStage = updates.status === 'Pending' && updates.centreHeadVerified === false;
+    // Stages are detected from what the request CHANGES relative to the stored record. The client PATCHes the whole
+    // record every time, and leaving `decidedBy` out used to make an approval look like a plain edit, which the
+    // submitter was allowed to send — i.e. self-approval.
+    const changed = (k: string) => JSON.stringify(existing?.[k]) !== JSON.stringify((updates as any)[k]) && k in updates;
+    const isVerifyStage = updates.centreHeadVerified === true && existing?.centreHeadVerified !== true;
+    const isDecideStage = (updates.status === 'Approved' || updates.status === 'Rejected') && (changed('status') || changed('decidedBy'));
+    const isEditStage = updates.status === 'Pending' && updates.centreHeadVerified === false && (existing?.status !== 'Pending' || existing?.centreHeadVerified !== false);
 
-    let allowed = false;
-    if (isVerifyStage) {
-      allowed = allowed || canVerifyBudgetCentreHead(actor, settings);
-    }
-    if (isDecideStage) {
-      allowed = allowed || canDecideBudget(actor, settings, existing);
-    }
-    if (isEditStage) {
-      allowed = allowed || canSubmitBudget(actor, settings) || isSubmitter;
-    }
+    // Every stage the body touches must be permitted (a verify + decide in one request needs BOTH rights).
+    let allowed = true;
+    if (isVerifyStage) allowed = allowed && canVerifyBudgetCentreHead(actor, settings);
+    if (isDecideStage) allowed = allowed && canDecideBudget(actor, settings, existing);
+    if (isEditStage) allowed = allowed && (canSubmitBudget(actor, settings) || isSubmitter);
     if (!isVerifyStage && !isDecideStage && !isEditStage) {
       // No recognized stage transition — fall back to the union of everyone
       // who could legitimately touch this record.
