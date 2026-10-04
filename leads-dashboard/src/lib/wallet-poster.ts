@@ -159,11 +159,12 @@ export async function renderWalletPosterJpeg(input: PosterRenderInput, theme: Pa
   // Styled QR instead of Apple's native barcode: white plate in the barcode band, same place Apple would draw it
   if (input.qr) {
     const { url, options, caption } = input.qr;
-    const size = 300;
-    const plate = 20;
+    // Must end above Apple's field row (fieldsTop): barcodeTop + plate*2 + size + caption <= ~79% of the card
+    const size = 250;
+    const plate = 18;
     const px = (W - size - plate * 2) / 2;
     const py = H * POSTER_ZONES.barcodeTop;
-    const ph = size + plate * 2 + (caption ? 34 : 0);
+    const ph = size + plate * 2 + (caption ? 30 : 0);
     ctx.fillStyle = options.light;
     ctx.beginPath();
     ctx.moveTo(px + 22, py);
@@ -184,9 +185,9 @@ export async function renderWalletPosterJpeg(input: PosterRenderInput, theme: Pa
     drawStyledQr(ctx, url, px + plate, py + plate, size, { dark: options.dark, light: options.light, eye: options.eye || undefined, shape: options.shape, logo });
     if (caption) {
       ctx.fillStyle = options.dark;
-      ctx.font = `bold 20px ${fam}`;
+      ctx.font = `bold 18px ${fam}`;
       ctx.textAlign = 'center';
-      ctx.fillText(caption, W / 2, py + plate * 2 + size + 8);
+      ctx.fillText(caption, W / 2, py + plate * 2 + size + 2);
       ctx.textAlign = 'left';
     }
   }
