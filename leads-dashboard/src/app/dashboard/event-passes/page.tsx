@@ -127,7 +127,7 @@ export default function EventPassesPage() {
   const syncPassesFromServer = async () => {
     try {
       setIsRefreshing(true);
-      const res = await fetch('/api/events/all/passes', { headers: authHeaders() });
+      const res = await fetch('/api/events/all/passes', { cache: 'no-store', headers: authHeaders() });
       if (res.ok) {
         const serverPasses = await res.json();
         if (Array.isArray(serverPasses)) {

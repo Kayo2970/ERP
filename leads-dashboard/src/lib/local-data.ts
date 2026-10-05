@@ -3070,7 +3070,7 @@ export function saveEventPasses(passes: EventPassItem[]): void {
 export async function reconcilePassesFromServer(): Promise<void> {
   if (typeof window === 'undefined') return;
   try {
-    const res = await fetch('/api/events/all/passes', { headers: authHeaders() });
+    const res = await fetch('/api/events/all/passes', { cache: 'no-store', headers: authHeaders() });
     if (!res.ok) return;
     const rows = await res.json();
     if (Array.isArray(rows)) {
