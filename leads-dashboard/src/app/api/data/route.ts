@@ -43,6 +43,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(db, {
       headers: {
+        'Cache-Control': 'no-store, max-age=0',
         'Server-Timing': `auth;dur=${authMs.toFixed(1)}, dbread;dur=${readMs.toFixed(1)}, total;dur=${totalMs.toFixed(1)}`,
       },
     });

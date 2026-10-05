@@ -1699,11 +1699,27 @@ function hydrateIfStale(key: string, serverArray: unknown, requestStartedAt: num
  * getters below) — that's the true first-run/offline experience. Once a sync
  * resolves, even to an empty collection, that's what's shown from then on.
  */
-export async function syncWithServer(): Promise<boolean> {
-  if (typeof window === 'undefined') return false;
+let syncInFlight: Promise<boolean> | null = null;
+
+export function syncWithServer(): Promise<boolean> {
+  if (typeof window === 'undefined') return Promise.resolve(false);
+  // Share one request between overlapping callers (poll + visibility/focus
+  // triggers firing together on resume).
+  if (!syncInFlight) {
+    syncInFlight = doSyncWithServer().finally(() => { syncInFlight = null; });
+  }
+  return syncInFlight;
+}
+
+async function doSyncWithServer(): Promise<boolean> {
   const requestStartedAt = Date.now();
+  // iOS Safari can leave a fetch hanging forever after the page was
+  // suspended/resumed; without a timeout the in-flight guard would then
+  // block every later sync and the UI would stay stale indefinitely.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
   try {
-    const res = await fetch('/api/data', { cache: 'no-store', headers: authHeaders() });
+    const res = await fetch('/api/data', { cache: 'no-store', headers: authHeaders(), signal: controller.signal });
     if (!res.ok) return false;
     const data = await res.json();
     if (data && typeof data === 'object') {
@@ -1736,6 +1752,8 @@ export async function syncWithServer(): Promise<boolean> {
     }
   } catch (err) {
     console.warn('[sync] Server sync skipped (offline or starting up):', err);
+  } finally {
+    clearTimeout(timeout);
   }
   return false;
 }

@@ -518,6 +518,19 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         syncWithServer().catch(() => {}); // silent — offline is OK
       }, 7000);
 
+      // Mobile browsers (iOS Safari especially) freeze timers while the tab is
+      // backgrounded or the phone is locked, and can restore a page from the
+      // back/forward cache without re-running anything — so the 7s poll alone
+      // leaves stale data on screen after resuming. Re-sync immediately on any
+      // resume signal.
+      const resync = () => { syncWithServer().catch(() => {}); };
+      const onVisibility = () => { if (document.visibilityState === 'visible') resync(); };
+      const onPageShow = () => resync();
+      document.addEventListener('visibilitychange', onVisibility);
+      window.addEventListener('focus', resync);
+      window.addEventListener('pageshow', onPageShow);
+      window.addEventListener('online', resync);
+
       // Load dynamic notifications from recent announcements, tasks, and proofread requests
       setNotifications(buildNotifications(parsedUser));
       setSeenActionIds(loadSeenActionIds());
@@ -575,7 +588,13 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       localStorage.setItem(`leads_seen_tier_${userKey}`, String(parsedUser.tier));
       localStorage.setItem(`leads_seen_role_${userKey}`, parsedUser.role || '');
 
-      return () => clearInterval(pollInterval);
+      return () => {
+        clearInterval(pollInterval);
+        document.removeEventListener('visibilitychange', onVisibility);
+        window.removeEventListener('focus', resync);
+        window.removeEventListener('pageshow', onPageShow);
+        window.removeEventListener('online', resync);
+      };
     } catch (e) {
       console.error('Failed to parse user session:', e);
       router.replace('/');
