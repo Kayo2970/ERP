@@ -997,7 +997,7 @@ export default function DesignPortalPage() {
   // queue until its status flips to 'Completed', which syncDesignTask() does
   // automatically the moment the linked submission's proofread is approved.
   const designTaskRequests = tasks.filter(t => {
-    if (t.taskCategory !== 'design' || t.status === 'Completed') return false;
+    if (!(t.taskCategory === 'design' || t.isDesignDeliverable || t.designCategory) || t.status === 'Completed') return false;
     if (canViewAllDesigns(user)) return true;
     // isTaskAssignee is the canonical "is this assigned to me" check used
     // across the app (Tasks page, notifications, etc.) — it correctly
@@ -1261,11 +1261,12 @@ export default function DesignPortalPage() {
               onChange={(e) => setCategoryFilter(e.target.value)}
               className="px-3 py-1.5 text-xs rounded-xl bg-white/40 dark:bg-white/5 border border-theme-border/30 text-theme-text-primary focus:outline-none focus:border-accent cursor-pointer"
             >
-              <option value="ALL">All Categories</option>
+              <option value="all">All Categories</option>
               <option value="Poster">Poster</option>
+              <option value="Postage">Postage</option>
               <option value="Banner">Banner</option>
-              <option value="Social Media Post">Social Media Post</option>
-              <option value="ID Card / Certificate">ID Card / Certificate</option>
+              <option value="Social Media">Social Media Post</option>
+              <option value="Certificates">Certificates</option>
               <option value="Brochure">Brochure</option>
               <option value="Other">Other</option>
             </select>
