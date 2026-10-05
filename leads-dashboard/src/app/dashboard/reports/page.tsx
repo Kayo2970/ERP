@@ -211,7 +211,7 @@ export default function ReportsPage() {
         return {
           name: key,
           detail: finalRow
-            ? `Final score — avg ${finalRow.avgScore.toFixed(1)} across ${group.length} task${group.length === 1 ? '' : 's'}, weighted by task count`
+            ? `Final score — avg ${finalRow.avgScore.toFixed(1)} over ${finalRow.eventCount} event${finalRow.eventCount === 1 ? '' : 's'} (${group.length} task${group.length === 1 ? '' : 's'}), weighted by task count`
             : `Average of ${group.length} evaluated task${group.length === 1 ? '' : 's'}`,
           score: avg,
           fill: getRatingColor(avg).hex,
@@ -560,7 +560,7 @@ export default function ReportsPage() {
             <h3 className="font-bold text-sm text-theme-text-primary">Student Final Score</h3>
             <p className="text-[11px] text-theme-text-secondary">
               Final = {Math.round(QUALITY_WEIGHT * 100)}% average evaluation score + {Math.round(TASK_COUNT_WEIGHT * 100)}% task count
-              (full marks at {TASK_COUNT_TARGET}+ evaluated tasks).
+              (full marks at {TASK_COUNT_TARGET}+ evaluated tasks). Every event counts: scores are averaged per event first, then across all events with equal weight.
             </p>
           </div>
           <div className="overflow-x-auto">
@@ -569,6 +569,7 @@ export default function ReportsPage() {
                 <tr className="text-theme-text-secondary border-b border-theme-border/30">
                   <th className="pb-2 font-semibold">#</th>
                   <th className="pb-2 font-semibold">Student</th>
+                  <th className="pb-2 font-semibold">Events</th>
                   <th className="pb-2 font-semibold">Tasks Evaluated</th>
                   <th className="pb-2 font-semibold">Avg Score</th>
                   <th className="pb-2 font-semibold">Task Count Score</th>
@@ -582,6 +583,7 @@ export default function ReportsPage() {
                     <tr key={row.name}>
                       <td className="py-2 pr-2 text-theme-text-secondary">{i + 1}</td>
                       <td className="py-2 pr-2 font-bold text-theme-text-primary">{row.name}</td>
+                      <td className="py-2 pr-2 text-theme-text-secondary">{row.eventCount}</td>
                       <td className="py-2 pr-2 text-theme-text-secondary">{row.taskCount}</td>
                       <td className="py-2 pr-2 text-theme-text-secondary">{row.avgScore.toFixed(2)} / 5.0</td>
                       <td className="py-2 pr-2 text-theme-text-secondary">{row.countScore.toFixed(2)} / 5.0</td>
