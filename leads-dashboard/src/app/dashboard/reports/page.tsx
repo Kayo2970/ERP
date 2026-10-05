@@ -18,6 +18,7 @@ import {
 } from 'recharts';
 import { getRatings, getMembers, getEvents, getTasks, RatingItem, Member, EventItem, TaskItem } from '@/lib/local-data';
 import { getRatingColor } from '@/lib/design-tokens';
+import { buildStudentFinalScores, QUALITY_WEIGHT, TASK_COUNT_WEIGHT, TASK_COUNT_TARGET } from '@/lib/final-score';
 import { canViewRating, isFaculty, isSocialMediaTeamMember } from '@/lib/permissions';
 import { generatePerformanceReportPdf, ReportType, CapturedChartImage } from '@/lib/report-generator';
 import { BarChart3, Download, FileText, Star, Loader2 } from 'lucide-react';
@@ -204,16 +205,24 @@ export default function ReportsPage() {
 
     return Array.from(groups.entries())
       .map(([key, group]) => {
-        const avg = parseFloat((group.reduce((sum, r) => sum + r.overallScore, 0) / group.length).toFixed(1));
+        const rawAvg = group.reduce((sum, r) => sum + r.overallScore, 0) / group.length;
+        const finalRow = barBreakdown === 'student' ? studentFinalScores.find(s => s.name === key) : undefined;
+        const avg = finalRow ? finalRow.finalScore : parseFloat(rawAvg.toFixed(1));
         return {
           name: key,
-          detail: `Average of ${group.length} evaluated task${group.length === 1 ? '' : 's'}`,
+          detail: finalRow
+            ? `Final score — avg ${finalRow.avgScore.toFixed(1)} across ${group.length} task${group.length === 1 ? '' : 's'}, weighted by task count`
+            : `Average of ${group.length} evaluated task${group.length === 1 ? '' : 's'}`,
           score: avg,
           fill: getRatingColor(avg).hex,
         };
       })
       .sort((a, b) => b.score - a.score);
   })();
+
+  // Final score per student: weighted blend of average evaluation score and
+  // number of evaluated tasks (see final-score.ts).
+  const studentFinalScores = buildStudentFinalScores(filteredRatings);
 
   // Unique Targets List for selector — professors and ineligible members strictly excluded
   const targets = Array.from(new Set(
@@ -481,7 +490,7 @@ export default function ReportsPage() {
               <div>
                 <h3 className="font-bold text-sm text-theme-text-primary">Deliverable Performance Distribution</h3>
                 <p className="text-[11px] text-theme-text-secondary">
-                  {barBreakdown === 'student' && 'One bar per student — their average across every evaluated task in scope'}
+                  {barBreakdown === 'student' && 'One bar per student — final score (average rating weighted with number of tasks done)'}
                   {barBreakdown === 'event' && 'One bar per event — the average score of everyone evaluated on it'}
                   {barBreakdown === 'task' && 'One bar per individual evaluated deliverable (detailed view)'}
                 </p>
@@ -541,6 +550,50 @@ export default function ReportsPage() {
             </div>
           </div>
 
+        </div>
+      )}
+
+      {/* Student Final Score — average quality + task-count weightage */}
+      {studentFinalScores.length > 0 && (
+        <div className="glass-panel rounded-2xl p-6 space-y-4">
+          <div>
+            <h3 className="font-bold text-sm text-theme-text-primary">Student Final Score</h3>
+            <p className="text-[11px] text-theme-text-secondary">
+              Final = {Math.round(QUALITY_WEIGHT * 100)}% average evaluation score + {Math.round(TASK_COUNT_WEIGHT * 100)}% task count
+              (full marks at {TASK_COUNT_TARGET}+ evaluated tasks).
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="text-theme-text-secondary border-b border-theme-border/30">
+                  <th className="pb-2 font-semibold">#</th>
+                  <th className="pb-2 font-semibold">Student</th>
+                  <th className="pb-2 font-semibold">Tasks Evaluated</th>
+                  <th className="pb-2 font-semibold">Avg Score</th>
+                  <th className="pb-2 font-semibold">Task Count Score</th>
+                  <th className="pb-2 font-semibold">Final Score</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-theme-border/20">
+                {studentFinalScores.map((row, i) => {
+                  const colorTokens = getRatingColor(row.finalScore);
+                  return (
+                    <tr key={row.name}>
+                      <td className="py-2 pr-2 text-theme-text-secondary">{i + 1}</td>
+                      <td className="py-2 pr-2 font-bold text-theme-text-primary">{row.name}</td>
+                      <td className="py-2 pr-2 text-theme-text-secondary">{row.taskCount}</td>
+                      <td className="py-2 pr-2 text-theme-text-secondary">{row.avgScore.toFixed(2)} / 5.0</td>
+                      <td className="py-2 pr-2 text-theme-text-secondary">{row.countScore.toFixed(2)} / 5.0</td>
+                      <td className="py-2 pr-2">
+                        <span className={`px-2 py-0.5 rounded-lg font-bold ${colorTokens.bg} ${colorTokens.text} ${colorTokens.border} border`}>{row.finalScore.toFixed(2)} / 5.0</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
