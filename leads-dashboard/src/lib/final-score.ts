@@ -19,28 +19,43 @@ export function computeFinalScore(avgScore: number, taskCount: number): number {
 export interface StudentFinalScore {
   name: string;
   taskCount: number;
+  eventCount: number;
   avgScore: number;
   countScore: number;
   finalScore: number;
 }
 
+/**
+ * Every event a student was evaluated on counts. Tasks are first averaged
+ * within each event, then the per-event averages are averaged with equal
+ * weight, so a single task-heavy event cannot dominate the quality part and
+ * an event with one task counts as much as one with many. Tasks without an
+ * event are pooled as one "standalone" bucket. The task-count part still
+ * uses the total number of evaluated tasks across all events.
+ */
 export function buildStudentFinalScores(
-  items: { targetName: string; overallScore: number }[]
+  items: { targetName: string; overallScore: number; eventName?: string }[]
 ): StudentFinalScore[] {
-  const groups = new Map<string, number[]>();
+  const byStudent = new Map<string, Map<string, number[]>>();
   items.forEach(r => {
-    const g = groups.get(r.targetName);
-    if (g) g.push(r.overallScore); else groups.set(r.targetName, [r.overallScore]);
+    const events = byStudent.get(r.targetName) ?? new Map<string, number[]>();
+    const ev = r.eventName || '__standalone__';
+    const scores = events.get(ev);
+    if (scores) scores.push(r.overallScore); else events.set(ev, [r.overallScore]);
+    byStudent.set(r.targetName, events);
   });
-  return Array.from(groups.entries())
-    .map(([name, scores]) => {
-      const avgScore = parseFloat((scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2));
+  return Array.from(byStudent.entries())
+    .map(([name, events]) => {
+      const eventAvgs = Array.from(events.values()).map(sc => sc.reduce((a, b) => a + b, 0) / sc.length);
+      const taskCount = Array.from(events.values()).reduce((n, sc) => n + sc.length, 0);
+      const avgScore = parseFloat((eventAvgs.reduce((a, b) => a + b, 0) / eventAvgs.length).toFixed(2));
       return {
         name,
-        taskCount: scores.length,
+        taskCount,
+        eventCount: events.size,
         avgScore,
-        countScore: parseFloat((5 * Math.min(scores.length, TASK_COUNT_TARGET) / TASK_COUNT_TARGET).toFixed(2)),
-        finalScore: computeFinalScore(avgScore, scores.length),
+        countScore: parseFloat((5 * Math.min(taskCount, TASK_COUNT_TARGET) / TASK_COUNT_TARGET).toFixed(2)),
+        finalScore: computeFinalScore(avgScore, taskCount),
       };
     })
     .sort((a, b) => b.finalScore - a.finalScore);
