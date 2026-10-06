@@ -810,7 +810,7 @@ export default function EventsPage() {
       {/* Create / Edit Event Modal */}
       {(isCreateModalOpen || editingEvent) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-2 sm:p-4 animate-in fade-in duration-200">
-          <div className="glass-panel w-full max-w-lg max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-3xl p-4 sm:p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl">
+          <div className="glass-panel w-full max-w-lg lg:max-w-4xl max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-3xl p-4 sm:p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-theme-text-primary">
                 {editingEvent ? 'Edit Event Details' : 'Create New Event'}
@@ -844,7 +844,7 @@ export default function EventsPage() {
                   setTimeout(() => f.reportValidity(), 60);
                 }
               }}
-              className="space-y-4 text-xs"
+              className="space-y-4 text-xs lg:grid lg:grid-cols-2 lg:gap-x-8 lg:gap-y-4 lg:space-y-0"
             >
               <div className="sm:hidden -mx-1 flex gap-1 overflow-x-auto pb-1" role="tablist" aria-label="Event form sections">
                 {([['basics', 'Basics'], ['dates', 'Dates'], ['sponsors', 'Sponsors'], ['details', 'Details']] as const).map(([key, label]) => (
@@ -863,6 +863,7 @@ export default function EventsPage() {
                 ))}
               </div>
 
+              <div className="space-y-4 min-w-0">
               <div data-tab="basics" className={formTabClass('basics')}>
               <div className="space-y-1.5">
                 <label className="block font-medium text-theme-text-secondary">Event Title *</label>
@@ -985,6 +986,9 @@ export default function EventsPage() {
 
               </div>
 
+              </div>
+
+              <div className="space-y-4 min-w-0">
               <div data-tab="sponsors" className={formTabClass('sponsors')}>
               <div className="space-y-2 border-t border-theme-border/30 pt-3">
                 <div className="flex items-center justify-between">
@@ -1120,9 +1124,11 @@ export default function EventsPage() {
 
               </div>
 
+              </div>
+
               <button
                 type="submit"
-                className="w-full py-3 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer mt-4"
+                className="w-full lg:col-span-2 py-3 bg-accent hover:bg-primary-light text-white font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer mt-4"
               >
                 {editingEvent ? 'Save Event Updates' : 'Create Event & Initialize Sub-Committees'}
               </button>
