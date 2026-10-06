@@ -856,7 +856,7 @@ export function EventPassStudio({
         </div>
 
         {/* RIGHT COLUMN: REAL-TIME INTERACTIVE LIVE PASS PREVIEWS */}
-        <div className="lg:col-span-6 flex flex-col items-center space-y-4">
+        <div className="lg:col-span-6 flex flex-col items-center space-y-4 lg:sticky lg:top-20 lg:self-start lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
           {/* Dual Preview Switcher: 3D Luxury vs Apple Wallet (98% Match) */}
           <div className="flex items-center justify-between w-full max-w-[380px] px-1">
             <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-white/15">

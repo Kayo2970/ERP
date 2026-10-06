@@ -327,8 +327,19 @@ export function PassSection({
   /** Keep the content mounted (hidden) while collapsed, e.g. when it loads data other previews depend on. */
   keepMounted?: boolean;
 }) {
+  const ref = useRef<HTMLElement>(null);
+  const wasOpen = useRef(open);
+  // When a menu opens, bring it into view (below the sticky header). Other menus collapse as it opens, so wait a frame.
+  useEffect(() => {
+    if (open && !wasOpen.current) {
+      const t = setTimeout(() => ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+      wasOpen.current = open;
+      return () => clearTimeout(t);
+    }
+    wasOpen.current = open;
+  }, [open]);
   return (
-    <section className="rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50/60 dark:bg-white/[0.03] overflow-hidden">
+    <section ref={ref} className="scroll-mt-20 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50/60 dark:bg-white/[0.03] overflow-hidden">
       <button
         type="button"
         onClick={onToggle}
