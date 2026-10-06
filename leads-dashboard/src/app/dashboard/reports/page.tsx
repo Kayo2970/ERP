@@ -179,6 +179,13 @@ export default function ReportsPage() {
     { subject: 'Collaboration', A: averages.collaboration, fullMark: 5 },
   ];
 
+  // Final score per student (see final-score.ts). Must be defined before barData, which reads it.
+  // Every event held in the selected period counts toward participation, not just the ones a student was rated on.
+  // Events with dates still to be decided, or that have not started yet, can't have been taken part in, so they don't count.
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const totalEventsInPeriod = events.filter(e => !e.datesTBD && !!e.startDate && e.startDate <= todayIso && isWithinPeriod(e.startDate, periodFilter)).length;
+  const studentFinalScores = buildStudentFinalScores(filteredRatings, totalEventsInPeriod || undefined);
+
   // Bar Data with dynamic color tokens from design system — grouped
   // according to barBreakdown so a student (or event) with several rated
   // tasks shows up as ONE bar (their average), instead of one bar per task
@@ -219,14 +226,6 @@ export default function ReportsPage() {
       })
       .sort((a, b) => b.score - a.score);
   })();
-
-  // Final score per student: weighted blend of average evaluation score and
-  // number of evaluated tasks (see final-score.ts).
-  // Every event held in the selected period counts toward participation, not just the ones a student was rated on.
-  // Events with dates still to be decided, or that have not started yet, can't have been taken part in, so they don't count.
-  const todayIso = new Date().toISOString().slice(0, 10);
-  const totalEventsInPeriod = events.filter(e => !e.datesTBD && !!e.startDate && e.startDate <= todayIso && isWithinPeriod(e.startDate, periodFilter)).length;
-  const studentFinalScores = buildStudentFinalScores(filteredRatings, totalEventsInPeriod || undefined);
 
   // Unique Targets List for selector — professors and ineligible members strictly excluded
   const targets = Array.from(new Set(
