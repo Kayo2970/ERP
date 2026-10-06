@@ -103,6 +103,12 @@ export default function EventsPage() {
   const [status, setStatus] = useState<EventItem['status']>('planned');
   const [sponsors, setSponsors] = useState<EventSponsor[]>([]);
   const [formError, setFormError] = useState('');
+  // Phones show the event form one section at a time; sm+ screens show every section as before
+  const [formTab, setFormTab] = useState<'basics' | 'dates' | 'sponsors' | 'details'>('basics');
+  useEffect(() => {
+    if (isCreateModalOpen || editingEvent) setFormTab('basics');
+  }, [isCreateModalOpen, editingEvent]);
+  const formTabClass = (tab: string) => `space-y-4 ${formTab === tab ? 'block' : 'hidden'} sm:block`;
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -803,8 +809,8 @@ export default function EventsPage() {
 
       {/* Create / Edit Event Modal */}
       {(isCreateModalOpen || editingEvent) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="glass-panel w-full max-w-lg rounded-3xl p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-2 sm:p-4 animate-in fade-in duration-200">
+          <div className="glass-panel w-full max-w-lg max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-3xl p-4 sm:p-6 flex flex-col space-y-5 relative border border-white/15 shadow-2xl">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-theme-text-primary">
                 {editingEvent ? 'Edit Event Details' : 'Create New Event'}
@@ -827,7 +833,37 @@ export default function EventsPage() {
               </div>
             )}
 
-            <form onSubmit={handleSaveEvent} className="space-y-4 text-xs">
+            <form
+              onSubmit={handleSaveEvent}
+              onInvalidCapture={(e) => {
+                // A required field sits in a section that is hidden on phones: jump to it and re-show the message
+                const tab = (e.target as HTMLElement).closest('[data-tab]')?.getAttribute('data-tab') as typeof formTab | null;
+                if (tab && tab !== formTab) {
+                  const f = e.currentTarget;
+                  setFormTab(tab);
+                  setTimeout(() => f.reportValidity(), 60);
+                }
+              }}
+              className="space-y-4 text-xs"
+            >
+              <div className="sm:hidden -mx-1 flex gap-1 overflow-x-auto pb-1" role="tablist" aria-label="Event form sections">
+                {([['basics', 'Basics'], ['dates', 'Dates'], ['sponsors', 'Sponsors'], ['details', 'Details']] as const).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    role="tab"
+                    aria-selected={formTab === key}
+                    onClick={() => setFormTab(key)}
+                    className={`shrink-0 px-3.5 py-2 rounded-full text-[11px] font-bold cursor-pointer transition-all ${
+                      formTab === key ? 'bg-accent text-white shadow-md shadow-accent/20' : 'bg-theme-background/40 text-theme-text-secondary border border-theme-card-border'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <div data-tab="basics" className={formTabClass('basics')}>
               <div className="space-y-1.5">
                 <label className="block font-medium text-theme-text-secondary">Event Title *</label>
                 <input
@@ -865,6 +901,9 @@ export default function EventsPage() {
                 </div>
               </div>
 
+              </div>
+
+              <div data-tab="dates" className={formTabClass('dates')}>
               <label className="flex items-center gap-2 cursor-pointer font-medium text-theme-text-primary">
                 <input
                   type="checkbox"
@@ -944,6 +983,9 @@ export default function EventsPage() {
                 </select>
               </div>
 
+              </div>
+
+              <div data-tab="sponsors" className={formTabClass('sponsors')}>
               <div className="space-y-2 border-t border-theme-border/30 pt-3">
                 <div className="flex items-center justify-between">
                   <label className="font-medium text-theme-text-secondary flex items-center gap-1.5">
@@ -989,6 +1031,9 @@ export default function EventsPage() {
                 ))}
               </div>
 
+              </div>
+
+              <div data-tab="details" className={formTabClass('details')}>
               <div className="space-y-1.5">
                 <label className="block font-medium text-theme-text-secondary">Description / Objectives</label>
                 <textarea
@@ -1072,6 +1117,8 @@ export default function EventsPage() {
                   )}
                 </div>
               )}
+
+              </div>
 
               <button
                 type="submit"
