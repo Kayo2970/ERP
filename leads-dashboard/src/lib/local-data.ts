@@ -5249,8 +5249,9 @@ export function getStudentLeaderboard(): {
   totalEvents: number;
 }[] {
   const members = getMembers();
-  // Filter for student contributors: Core Committee, Training Associates, Alumni
-  const studentMembers = members.filter(m => m.division !== 'Advisory Board' && m.tier >= 5);
+  // Student contributors (Core Committee, Training Associates, Alumni) plus Super Users, who are evaluated on their
+  // tasks like everyone else and are ranked alongside the students.
+  const studentMembers = members.filter(m => m.tier === 1 || (m.division !== 'Advisory Board' && m.tier >= 5));
 
   // The leaderboard shows exactly what the Reports module's "Student Final Score" shows (same ratings, same
   // formula — see final-score.ts), so the two never disagree. Same rating filter as the Reports page: only
