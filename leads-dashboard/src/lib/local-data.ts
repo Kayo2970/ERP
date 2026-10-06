@@ -4041,6 +4041,11 @@ export function updateTask(id: string, updates: Partial<TaskItem>, actorName: st
     delete updates.status;
   }
 
+  // An event report request can only be completed by uploading the report
+  if (updates.status === 'Completed' && previousStatus !== 'Completed' && getEventReportCompletionBlocker(tasks[idx])) {
+    delete updates.status;
+  }
+
   tasks[idx] = { ...tasks[idx], ...updates };
 
   // Chain reaction: the moment the Centre Head / Advisor / GG Campus Events
@@ -4250,7 +4255,24 @@ export function allotSocialMediaTask(
   return updated;
 }
 
+export const EVENT_REPORT_UPLOAD_REQUIRED_MESSAGE =
+  'Upload the event report (Event Reports module) to complete this task — it can\'t be marked completed any other way.';
+
+/**
+ * An "Event Report Request" task is only done once the report itself has been uploaded for that event, so it can't be
+ * marked Completed by hand. Uploading the report completes it automatically (see the event-reports page). A rejected
+ * report doesn't count — it has to be re-uploaded. Returns the message to show, or null when completing is allowed.
+ */
+export function getEventReportCompletionBlocker(task: Pick<TaskItem, 'workflowType' | 'eventId'> | undefined | null): string | null {
+  if (!task || task.workflowType !== 'event_report_request') return null;
+  const hasReport = !!task.eventId && getEventReports().some(r => r.eventId === task.eventId && r.status !== 'rejected');
+  return hasReport ? null : EVENT_REPORT_UPLOAD_REQUIRED_MESSAGE;
+}
+
 export function updateTaskStatus(id: string, status: TaskItem['status'], actorName?: string): TaskItem | null {
+  if (status === 'Completed' && getEventReportCompletionBlocker(getTasks().find(t => t.id === id))) {
+    return getTasks().find(t => t.id === id) || null;
+  }
   registerOptimisticTaskUpdate(id, { status });
   return updateTask(id, { status }, actorName || 'User');
 }
@@ -4263,6 +4285,10 @@ export async function updateTaskStatusAsync(
   const tasks = getTasks();
   const idx = tasks.findIndex(t => t.id === id);
   if (idx === -1) return { success: false, error: 'Task not found' };
+  if (status === 'Completed') {
+    const blocker = getEventReportCompletionBlocker(tasks[idx]);
+    if (blocker) return { success: false, error: blocker };
+  }
 
   const previousTask = { ...tasks[idx] };
   const previousStatus = previousTask.status;

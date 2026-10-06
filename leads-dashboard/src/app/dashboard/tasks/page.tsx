@@ -45,6 +45,7 @@ import {
   updateTask,
   updateTaskStatus,
   updateTaskStatusAsync,
+  getEventReportCompletionBlocker,
   deleteTask,
   submitTaskEdit,
   approveTask,
@@ -743,6 +744,13 @@ export default function TasksPage() {
   };
 
   const handleStatusChange = (id: string, newStatus: TaskItem['status']) => {
+    if (newStatus === 'Completed') {
+      const blocker = getEventReportCompletionBlocker(tasks.find(t => t.id === id));
+      if (blocker) {
+        setBottomErrorToast({ isOpen: true, message: blocker });
+        return;
+      }
+    }
     updateTaskStatus(id, newStatus);
     setTasks(getTasks());
     triggerSuccess(`Task status changed to ${newStatus}.`);

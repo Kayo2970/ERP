@@ -230,9 +230,15 @@ export default function DirectoryPage() {
       }
     } else if (div === 'Training Associate') {
       tier = 6;
-      const dept = opts.departmentSelect || STANDARDIZED_DEPARTMENTS[0];
-      role = `Associate - ${dept}`;
-      department = dept;
+      if (opts.associatePosition === 'Department Associate' || opts.associatePosition === undefined) {
+        const dept = opts.departmentSelect || STANDARDIZED_DEPARTMENTS[0];
+        role = `Associate - ${dept}`;
+        department = dept;
+      } else {
+        // General Associate: a Training Associate who isn't attached to any department
+        role = 'Training Associate';
+        department = 'General';
+      }
     } else if (div === 'Alumni') {
       tier = 7;
       role = 'Alumni Member';
@@ -1868,7 +1874,7 @@ export default function DirectoryPage() {
                         onChange={(e) => setAssociatePosition(e.target.value as AssociatePosition)}
                         className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                       >
-                        <option value="Associate">General Associate</option>
+                        <option value="Associate">General Associate (no department)</option>
                         <option value="Department Associate">Department Associate</option>
                       </select>
                     </div>
@@ -2103,6 +2109,20 @@ export default function DirectoryPage() {
                   )}
 
                   {editDivision === 'Training Associate' && (
+                    <div className="space-y-1.5">
+                      <label className="block font-medium text-theme-text-secondary">Associate Role</label>
+                      <select
+                        value={editAssociatePosition}
+                        onChange={(e) => setEditAssociatePosition(e.target.value as AssociatePosition)}
+                        className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                      >
+                        <option value="Associate">General Associate (no department)</option>
+                        <option value="Department Associate">Department Associate</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {editDivision === 'Training Associate' && editAssociatePosition === 'Department Associate' && (
                     <div className="space-y-1.5">
                       <label className="block font-medium text-theme-text-secondary">Select Department *</label>
                       <select
