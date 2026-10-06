@@ -64,6 +64,8 @@ export async function POST(request: Request) {
         id: `audit-${Date.now()}`,
         action: 'ADMIN_OVERRIDE_PASSWORD_RESET',
         user: updatedUserRecord.name,
+        actorName: updatedUserRecord.name,
+        actorEmail: trimmedEmail,
         details: `${updatedUserRecord.name} (${trimmedEmail}) successfully set a new password via Super User admin override (no OTP required).`,
         timestamp: new Date().toISOString(),
       },

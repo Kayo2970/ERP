@@ -6418,12 +6418,30 @@ export function addSubmission(sub: Omit<FormSubmissionItem, 'id' | 'submittedAt'
 // Audit Logs
 // -------------------------------------------------------------
 
+/**
+ * Some server routes (password reset, account activation, email change, setup...) wrote audit entries as
+ * `{ user: name }` / `{ actor: name }` with no actorName/actorEmail. Every consumer assumes the AuditLogItem shape, so
+ * a missing string field made searching the Audit Trail throw and blank the whole Settings page. Fill the gaps here.
+ */
+function normalizeAuditLog(raw: any): AuditLogItem {
+  return {
+    ...raw,
+    id: String(raw?.id ?? ''),
+    action: String(raw?.action ?? ''),
+    actorName: String(raw?.actorName ?? raw?.user ?? raw?.actor ?? ''),
+    actorEmail: String(raw?.actorEmail ?? raw?.targetEmail ?? ''),
+    details: String(raw?.details ?? ''),
+    timestamp: String(raw?.timestamp ?? ''),
+  };
+}
+
 export function getAuditLogs(): AuditLogItem[] {
   if (typeof window === 'undefined') return [];
   const saved = localStorage.getItem('leads_audit_logs');
   if (saved) {
     try {
-      return JSON.parse(saved);
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed.map(normalizeAuditLog) : [];
     } catch (e) {
       console.error(e);
     }
