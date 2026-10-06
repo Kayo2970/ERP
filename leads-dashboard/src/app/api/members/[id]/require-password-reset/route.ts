@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { mutateCollection } from '@/lib/server-db';
-import { requireSession } from '@/lib/session';
+import { requireSession, invalidateAllSessionsForMember } from '@/lib/session';
 import { getAccessLevelSettingsServer, isCentreHead } from '@/lib/permissions-server';
 import { apiError } from '@/lib/api-error';
 
@@ -50,6 +50,10 @@ export async function POST(
     if (!memberFound) {
       return NextResponse.json({ error: 'Member not found.' }, { status: 404 });
     }
+
+    // Anyone already signed in (e.g. a phone that stayed logged in) would never reach the login prompt, so end their
+    // sessions now: their next visit lands on the login page and asks for the new password.
+    if (mustReset) await invalidateAllSessionsForMember(id);
 
     const actionText = mustReset
       ? `Super User requested password reset for member ${memberName} (${memberEmail}). Direct password setup without OTP enabled on login.`

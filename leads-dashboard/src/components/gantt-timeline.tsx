@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   CalendarRange,
@@ -12,7 +12,9 @@ import {
   Maximize2,
   X,
   ChevronRight,
-  Info
+  Info,
+  ZoomIn,
+  ZoomOut
 } from 'lucide-react';
 import {
   EventItem,
@@ -36,6 +38,9 @@ const WINDOW_OPTIONS: { key: Exclude<WindowKey, 'custom'>; label: string; before
 ];
 
 const DAY_MS = 86400000;
+/** Horizontal zoom levels (multiplier on the width of one day column). */
+const ZOOM_STEPS = [0.5, 0.75, 1, 1.5, 2, 3, 4];
+const LABEL_GAP_PX = 56; // keep date labels at least this far apart at any zoom
 /** A task completed after its deadline with no extension: solid red with a red halo so it stands out from the plain "pending extension" red. */
 const LATE_MARKER_CLASS = 'bg-danger ring-2 ring-danger/60 !border-danger z-20';
 const taskMarkerTitle = (task: TaskItem) => {
@@ -84,6 +89,10 @@ function countInWindow(opt: typeof WINDOW_OPTIONS[number], events: EventItem[], 
 
 export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProps) {
   const [windowKey, setWindowKey] = useState<WindowKey>('30');
+  // Zoom: scales how wide each day is. Changing it keeps whatever date is in the middle of the view in the middle.
+  const [zoom, setZoom] = useState(1);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const zoomAnchor = useRef<{ dayFraction: number } | null>(null);
   // Custom date range (the "Custom" button): both ends inclusive, 'YYYY-MM-DD'
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -181,7 +190,50 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
     return { rangeStart: start, rangeEnd: end, totalDays: daysBetween(start, end) + 1 };
   }, [windowOpt, events, customValid, customFrom, customTo]);
 
-  const dayWidth = totalDays <= 16 ? 40 : totalDays <= 35 ? 22 : totalDays <= 120 ? 11 : 7;
+  const baseDayWidth = totalDays <= 16 ? 40 : totalDays <= 35 ? 22 : totalDays <= 120 ? 11 : 7;
+  const dayWidth = Math.max(1.5, baseDayWidth * zoom);
+
+  const changeZoom = (next: number) => {
+    const clamped = Math.min(ZOOM_STEPS[ZOOM_STEPS.length - 1], Math.max(ZOOM_STEPS[0], next));
+    if (clamped === zoom) return;
+    const el = scrollRef.current;
+    if (el) {
+      // Remember which day sits at the centre of the visible timeline (the 224px label column is sticky, not scrolled)
+      const visible = el.clientWidth - 224;
+      zoomAnchor.current = { dayFraction: (el.scrollLeft + visible / 2) / (totalDays * dayWidth) };
+    }
+    setZoom(clamped);
+  };
+  const stepZoom = (dir: 1 | -1) => {
+    const i = ZOOM_STEPS.findIndex(z => z >= zoom - 1e-9);
+    const cur = i === -1 ? ZOOM_STEPS.length - 1 : i;
+    changeZoom(ZOOM_STEPS[Math.min(ZOOM_STEPS.length - 1, Math.max(0, cur + dir))]);
+  };
+
+  // After the new width has rendered, scroll so the remembered centre day is centred again
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const anchor = zoomAnchor.current;
+    if (!el || !anchor) return;
+    zoomAnchor.current = null;
+    const visible = el.clientWidth - 224;
+    el.scrollLeft = Math.max(0, anchor.dayFraction * totalDays * dayWidth - visible / 2);
+  }, [zoom, dayWidth, totalDays]);
+
+  // Ctrl/Cmd + mouse wheel (or trackpad pinch) over the chart zooms it. Needs a non-passive native listener to stop the page zoom.
+  const zoomRef = useRef({ stepZoom, zoom });
+  zoomRef.current = { stepZoom, zoom };
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      zoomRef.current.stepZoom(e.deltaY < 0 ? 1 : -1);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  });
   const timelineWidth = totalDays * dayWidth;
   const todayOffset = daysBetween(rangeStart, new Date(new Date().setHours(0, 0, 0, 0)));
 
@@ -229,7 +281,7 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
 
   // Week/period tick labels along the header, spaced ~4-8 apart depending on zoom
   const ticks = useMemo(() => {
-    const tickEveryDays = totalDays <= 16 ? 1 : totalDays <= 35 ? 7 : totalDays <= 200 ? 14 : 30;
+    const tickEveryDays = [1, 2, 7, 14, 30, 60].find(d => d * dayWidth >= LABEL_GAP_PX) ?? 90;
     const result: { offset: number; label: string }[] = [];
     for (let i = 0; i <= totalDays; i += tickEveryDays) {
       const d = addDays(rangeStart, i);
@@ -271,6 +323,35 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
               {opt.label}
             </button>
           ))}
+          <div className="flex items-center gap-0.5 mr-1 rounded-lg bg-theme-border/30 p-0.5" title="Zoom the timeline (Ctrl/Cmd + scroll also works)">
+            <button
+              type="button"
+              onClick={() => stepZoom(-1)}
+              disabled={zoom <= ZOOM_STEPS[0]}
+              aria-label="Zoom out"
+              className="p-1 rounded-md text-theme-text-secondary hover:bg-theme-border/50 hover:text-theme-text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+            >
+              <ZoomOut className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => changeZoom(1)}
+              aria-label="Reset zoom"
+              title="Reset zoom to 100%"
+              className="px-1 min-w-[38px] text-[10px] font-bold text-theme-text-secondary hover:text-theme-text-primary tabular-nums cursor-pointer"
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+            <button
+              type="button"
+              onClick={() => stepZoom(1)}
+              disabled={zoom >= ZOOM_STEPS[ZOOM_STEPS.length - 1]}
+              aria-label="Zoom in"
+              className="p-1 rounded-md text-theme-text-secondary hover:bg-theme-border/50 hover:text-theme-text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+            >
+              <ZoomIn className="h-3.5 w-3.5" />
+            </button>
+          </div>
           <button
             type="button"
             onClick={selectCustom}
@@ -409,7 +490,7 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
         </div>
       ) : (
         <>
-          <div className={isExpanded ? 'flex-1 min-h-0 overflow-auto rounded-xl border border-theme-border/20' : 'overflow-x-auto rounded-xl border border-theme-border/20'}>
+          <div ref={scrollRef} className={isExpanded ? 'flex-1 min-h-0 overflow-auto rounded-xl border border-theme-border/20' : 'overflow-x-auto rounded-xl border border-theme-border/20'}>
             <div style={{ minWidth: timelineWidth + 224 }}>
               {/* Header: date scale */}
               <div className="flex sticky top-0 z-20">
