@@ -93,6 +93,8 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
   const [zoom, setZoom] = useState(1);
   const scrollRef = useRef<HTMLDivElement>(null);
   const zoomAnchor = useRef<{ dayFraction: number } | null>(null);
+  // Width of the scrolling chart box, so 100% zoom stretches the timeline across the whole box instead of leaving it empty
+  const [boxWidth, setBoxWidth] = useState(0);
   // Custom date range (the "Custom" button): both ends inclusive, 'YYYY-MM-DD'
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -191,7 +193,10 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
   }, [windowOpt, events, customValid, customFrom, customTo]);
 
   const baseDayWidth = totalDays <= 16 ? 40 : totalDays <= 35 ? 22 : totalDays <= 120 ? 11 : 7;
-  const dayWidth = Math.max(1.5, baseDayWidth * zoom);
+  // The 224px label column is sticky on the left; the rest of the box belongs to the date columns. Never narrower than the
+  // default column width, so a long range still scrolls instead of being squashed.
+  const fitDayWidth = boxWidth > 224 + 8 ? Math.floor(((boxWidth - 224 - 2) / totalDays) * 100) / 100 : 0;
+  const dayWidth = Math.max(1.5, Math.max(baseDayWidth, fitDayWidth) * zoom);
 
   const changeZoom = (next: number) => {
     const clamped = Math.min(ZOOM_STEPS[ZOOM_STEPS.length - 1], Math.max(ZOOM_STEPS[0], next));
@@ -209,6 +214,17 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
     const cur = i === -1 ? ZOOM_STEPS.length - 1 : i;
     changeZoom(ZOOM_STEPS[Math.min(ZOOM_STEPS.length - 1, Math.max(0, cur + dir))]);
   };
+
+  // Track the chart box's width (it changes with the window, the sidebar and the expand button)
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const update = () => setBoxWidth(el.clientWidth);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  });
 
   // After the new width has rendered, scroll so the remembered centre day is centred again
   useLayoutEffect(() => {
@@ -497,7 +513,7 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
                 <div className="sticky left-0 z-30 w-56 shrink-0 bg-theme-card border-b border-r border-theme-border/20 px-3 py-2">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-theme-text-secondary">Timeline</span>
                 </div>
-                <div className="relative bg-theme-card border-b border-theme-border/20" style={{ width: timelineWidth, height: 32 }}>
+                <div className="relative overflow-hidden bg-theme-card border-b border-theme-border/20" style={{ width: timelineWidth, height: 32 }}>
                   {ticks.map((t, i) => (
                     <div
                       key={i}
