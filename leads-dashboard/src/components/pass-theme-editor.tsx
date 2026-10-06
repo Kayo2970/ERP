@@ -5,6 +5,7 @@ import { ImagePlus, Trash2, Save, Palette } from 'lucide-react';
 import { DEFAULT_PASS_THEME, PassTheme, authHeaders } from '@/lib/local-data';
 import { passThemeStyle } from '@/lib/pass-theme-style';
 import { AppleWalletPosterPreview } from './apple-wallet-poster-preview';
+import { InteractiveKeycardHolder } from './interactive-keycard-holder';
 import { EventTitleToggle } from './pass-design-controls';
 
 interface Props {
@@ -30,6 +31,7 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
   const [pendingLogo, setPendingLogo] = useState<string | null | undefined>(undefined);
   const [pendingEmailArt, setPendingEmailArt] = useState<string | null | undefined>(undefined);
   const emailInput = useRef<HTMLInputElement>(null);
+  const [orientation, setOrientation] = useState<'horizontal' | 'vertical'>('horizontal');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const bgInput = useRef<HTMLInputElement>(null);
@@ -116,6 +118,50 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
     ? { backgroundUrl: em.art, backgroundColor: em.bg, foregroundColor: em.fg, labelColor: em.label, overlay: em.overlay, logoUrl: merged.logoUrl }
     : merged;
   const tk = emailOwn ? em : val;
+
+  const ticketPreview = (
+    <div
+      className="relative rounded-2xl overflow-hidden border border-white/10 shadow-lg"
+      style={{ ...passThemeStyle(ticketTheme, `linear-gradient(145deg, ${tk.bg} 0%, #030712 100%)`), aspectRatio: '1160 / 420' }}
+    >
+      <div className="absolute inset-0 flex">
+        <div className="flex-1 p-4 flex flex-col justify-between min-w-0">
+          <div className="flex items-center gap-2">
+            {merged.logoUrl && <img src={merged.logoUrl} alt="" className="h-6 w-auto object-contain" />}
+            <div>
+              <div className="text-[9px] font-black tracking-widest" style={{ color: tk.label }}>LEADS NEXT GEN CENTRE • RUAS</div>
+              <div className="text-[8px]" style={{ color: tk.label }}>OFFICIAL EVENT PASS</div>
+            </div>
+          </div>
+          <div>
+            <div className="text-sm font-black truncate" style={{ color: tk.fg }}>{eventName}</div>
+            <div className="text-[8px] mt-1" style={{ color: tk.label }}>VIP DIGNITARY</div>
+            <div className="text-xs font-bold" style={{ color: tk.fg }}>Attendee Name</div>
+          </div>
+        </div>
+        <div className="w-[25%] bg-white/95 flex flex-col items-center justify-center border-l-2 border-dashed border-slate-400/50">
+          <div className="h-10 w-10 bg-slate-900 rounded-sm" />
+          <div className="text-[7px] font-bold text-slate-700 mt-1">SCAN AT ENTRY</div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const posterPreview = (
+    <AppleWalletPosterPreview
+      attendeeName="Attendee Name"
+      guestCategory="VIP Dignitary"
+      passType="VIP Pass"
+      roomOrVenue="Main Auditorium"
+      eventName={eventName}
+      validity="10 Oct – 12 Oct 2026"
+      serialNumber="LEADS-EVT-2026-XXXXXX"
+      validDaysCount={3}
+      logoUrl={merged.logoUrl || '/card/leads-logo.png'}
+      theme={{ ...merged, walletBackgroundUrl: pendingBg || draft.walletBackgroundUrl }}
+      passColor={val.bg}
+    />
+  );
 
   const pick = async (e: React.ChangeEvent<HTMLInputElement>, kind: 'bg' | 'logo' | 'email') => {
     const file = e.target.files?.[0];
@@ -219,25 +265,57 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
         <Palette className="h-3.5 w-3.5 text-accent" /> Pass look for “{eventName}”
       </div>
 
+      {/* Folder + pass preview: the leather holder cover carries the same logo as the pass inside it */}
+      <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-3 space-y-3">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Folder &amp; pass preview</div>
+          <div className="flex rounded-full border border-white/15 p-0.5 text-[10px] font-bold">
+            {(['horizontal', 'vertical'] as const).map((o) => (
+              <button
+                key={o}
+                type="button"
+                onClick={() => setOrientation(o)}
+                className={`px-3 py-1 rounded-full capitalize cursor-pointer ${orientation === o ? 'bg-accent text-white' : 'text-slate-400 hover:text-white'}`}
+              >
+                {o}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-4 items-center sm:items-start justify-center">
+          <div className="shrink-0 text-center">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Leather folder cover</div>
+            <div className="w-[190px] h-[300px] overflow-hidden rounded-2xl pointer-events-none" aria-hidden="true">
+              <div style={{ zoom: 0.6 }}>
+                <InteractiveKeycardHolder
+                  isEventPass
+                  memberName="Attendee Name"
+                  eventName={eventName}
+                  showActions={false}
+                  logoUrl={merged.logoUrl}
+                />
+              </div>
+            </div>
+            <div className="text-[10px] text-slate-500 mt-1">{merged.logoUrl ? 'Debossed with the event logo' : 'Default LEADS logo — upload one below'}</div>
+          </div>
+          <div className="min-w-0 max-w-full text-center">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+              {orientation === 'horizontal' ? 'Horizontal pass (email ticket)' : 'Vertical pass (Apple / Google Wallet)'}
+            </div>
+            {orientation === 'horizontal' ? (
+              <div className="w-full max-w-[420px] mx-auto text-left">{ticketPreview}</div>
+            ) : (
+              <div className="inline-block" style={{ zoom: 0.7 }}>{posterPreview}</div>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Wallet preview: exactly what iOS 27 draws from the portrait 690×1010 crop WalletWallet receives */}
       <div className="flex flex-col sm:flex-row gap-4 items-start">
         <div className="shrink-0">
           <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Apple / Google Wallet (iOS 27 poster) <span className="ml-1 normal-case tracking-normal font-semibold text-amber-500">· Apple fixes the text: white</span></div>
-          <div style={{ zoom: 0.8 }}>
-            <AppleWalletPosterPreview
-              attendeeName="Attendee Name"
-              guestCategory="VIP Dignitary"
-              passType="VIP Pass"
-              roomOrVenue="Main Auditorium"
-              eventName={eventName}
-              validity="10 Oct – 12 Oct 2026"
-              serialNumber="LEADS-EVT-2026-XXXXXX"
-              validDaysCount={3}
-              logoUrl={merged.logoUrl || '/card/leads-logo.png'}
-              theme={{ ...merged, walletBackgroundUrl: pendingBg || draft.walletBackgroundUrl }}
-              passColor={val.bg}
-            />
-          </div>
+          <div style={{ zoom: 0.8 }}>{posterPreview}</div>
           <div className="mt-3 max-w-[300px]">
             <EventTitleToggle scope="event" value={draft.showEventTitle} onChange={(v) => setDraft((d) => ({ ...d, showEventTitle: v }))} />
           </div>
@@ -255,31 +333,7 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
 
       {/* Live boarding-pass preview (email + portal ticket) */}
       <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 -mb-1">Emailed boarding-pass ticket{emailOwn ? ' (custom design)' : ' (uses the event background)'}</div>
-      <div
-        className="relative rounded-2xl overflow-hidden border border-white/10 shadow-lg"
-        style={{ ...passThemeStyle(ticketTheme, `linear-gradient(145deg, ${tk.bg} 0%, #030712 100%)`), aspectRatio: '1160 / 420' }}
-      >
-        <div className="absolute inset-0 flex">
-          <div className="flex-1 p-4 flex flex-col justify-between min-w-0">
-            <div className="flex items-center gap-2">
-              {merged.logoUrl && <img src={merged.logoUrl} alt="" className="h-6 w-auto object-contain" />}
-              <div>
-                <div className="text-[9px] font-black tracking-widest" style={{ color: tk.label }}>LEADS NEXT GEN CENTRE • RUAS</div>
-                <div className="text-[8px]" style={{ color: tk.label }}>OFFICIAL EVENT PASS</div>
-              </div>
-            </div>
-            <div>
-              <div className="text-sm font-black truncate" style={{ color: tk.fg }}>{eventName}</div>
-              <div className="text-[8px] mt-1" style={{ color: tk.label }}>VIP DIGNITARY</div>
-              <div className="text-xs font-bold" style={{ color: tk.fg }}>Attendee Name</div>
-            </div>
-          </div>
-          <div className="w-[25%] bg-white/95 flex flex-col items-center justify-center border-l-2 border-dashed border-slate-400/50">
-            <div className="h-10 w-10 bg-slate-900 rounded-sm" />
-            <div className="text-[7px] font-bold text-slate-700 mt-1">SCAN AT ENTRY</div>
-          </div>
-        </div>
-      </div>
+      {ticketPreview}
 
       <div className="grid grid-cols-2 gap-2">
         <button
