@@ -35,6 +35,17 @@ export async function PATCH(
     // Chain of command: only a genuinely pending task can be decided (by its approver); a content edit by someone whose
     // access comes from an approval-required Group Policy is held as pending_edit instead of applying.
     const storedTask = (await readCollection<any>('tasks')).find((t: any) => t.id === id);
+    // An Event Report Request task can only be completed by actually uploading the report for its event
+    if (updates?.status === 'Completed' && storedTask?.status !== 'Completed' && storedTask?.workflowType === 'event_report_request') {
+      const reports = await readCollection<any>('eventReports');
+      const uploaded = !!storedTask.eventId && reports.some((r: any) => r.eventId === storedTask.eventId && r.status !== 'rejected');
+      if (!uploaded) {
+        return NextResponse.json(
+          { error: "Upload the event report (Event Reports module) to complete this task — it can't be marked completed any other way." },
+          { status: 400 }
+        );
+      }
+    }
     if (classifyApprovalUpdate(storedTask, updates) === 'decision') {
       if (!(await canDecidePending(storedTask, actor, isEventsHeadGgCampus))) {
         throw new ForbiddenError('You are not authorized to decide this task — it needs sign-off from the designated approver.');

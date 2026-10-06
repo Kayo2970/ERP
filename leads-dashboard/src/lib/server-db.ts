@@ -1032,6 +1032,28 @@ const writeLocks = new Map<keyof DbSchema, Promise<void>>();
  * Locked per-collection so concurrent calls to the SAME collection queue up
  * safely, while calls to different collections proceed independently.
  */
+/**
+ * Server-side bookkeeping for tasks, whichever route or scheduler wrote them: a task the server has not seen before gets
+ * `assignedAt` (so the "assigned on" date is the real creation moment), and a task that just became Completed gets
+ * `completedAt` (cleared again if it is reopened). Existing tasks are never back-dated.
+ */
+function stampTaskTimes(before: any[], after: any[]): any[] {
+  const prev = new Map((before || []).map(t => [t?.id, t]));
+  const now = new Date().toISOString();
+  return (after || []).map(t => {
+    if (!t || typeof t !== 'object') return t;
+    const old = prev.get(t.id);
+    let next = t;
+    if (!old && !t.assignedAt) next = { ...next, assignedAt: now };
+    if (t.status === 'Completed' && (!old || old.status !== 'Completed') && !t.completedAt) next = { ...next, completedAt: now };
+    if (t.status !== 'Completed' && old?.status === 'Completed' && t.completedAt) {
+      const { completedAt: _drop, ...rest } = next;
+      next = rest;
+    }
+    return next;
+  });
+}
+
 export async function mutateCollection<T = any>(
   key: keyof DbSchema,
   mutator: (current: T[]) => T[]
@@ -1043,7 +1065,8 @@ export async function mutateCollection<T = any>(
   const thisLock = previousLock.then(async () => {
     try {
       const current = await readCollectionFile<T>(key);
-      const updated = mutator(current);
+      let updated = mutator(current);
+      if (key === 'tasks') updated = stampTaskTimes(current as any[], updated as any[]) as unknown as T[];
       await writeCollectionFile(key, updated);
       result = updated;
     } catch (err) {

@@ -250,7 +250,7 @@ export default function ReportsPage() {
     
     let csvContent = 'Student Member,Task Deliverable,Event,Rater,Month,Quality,Timeliness,Initiative,Collaboration,Overall Score,Evaluation Date,Remarks\n';
     filteredRatings.forEach(r => {
-      csvContent += `"${r.targetName}","${r.taskTitle}","${r.eventName || ''}","${r.raterName}","${r.createdAt?.slice(0, 7) || ''}",${r.quality},${r.timeliness},${r.initiative},${r.collaboration},${r.overallScore},"${r.createdAt}","${r.notes || ''}"\n`;
+      csvContent += `"${r.targetName}","${r.taskTitle}","${r.eventName || ''}","${r.raterName}","${r.createdAt?.slice(0, 7) || ''}",${r.quality},${r.timeliness},${r.initiative},${r.collaboration},${r.overallScore},"${r.createdAt}","${[r.lateNote, r.notes].filter(Boolean).join(' | ').replace(/"/g, '""')}"\n`;
     });
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });

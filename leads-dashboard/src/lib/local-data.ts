@@ -594,6 +594,13 @@ export interface TaskItem {
   assigneeIds?: string[]; // set when assigneeType === 'group'
   dueDate: string;
   status: 'Assigned' | 'In Progress' | 'Completed' | 'Pending Extension';
+  /** ISO timestamp the task was assigned/created. Older tasks don't have it (see getTaskAssignedDate for the fallback). */
+  assignedAt?: string;
+  /** ISO timestamp the task was marked Completed (cleared if it is reopened). Not recorded for tasks completed before this existed. */
+  completedAt?: string;
+  /** True once an extension request on this task was approved; originalDueDate is the deadline before the first extension. */
+  extensionGranted?: boolean;
+  originalDueDate?: string;
   creatorName?: string;
   extensionReason?: string;
   decidedBy?: string;
@@ -890,6 +897,8 @@ export interface ApprovalRequest {
 
 export interface RatingItem {
   id: string;
+  /** Auto-generated when the task was completed late with no extension (see describeTaskLateness). */
+  lateNote?: string;
   taskId: string;
   taskTitle: string;
   eventId?: string;
@@ -3996,6 +4005,56 @@ export async function uploadTaskAttachments(
   return (data.files || []) as ReceiptFile[];
 }
 
+const localDateStr = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/** 'YYYY-MM-DD' the task was assigned: its recorded assignedAt, else the timestamp baked into manual task ids ('t_<ms>'), else undefined. */
+export function getTaskAssignedDate(task: Pick<TaskItem, 'id' | 'assignedAt'>): string | undefined {
+  if (task.assignedAt) {
+    const d = new Date(task.assignedAt);
+    if (!Number.isNaN(d.getTime())) return localDateStr(d);
+  }
+  const m = /^t_(\d{12,})$/.exec(task.id || '');
+  if (m) {
+    const d = new Date(Number(m[1]));
+    if (!Number.isNaN(d.getTime())) return localDateStr(d);
+  }
+  return undefined;
+}
+
+/** Whether an extension request on this task was approved (older tasks: inferred from an approving decision on a requested extension). */
+export function wasTaskExtensionGranted(task: Pick<TaskItem, 'extensionGranted' | 'decidedBy' | 'extensionReason'>): boolean {
+  if (task.extensionGranted) return true;
+  return !!task.extensionReason && !!task.decidedBy && !/\(denied\)/i.test(task.decidedBy);
+}
+
+export interface TaskLateness {
+  daysLate: number;
+  dueDate: string;
+  completedOn: string;
+  assignedOn?: string;
+}
+
+/**
+ * Set when a task was completed after its deadline and no extension was granted. Null when it was on time, still open,
+ * had an extension, or has no recorded completion time (tasks completed before completion times were recorded).
+ */
+export function getTaskLateness(task: TaskItem | undefined | null): TaskLateness | null {
+  if (!task || task.status !== 'Completed' || !task.completedAt || !task.dueDate) return null;
+  if (wasTaskExtensionGranted(task)) return null;
+  const completed = new Date(task.completedAt);
+  if (Number.isNaN(completed.getTime())) return null;
+  const completedOn = localDateStr(completed);
+  const daysLate = Math.round((new Date(`${completedOn}T00:00:00`).getTime() - new Date(`${task.dueDate}T00:00:00`).getTime()) / 86400000);
+  if (daysLate <= 0) return null;
+  return { daysLate, dueDate: task.dueDate, completedOn, assignedOn: getTaskAssignedDate(task) };
+}
+
+/** Human-readable line for ratings/reports: how late it was, with the deadline and when the task was assigned. */
+export function describeTaskLateness(l: TaskLateness): string {
+  const days = `${l.daysLate} day${l.daysLate === 1 ? '' : 's'}`;
+  return `Submitted ${days} after the deadline (due ${l.dueDate}, completed ${l.completedOn}, no extension)${l.assignedOn ? ` · task assigned ${l.assignedOn}` : ''}`;
+}
+
 export function addTask(task: Omit<TaskItem, 'id' | 'status'> & { status?: TaskItem['status'] }): TaskItem {
   const tasks = getTasks();
 
@@ -4018,6 +4077,7 @@ export function addTask(task: Omit<TaskItem, 'id' | 'status'> & { status?: TaskI
     ...task,
     id: 't_' + Date.now(),
     status: task.status || 'Assigned',
+    assignedAt: task.assignedAt || new Date().toISOString(),
     delegationTrail: trail.length > 0 ? trail : undefined,
   };
   tasks.unshift(newTask);
@@ -4041,7 +4101,17 @@ export function updateTask(id: string, updates: Partial<TaskItem>, actorName: st
     delete updates.status;
   }
 
+  // An event report request can only be completed by uploading the report
+  if (updates.status === 'Completed' && previousStatus !== 'Completed' && getEventReportCompletionBlocker(tasks[idx])) {
+    delete updates.status;
+  }
+
   tasks[idx] = { ...tasks[idx], ...updates };
+  if (updates.status === 'Completed' && previousStatus !== 'Completed') {
+    tasks[idx].completedAt = new Date().toISOString();
+  } else if (updates.status && updates.status !== 'Completed' && previousStatus === 'Completed') {
+    delete tasks[idx].completedAt;
+  }
 
   // Chain reaction: the moment the Centre Head / Advisor / GG Campus Events
   // Head's "who should prepare this report" assignment task is delegated to
@@ -4250,7 +4320,24 @@ export function allotSocialMediaTask(
   return updated;
 }
 
+export const EVENT_REPORT_UPLOAD_REQUIRED_MESSAGE =
+  'Upload the event report (Event Reports module) to complete this task — it can\'t be marked completed any other way.';
+
+/**
+ * An "Event Report Request" task is only done once the report itself has been uploaded for that event, so it can't be
+ * marked Completed by hand. Uploading the report completes it automatically (see the event-reports page). A rejected
+ * report doesn't count — it has to be re-uploaded. Returns the message to show, or null when completing is allowed.
+ */
+export function getEventReportCompletionBlocker(task: Pick<TaskItem, 'workflowType' | 'eventId'> | undefined | null): string | null {
+  if (!task || task.workflowType !== 'event_report_request') return null;
+  const hasReport = !!task.eventId && getEventReports().some(r => r.eventId === task.eventId && r.status !== 'rejected');
+  return hasReport ? null : EVENT_REPORT_UPLOAD_REQUIRED_MESSAGE;
+}
+
 export function updateTaskStatus(id: string, status: TaskItem['status'], actorName?: string): TaskItem | null {
+  if (status === 'Completed' && getEventReportCompletionBlocker(getTasks().find(t => t.id === id))) {
+    return getTasks().find(t => t.id === id) || null;
+  }
   registerOptimisticTaskUpdate(id, { status });
   return updateTask(id, { status }, actorName || 'User');
 }
@@ -4263,12 +4350,16 @@ export async function updateTaskStatusAsync(
   const tasks = getTasks();
   const idx = tasks.findIndex(t => t.id === id);
   if (idx === -1) return { success: false, error: 'Task not found' };
+  if (status === 'Completed') {
+    const blocker = getEventReportCompletionBlocker(tasks[idx]);
+    if (blocker) return { success: false, error: blocker };
+  }
 
   const previousTask = { ...tasks[idx] };
   const previousStatus = previousTask.status;
 
   // Optimistic update locally
-  const optimisticTask: TaskItem = { ...tasks[idx], status };
+  const optimisticTask: TaskItem = { ...tasks[idx], status, ...(status === 'Completed' && tasks[idx].status !== 'Completed' ? { completedAt: new Date().toISOString() } : {}) };
   tasks[idx] = optimisticTask;
 
   // Register in optimistic registry to shield against background sync polls
