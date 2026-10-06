@@ -112,6 +112,30 @@ body {
     scroll-behavior: smooth;
   }
 
+  /* iOS Safari gives date/time inputs an intrinsic width that ignores w-full, so in a grid they spill past their
+     column and the screen edge. Let them shrink to the cell, and let grid/flex children shrink below content. */
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
+  input[type="month"],
+  input[type="week"] {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+    appearance: none;
+    min-height: 2.75rem;
+  }
+  input[type="date"]::-webkit-date-and-time-value,
+  input[type="time"]::-webkit-date-and-time-value,
+  input[type="datetime-local"]::-webkit-date-and-time-value {
+    text-align: left;
+    min-width: 0;
+  }
+  .grid > * {
+    min-width: 0;
+  }
+
   /* Typography polish: display headings get a touch of negative tracking and
      balanced line-wrapping so multi-word headers never leave an orphaned word
      on the last line; body copy gets the softer "pretty" wrapping instead. */
