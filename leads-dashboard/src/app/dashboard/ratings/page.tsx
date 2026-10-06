@@ -24,6 +24,9 @@ import {
   deleteRating,
   getMembers,
   getTasks,
+  getTaskAssignedDate,
+  getTaskLateness,
+  describeTaskLateness,
   getEvents,
   Member,
   TaskItem,
@@ -55,6 +58,27 @@ const CRITERIA_SET_LABEL: Record<RatingCriteriaSet, string> = {
 // Sliders default to the midpoint (3 = Satisfactory), not the maximum score —
 // defaulting to 5 meant a reviewer who opened the modal and submitted without
 // touching a single slider silently handed out a perfect rating.
+/** Assigned / due / completed dates of a task, plus a red callout when it was completed after the deadline with no extension. */
+function TaskTimingLine({ task }: { task: TaskItem | undefined }) {
+  if (!task) return null;
+  const assigned = getTaskAssignedDate(task);
+  const late = getTaskLateness(task);
+  return (
+    <div className="space-y-1 mt-1">
+      <p className="text-[10px] text-theme-text-secondary">
+        {assigned ? <>Assigned <strong className="text-theme-text-primary">{assigned}</strong> &middot; </> : null}
+        Due <strong className="text-theme-text-primary">{task.dueDate}</strong>
+        {task.status === 'Completed' && task.completedAt ? <> &middot; Completed <strong className="text-theme-text-primary">{task.completedAt.slice(0, 10)}</strong></> : null}
+      </p>
+      {late && (
+        <p className="text-[10px] font-bold text-danger bg-danger/10 border border-danger/30 rounded-lg px-2 py-1">
+          Submitted {late.daysLate} day{late.daysLate === 1 ? '' : 's'} after the deadline — no extension was given
+        </p>
+      )}
+    </div>
+  );
+}
+
 function defaultScoresFor(set: RatingCriteriaSet): Record<string, number> {
   const scores: Record<string, number> = {};
   RATING_CRITERIA[set].forEach(c => { scores[c.key] = 3; });
@@ -259,12 +283,14 @@ export default function RatingsPage() {
         setFormError('Evaluation Access Denied: Procurement tasks are administrative operations and not subject to ratings or reviews.');
         return;
       }
+      const editLate = getTaskLateness(correlatedTask);
       updateRating(editingRating.id, {
         criteriaSet: activeCriteriaSet,
         scores,
         ...legacy,
         overallScore: overall,
         notes,
+        lateNote: editLate ? describeTaskLateness(editLate) : undefined,
       }, user?.name || 'User');
       triggerSuccess(`Updated evaluation scorecard for ${editingRating.targetName}`);
     } else if (selectedTask) {
@@ -282,6 +308,7 @@ export default function RatingsPage() {
         r => r.taskId === selectedTask.id && r.targetId === targetId && reviewerRole !== null && (r.reviewerRole === reviewerRole || r.raterName === user.name)
       );
 
+      const lateInfo = getTaskLateness(selectedTask);
       if (ownExisting) {
         updateRating(ownExisting.id, {
           criteriaSet: activeCriteriaSet,
@@ -289,6 +316,7 @@ export default function RatingsPage() {
           ...legacy,
           overallScore: overall,
           notes,
+          lateNote: lateInfo ? describeTaskLateness(lateInfo) : undefined,
         }, user.name);
       } else {
         addRating({
@@ -305,6 +333,7 @@ export default function RatingsPage() {
           ...legacy,
           overallScore: overall,
           notes,
+          lateNote: lateInfo ? describeTaskLateness(lateInfo) : undefined,
           // Committee/group tasks don't have a real person as their target —
           // targetId/targetName here is the committee's or group's
           // placeholder string. Flag it so it never surfaces as if it were
@@ -814,6 +843,7 @@ export default function RatingsPage() {
                               <p className="text-[10px] text-theme-text-secondary mt-0.5">
                                 Assignee: <strong className="text-theme-text-primary">{task.assignee}</strong>
                               </p>
+                              <TaskTimingLine task={task} />
                               <div className="flex items-center flex-wrap gap-1.5 mt-1">
                                 {task.event ? (
                                   <span className="text-[10px] text-accent font-semibold">{task.event}</span>
@@ -1148,6 +1178,14 @@ export default function RatingsPage() {
 
                         {/* Remarks */}
                         <td className="py-3.5 text-theme-text-secondary max-w-xs align-top space-y-1">
+                          {(() => {
+                            const taskForRow = tasks.find(t => t.id === group.ratings[0]?.taskId);
+                            const liveLate = taskForRow ? getTaskLateness(taskForRow) : null;
+                            const note = group.ratings.find(r => r.lateNote)?.lateNote || (liveLate ? describeTaskLateness(liveLate) : '');
+                            return note ? (
+                              <p className="text-[11px] font-bold text-danger" title={note}>{note}</p>
+                            ) : null;
+                          })()}
                           {group.ratings.map(r => r.notes ? (
                             <p key={r.id} className="text-[11px] truncate" title={`${r.raterName}: ${r.notes}`}>
                               {group.ratings.length > 1 ? <strong className="text-theme-text-primary">{r.raterName.split(' ')[0]}: </strong> : null}
@@ -1246,6 +1284,7 @@ export default function RatingsPage() {
               <p className="text-[11px] text-theme-text-secondary">
                 Student Assignee: <strong className="text-theme-text-primary">{editingRating ? editingRating.targetName : selectedTask?.assignee}</strong>
               </p>
+              <TaskTimingLine task={editingRating ? tasks.find(t => t.id === editingRating.taskId) : selectedTask || undefined} />
               {!editingRating && selectedTask && (() => {
                 const role = resolveRatingReviewerRole(user, isDesignTask(selectedTask));
                 if (role === 'SUPER_USER' || role === 'CENTRE_HEAD' || role === 'ADVISOR' || role === 'GG_HEAD') {

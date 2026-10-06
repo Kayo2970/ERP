@@ -20,7 +20,9 @@ import {
   getEffectiveEventStatus,
   hasEventPlanningPhase,
   formatEventDateRange,
-  formatEventPlanningNote
+  formatEventPlanningNote,
+  getTaskLateness,
+  describeTaskLateness
 } from '@/lib/local-data';
 import { EventDetailModal } from '@/components/event-detail-modal';
 
@@ -34,6 +36,12 @@ const WINDOW_OPTIONS: { key: Exclude<WindowKey, 'custom'>; label: string; before
 ];
 
 const DAY_MS = 86400000;
+/** A task completed after its deadline with no extension: solid red with a red halo so it stands out from the plain "pending extension" red. */
+const LATE_MARKER_CLASS = 'bg-danger ring-2 ring-danger/60 !border-danger z-20';
+const taskMarkerTitle = (task: TaskItem) => {
+  const late = getTaskLateness(task);
+  return `${task.title} · due ${task.dueDate} · ${task.status}${late ? ` · ${describeTaskLateness(late)}` : ''}`;
+};
 /** Longest custom range we draw — beyond this the day columns become unreadably thin. */
 const MAX_CUSTOM_DAYS = 731;
 const parseDate = (s: string) => new Date(`${s}T00:00:00`);
@@ -499,10 +507,10 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
                           href={`/dashboard/tasks?highlight=${task.id}`}
                           onClick={(e) => e.stopPropagation()}
                           className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 h-2.5 w-2.5 rotate-45 border border-white/60 shadow-sm hover:scale-125 transition-transform z-10 ${
-                            task.status === 'Completed' ? 'bg-success' : task.status === 'Pending Extension' ? 'bg-danger' : 'bg-white'
+                            getTaskLateness(task) ? LATE_MARKER_CLASS : task.status === 'Completed' ? 'bg-success' : task.status === 'Pending Extension' ? 'bg-danger' : 'bg-white'
                           }`}
                           style={{ left: xFor(task.dueDate) }}
-                          title={`${task.title} · due ${task.dueDate} · ${task.status}`}
+                          title={taskMarkerTitle(task)}
                         />
                       ))}
                     </div>
@@ -530,10 +538,10 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
                         key={task.id}
                         href={`/dashboard/tasks?highlight=${task.id}`}
                         className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 h-2.5 w-2.5 rotate-45 border border-white/60 shadow-sm hover:scale-125 transition-transform ${
-                          task.status === 'Completed' ? 'bg-success' : task.status === 'Pending Extension' ? 'bg-danger' : 'bg-accent'
+                          getTaskLateness(task) ? LATE_MARKER_CLASS : task.status === 'Completed' ? 'bg-success' : task.status === 'Pending Extension' ? 'bg-danger' : 'bg-accent'
                         }`}
                         style={{ left: xFor(task.dueDate) }}
-                        title={`${task.title} · due ${task.dueDate} · ${task.status}`}
+                        title={taskMarkerTitle(task)}
                       />
                     ))}
                   </div>
@@ -565,6 +573,7 @@ export function GanttTimeline({ events, tasks, maxRows = 10 }: GanttTimelineProp
                   <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-warning/40 border border-dashed border-warning/70" /> Planning/prep phase</span>
                   <span className="flex items-center gap-1.5"><span className="h-2 w-2 rotate-45 bg-white border border-theme-text-secondary/40 inline-block" /> Task due</span>
                   <span className="flex items-center gap-1.5"><span className="h-2 w-2 rotate-45 bg-success inline-block" /> Task completed</span>
+                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rotate-45 bg-danger ring-2 ring-danger/60 inline-block" /> Completed late, no extension</span>
                 </div>
               </>
             )}

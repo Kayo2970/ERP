@@ -46,6 +46,9 @@ import {
   updateTaskStatus,
   updateTaskStatusAsync,
   getEventReportCompletionBlocker,
+  getTaskAssignedDate,
+  getTaskLateness,
+  describeTaskLateness,
   deleteTask,
   submitTaskEdit,
   approveTask,
@@ -859,6 +862,8 @@ export default function TasksPage() {
       updateTask(taskId, {
         status: 'In Progress',
         dueDate: newDueStr,
+        extensionGranted: true,
+        originalDueDate: task.originalDueDate || task.dueDate,
         decidedBy: user?.name || 'Approver',
         decidedAt: now,
       }, user?.name || 'User');
@@ -1115,7 +1120,7 @@ export default function TasksPage() {
               <div key={task.id} className="p-3 bg-theme-background/40 border border-theme-border/40 rounded-xl space-y-2 text-xs">
                 <div className="flex justify-between items-start">
                   <h4 className="font-semibold text-theme-text-primary">{task.title}</h4>
-                  <span className="text-[10px] text-theme-text-secondary">Due: {task.dueDate}</span>
+                  <span className="text-[10px] text-theme-text-secondary">{getTaskAssignedDate(task) ? `Assigned: ${getTaskAssignedDate(task)} · ` : ''}Due: {task.dueDate}</span>
                 </div>
                 <p className="text-[11px] text-theme-text-secondary">
                   <strong>Assignee:</strong> {task.assignee} &middot; <strong>Reason:</strong> {task.extensionReason || 'No justification provided'}
@@ -1297,10 +1302,33 @@ export default function TasksPage() {
                               {task.status}
                             </span>
                           )}
+                          {getTaskAssignedDate(task) && (
+                            <span className="text-[11px] text-theme-text-secondary font-medium flex items-center gap-1.5" title="The day this task was assigned">
+                              <Calendar className="h-3.5 w-3.5 text-theme-text-secondary" />
+                              Assigned: {getTaskAssignedDate(task)}
+                            </span>
+                          )}
                           <span className="text-[11px] text-theme-text-secondary font-medium flex items-center gap-1.5">
                             <Calendar className="h-3.5 w-3.5 text-accent" />
                             Due: {task.dueDate}
+                            {task.originalDueDate && task.originalDueDate !== task.dueDate && (
+                              <span className="text-[10px] text-warning" title="Deadline before the approved extension">(extended from {task.originalDueDate})</span>
+                            )}
                           </span>
+                          {task.status === 'Completed' && task.completedAt && (
+                            <span className="text-[11px] text-theme-text-secondary font-medium flex items-center gap-1.5">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-success" />
+                              Completed: {task.completedAt.slice(0, 10)}
+                            </span>
+                          )}
+                          {(() => {
+                            const late = getTaskLateness(task);
+                            return late ? (
+                              <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-danger/15 text-danger border border-danger/40" title={describeTaskLateness(late)}>
+                                {late.daysLate} day{late.daysLate === 1 ? '' : 's'} late — no extension
+                              </span>
+                            ) : null;
+                          })()}
                         </div>
                 
                 {(task.approvalStatus === 'pending_create' || task.approvalStatus === 'pending_edit') && canSeeTaskApprovalMeta(task) && (
