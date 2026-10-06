@@ -34,6 +34,8 @@ export interface InteractiveKeycardProps {
   qrEye?: string;
   qrShape?: PassQrShape;
   qrLogo?: boolean;
+  /** Custom logo (event theme logo). Used on the card faces, the QR centre and the holder's debossed cover so they all match. */
+  logoUrl?: string;
   onSaveContact?: () => void;
   saveContactLabel?: string;
   onAddToAppleWallet?: () => void;
@@ -82,6 +84,7 @@ export function InteractiveKeycardHolder({
   qrEye = '',
   qrShape = 'square',
   qrLogo = true,
+  logoUrl,
   onSaveContact,
   saveContactLabel = 'Save Contact',
   onAddToAppleWallet,
@@ -113,6 +116,9 @@ export function InteractiveKeycardHolder({
   const cardRef = useRef<HTMLDivElement>(null);
   const dragInfo = useRef({ isDragging: false, startY: 0, currentDeltaY: 0, hasDragged: false });
   const holderDragInfo = useRef({ isDragging: false, startY: 0, hasDragged: false });
+
+  const cardLogo = logoUrl || '/card/leads-logo.png';
+  const markLogo = logoUrl || '/card/leads-logo-clean.png';
 
   const isEvent = Boolean(isEventPass || eventName || passType);
 
@@ -212,7 +218,7 @@ export function InteractiveKeycardHolder({
         const logo = new Image();
         logo.onload = () => draw(logo);
         logo.onerror = () => draw();
-        logo.src = '/card/leads-logo-clean.png';
+        logo.src = markLogo;
       } catch (err) {
         console.warn('[InteractiveKeycard] QR generation warning:', err);
       }
@@ -220,7 +226,7 @@ export function InteractiveKeycardHolder({
 
     generateQr();
     return () => { isMounted = false; };
-  }, [cardUrl, qrUrl, qrDark, qrLight, qrEye, qrShape, qrLogo]);
+  }, [cardUrl, qrUrl, qrDark, qrLight, qrEye, qrShape, qrLogo, markLogo]);
 
   useEffect(() => {
     // Respect reduced-motion preferences: skip the cover/extract choreography entirely
@@ -417,7 +423,7 @@ export function InteractiveKeycardHolder({
       <svg width="0" height="0" style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }} aria-hidden="true">
         <defs>
           <mask id="leads-deboss-mask" maskUnits="objectBoundingBox" maskContentUnits="objectBoundingBox">
-            <image href="/card/leads-logo-clean.png" width="1" height="1" preserveAspectRatio="xMidYMid meet" />
+            <image href={markLogo} width="1" height="1" preserveAspectRatio="xMidYMid meet" />
           </mask>
         </defs>
       </svg>
@@ -494,6 +500,7 @@ export function InteractiveKeycardHolder({
             '--card-tuck-duration': `${CARD_TUCK_DURATION}ms`,
             '--cover-open-duration': `${COVER_OPEN_DURATION}ms`,
             '--cover-close-duration': `${COVER_CLOSE_DURATION}ms`,
+            ...(logoUrl ? { '--holder-logo': `url("${logoUrl}")` } : {}),
           } as React.CSSProperties}
         >
           {/* Base Body & Inside Right Pocket */}
@@ -530,7 +537,7 @@ export function InteractiveKeycardHolder({
                     <div className={styles.eventPassBody}>
                       <div className={styles.eventPassHeader}>
                         <div className={styles.eventBrandWrap}>
-                          <img src="/card/leads-logo.png" alt="LEADS Logo" className={styles.eventBrandLogo} />
+                          <img src={cardLogo} alt="LEADS Logo" className={styles.eventBrandLogo} />
                           <div className={styles.eventBrandText}>
                             <span className={styles.eventBrandTitle}>{brandHeader || 'LEADS Next Gen Centre'}</span>
                             <span className={styles.eventBrandSubtitle}>RUAS Executive Credential</span>
@@ -616,7 +623,7 @@ export function InteractiveKeycardHolder({
 
                     <div>
                       <div className={styles.passHeader}>
-                        <img src="/card/leads-logo.png" alt="LEADS Logo" className={styles.passMiniLogo} />
+                        <img src={cardLogo} alt="LEADS Logo" className={styles.passMiniLogo} />
                         <span className={styles.passBadgePill}>EXECUTIVE PASS</span>
                       </div>
 
@@ -633,7 +640,7 @@ export function InteractiveKeycardHolder({
                           <div className={styles.passLabel}>{memberRole}</div>
                           <div className={styles.passName} style={{ fontSize: '15px' }}>{memberName}</div>
                         </div>
-                        <img src="/card/leads-logo-clean.png" alt="LEADS RUAS" className={styles.passSideLogo} />
+                        <img src={markLogo} alt="LEADS RUAS" className={styles.passSideLogo} />
                       </div>
 
                       <div className={styles.passGrid}>

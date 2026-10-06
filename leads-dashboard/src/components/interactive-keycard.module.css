@@ -760,8 +760,8 @@
   background-color: rgba(140, 210, 255, 0.55);
   -webkit-mask: url(#leads-deboss-mask);
   mask: url(#leads-deboss-mask);
-  -webkit-mask-image: url(#leads-deboss-mask), url('/card/leads-logo-clean.png');
-  mask-image: url(#leads-deboss-mask), url('/card/leads-logo-clean.png');
+  -webkit-mask-image: var(--holder-logo, url('/card/leads-logo-clean.png'));
+  mask-image: var(--holder-logo, url('/card/leads-logo-clean.png'));
   -webkit-mask-size: contain;
   mask-size: contain;
   -webkit-mask-repeat: no-repeat;
@@ -781,8 +781,8 @@
   background-color: rgba(0, 0, 0, 0.95);
   -webkit-mask: url(#leads-deboss-mask);
   mask: url(#leads-deboss-mask);
-  -webkit-mask-image: url(#leads-deboss-mask), url('/card/leads-logo-clean.png');
-  mask-image: url(#leads-deboss-mask), url('/card/leads-logo-clean.png');
+  -webkit-mask-image: var(--holder-logo, url('/card/leads-logo-clean.png'));
+  mask-image: var(--holder-logo, url('/card/leads-logo-clean.png'));
   -webkit-mask-size: contain;
   mask-size: contain;
   -webkit-mask-repeat: no-repeat;
@@ -805,8 +805,8 @@
   background-blend-mode: multiply;
   -webkit-mask: url(#leads-deboss-mask);
   mask: url(#leads-deboss-mask);
-  -webkit-mask-image: url(#leads-deboss-mask), url('/card/leads-logo-clean.png');
-  mask-image: url(#leads-deboss-mask), url('/card/leads-logo-clean.png');
+  -webkit-mask-image: var(--holder-logo, url('/card/leads-logo-clean.png'));
+  mask-image: var(--holder-logo, url('/card/leads-logo-clean.png'));
   -webkit-mask-size: contain;
   mask-size: contain;
   -webkit-mask-repeat: no-repeat;
