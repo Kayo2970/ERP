@@ -1730,6 +1730,12 @@ async function doSyncWithServer(): Promise<boolean> {
   const timeout = setTimeout(() => controller.abort(), 20000);
   try {
     const res = await fetch('/api/data', { cache: 'no-store', headers: authHeaders(), signal: controller.signal });
+    if (res.status === 401 && getSessionToken()) {
+      // The server no longer recognises this session (signed out elsewhere, password reset by an admin, terminated...).
+      // Tell the app shell so it can send the person back to the login page instead of showing stale data forever.
+      window.dispatchEvent(new Event('leads-session-expired'));
+      return false;
+    }
     if (!res.ok) return false;
     const data = await res.json();
     if (data && typeof data === 'object') {
