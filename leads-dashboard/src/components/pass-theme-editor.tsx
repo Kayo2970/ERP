@@ -5,7 +5,7 @@ import { ImagePlus, Trash2, Save, Palette } from 'lucide-react';
 import { DEFAULT_PASS_THEME, PassTheme, authHeaders } from '@/lib/local-data';
 import { passThemeStyle } from '@/lib/pass-theme-style';
 import { AppleWalletPosterPreview } from './apple-wallet-poster-preview';
-import { InteractiveKeycardHolder } from './interactive-keycard-holder';
+import { HolderCoverPreview } from './interactive-keycard-holder';
 import { EventTitleToggle } from './pass-design-controls';
 
 interface Props {
@@ -285,20 +285,12 @@ export function PassThemeEditor({ eventId, eventName, onThemeChange }: Props) {
         <div className="flex flex-col sm:flex-row gap-4 items-center sm:items-start justify-center">
           <div className="shrink-0 text-center">
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Leather folder cover</div>
-            <div className="w-[190px] h-[300px] overflow-hidden rounded-2xl pointer-events-none" aria-hidden="true">
-              <div style={{ zoom: 0.6 }}>
-                <InteractiveKeycardHolder
-                  isEventPass
-                  memberName="Attendee Name"
-                  eventName={eventName}
-                  showActions={false}
-                  logoUrl={merged.logoUrl}
-                />
-              </div>
+            <div className="flex justify-center pb-2">
+              <HolderCoverPreview logoUrl={merged.logoUrl} width={190} />
             </div>
             <div className="text-[10px] text-slate-500 mt-1">{merged.logoUrl ? 'Debossed with the event logo' : 'Default LEADS logo — upload one below'}</div>
           </div>
-          <div className="min-w-0 max-w-full text-center">
+          <div className="min-w-0 flex-1 max-w-full text-center">
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
               {orientation === 'horizontal' ? 'Horizontal pass (email ticket)' : 'Vertical pass (Apple / Google Wallet)'}
             </div>
