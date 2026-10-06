@@ -184,7 +184,24 @@ export default function ReportsPage() {
   // Events with dates still to be decided, or that have not started yet, can't have been taken part in, so they don't count.
   const todayIso = new Date().toISOString().slice(0, 10);
   const totalEventsInPeriod = events.filter(e => !e.datesTBD && !!e.startDate && e.startDate <= todayIso && isWithinPeriod(e.startDate, periodFilter)).length;
-  const studentFinalScores = buildStudentFinalScores(filteredRatings, totalEventsInPeriod || undefined);
+  // Current student members with no rating at all in this view get a performance score of 0 (they are listed, not
+  // left out). Someone who has ratings the viewer isn't allowed to see is not "unrated", so they are skipped.
+  const namesWithAnyRating = new Set(
+    ratings
+      .filter(r => !r.isGroupPlaceholder && r.taskId && tasks.some(t => t.id === r.taskId) && isWithinPeriod(r.createdAt, periodFilter))
+      .map(r => r.targetName.toLowerCase())
+  );
+  const unratedStudentNames = selectedTarget !== 'All' ? [] : members
+    .filter(m =>
+      m.tier >= 5 &&
+      m.division !== 'Advisory Board' && m.division !== 'Alumni' && m.division !== 'Faculty' &&
+      m.status !== 'Terminated' &&
+      !isFaculty(m) &&
+      (selectedDivision === 'ALL' || m.division === selectedDivision) &&
+      !namesWithAnyRating.has(m.name.toLowerCase())
+    )
+    .map(m => m.name);
+  const studentFinalScores = buildStudentFinalScores(filteredRatings, totalEventsInPeriod || undefined, unratedStudentNames);
 
   // Bar Data with dynamic color tokens from design system — grouped
   // according to barBreakdown so a student (or event) with several rated
@@ -224,6 +241,11 @@ export default function ReportsPage() {
           fill: getRatingColor(avg).hex,
         };
       })
+      .concat(barBreakdown === 'student'
+        ? studentFinalScores
+            .filter(r => r.taskCount === 0)
+            .map(r => ({ name: r.name, detail: 'Not rated yet — performance score 0', score: 0, fill: getRatingColor(0).hex }))
+        : [])
       .sort((a, b) => b.score - a.score);
   })();
 
@@ -566,7 +588,7 @@ export default function ReportsPage() {
               {totalEventsInPeriod > 0
                 ? ` (share of all ${totalEventsInPeriod} event${totalEventsInPeriod === 1 ? '' : 's'} in this period the student took part in — events they were not part of count against them)`
                 : ` (full marks at ${TASK_COUNT_TARGET}+ evaluated tasks — no events found in this period)`}.
-              Scores are averaged per event first, then across the events the student was evaluated on with equal weight.
+              Scores are averaged per event first, then across the events the student was evaluated on with equal weight. Students with no ratings yet are listed with a score of 0.
             </p>
           </div>
           <div className="overflow-x-auto">

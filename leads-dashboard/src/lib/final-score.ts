@@ -50,7 +50,9 @@ export interface StudentFinalScore {
  */
 export function buildStudentFinalScores(
   items: { targetName: string; overallScore: number; eventName?: string }[],
-  totalEvents?: number
+  totalEvents?: number,
+  /** Students with no rating at all: listed with a final score of 0 instead of being left out. */
+  unratedNames: string[] = []
 ): StudentFinalScore[] {
   const byStudent = new Map<string, Map<string, number[]>>();
   items.forEach(r => {
@@ -77,5 +79,10 @@ export function buildStudentFinalScores(
         finalScore: computeFinalScore(avgScore, taskCount, totalEvents, eventsParticipated),
       };
     })
-    .sort((a, b) => b.finalScore - a.finalScore);
+    .concat(
+      unratedNames
+        .filter(n => !byStudent.has(n))
+        .map(name => ({ name, taskCount: 0, eventCount: 0, eventsParticipated: 0, avgScore: 0, countScore: 0, finalScore: 0 }))
+    )
+    .sort((a, b) => b.finalScore - a.finalScore || a.name.localeCompare(b.name));
 }
