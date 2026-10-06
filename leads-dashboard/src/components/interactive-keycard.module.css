@@ -1,4 +1,6 @@
 .stageContainer {
+  container-type: inline-size;
+  container-name: keycard;
   position: relative;
   min-height: 100%;
   width: 100%;
@@ -1253,7 +1255,9 @@
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8);
 }
 
-@media (max-width: 768px) {
+/* Container query, not a viewport media query: a half-screen window or a narrow panel is as cramped as a phone,
+   because the open folder needs ~660px (card + opened cover leaf) */
+@container keycard (max-width: 700px) {
   .experienceStage {
     perspective: 1500px;
     width: 100%;
