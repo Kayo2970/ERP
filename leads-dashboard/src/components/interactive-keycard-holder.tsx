@@ -875,4 +875,29 @@ export function InteractiveKeycardHolder({
   );
 }
 
+/** Static, closed leather cover (no animation or controls): shows the debossed logo exactly as the folder draws it. */
+export function HolderCoverPreview({ logoUrl, width = 220 }: { logoUrl?: string; width?: number }) {
+  const mark = Math.round(width * 0.72);
+  return (
+    <div
+      style={{
+        position: 'relative',
+        width,
+        height: Math.round(width * 1.45),
+        ...(logoUrl ? { '--holder-logo': `url("${logoUrl}")` } : {}),
+      } as React.CSSProperties}
+      aria-label="Leather folder cover"
+    >
+      <div className={styles.coverFront} style={{ padding: 0 }}>
+        <div className={styles.coverStitch} />
+        <div className={styles.debossedLeatherMark} style={{ width: mark, height: mark, cursor: 'default' }}>
+          <div className={styles.debossCavity} />
+          <div className={styles.debossShadowBevel} />
+          <div className={styles.debossHighlightBevel} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default InteractiveKeycardHolder;
