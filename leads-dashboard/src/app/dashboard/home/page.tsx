@@ -427,7 +427,7 @@ export default function DashboardHome() {
         <div className="glass-panel rounded-2xl p-6 flex flex-col space-y-4">
           <div>
             <h3 className="text-base font-bold text-theme-text-primary">Student Performance Leaderboard</h3>
-            <p className="text-xs text-theme-text-secondary">Individual student contributor rankings based on task evaluations and scored event reports</p>
+            <p className="text-xs text-theme-text-secondary">Individual student contributor rankings from the Reports module's Final Score (task evaluations + event participation)</p>
           </div>
 
           <div className="flex-1 space-y-2.5">
@@ -477,11 +477,11 @@ export default function DashboardHome() {
                       className={`flex items-center gap-1 px-2.5 py-1 rounded-xl font-bold text-xs border ${colorTokens.bg} ${colorTokens.text} ${colorTokens.border}`}
                       title={
                         perf.ratingsCount > 0
-                          ? `Since 1 Aug: raw average ${perf.rawScore.toFixed(1)} (recency-weighted: ${perf.recencyScore.toFixed(1)}) across ${perf.ratingsCount} evaluated task${perf.ratingsCount === 1 ? '' : 's'} (multi-reviewer tasks count once), ${Math.round(perf.consistencyRatio * 100)}% weekly-active since their first rating this cycle — fewer, older, or more sporadic ratings pull the score down toward the org-wide typical score`
-                          : 'No ratings this cycle (resets every 1 Aug) — 0.0 until their first evaluation'
+                          ? `Same as the Reports module's Final Score: 70% average evaluation score (${perf.rawScore.toFixed(1)} across ${perf.ratingsCount} evaluated task${perf.ratingsCount === 1 ? '' : 's'}, multi-reviewer tasks count once) + 30% event participation (${perf.eventsParticipated} of ${perf.totalEvents} event${perf.totalEvents === 1 ? '' : 's'} held)`
+                          : 'No ratings yet — 0.0 until their first evaluation'
                       }
                     >
-                      <span>{perf.score.toFixed(1)}</span>
+                      <span>{perf.score.toFixed(2)}</span>
                       <Star className="h-3 w-3 fill-current" />
                     </div>
                   </div>

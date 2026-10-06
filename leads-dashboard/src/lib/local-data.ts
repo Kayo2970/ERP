@@ -1,5 +1,6 @@
 import { trackSync } from './sync-status';
-import { averageScore, computeFinalStudentScore, groupRatingsByTask, isWithinCurrentScoringCycle } from './rating-criteria';
+import { averageScore } from './rating-criteria';
+import { buildStudentFinalScores } from './final-score';
 
 // -------------------------------------------------------------
 // Session token — attached to every authenticated API call so the server
@@ -5244,78 +5245,62 @@ export function getStudentLeaderboard(): {
   completedTasks: number;
   totalTasks: number;
   ratingsCount: number;
+  eventsParticipated: number;
+  totalEvents: number;
 }[] {
   const members = getMembers();
   // Filter for student contributors: Core Committee, Training Associates, Alumni
   const studentMembers = members.filter(m => m.division !== 'Advisory Board' && m.tier >= 5);
 
-  const now = new Date();
+  // The leaderboard shows exactly what the Reports module's "Student Final Score" shows (same ratings, same
+  // formula — see final-score.ts), so the two never disagree. Same rating filter as the Reports page: only
+  // ratings of an existing task, no committee/group placeholder rows, no faculty/professors.
+  const validTaskIds = new Set(getTasks().map(t => t.id));
+  const validRatings = getRatings().filter(r => {
+    if (r.isGroupPlaceholder || !r.taskId || !validTaskIds.has(r.taskId)) return false;
+    const target = members.find(m => m.id === r.targetId || m.name.toLowerCase() === r.targetName.toLowerCase());
+    if (target && (target.division === 'Faculty' || /prof\.|professor|faculty/i.test(target.role || ''))) return false;
+    if (/prof\.|professor|faculty/i.test(r.targetName)) return false;
+    return true;
+  });
 
-  // Everything below only looks at ratings from the current annual scoring
-  // cycle (resets every 1 August, see currentScoringCycleStart) — last
-  // year's volume, recency, and consistency history doesn't carry over.
-  // Excludes committee/group placeholder rows (see RatingItem.isGroupPlaceholder)
-  // so the same evaluation isn't counted once for the placeholder AND again
-  // for every student it was fanned out to, which would skew this baseline.
-  // Direct correlation check: only count ratings correlated to an existing task.
-  const allCurrentTasks = getTasks();
-  const validCycleTaskIds = new Set(allCurrentTasks.map(t => t.id));
-  const cycleRatings = getRatings().filter(r =>
-    !r.isGroupPlaceholder &&
-    r.taskId &&
-    validCycleTaskIds.has(r.taskId) &&
-    isWithinCurrentScoringCycle(r.createdAt, now)
-  );
+  // Several reviewers rating the same student on the same task count as ONE evaluation (their average)
+  const byStudentTask = new Map<string, RatingItem[]>();
+  validRatings.forEach(r => {
+    const key = `${r.targetId || r.targetName}_${r.taskId || r.taskTitle}`;
+    const group = byStudentTask.get(key);
+    if (group) group.push(r); else byStudentTask.set(key, [r]);
+  });
+  const evaluations = Array.from(byStudentTask.values()).map(group => ({
+    targetName: group[0].targetName,
+    eventName: group[0].eventName,
+    overallScore: group.reduce((sum, r) => sum + r.overallScore, 0) / group.length,
+  }));
 
-  // Org-wide baseline for the confidence weighting below — the mean overall
-  // score across every in-cycle rating. Falls back to the neutral midpoint
-  // (3.0) when nothing has been rated yet this cycle.
-  const baseline = cycleRatings.length > 0
-    ? cycleRatings.reduce((sum, r) => sum + r.overallScore, 0) / cycleRatings.length
-    : 3.0;
-
-  // Scored event reports (Report Writing rubric) count as evaluated work for the student who submitted them, so
-  // submitting and scoring a report moves their rank just like a rated task does. Only this cycle's reports count.
-  const scoredReports = getEventReports().filter(r =>
-    typeof r.reportScore === 'number' && isWithinCurrentScoringCycle(r.scoredAt || r.submittedAt, now)
+  // Events held so far count toward participation, not only the ones a student was rated on
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const totalEvents = getEvents().filter(e => !e.datesTBD && !!e.startDate && e.startDate <= todayIso).length;
+  const finalByName = new Map(
+    buildStudentFinalScores(evaluations, totalEvents || undefined).map(f => [f.name.toLowerCase(), f])
   );
 
   const results = studentMembers.map(m => {
     const profile = getStudentProfile(m.id);
-    const inCycle = (profile?.ratings || []).filter(r => isWithinCurrentScoringCycle(r.createdAt, now));
-    // Collapse independent multi-reviewer rows (Super User / Centre Head /
-    // Advisor / GG Head each rate the same task separately) into one data
-    // point per distinct task, so volume tracks tasks actually done, not
-    // how many reviewers happened to rate each one — see groupRatingsByTask.
-    const memberReportRows = scoredReports
-      .filter(r =>
-        (r.submittedByEmail && m.email && r.submittedByEmail.toLowerCase() === m.email.toLowerCase()) ||
-        (!r.submittedByEmail && r.submittedBy && r.submittedBy.toLowerCase() === m.name.toLowerCase())
-      )
-      .map(r => ({ score: r.reportScore as number, date: r.scoredAt || r.submittedAt, taskKey: `event-report:${r.id}` }));
-    const datedScores = groupRatingsByTask([
-      ...inCycle.map(r => ({ score: r.overallScore, date: r.createdAt, taskKey: r.taskId || r.taskTitle })),
-      ...memberReportRows,
-    ]);
-    // Final score blends three signals — see computeFinalStudentScore in
-    // rating-criteria.ts: (1) a recency-weighted average so current
-    // performance outweighs a stale one-off, (2) confidence weighting by
-    // task count so volume of contribution matters, and (3) a consistency
-    // multiplier so steady contribution relative to TODAY beats an old
-    // burst of activity. This is what the leaderboard ranks by.
-    const breakdown = computeFinalStudentScore(datedScores, baseline, now);
+    const f = finalByName.get(m.name.toLowerCase());
     return {
       id: m.id,
       name: m.name,
       role: m.role,
       division: m.division,
-      score: breakdown.finalScore,
-      rawScore: breakdown.rawAverage,
-      recencyScore: breakdown.recencyAverage,
-      consistencyRatio: breakdown.consistencyRatio,
+      score: f ? f.finalScore : 0,
+      rawScore: f ? f.avgScore : 0,
+      recencyScore: f ? f.avgScore : 0,
+      consistencyRatio: 1,
       completedTasks: profile?.stats.completedTasks || 0,
       totalTasks: profile?.stats.totalTasks || 0,
-      ratingsCount: breakdown.ratingCount,
+      ratingsCount: f ? f.taskCount : 0,
+      eventsParticipated: f ? f.eventsParticipated : 0,
+      totalEvents,
     };
   });
 
