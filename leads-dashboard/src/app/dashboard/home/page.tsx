@@ -427,7 +427,7 @@ export default function DashboardHome() {
         <div className="glass-panel rounded-2xl p-6 flex flex-col space-y-4">
           <div>
             <h3 className="text-base font-bold text-theme-text-primary">Student Performance Leaderboard</h3>
-            <p className="text-xs text-theme-text-secondary">Individual student contributor rankings based on task evaluations</p>
+            <p className="text-xs text-theme-text-secondary">Individual student contributor rankings based on task evaluations and scored event reports</p>
           </div>
 
           <div className="flex-1 space-y-2.5">

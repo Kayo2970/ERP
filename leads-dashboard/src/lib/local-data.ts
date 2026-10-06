@@ -5274,6 +5274,12 @@ export function getStudentLeaderboard(): {
     ? cycleRatings.reduce((sum, r) => sum + r.overallScore, 0) / cycleRatings.length
     : 3.0;
 
+  // Scored event reports (Report Writing rubric) count as evaluated work for the student who submitted them, so
+  // submitting and scoring a report moves their rank just like a rated task does. Only this cycle's reports count.
+  const scoredReports = getEventReports().filter(r =>
+    typeof r.reportScore === 'number' && isWithinCurrentScoringCycle(r.scoredAt || r.submittedAt, now)
+  );
+
   const results = studentMembers.map(m => {
     const profile = getStudentProfile(m.id);
     const inCycle = (profile?.ratings || []).filter(r => isWithinCurrentScoringCycle(r.createdAt, now));
@@ -5281,9 +5287,16 @@ export function getStudentLeaderboard(): {
     // Advisor / GG Head each rate the same task separately) into one data
     // point per distinct task, so volume tracks tasks actually done, not
     // how many reviewers happened to rate each one — see groupRatingsByTask.
-    const datedScores = groupRatingsByTask(
-      inCycle.map(r => ({ score: r.overallScore, date: r.createdAt, taskKey: r.taskId || r.taskTitle }))
-    );
+    const memberReportRows = scoredReports
+      .filter(r =>
+        (r.submittedByEmail && m.email && r.submittedByEmail.toLowerCase() === m.email.toLowerCase()) ||
+        (!r.submittedByEmail && r.submittedBy && r.submittedBy.toLowerCase() === m.name.toLowerCase())
+      )
+      .map(r => ({ score: r.reportScore as number, date: r.scoredAt || r.submittedAt, taskKey: `event-report:${r.id}` }));
+    const datedScores = groupRatingsByTask([
+      ...inCycle.map(r => ({ score: r.overallScore, date: r.createdAt, taskKey: r.taskId || r.taskTitle })),
+      ...memberReportRows,
+    ]);
     // Final score blends three signals — see computeFinalStudentScore in
     // rating-criteria.ts: (1) a recency-weighted average so current
     // performance outweighs a stale one-off, (2) confidence weighting by
