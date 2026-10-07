@@ -23,6 +23,7 @@ import {
   Ban,
   UserCheck,
   Search,
+  Download,
 } from 'lucide-react';
 import {
   getEventById,
@@ -48,7 +49,8 @@ import {
   Member,
   TaskItem
 } from '@/lib/local-data';
-import { canManageEvents, isCommitteeApprover, canDeleteTask } from '@/lib/permissions';
+import { canExportEventDetails, canManageEvents, isCommitteeApprover, canDeleteTask } from '@/lib/permissions';
+import { downloadEventDetailsCsv } from '@/lib/event-participants-export';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { StudentProfileModal } from '@/components/student-profile-modal';
 import { RequestApprovalModal } from '@/components/request-approval-modal';
@@ -317,7 +319,19 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
       {/* Event Header Banner */}
       <div className="glass-panel rounded-3xl p-6 md:p-8 space-y-4 border border-theme-border/40 relative overflow-hidden">
         <div className="space-y-2">
-          <h1 className="text-2xl font-black text-theme-text-primary tracking-tight">{event.title}</h1>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <h1 className="text-2xl font-black text-theme-text-primary tracking-tight">{event.title}</h1>
+            {canExportEventDetails(user) && (
+              <button
+                onClick={() => downloadEventDetailsCsv(event, members)}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-border/40"
+                title="Download event details and student details (CSV)"
+              >
+                <Download className="h-4 w-4" />
+                Download Event & Student Details
+              </button>
+            )}
+          </div>
           <p className="text-xs text-theme-text-secondary max-w-3xl leading-relaxed">{event.description}</p>
         </div>
 
