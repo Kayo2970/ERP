@@ -236,6 +236,19 @@ export function isCentreHead(user: SessionUser): boolean {
   return user.tier <= settings.sectorHeadMaxTier || anyKeywordMatches(role, settings.sectorHeadKeywords) || keywordMatches(role, 'advisor');
 }
 
+/**
+ * Download an event's details plus the details of every student in it (CSV).
+ * Always allowed for Super User, Centre Head and Advisor; anyone else needs the
+ * EVENT_EXPORT capability through a Group Policy. Exported data includes
+ * personal contact info, so the Chief Advisor's view-only restriction is
+ * irrelevant here — it's a read, and isCentreHead/isAdvisor decide the rest.
+ */
+export function canExportEventDetails(user: SessionUser): boolean {
+  if (!user) return false;
+  if (user.tier === 1 || isCentreHead(user) || isAdvisor(user)) return true;
+  return hasCapability(user, 'EVENT_EXPORT');
+}
+
 /** Check if user holds the designation of Head of Events (or Events Head). */
 export function isHeadOfEvents(user: SessionUser): boolean {
   if (!user) return false;
@@ -389,6 +402,7 @@ export const CAPABILITY_CATALOG: { key: string; label: string; description: stri
   { key: 'EVENTS_EDIT', label: 'Edit Events', description: "Edit any existing event's details.", module: 'Events' },
   { key: 'EVENTS_DELETE', label: 'Delete Events', description: 'Delete any event.', module: 'Events' },
   { key: 'EVENTS_VIEW_ALL', label: 'View All Events', description: 'See every event, not just ones created by or listing this person.', module: 'Events' },
+  { key: 'EVENT_EXPORT', label: 'Download Event & Participant Details', description: 'Download an event\'s details together with the details of every student in it (committees, roles, contact info) as a CSV — from the Events page and the Members Directory. Centre Head, Advisor, and Super User always have this.', module: 'Events' },
   { key: 'FESTIVALS_MANAGE', label: 'Manage Festivals', description: 'Create, edit, and organize festival schedules and events.', module: 'Festivals' },
   { key: 'TASKS_CREATE', label: 'Create Tasks', description: 'Assign new tasks to individuals or committees.', module: 'Tasks' },
   { key: 'TASKS_EDIT', label: 'Edit Tasks', description: 'Edit any existing task.', module: 'Tasks' },

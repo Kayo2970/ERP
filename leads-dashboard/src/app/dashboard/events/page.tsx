@@ -51,10 +51,12 @@ import {
   canEditEvent,
   canDeleteEvent,
   canManageEvents,
+  canExportEventDetails,
   canViewEvent,
   canApprovePendingEvent,
   getEventApprovalRequirement,
 } from '@/lib/permissions';
+import { downloadEventDetailsCsv } from '@/lib/event-participants-export';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useDropTarget } from '@/components/ui/file-dropzone';
@@ -768,6 +770,16 @@ export default function EventsPage() {
                     <span>Event Workspace</span>
                     <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
                   </Link>
+                  {canExportEventDetails(user) && (
+                    <button
+                      onClick={() => downloadEventDetailsCsv(event, members)}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-theme-text-secondary hover:text-accent transition-all cursor-pointer"
+                      title="Download event details and student details (CSV)"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Details
+                    </button>
+                  )}
                   
                   {(canEditEvent(user) || canDeleteEvent(user) || user) && (
                     <div className="flex items-center gap-1">
