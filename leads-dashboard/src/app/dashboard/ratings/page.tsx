@@ -28,6 +28,7 @@ import {
   getTaskLateness,
   describeTaskLateness,
   getEvents,
+  getTaskAssigneeStatuses,
   Member,
   TaskItem,
   RatingItem,
@@ -1335,6 +1336,32 @@ export default function RatingsPage() {
                 Student Assignee: <strong className="text-theme-text-primary">{editingRating ? editingRating.targetName : selectedTask?.assignee}</strong>
               </p>
               <TaskTimingLine task={editingRating ? tasks.find(t => t.id === editingRating.taskId) : selectedTask || undefined} />
+              {(() => {
+                const modalTask = editingRating ? tasks.find(t => t.id === editingRating.taskId) : selectedTask;
+                if (!modalTask) return null;
+                const isCommitteeTask = modalTask.assigneeType === 'committee' || Boolean(modalTask.eventCommitteeId);
+                if (!isCommitteeTask && modalTask.assigneeType !== 'group') return null;
+                const roster = getTaskAssigneeStatuses(
+                  isCommitteeTask ? { ...modalTask, assigneeType: 'committee' } : modalTask,
+                  members,
+                  events
+                );
+                if (roster.length === 0) return null;
+                return (
+                  <div className="pt-1.5 space-y-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-theme-text-secondary">
+                      {isCommitteeTask ? 'Committee' : 'Group'} Members ({roster.length})
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {roster.map(m => (
+                        <span key={m.id} className="px-2 py-0.5 rounded-lg bg-theme-background/40 border border-theme-border/40 text-[11px] font-medium text-theme-text-primary">
+                          {m.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
               {!editingRating && selectedTask && (() => {
                 const role = resolveRatingReviewerRole(user, isDesignTask(selectedTask));
                 if (role === 'SUPER_USER' || role === 'CENTRE_HEAD' || role === 'ADVISOR' || role === 'GG_HEAD') {
