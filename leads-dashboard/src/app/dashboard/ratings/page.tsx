@@ -47,7 +47,9 @@ import {
   projectLegacyRatingFields,
 } from '@/lib/rating-criteria';
 import { groupScoredReportsBySubmitter } from '@/lib/report-scoring';
-import { getEventReports } from '@/lib/local-data';
+import { getEventReports, EventReportItem } from '@/lib/local-data';
+import { ReportScorePanel } from '@/components/report-score-panel';
+import { canReviewEventReports } from '@/lib/permissions';
 
 const CRITERIA_SET_LABEL: Record<RatingCriteriaSet, string> = {
   general: 'General Task',
@@ -110,6 +112,7 @@ export default function RatingsPage() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [user, setUser] = useState<any>(null);
   const [eventReports, setEventReports] = useState<ReturnType<typeof getEventReports>>([]);
+  const [scoringReportId, setScoringReportId] = useState<string | null>(null);
 
   // Search & Filter state
   const [taskSearchQuery, setTaskSearchQuery] = useState('');
@@ -633,6 +636,7 @@ export default function RatingsPage() {
   // Report Writing Final Score leaderboard — decay-weighted average of each
   // submitter's scored event reports (see report-scoring.ts). Excludes faculty.
   const reportScoreLeaderboard = groupScoredReportsBySubmitter(eventReports, members);
+  const canScoreReports = !!user && canReviewEventReports(user);
 
   return (
     <div className="p-6 md:p-8 space-y-6">
@@ -650,6 +654,52 @@ export default function RatingsPage() {
         <h1 className="text-xl font-bold text-theme-text-primary">Task-Based Performance Ratings</h1>
         <p className="text-xs text-theme-text-secondary">Evaluate student members against the General, Design, or Report Writing rubric — whichever matches the task</p>
       </div>
+
+      {/* Score event reports on the Report Writing rubric (same data as the Event Reports page) */}
+      {canScoreReports && eventReports.length > 0 && (
+        <div className="bg-theme-card border border-theme-card-border rounded-2xl p-5 space-y-3">
+          <div>
+            <h2 className="text-sm font-bold text-theme-text-primary mb-1">Score Event Reports</h2>
+            <p className="text-[11px] text-theme-text-secondary">
+              Rate submitted event reports on the Report Writing rubric. Scores here are the same as on the Event Reports page and feed the Final Score below.
+            </p>
+          </div>
+          <div className="space-y-2 max-h-[420px] overflow-y-auto">
+            {eventReports.filter(r => r.status !== 'rejected').map(report => (
+              <div key={report.id} className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-bold text-theme-text-primary truncate">{report.eventTitle}</p>
+                    <p className="text-[10px] text-theme-text-secondary">
+                      Submitted by {report.submittedBy}
+                      {report.reportScore != null && <> &middot; Score {report.reportScore.toFixed(1)}/5.0 (by {report.scoredBy})</>}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setScoringReportId(scoringReportId === report.id ? null : report.id)}
+                    className="shrink-0 px-3 py-1.5 bg-accent/15 hover:bg-accent/25 text-accent border border-accent/30 text-[11px] font-bold rounded-lg transition-all cursor-pointer"
+                  >
+                    {report.reportScore != null ? 'Edit Score' : 'Score Report'}
+                  </button>
+                </div>
+                {scoringReportId === report.id && (
+                  <ReportScorePanel
+                    report={report}
+                    actorName={user?.name || 'Reviewer'}
+                    onSaved={(r: EventReportItem) => {
+                      setEventReports(getEventReports());
+                      setScoringReportId(null);
+                      triggerSuccess(`Scored ${r.reportScore?.toFixed(1)}/5.0 on the Report Writing rubric.`);
+                    }}
+                    onCancel={() => setScoringReportId(null)}
+                    onError={(m) => window.alert(m)}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Report Writing Final Score leaderboard */}
       {reportScoreLeaderboard.length > 0 && (
