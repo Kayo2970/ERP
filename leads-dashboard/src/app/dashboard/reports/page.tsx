@@ -27,6 +27,16 @@ import { PeriodFilter } from '@/components/period-filter';
 import { SearchableSelect } from '@/components/searchable-select';
 import { PeriodFilterValue, extractAvailableMonths, isWithinPeriod, periodLabel } from '@/lib/period-filter';
 
+// Score quartiles on the 0-5 scale: Q1 (lowest) .. Q4 (highest).
+const SCORE_QUARTILES = [
+  { key: 'Q1', label: 'Q1', range: '0 – 1.25', min: 0, hex: '#EF4444' },
+  { key: 'Q2', label: 'Q2', range: '1.25 – 2.5', min: 1.25, hex: '#F59E0B' },
+  { key: 'Q3', label: 'Q3', range: '2.5 – 3.75', min: 2.5, hex: '#3B82F6' },
+  { key: 'Q4', label: 'Q4', range: '3.75 – 5.0', min: 3.75, hex: '#10B981' },
+];
+const getQuartile = (score: number) =>
+  [...SCORE_QUARTILES].reverse().find(q => score >= q.min) ?? SCORE_QUARTILES[0];
+
 export default function ReportsPage() {
   const [ratings, setRatings] = useState<RatingItem[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
@@ -198,7 +208,7 @@ export default function ReportsPage() {
         name: r.targetName,
         detail: `"${r.taskTitle}" — rated by ${r.raterName}`,
         score: r.overallScore,
-        fill: getRatingColor(r.overallScore).hex,
+        fill: getQuartile(r.overallScore).hex,
       }));
     }
 
@@ -221,7 +231,7 @@ export default function ReportsPage() {
             ? `Final score — avg ${finalRow.avgScore.toFixed(1)} over ${finalRow.eventCount} event${finalRow.eventCount === 1 ? '' : 's'} (${group.length} task${group.length === 1 ? '' : 's'}), weighted by participation across all events`
             : `Average of ${group.length} evaluated task${group.length === 1 ? '' : 's'}`,
           score: avg,
-          fill: getRatingColor(avg).hex,
+          fill: getQuartile(avg).hex,
         };
       })
       .sort((a, b) => b.score - a.score);
@@ -516,7 +526,8 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            <div ref={barChartRef} className="h-64 w-full">
+            <div ref={barChartRef} className="w-full">
+              <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={barData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
@@ -533,7 +544,7 @@ export default function ReportsPage() {
                           <p className="font-bold text-slate-100 text-xs mb-1.5">{label || data?.name}</p>
                           <div className="flex items-center gap-1.5 text-slate-200">
                             <span className="font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded text-[11px]">
-                              Score: {scoreVal} / 5.0
+                              Score: {scoreVal} / 5.0 · {getQuartile(item?.value ?? 0).label}
                             </span>
                             {data?.detail && (
                               <span className="text-slate-300 font-medium text-[11px]">— {data.detail}</span>
@@ -550,6 +561,15 @@ export default function ReportsPage() {
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 pt-2 text-[10px] text-theme-text-secondary">
+                {SCORE_QUARTILES.map(q => (
+                  <span key={q.key} className="inline-flex items-center gap-1.5">
+                    <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: q.hex }} />
+                    <span className="font-semibold">{q.label}</span> ({q.range})
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
 
