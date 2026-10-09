@@ -4979,7 +4979,25 @@ export function saveRatings(ratings: RatingItem[]): void {
  * the committee/group identifier for a fan-out task). The score is the live average
  * of whichever reviewers have submitted so far.
  */
+function isCommitteeReviewerRole(role?: string): boolean {
+  return role === 'SUPER_USER' || role === 'CENTRE_HEAD' || role === 'ADVISOR' || role === 'GG_HEAD';
+}
+
 function recomputeTaskAggregateScore(taskId: string, targetId: string, actorName: string): void {
+  const task = getTasks().find(t => t.id === taskId);
+  const isFanOutTask = !!task && (task.assigneeType === 'committee' || !!task.eventCommitteeId || task.assigneeType === 'group');
+  if (isFanOutTask) {
+    // A committee/group's score is the average of its members' own ratings
+    // (the per-student rows), so students rated individually count at their
+    // own score. Falls back to the bookkeeping row if nothing fanned out.
+    const rows = getRatings().filter(r => r.taskId === taskId && isCommitteeReviewerRole(r.reviewerRole));
+    const perStudent = rows.filter(r => !r.isGroupPlaceholder);
+    const basis = perStudent.length > 0 ? perStudent : rows;
+    if (basis.length === 0) return;
+    const committeeAvg = parseFloat((basis.reduce((sum, r) => sum + r.overallScore, 0) / basis.length).toFixed(2));
+    updateTask(taskId, { ratingScore: committeeAvg, ratedAt: new Date().toISOString().split('T')[0] }, actorName);
+    return;
+  }
   const relevant = getRatings().filter(
     r => r.taskId === taskId && r.targetId === targetId && (
       r.reviewerRole === 'SUPER_USER' ||
@@ -5149,6 +5167,66 @@ function propagateGroupRating(task: TaskItem, parentRating: RatingItem): void {
   }
 }
 
+/**
+ * Rate only some of a committee's/group's members (or a single student) with
+ * one scorecard, leaving the rest to be rated separately. Writes real
+ * per-student rows only -- no committee-level bookkeeping row -- so each
+ * student keeps exactly the score they were given, and the task's overall
+ * score becomes the average across all its per-student ratings.
+ * Re-rating a student this reviewer already rated edits that row in place.
+ */
+export function rateTaskMembers(
+  task: TaskItem,
+  memberIds: string[],
+  input: Pick<RatingItem, 'raterName' | 'reviewerRole' | 'criteriaSet' | 'scores' | 'quality' | 'timeliness' | 'initiative' | 'collaboration' | 'overallScore' | 'notes' | 'lateNote'>
+): RatingItem[] {
+  const members = getMembers();
+  const ratings = getRatings();
+  const today = new Date().toISOString().split('T')[0];
+  const touched: RatingItem[] = [];
+  const label = task.assigneeType === 'group' ? 'Group Evaluation' : `Committee Evaluation: ${task.eventCommitteeName || task.assignee}`;
+  const notes = `[${label} \u2014 individual/subset rating] ${input.notes || ''}`.trim();
+
+  memberIds.forEach(mId => {
+    const memberObj = members.find(m => m.id === mId);
+    if (!memberObj || isFacultyMember(memberObj)) return;
+    if (isSocialMediaPostTask(task) && !isSocialMediaTeamMember(memberObj)) return;
+
+    const existingIdx = ratings.findIndex(
+      r => r.taskId === task.id && !r.isGroupPlaceholder && r.targetId === memberObj.id &&
+        ((input.reviewerRole && r.reviewerRole === input.reviewerRole) || r.raterName === input.raterName)
+    );
+    if (existingIdx !== -1) {
+      ratings[existingIdx] = { ...ratings[existingIdx], ...input, notes, updatedAt: today };
+      serverPatch('/api/ratings', ratings[existingIdx].id, ratings[existingIdx]);
+      touched.push(ratings[existingIdx]);
+      return;
+    }
+    const row: RatingItem = {
+      ...input,
+      id: 'r_sub_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      taskId: task.id,
+      taskTitle: task.title,
+      eventId: task.eventId,
+      eventName: task.event,
+      targetId: memberObj.id,
+      targetName: memberObj.name,
+      notes,
+      createdAt: today,
+    };
+    ratings.unshift(row);
+    serverPost('/api/ratings', row);
+    touched.push(row);
+  });
+
+  if (touched.length > 0) {
+    saveRatings(ratings);
+    recomputeTaskAggregateScore(task.id, touched[0].targetId, input.raterName);
+    logAuditEvent('RATING_SUBMITTED', input.raterName, `Evaluated ${touched.length} member(s) (${input.overallScore}/5.0) individually on "${task.title}": ${touched.map(r => r.targetName).join(', ')}`);
+  }
+  return touched;
+}
+
 export function addRating(rating: Omit<RatingItem, 'id' | 'createdAt'>): RatingItem {
   // Direct correlation check: every rating MUST directly correlate to an existing task
   if (!rating.taskId || typeof rating.taskId !== 'string' || !rating.taskId.trim()) {
@@ -5189,6 +5267,8 @@ export function addRating(rating: Omit<RatingItem, 'id' | 'createdAt'>): RatingI
     } else if (task && task.assigneeType === 'group') {
       propagateGroupRating(task, newRating);
     }
+    // Re-average now that the per-student rows exist.
+    recomputeTaskAggregateScore(rating.taskId, rating.targetId, rating.raterName);
   }
 
   logAuditEvent('RATING_SUBMITTED', rating.raterName, `Evaluated task performance (${rating.overallScore}/5.0) for ${rating.targetName} on "${rating.taskTitle}"`);
