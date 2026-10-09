@@ -13,8 +13,8 @@ interface ReportScorePanelProps {
 }
 
 /**
- * Report Writing rubric form (Clarity, Analysis, Structure, Comprehensiveness,
- * Accuracy). Shared by the Event Reports page and the Ratings page so a score
+ * Report Writing rubric form (Clarity, Flow/Structure, Timeliness of Submission,
+ * Number of Errors, Geotagged Photos & Pictures). Shared by the Event Reports page and the Ratings page so a score
  * entered in either place lands on the same report record and feeds the same
  * Final Score leaderboard.
  */

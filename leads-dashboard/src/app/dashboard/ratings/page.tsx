@@ -272,7 +272,15 @@ export default function RatingsPage() {
     setSelectedTask(matchedTask);
     const criteriaSet = rating.criteriaSet ?? criteriaSetForTaskCategory(matchedTask?.taskCategory);
     setActiveCriteriaSet(criteriaSet);
-    setScores(rating.scores ?? (rating.criteriaSet ? defaultScoresFor(criteriaSet) : legacyRatingAsGeneralScores(rating)));
+    if (rating.scores) {
+      // Keep only the current rubric's criteria (older ratings may carry retired keys).
+      const base = defaultScoresFor(criteriaSet);
+      const kept: Record<string, number> = {};
+      Object.keys(base).forEach(k => { kept[k] = rating.scores?.[k] ?? base[k]; });
+      setScores(kept);
+    } else {
+      setScores(rating.criteriaSet ? defaultScoresFor(criteriaSet) : legacyRatingAsGeneralScores(rating));
+    }
     setNotes(rating.notes || '');
     setFormError('');
     setIsModalOpen(true);
@@ -1287,7 +1295,7 @@ export default function RatingsPage() {
                                   {RATING_CRITERIA[rating.criteriaSet].map((c, i) => (
                                     <React.Fragment key={c.key}>
                                       {i > 0 && ' · '}
-                                      <span className="font-semibold text-theme-text-primary" title={c.label}>{(rating.scores as Record<string, number>)[c.key]}</span>
+                                      <span className="font-semibold text-theme-text-primary" title={c.label}>{(rating.scores as Record<string, number>)[c.key] ?? '–'}</span>
                                     </React.Fragment>
                                   ))}
                                 </span>

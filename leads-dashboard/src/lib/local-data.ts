@@ -3705,8 +3705,8 @@ export async function approveEventReport(id: string, as: 'centre_head' | 'gg_eve
   return current[idx] || null;
 }
 
-/** Score a report against the Report Writing rubric (Clarity, Analysis,
- *  Structure, Comprehensiveness, Accuracy — see rating-criteria.ts). Either
+/** Score a report against the Report Writing rubric (Clarity, Flow/Structure,
+ *  Timeliness of Submission, Number of Errors, Geotagged Photos & Pictures — see rating-criteria.ts). Either
  *  reviewer (Centre Head or GG Campus Head of Events) can enter or edit the
  *  score, same trust level as approving the report. Feeds the decay-weighted
  *  Final Score leaderboard on the Ratings page (report-scoring.ts). */
