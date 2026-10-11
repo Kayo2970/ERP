@@ -312,7 +312,7 @@ export type EventGuestCategory =
   | string;
 
 import { passEmailButtonsHtml } from '@/lib/pass-email-buttons';
-import { mergePassTemplate, DEFAULT_PASS_EMAIL_SUBJECT, DEFAULT_PASS_EMAIL_BODY, IMAGE_MARKER, DETAILS_MARKER } from '@/lib/pass-email-template';
+import { mergePassTemplate, DEFAULT_PASS_EMAIL_SUBJECT, DEFAULT_PASS_EMAIL_BODY, IMAGE_MARKER, DETAILS_MARKER, safeHttpUrl } from '@/lib/pass-email-template';
 
 export interface PassAttendanceRecord {
   day: string; // e.g. "Day 1", "Day 2", "2026-10-13"
@@ -3346,7 +3346,7 @@ export async function updateEventPass(
 export function buildPassEmail(
   pass: EventPassItem,
   origin: string,
-  opts: { forPreview?: boolean; subjectTemplate?: string; bodyTemplate?: string } = {}
+  opts: { forPreview?: boolean; subjectTemplate?: string; bodyTemplate?: string; includeMap?: boolean; mapUrl?: string; includeWhatsapp?: boolean; whatsappUrl?: string } = {}
 ): { subject: string; bodyText: string; bodyHtml: string } {
   const passUrl = `${origin}/pass/${pass.serialNumber}`;
   const trackPixelUrl = `${origin}/api/pass/${pass.serialNumber}/track`;
@@ -3371,6 +3371,12 @@ export function buildPassEmail(
   const subject = mergePassTemplate(opts.subjectTemplate || DEFAULT_PASS_EMAIL_SUBJECT, vars)
     .split(IMAGE_MARKER).join('').split(DETAILS_MARKER).join('').trim();
   const merged = mergePassTemplate(opts.bodyTemplate || DEFAULT_PASS_EMAIL_BODY, vars);
+
+  // Optional extras: a venue map link (explicit link, else a Google Maps search of the venue) and a WhatsApp group invite
+  const mapUrl = opts.includeMap
+    ? safeHttpUrl(opts.mapUrl) || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([venue, pass.eventVenue].filter((v, i, a) => v && a.indexOf(v) === i).join(', '))}`
+    : undefined;
+  const whatsappUrl = opts.includeWhatsapp ? safeHttpUrl(opts.whatsappUrl) : undefined;
 
   const detailRows: Array<[string, string]> = [
     ['Pass Tier', String(pass.passType)],
@@ -3407,7 +3413,7 @@ export function buildPassEmail(
   const detailsText = detailRows.map(([k, v]) => `• ${k}: ${v}`).join('\n');
   const bodyText = (merged.split(IMAGE_MARKER).join('').split(DETAILS_MARKER).join(detailsText) + (hasDetails ? '' : `\n\n${detailsText}`))
     .replace(/\n{3,}/g, '\n\n')
-    .trim() + `\n\nYour digital pass: ${passUrl}`;
+    .trim() + `\n\nYour digital pass: ${passUrl}${mapUrl ? `\nVenue location: ${mapUrl}` : ''}${whatsappUrl ? `\nJoin the event WhatsApp group: ${whatsappUrl}` : ''}`;
 
   const bodyHtml = `
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;padding:24px;background:#0f172a;color:#f8fafc;border-radius:16px;">
@@ -3421,7 +3427,7 @@ export function buildPassEmail(
         ${messageHtml}
         ${hasDetails ? '' : detailsBlock}
       </div>
-      ${passEmailButtonsHtml(origin, pass.serialNumber)}
+      ${passEmailButtonsHtml(origin, pass.serialNumber, { mapUrl, whatsappUrl })}
       <p style="margin:0;font-size:12px;color:#64748b;text-align:center;border-top:1px solid rgba(255,255,255,0.08);padding-top:16px;">
         Please present your digital pass or QR code at official event turnstiles upon arrival.<br/>
         &copy; ${new Date().getFullYear()} LEADS Next Gen Centre &bull; MSRUAS
@@ -3440,7 +3446,7 @@ export function buildPassEmail(
 export async function dispatchPassEmail(
   pass: EventPassItem,
   targetEmail?: string,
-  template?: { subjectTemplate?: string; bodyTemplate?: string }
+  template?: { subjectTemplate?: string; bodyTemplate?: string; includeMap?: boolean; mapUrl?: string; includeWhatsapp?: boolean; whatsappUrl?: string }
 ): Promise<{ success: boolean; error?: string; pending?: boolean }> {
   const recipient = (targetEmail || pass.attendeeEmail || '').trim();
   if (!recipient) {
