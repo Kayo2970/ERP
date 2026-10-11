@@ -52,7 +52,7 @@ import {
   EventPassItem,
   getEventPasses,
 } from '@/lib/local-data';
-import { canExportEventDetails, canManageEvents, isCommitteeApprover, canDeleteTask, canViewEventGuestList, canViewIssuedCertificates } from '@/lib/permissions';
+import { canExportEventDetails, canManageEvents, isCommitteeApprover, canDeleteTask, canViewEventGuestList, canViewIssuedCertificates, canDeleteCertificates } from '@/lib/permissions';
 import { IssuedCertificatesPanel } from '@/components/issued-certificates-panel';
 import { downloadEventDetailsCsv } from '@/lib/event-participants-export';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
@@ -799,7 +799,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                   </table>
                 </div>
               ))}
-              {canViewIssuedCertificates(user) && <IssuedCertificatesPanel eventId={eventId} compact />}
+              {canViewIssuedCertificates(user) && <IssuedCertificatesPanel eventId={eventId} compact canDelete={canDeleteCertificates(user)} />}
             </div>
           )}
 

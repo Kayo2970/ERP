@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Award, ChevronDown, ChevronRight, RefreshCw, Search } from 'lucide-react';
+import { Award, ChevronDown, ChevronRight, RefreshCw, Search, Trash2 } from 'lucide-react';
+import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EventItem, authHeaders, getEffectiveEventStatus, getEventSortTime, getEvents } from '@/lib/local-data';
 import { CertificateStatusBadge, CERT_STATUS_FILTERS } from '@/components/certificate-status-badge';
 
@@ -17,6 +18,7 @@ interface IssuedCert {
   organisation?: string;
   category?: string;
   manual?: boolean;
+  archivedAt?: string;
   typeName?: string;
   status: string;
   issuedAt?: string;
@@ -45,7 +47,7 @@ interface Group {
  * Read-only ledger of issued certificates, grouped per event the way the Events page groups events
  * (Ongoing / Completed / Archived tabs). Used under the certificate designer and on the event page (`eventId`).
  */
-export function IssuedCertificatesPanel({ eventId, compact = false }: { eventId?: string; compact?: boolean }) {
+export function IssuedCertificatesPanel({ eventId, compact = false, canDelete = false }: { eventId?: string; compact?: boolean; canDelete?: boolean }) {
   const [certs, setCerts] = useState<IssuedCert[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,6 +56,9 @@ export function IssuedCertificatesPanel({ eventId, compact = false }: { eventId?
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState<Set<string>>(new Set());
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -110,6 +115,25 @@ export function IssuedCertificatesPanel({ eventId, compact = false }: { eventId?
       });
   }, [certs, events, filter, statusFilter, search]);
 
+  const togglePick = (ids: string[], on: boolean) => setPicked((prev) => { const n = new Set(prev); ids.forEach((i) => (on ? n.add(i) : n.delete(i))); return n; });
+  const doDelete = async () => {
+    setDeleting(true);
+    setError('');
+    try {
+      const res = await fetch('/api/certificates/issued', { method: 'DELETE', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ ids: [...picked] }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Could not delete the certificates.');
+      setPicked(new Set());
+      setConfirmOpen(false);
+      await load();
+    } catch (e: any) {
+      setError(e?.message || 'Could not delete the certificates.');
+      setConfirmOpen(false);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const total = groups.reduce((n, g) => n + g.rows.length, 0);
   const toggle = (id: string) => setOpen((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
@@ -123,9 +147,16 @@ export function IssuedCertificatesPanel({ eventId, compact = false }: { eventId?
           </h3>
           <p className="text-[11px] text-theme-text-secondary">Every certificate issued, grouped by event, with its delivery status.</p>
         </div>
+        <div className="flex items-center gap-2">
+        {canDelete && picked.size > 0 && (
+          <button type="button" onClick={() => setConfirmOpen(true)} className="px-3 py-1.5 text-xs font-bold rounded-xl bg-red-600 hover:bg-red-700 text-white flex items-center gap-1.5 cursor-pointer">
+            <Trash2 className="h-3.5 w-3.5" /> Delete {picked.size}
+          </button>
+        )}
         <button type="button" onClick={load} className="px-3 py-1.5 text-xs font-bold rounded-xl border border-slate-300 dark:border-white/15 bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/15 text-slate-800 dark:text-white flex items-center gap-1.5 cursor-pointer">
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
         </button>
+        </div>
       </div>
 
       {!compact && (
@@ -178,6 +209,11 @@ export function IssuedCertificatesPanel({ eventId, compact = false }: { eventId?
                   <table className="min-w-full text-xs text-left">
                     <thead>
                       <tr className="text-theme-text-secondary border-b border-theme-border/40">
+                        {canDelete && (
+                          <th className="py-2 pl-4 w-8">
+                            <input type="checkbox" aria-label="Select all in this event" checked={g.rows.every((r) => picked.has(r.id))} onChange={(e) => togglePick(g.rows.map((r) => r.id), e.target.checked)} />
+                          </th>
+                        )}
                         <th className="py-2 px-4 font-semibold">Recipient</th>
                         <th className="py-2 px-4 font-semibold">Type</th>
                         <th className="py-2 px-4 font-semibold">Code</th>
@@ -187,9 +223,12 @@ export function IssuedCertificatesPanel({ eventId, compact = false }: { eventId?
                     <tbody className="divide-y divide-theme-border/20">
                       {g.rows.map((r) => (
                         <tr key={r.id} className="hover:bg-theme-border/10">
+                          {canDelete && (
+                            <td className="py-2 pl-4"><input type="checkbox" aria-label={`Select ${r.attendeeName}`} checked={picked.has(r.id)} onChange={(e) => togglePick([r.id], e.target.checked)} /></td>
+                          )}
                           <td className="py-2 px-4">
                             <span className="font-semibold text-theme-text-primary">{r.attendeeName}</span>
-                            <span className="block text-[10px] text-theme-text-secondary">{r.attendeeEmail}{r.organisation ? ` · ${r.organisation}` : ''}{r.manual ? ' · added manually' : ''}</span>
+                            <span className="block text-[10px] text-theme-text-secondary">{r.attendeeEmail}{r.organisation ? ` · ${r.organisation}` : ''}{r.manual ? ' · added manually' : ''}{r.archivedAt ? ' · thumbnail only (30+ days after event)' : ''}</span>
                           </td>
                           <td className="py-2 px-4 text-theme-text-secondary">{r.typeName || 'Participation'}</td>
                           <td className="py-2 px-4 font-mono text-[10px] text-theme-text-secondary">{r.code ? <a href={`/certificate/${r.code}`} target="_blank" rel="noreferrer" className="hover:text-accent underline">{r.code}</a> : '—'}</td>
@@ -204,6 +243,14 @@ export function IssuedCertificatesPanel({ eventId, compact = false }: { eventId?
           );
         })}
       </div>
+      <ConfirmModal
+        isOpen={confirmOpen}
+        title={`Delete ${picked.size} certificate${picked.size === 1 ? '' : 's'}?`}
+        message="This permanently removes the selected certificates from the system. Their verification links will stop working. This cannot be undone."
+        confirmLabel={deleting ? 'Deleting…' : 'Delete'}
+        onConfirm={doDelete}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </div>
   );
 }

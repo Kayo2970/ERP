@@ -46,10 +46,16 @@ let timer: NodeJS.Timeout | null = null;
 
 export function startPassRetentionScheduler(): void {
   if (timer) return;
-  const tick = () =>
+  const tick = () => {
     runPassRetention()
       .then((r) => r.passesArchived && console.log(`[pass-retention] archived ${r.passesArchived} pass(es), removed ${r.themesRemoved} theme folder(s)`))
       .catch((err) => console.error('[pass-retention] run failed:', err));
+    // Same 30-day rule for certificates: keep only a small background-free thumbnail for the verify page
+    import('@/lib/certificate')
+      .then(({ runCertificateRetention }) => runCertificateRetention())
+      .then((r) => r.archived && console.log(`[certificate-retention] thumbnailed ${r.archived} certificate(s), removed ${r.artworkRemoved} artwork file(s)`))
+      .catch((err) => console.error('[certificate-retention] run failed:', err));
+  };
   setTimeout(tick, 60_000); // shortly after boot, then daily
   timer = setInterval(tick, DAY_MS);
   timer.unref?.();

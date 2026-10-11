@@ -453,6 +453,7 @@ export const CAPABILITY_CATALOG: { key: string; label: string; description: stri
   { key: 'SCAN_EVENT_PASSES', label: 'Scan & Admit Turnstile Passes', description: 'Operate turnstile camera QR scanner and check in attendees at venue gates.', module: 'Event Passes' },
   { key: 'CERTIFICATES_SEND', label: 'Send Attendance Certificates', description: 'Preview, email and schedule PDF attendance certificates to checked-in attendees of a finished event ("Send Certificates" in Event Passes) — without being able to email passes or change the certificate design.', module: 'Certificates' },
   { key: 'CERTIFICATES_DESIGN', label: 'Design Certificates & Fonts', description: 'Edit the certificate design for an event (artwork, text boxes, which details are printed) and upload / import / delete custom certificate fonts.', module: 'Certificates' },
+  { key: 'CERTIFICATES_DELETE', label: 'Delete Issued Certificates', description: 'Permanently delete issued certificates from the Issued Certificates box (their verify links stop working).', module: 'Certificates' },
   { key: 'MANAGE_BACKUP', label: 'Access Backup & Restore', description: 'Download system backups and restore from an archive.', module: 'Administration' },
   { key: 'MANAGE_EMAIL_SETTINGS', label: 'Access Email Management', description: 'View dispatch logs and manage email settings.', module: 'Administration' },
   { key: 'MANAGE_GROUP_POLICIES', label: 'Manage Group Policies', description: 'Create, edit, and configure group policies and dynamic RBAC tags.', module: 'Administration' },
@@ -959,6 +960,12 @@ export function canDesignCertificates(user: SessionUser): boolean {
 export function canDeleteEventPasses(user: SessionUser): boolean {
   if (!user) return false;
   return canManageEventPasses(user) || hasCapability(user, 'EVENT_PASSES_DELETE');
+}
+
+/** Delete issued certificates. Anyone who can delete passes keeps this; CERTIFICATES_DELETE grants it on its own. */
+export function canDeleteCertificates(user: SessionUser): boolean {
+  if (!user) return false;
+  return canDeleteEventPasses(user) || hasCapability(user, 'CERTIFICATES_DELETE');
 }
 
 /** Can open the Issued Event Passes roster (managers, or anyone granted edit / dispatch / delete). */
