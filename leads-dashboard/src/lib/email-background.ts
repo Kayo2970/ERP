@@ -18,7 +18,6 @@ import { getAppBaseUrl } from './app-url';
 
 /** Uploaded originals live here; a custom per-send storageKey must too. */
 export const EMAIL_BACKGROUND_CATEGORY = 'email-backgrounds';
-const BLURRED_CATEGORY = 'email-backgrounds-blurred';
 export const MAX_EMAIL_BLUR = 40;
 export const DEFAULT_EMAIL_BLUR = 12;
 const OUT_WIDTH = 1200;
@@ -45,6 +44,75 @@ export function isEmailBackgroundKey(key: unknown): key is string {
   return typeof key === 'string' && key.startsWith(`${EMAIL_BACKGROUND_CATEGORY}/`) && !key.includes('..');
 }
 
+// ── Blurred copies: creation, usage tracking, retention ──────────────────────────
+// A sent e-mail doesn't contain its background — it links to the blurred JPEG on this server, which the recipient's mail app
+// fetches whenever the e-mail is opened. So a copy is kept while e-mails using it are still likely to be opened:
+//   • full quality for 90 days after the last e-mail that used it,
+//   • then shrunk to a tiny blurred version (same URL, so old e-mails keep a soft backdrop),
+//   • and removed 180 days after the last use — old e-mails then simply show the plain solid background.
+// Sending again with the same picture + blur after that rebuilds a full-quality copy from the uploaded original.
+// The daily sweep lives in email-background-retention.ts.
+
+export const BLURRED_CATEGORY = 'email-backgrounds-blurred';
+export const SMALL_AFTER_DAYS = 90;
+export const DELETE_AFTER_DAYS = 180;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const CACHE_TTL_MS = 5 * 60 * 1000;
+const SMALL_WIDTH = 160;
+const SMALL_QUALITY = 35;
+
+export interface BlurredMeta {
+  stage: 'full' | 'small';
+  /** The last time an e-mail (or preview) used this copy. */
+  lastUsedAt: string;
+  sourceKey: string;
+  blur: number;
+}
+
+export const blurredFileKey = (hash: string) => `${BLURRED_CATEGORY}/${hash}/0__bg.jpg`;
+const blurredMetaKey = (hash: string) => `${BLURRED_CATEGORY}/${hash}/1__meta.json`;
+
+export async function readBlurredMeta(hash: string): Promise<BlurredMeta | null> {
+  try {
+    const m = JSON.parse((await readStoredFile(blurredMetaKey(hash))).toString('utf8'));
+    return m && (m.stage === 'full' || m.stage === 'small') && typeof m.lastUsedAt === 'string' ? (m as BlurredMeta) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function writeBlurredMeta(hash: string, meta: BlurredMeta): Promise<void> {
+  await saveBase64File(BLURRED_CATEGORY, hash, 1, 'meta.json', `data:application/json;base64,${Buffer.from(JSON.stringify(meta)).toString('base64')}`);
+}
+
+/** Re-encodes an already-blurred JPEG as a very small one (a few KB); upscaled by the mail app it looks the same, only softer. */
+export async function shrinkBlurredJpeg(jpeg: Buffer): Promise<Buffer> {
+  const img = await loadImage(jpeg);
+  const width = SMALL_WIDTH;
+  const height = Math.max(1, Math.round((img.height * width) / img.width));
+  const canvas = createCanvas(width, height);
+  canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+  return canvas.toBuffer('image/jpeg', SMALL_QUALITY);
+}
+
+async function renderBlurredJpeg(storageKey: string, radius: number): Promise<Buffer> {
+  const img = await loadImage(await readStoredFile(storageKey));
+  const scale = OUT_WIDTH / img.width;
+  const width = OUT_WIDTH;
+  const height = Math.min(OUT_MAX_HEIGHT, Math.max(1, Math.round(img.height * scale)));
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(0, 0, width, height);
+  // Draw slightly larger than the canvas so the blur doesn't fade to transparent at the edges.
+  const bleed = radius * 2;
+  (ctx as unknown as { filter: string }).filter = radius > 0 ? `blur(${radius}px)` : 'none';
+  ctx.drawImage(img, -bleed, -bleed, width + bleed * 2, Math.round(img.height * scale) + bleed * 2);
+  return canvas.toBuffer('image/jpeg', 80);
+}
+
+const urlCache = new Map<string, { path: string; until: number }>();
+
 /** Validates a per-send background choice that arrived from a browser; anything unrecognised means "use the default". */
 export function cleanBackgroundChoice(raw: unknown): EmailBackgroundChoice | undefined {
   if (raw === 'none') return 'none';
@@ -54,46 +122,46 @@ export function cleanBackgroundChoice(raw: unknown): EmailBackgroundChoice | und
   return undefined;
 }
 
-const urlCache = new Map<string, string>();
-
-/** Server-relative URL (/api/files/...) of the blurred JPEG for this picture + blur, created on first use. */
+/** Server-relative URL (/api/files/...) of the blurred JPEG for this picture + blur: reused if it exists, else (re)built. Marks it as used today. */
 export async function getBlurredBackgroundPath(storageKey: string, blur: number): Promise<string | null> {
   if (!isEmailBackgroundKey(storageKey)) return null;
   const radius = clampBlur(blur);
   const hash = createHash('sha1').update(`${storageKey}|${radius}`).digest('hex').slice(0, 20);
+  const now = Date.now();
   const cached = urlCache.get(hash);
-  if (cached) return cached;
+  if (cached && cached.until > now) return cached.path;
 
-  const outKey = `${BLURRED_CATEGORY}/${hash}/0__bg.jpg`;
+  const outKey = blurredFileKey(hash);
+  const path = `/api/files/${outKey}`;
+  const meta = await readBlurredMeta(hash);
+  let exists = false;
   try {
-    await readStoredFile(outKey); // already made
-    const path = `/api/files/${outKey}`;
-    urlCache.set(hash, path);
-    return path;
+    await readStoredFile(outKey);
+    exists = true;
   } catch {
-    /* not made yet */
+    /* not made yet, or removed by the retention sweep */
   }
 
+  // Up to date: just note today's use (at most one write a day per copy).
+  if (exists && meta?.stage !== 'small') {
+    if (!meta || now - Date.parse(meta.lastUsedAt) > DAY_MS) {
+      await writeBlurredMeta(hash, { stage: 'full', lastUsedAt: new Date(now).toISOString(), sourceKey: storageKey, blur: radius }).catch(() => {});
+    }
+    urlCache.set(hash, { path, until: now + CACHE_TTL_MS });
+    return path;
+  }
+
+  // Missing, or only the shrunken copy is left (an old picture used again): rebuild full quality from the original.
   try {
-    const img = await loadImage(await readStoredFile(storageKey));
-    const scale = OUT_WIDTH / img.width;
-    const width = OUT_WIDTH;
-    const height = Math.min(OUT_MAX_HEIGHT, Math.max(1, Math.round(img.height * scale)));
-    const canvas = createCanvas(width, height);
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#f8fafc';
-    ctx.fillRect(0, 0, width, height);
-    // Draw slightly larger than the canvas so the blur doesn't fade to transparent at the edges.
-    const bleed = radius * 2;
-    (ctx as unknown as { filter: string }).filter = radius > 0 ? `blur(${radius}px)` : 'none';
-    ctx.drawImage(img, -bleed, -bleed, width + bleed * 2, Math.round(img.height * scale) + bleed * 2);
-    const jpeg = canvas.toBuffer('image/jpeg', 80);
-    const saved = await saveBase64File(BLURRED_CATEGORY, hash, 0, 'bg.jpg', `data:image/jpeg;base64,${jpeg.toString('base64')}`);
-    urlCache.set(hash, saved.url);
-    return saved.url;
+    const jpeg = await renderBlurredJpeg(storageKey, radius);
+    await saveBase64File(BLURRED_CATEGORY, hash, 0, 'bg.jpg', `data:image/jpeg;base64,${jpeg.toString('base64')}`);
+    await writeBlurredMeta(hash, { stage: 'full', lastUsedAt: new Date(now).toISOString(), sourceKey: storageKey, blur: radius });
+    urlCache.set(hash, { path, until: now + CACHE_TTL_MS });
+    return path;
   } catch (err) {
     console.error('[email-background] Could not build the blurred background:', err);
-    return null;
+    // The original is gone but a shrunken copy remains: better a soft tiny backdrop than none.
+    return exists ? path : null;
   }
 }
 
