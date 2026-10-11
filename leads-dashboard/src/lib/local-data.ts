@@ -3268,6 +3268,60 @@ export function deleteEventPass(passId: string, actorName: string = 'Staff'): bo
   return true;
 }
 
+export interface BulkPassDeleteResult {
+  /** Removed straight away. */
+  deleted: number;
+  /** Sent for approval — the pass stays active until it is approved. */
+  pending: number;
+  failed: Array<{ name: string; error: string }>;
+}
+
+/**
+ * Deletes many passes at once. They disappear locally straight away; the server then handles each one with its own
+ * permission / approval rules (so some may come back as "waiting for approval", or be refused), and the screen is
+ * reconciled with the server's copy once at the end instead of nagging per pass.
+ */
+export async function deleteEventPassesBulk(
+  passIds: string[],
+  actorName: string = 'Staff',
+  onProgress?: (done: number, total: number) => void
+): Promise<BulkPassDeleteResult> {
+  const all = getEventPasses();
+  const targets = passIds.map((id) => all.find((p) => p.id === id)).filter((p): p is EventPassItem => !!p);
+  const result: BulkPassDeleteResult = { deleted: 0, pending: 0, failed: [] };
+  if (targets.length === 0) return result;
+
+  const gone = new Set(targets.map((p) => p.id));
+  saveEventPasses(all.filter((p) => !gone.has(p.id)));
+
+  let done = 0;
+  for (let i = 0; i < targets.length; i += 4) {
+    await Promise.all(
+      targets.slice(i, i + 4).map(async (t) => {
+        try {
+          const res = await fetch(`/api/events/${t.eventId}/passes/${t.id}`, { method: 'DELETE', headers: authHeaders() });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) result.failed.push({ name: t.attendeeName, error: data.error || `HTTP ${res.status}` });
+          else if (data.approvalPending) result.pending++;
+          else result.deleted++;
+        } catch (err: any) {
+          result.failed.push({ name: t.attendeeName, error: err?.message || 'Network error' });
+        }
+        done++;
+        onProgress?.(done, targets.length);
+      })
+    );
+  }
+
+  if (result.failed.length > 0 || result.pending > 0) await reconcilePassesFromServer();
+  logAuditEvent(
+    'EVENT_PASS_DELETED' as any,
+    actorName,
+    `Bulk-deleted ${result.deleted} pass${result.deleted === 1 ? '' : 'es'}${result.pending ? `, ${result.pending} sent for approval` : ''}${result.failed.length ? `, ${result.failed.length} failed` : ''}: ${targets.slice(0, 5).map((t) => t.serialNumber).join(', ')}${targets.length > 5 ? ` and ${targets.length - 5} more` : ''}`
+  );
+  return result;
+}
+
 export async function updateEventPass(
   passId: string,
   updates: Partial<EventPassItem>,
