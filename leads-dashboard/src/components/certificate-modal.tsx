@@ -144,6 +144,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
   const [saveState, setSaveState] = useState<'idle' | 'dirty' | 'saving' | 'saved'>('idle');
   const [previewPassId, setPreviewPassId] = useState('');
   const [finalPreview, setFinalPreview] = useState('');
+  const [openPreviews, setOpenPreviews] = useState<Set<string>>(new Set());
   const [emailSubject, setEmailSubject] = useState(DEFAULT_CERT_EMAIL.subject);
   const [emailBody, setEmailBody] = useState(DEFAULT_CERT_EMAIL.bodyText);
   const emailBodyRef = useRef<HTMLTextAreaElement>(null);
@@ -600,6 +601,10 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     code: 'PREVIEW000',
     verifyUrl: `${typeof window !== 'undefined' ? window.location.origin : ''}/certificate/PREVIEW000`,
   };
+  /** The merged fields for one person, so each recipient's own message can be read before sending. */
+  const varsFor = (a: Attendee) => ({ ...emailVars, name: a.name, email: a.email, code: a.code || 'ISSUED-ON-SEND', verifyUrl: `${typeof window !== 'undefined' ? window.location.origin : ''}/certificate/${a.code || 'ISSUED-ON-SEND'}` });
+  const togglePreview = (id: string) => setOpenPreviews((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const selectedPeople = attendees.filter((a) => selected.has(a.passId));
   const emailReady = emailSubject.trim().length > 0 && emailBody.trim().length > 0;
 
   const pending = attendees.filter((a) => a.status !== 'Sent' && a.status !== 'Queued').length;
@@ -820,7 +825,15 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                             ))}
                           </div>
                           {activeBox === 'name' ? (
-                            <p className="text-[10px] text-slate-500">The name is always centred horizontally and vertically in its box.</p>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className={label}>Vertical</label>
+                                <select className={field} value={box.valign} disabled={!canEditDesign} onChange={(e) => patchBox('name', { valign: e.target.value as CertBox['valign'] })}>
+                                  <option value="top" className="bg-slate-900">Top</option><option value="middle" className="bg-slate-900">Middle</option><option value="bottom" className="bg-slate-900">Bottom (letters sit on the box&apos;s bottom edge)</option>
+                                </select>
+                              </div>
+                              <p className="text-[10px] text-slate-500 self-end">The name is always centred horizontally in its box.</p>
+                            </div>
                           ) : (
                             <div className="grid grid-cols-3 gap-2">
                               <div>
@@ -890,17 +903,17 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                     {counts['Failed'] > 0 && <button type="button" onClick={selectFailed} className="px-3 py-2 rounded-xl bg-rose-500/15 text-rose-500 border border-rose-500/30 font-bold cursor-pointer">Retry failed ({counts['Failed']})</button>}
                     <button type="button" onClick={exportLedgerCsv} disabled={visibleAttendees.length === 0} className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-white font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"><Download className="h-3.5 w-3.5" /> CSV</button>
                   </div>
-                  <div className="border border-slate-200 dark:border-white/10 rounded-xl divide-y divide-slate-100 dark:divide-white/5 max-h-[40vh] overflow-y-auto">
+                  <div className="border border-slate-200 dark:border-white/10 rounded-xl divide-y divide-slate-100 dark:divide-white/5 max-h-[50vh] overflow-y-auto">
                     {attendees.length === 0 && <div className="py-6 text-center text-slate-400">{busy ? 'Loading…' : 'No checked-in attendees with an email address for this event.'}</div>}
                     {attendees.length > 0 && visibleAttendees.length === 0 && <div className="py-6 text-center text-slate-400">No one matches this filter.</div>}
                     {visibleAttendees.map((a) => (
                       <div key={a.passId} onClick={() => toggle(a.passId)} className="flex items-center justify-between gap-2 p-2 hover:bg-white/10 cursor-pointer">
-                        <div className="flex items-center gap-2 min-w-0">
-                          {selected.has(a.passId) ? <CheckSquare className="h-4 w-4 text-accent shrink-0" /> : <Square className="h-4 w-4 text-slate-400 shrink-0" />}
+                        <div className="flex items-start gap-2 min-w-0">
+                          {selected.has(a.passId) ? <CheckSquare className="h-4 w-4 text-accent shrink-0 mt-0.5" /> : <Square className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />}
                           <div className="min-w-0">
-                            <span className="font-bold text-slate-900 dark:text-white block truncate">{a.name}{a.manual && <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-400 align-middle">Manual</span>}</span>
-                            <span className="text-[10px] text-slate-400 block truncate">{a.email}{a.organisation ? ` · ${a.organisation}` : ''}{a.category ? ` · ${a.category}` : ''}</span>
-                            {a.status === 'Failed' && a.error && <span className="text-[10px] text-rose-400 block truncate">{a.error}</span>}
+                            <span className="font-bold text-slate-900 dark:text-white block break-words">{a.name}{a.manual && <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-400 align-middle">Manual</span>}</span>
+                            <span className="text-[10px] text-slate-400 block break-all">{a.email}{a.organisation ? ` · ${a.organisation}` : ''}{a.category ? ` · ${a.category}` : ''}</span>
+                            {a.status === 'Failed' && a.error && <span className="text-[10px] text-rose-400 block break-words">{a.error}</span>}
                           </div>
                         </div>
                         <div className="shrink-0 flex items-center gap-2">
@@ -943,8 +956,8 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                                       <label key={m.id} className={`flex items-center gap-2 p-2 ${has ? 'opacity-50' : 'hover:bg-white/10 cursor-pointer'}`}>
                                         <input type="checkbox" disabled={has} checked={pickerSelected.has(m.id)} onChange={() => togglePick(m.id)} />
                                         <span className="min-w-0 flex-1">
-                                          <span className="font-bold text-slate-900 dark:text-white block truncate">{m.name}</span>
-                                          <span className="text-[10px] text-slate-400 block truncate">{m.email} · {m.role}{m.division === 'Alumni' && m.batch ? ` · ${m.batch}` : ` · ${m.division}`}</span>
+                                          <span className="font-bold text-slate-900 dark:text-white block break-words">{m.name}</span>
+                                          <span className="text-[10px] text-slate-400 block break-all">{m.email} · {m.role}{m.division === 'Alumni' && m.batch ? ` · ${m.batch}` : ` · ${m.division}`}</span>
                                         </span>
                                         {has && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 shrink-0">Already has one</span>}
                                       </label>
@@ -1010,17 +1023,64 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                       ))}
                     </div>
                     <p className="text-[10px] text-slate-500">Each placeholder is filled in for every attendee. The certificate PDF is always attached.</p>
-                    <div className="rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-white/10 p-2.5 space-y-1">
-                      <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Preview — {emailVars.name}</span>
-                      <p className="font-bold text-slate-900 dark:text-white">{mergeCertEmail(emailSubject, emailVars) || '(no subject)'}</p>
-                      <p className="text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{mergeCertEmail(emailBody, emailVars) || '(no message)'}</p>
+                  </div>
+
+                  <div className="space-y-2 p-3 rounded-xl border border-slate-200 dark:border-white/10">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <label className={`${label} mb-0`}>Who gets this ({selected.size} of {attendees.length} selected)</label>
+                      <div className="flex flex-wrap items-center gap-3 text-[11px] font-bold">
+                        <button type="button" className="text-accent hover:underline cursor-pointer" onClick={() => setSelected(new Set(attendees.map((a) => a.passId)))}>Select all</button>
+                        <button type="button" className="text-accent hover:underline cursor-pointer" onClick={() => setSelected(new Set(attendees.filter((a) => a.status !== 'Sent' && a.status !== 'Queued').map((a) => a.passId)))}>Only not yet sent</button>
+                        <button type="button" className="text-slate-500 hover:underline cursor-pointer" onClick={() => setSelected(new Set())}>Clear</button>
+                        <button type="button" className="text-slate-500 hover:underline cursor-pointer" onClick={() => setOpenPreviews(openPreviews.size ? new Set() : new Set(selectedPeople.map((a) => a.passId)))}>{openPreviews.size ? 'Hide all messages' : 'Show all messages'}</button>
+                      </div>
                     </div>
+                    <p className="text-[10px] text-slate-500">Tick exactly who this send (or schedule) is for. Send now to one group, then tick the others and schedule them. Open any row to read that person&apos;s own message.</p>
+                    <div className="border border-slate-200 dark:border-white/10 rounded-xl divide-y divide-slate-100 dark:divide-white/5 max-h-[45vh] overflow-y-auto">
+                      {attendees.length === 0 && <div className="py-4 text-center text-slate-400">No recipients yet.</div>}
+                      {attendees.map((a) => {
+                        const on = selected.has(a.passId);
+                        const open = openPreviews.has(a.passId);
+                        const v = varsFor(a);
+                        return (
+                          <div key={a.passId} className={on ? 'bg-accent/5' : ''}>
+                            <div className="flex items-start justify-between gap-2 p-2">
+                              <button type="button" onClick={() => toggle(a.passId)} className="flex items-start gap-2 min-w-0 text-left cursor-pointer">
+                                {on ? <CheckSquare className="h-4 w-4 text-accent shrink-0 mt-0.5" /> : <Square className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />}
+                                <span className="min-w-0">
+                                  <span className="font-bold text-slate-900 dark:text-white block break-words">{a.name}{a.manual && <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-400 align-middle">Manual</span>}</span>
+                                  <span className="text-[10px] text-slate-400 block break-all">{a.email}</span>
+                                </span>
+                              </button>
+                              <div className="shrink-0 flex items-center gap-2">
+                                <CertificateStatusBadge status={a.status} sentAt={a.sentAt} issuedAt={a.issuedAt} error={a.error} sentBy={a.sentBy} />
+                                <button type="button" title="Read this person's message" onClick={() => togglePreview(a.passId)} className="h-7 px-2 rounded-lg border border-slate-300 dark:border-white/15 text-slate-500 text-[10px] font-bold flex items-center gap-1 cursor-pointer">{open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />} Message</button>
+                              </div>
+                            </div>
+                            {open && (
+                              <div className="mx-2 mb-2 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-white/10 p-2.5 space-y-1">
+                                <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">To {a.name} &lt;{a.email}&gt;</span>
+                                <p className="font-bold text-slate-900 dark:text-white">{mergeCertEmail(emailSubject, v) || '(no subject)'}</p>
+                                <p className="text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{mergeCertEmail(emailBody, v) || '(no message)'}</p>
+                                <p className="text-[10px] text-slate-500">Attached: Certificate-{a.name.replace(/[^\w]+/g, '_')}.pdf</p>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {selectedPeople.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        <span className="text-[10px] font-bold text-slate-500 self-center">{sendMode === 'later' ? 'Scheduling for:' : 'Sending to:'}</span>
+                        {selectedPeople.map((a) => <span key={a.passId} className="px-2 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/30 text-[10px] font-bold break-words">{a.name}</span>)}
+                      </div>
+                    )}
                   </div>
                   {sendMode === 'later' && <input type="datetime-local" className={`${field} max-w-xs`} value={sendAt} onChange={(e) => setSendAt(e.target.value)} />}
                   {!canSend && <p className="text-amber-500 font-semibold">You can design and preview certificates but not send them.</p>}
                   <button type="button" disabled={!canSend || !emailReady || busy || selected.size === 0 || (sendMode === 'now' && !eventOver)} onClick={send} className="px-6 py-2.5 bg-accent text-white font-extrabold rounded-xl text-xs shadow-lg shadow-accent/25 flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                     {busy ? <RefreshCw className="h-4 w-4 animate-spin" /> : sendMode === 'later' ? <CalendarClock className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-                    {sendMode === 'later' ? 'Schedule' : 'Send'} {selected.size} certificate{selected.size === 1 ? '' : 's'}
+                    {sendMode === 'later' ? `Schedule ${selected.size} certificate${selected.size === 1 ? '' : 's'}${sendAt ? ` for ${new Date(sendAt).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}` : `Send ${selected.size} certificate${selected.size === 1 ? '' : 's'} now`}
                   </button>
                   {schedules.length > 0 && (
                     <div className="space-y-1">

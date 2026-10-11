@@ -347,8 +347,15 @@ function drawTextBox(ctx: SKRSContext2D, text: string, box: CertBox, fallbackCol
   ctx.fillStyle = box.color || fallbackColor;
   ctx.globalAlpha = box.opacity;
   ctx.textAlign = box.align;
-  ctx.textBaseline = 'middle';
-  lines.forEach((l, i) => ctx.fillText(l, ax, top + lineH * (i + 0.5)));
+  if (box.valign === 'bottom') {
+    // Bottom-anchored: the lowest letters (including descenders like g, y, p) rest on the box's bottom edge.
+    ctx.textBaseline = 'alphabetic';
+    const descent = ctx.measureText('gjpqy').actualBoundingBoxDescent || size * 0.22;
+    lines.forEach((l, i) => ctx.fillText(l, ax, by + bh - descent - (lines.length - 1 - i) * lineH));
+  } else {
+    ctx.textBaseline = 'middle';
+    lines.forEach((l, i) => ctx.fillText(l, ax, top + lineH * (i + 0.5)));
+  }
   if (box.underline && lines.length) {
     const widest = Math.max(...lines.map((l) => ctx.measureText(l).width));
     const w = Math.min(widest + 80, bw);
@@ -406,7 +413,7 @@ export async function renderCertificatePng(
   const nameText = ({ name: data.attendeeName, organisation: data.organisation || data.attendeeName, category: data.category || data.attendeeName, serial: data.serial || data.attendeeName } as Record<string, string>)[template.nameSource] || data.attendeeName;
   if (L.title.enabled) drawTextBox(ctx, merge(template.title, vars).toUpperCase(), L.title, ink);
   if (L.intro.enabled && template.introText) drawTextBox(ctx, merge(template.introText, vars), L.intro, ink);
-  if (L.name.enabled) drawTextBox(ctx, nameText, { ...L.name, align: 'center', valign: 'middle' }, ink);
+  if (L.name.enabled) drawTextBox(ctx, nameText, { ...L.name, align: 'center' }, ink);
   if (L.body.enabled) drawTextBox(ctx, merge(template.bodyText, vars), L.body, ink);
 
   // Signatory: a rule with the name and designation under it
