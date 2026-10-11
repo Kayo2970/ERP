@@ -1161,9 +1161,16 @@ export interface PublicFormItem {
   fields: FormField[];
   committee: string;
   createdBy: string;
+  // Stamped by the server on creation (never trusted from the client). Training Associates can only see/edit the forms
+  // they created, matched on createdById; createdByDivision routes their approvals (see approval-sync.ts).
+  createdById?: string;
+  createdByDivision?: string;
   createdAt: string;
   isSample?: boolean;
   status: 'active' | 'archived';
+  // ISO UTC timestamp after which the public form stops accepting responses and shows a "currently closed"
+  // message instead. Unset = never closes. See isFormClosed().
+  closeAt?: string;
   eventId?: string;
   eventName?: string;
   // Set when this form was built from a FormTemplateItem via the "Start from
@@ -6636,6 +6643,13 @@ export function saveSubmissions(submissions: FormSubmissionItem[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('leads_form_submissions', JSON.stringify(submissions));
   markLocalWrite('leads_form_submissions');
+}
+
+/** True once a public form's optional `closeAt` (ISO UTC) has passed. Pure, so it runs on both server and client. */
+export function isFormClosed(form: { closeAt?: string } | null | undefined, now: number = Date.now()): boolean {
+  if (!form?.closeAt) return false;
+  const t = Date.parse(form.closeAt);
+  return !isNaN(t) && now > t;
 }
 
 export function addSubmission(sub: Omit<FormSubmissionItem, 'id' | 'submittedAt'>): { submission: FormSubmissionItem; synced: Promise<boolean> } {

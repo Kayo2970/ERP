@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { readDb } from '@/lib/server-db';
 import { requireSession } from '@/lib/session';
+import { getAccessLevelSettingsServer, seesOnlyOwnForms } from '@/lib/permissions-server';
+import { visibleFormsFor, visibleSubmissionsFor, visibleApprovalRequestsFor } from '@/lib/forms-visibility';
 import { apiError } from '@/lib/api-error';
 
 // Only the collections the client actually hydrates from this poll. Everything
@@ -24,7 +26,7 @@ const CLIENT_SYNC_KEYS = [
 export async function GET(request: Request) {
   const t0 = performance.now();
   try {
-    await requireSession(request);
+    const actor = await requireSession(request);
     const tAuth = performance.now();
     const db: any = await readDb(CLIENT_SYNC_KEYS as any);
     const tRead = performance.now();
@@ -39,6 +41,15 @@ export async function GET(request: Request) {
       return { ...safe, hasPassword: !!passwordHash };
     });
     delete db.sessions;
+
+    // Training Associates only ever receive the forms they created (and those forms' responses).
+    const settings = await getAccessLevelSettingsServer();
+    if (seesOnlyOwnForms(actor, settings)) {
+      const allForms = db.forms || [];
+      db.forms = visibleFormsFor(allForms, actor, settings);
+      db.submissions = visibleSubmissionsFor(db.submissions || [], allForms, actor, settings);
+      db.approvalRequests = visibleApprovalRequestsFor(db.approvalRequests || [], allForms, actor, settings);
+    }
 
     const authMs = tAuth - t0;
     const readMs = tRead - tAuth;

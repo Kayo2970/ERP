@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { readCollection } from '@/lib/server-db';
 import { apiError } from '@/lib/api-error';
 import { getFormEventInfo } from '@/lib/public-form';
+import { isFormClosed } from '@/lib/local-data';
 
 /**
  * Deliberately unauthenticated — this is what src/app/forms/[slug]/page.tsx
@@ -36,7 +37,7 @@ export async function GET(
     const {
       id, slug: formSlug, title, description, fields, eventName, sourceTemplateId,
       headerText, headerImageUrl, headerPosX, headerPosY, headerZoom, headerHeight,
-      backgroundImageUrl, backgroundBlur, backgroundDim,
+      backgroundImageUrl, backgroundBlur, backgroundDim, closeAt,
     } = match;
 
     const eventInfo = await getFormEventInfo(match);
@@ -44,6 +45,8 @@ export async function GET(
       id, slug: formSlug, title, description, fields, eventName, sourceTemplateId, eventInfo,
       headerText, headerImageUrl, headerPosX, headerPosY, headerZoom, headerHeight,
       backgroundImageUrl, backgroundBlur, backgroundDim,
+      // `closed` is computed with the server's clock so a respondent's own (possibly wrong) clock can't reopen it.
+      closeAt, closed: isFormClosed(match),
     });
   } catch (err: any) {
     return apiError(err, 'public-forms-slug-api-get', 500);

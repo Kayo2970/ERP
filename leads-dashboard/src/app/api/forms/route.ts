@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { requireSession, ForbiddenError } from '@/lib/session';
-import { getAccessLevelSettingsServer, canBuildForms } from '@/lib/permissions-server';
-import { fanOutAutoApproval, resolveCustomApprovalPanel } from '@/lib/approval-sync';
+import { getAccessLevelSettingsServer, canCreateForms, seesOnlyOwnForms, isOwnForm } from '@/lib/permissions-server';
+import { visibleFormsFor } from '@/lib/forms-visibility';
+import { fanOutAutoApproval, resolveCustomApprovalPanel, resolveTraineeFormPanel } from '@/lib/approval-sync';
 import { apiError } from '@/lib/api-error';
 import { gateFormAction, formEditKeys, holdEditForApproval, stampPendingCreate, isPendingState } from '@/lib/approval-gate';
 
@@ -14,9 +15,10 @@ const PENDING_APPROVAL_MESSAGE: Record<string, string> = {
 
 export async function GET(request: Request) {
   try {
-    await requireSession(request);
-    const items = await readCollection('forms');
-    return NextResponse.json(items);
+    const actor = await requireSession(request);
+    const settings = await getAccessLevelSettingsServer();
+    const items = await readCollection<any>('forms');
+    return NextResponse.json(visibleFormsFor(items, actor, settings));
   } catch (err: any) {
     return apiError(err, 'forms-api-get', 500);
   }
@@ -33,9 +35,13 @@ export async function POST(request: Request) {
       const gate = await gateFormAction(actor, 'CREATE');
       if (!gate.allowed) throw new ForbiddenError();
       if (gate.requiresApproval) stampPendingCreate(item, gate, actor);
-      else if (!canBuildForms(actor, settings) && actor.tier !== 1) throw new ForbiddenError();
+      else if (!canCreateForms(actor, settings) && actor.tier !== 1) throw new ForbiddenError();
+      // Ownership is stamped from the session, never trusted from the browser.
+      item.createdById = actor.id;
+      item.createdByDivision = actor.division;
     } else {
-      const bookkeeping = ['approvalStatus', 'pendingChange', 'submittedBy', 'submittedByEmail', 'approverType', 'approverMemberId', 'approverPolicyTagId', 'approvalPolicyName', 'approverName', 'decidedBy', 'decidedAt', 'rejectionReason'];
+      if (seesOnlyOwnForms(actor, settings) && !isOwnForm(storedForm, actor)) throw new ForbiddenError();
+      const bookkeeping = ['createdById', 'createdByDivision', 'approvalStatus', 'pendingChange', 'submittedBy', 'submittedByEmail', 'approverType', 'approverMemberId', 'approverPolicyTagId', 'approvalPolicyName', 'approverName', 'decidedBy', 'decidedAt', 'rejectionReason'];
       const keys = formEditKeys(item).filter((k) => JSON.stringify(storedForm[k]) !== JSON.stringify(item[k]));
       for (const k of bookkeeping) { if (k in storedForm) item[k] = storedForm[k]; else delete item[k]; }
       const gate = await gateFormAction(actor, 'EDIT');
@@ -68,7 +74,7 @@ export async function POST(request: Request) {
       try {
         const customPanel = created.approverType && created.approverType !== 'CENTER_HEAD'
           ? await resolveCustomApprovalPanel(created.approverType, created.approverMemberId, created.approverPolicyTagId)
-          : undefined;
+          : created.createdByDivision === 'Training Associate' ? await resolveTraineeFormPanel() : undefined;
         await fanOutAutoApproval({
           entityType: 'form',
           entityId: created.id,

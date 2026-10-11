@@ -1506,6 +1506,29 @@ export function canBuildForms(user: SessionUser): boolean {
   return (!!user && (user.tier === 1 || user.tier === 5)) || isHeadRole(user) || isExecutiveRole(user) || hasCapability(user, 'BUILD_FORMS');
 }
 
+/** Training Associates (division 'Training Associate'): may build public forms of their own, which go for sign-off first. */
+export function isTrainingAssociate(user: SessionUser): boolean {
+  if (!user || isAlumniRole(user)) return false;
+  return (user as any).division === 'Training Associate';
+}
+
+/** Anyone who may create public forms: the usual form builders, plus Training Associates (their forms always need sign-off). */
+export function canCreateForms(user: SessionUser): boolean {
+  if (canBuildForms(user)) return true;
+  return isTrainingAssociate(user) && resolveModuleEditOverride(user, 'FORMS') !== 'NONE';
+}
+
+/** A Training Associate who is not a full form builder some other way sees only the forms they created. */
+export function seesOnlyOwnForms(user: SessionUser): boolean {
+  return isTrainingAssociate(user) && !canBuildForms(user);
+}
+
+export function isOwnForm(form: { createdById?: string; submittedByEmail?: string }, user: SessionUser): boolean {
+  if (!user) return false;
+  if (form.createdById) return form.createdById === user.id;
+  return !!form.submittedByEmail && !!user.email && form.submittedByEmail.toLowerCase() === user.email.toLowerCase();
+}
+
 /** Check if user can delete public forms (Centre Head or Super User only), or a moduleAccess.FORMS.edit === 'ALL' grant. */
 export function canDeleteForms(user: SessionUser): boolean {
   if (isExecutiveRole(user) || isAlumniRole(user)) return false;
@@ -1530,7 +1553,7 @@ export function getFormApprovalRequirement(user: SessionUser, action: 'CREATE' |
   // getApprovalRequirement() only reasons about policy-granted capabilities,
   // so it can't see that built-in grant. Check the real access gate directly
   // and route it through approval whenever they have access by any means.
-  const hasAccess = action === 'DELETE' ? canDeleteForms(user) || canBuildForms(user) : canBuildForms(user);
+  const hasAccess = action === 'DELETE' ? canDeleteForms(user) || canCreateForms(user) : canCreateForms(user);
   if (!hasAccess) return { requiresApproval: false };
   return {
     requiresApproval: true,
@@ -1554,7 +1577,8 @@ export function canApprovePendingForm(form: PublicFormItem, user: SessionUser): 
     const tagPolicy = getGroupPolicies().find(p => p.id === form.approverPolicyTagId);
     return !!tagPolicy && memberMatchesPolicy(member, tagPolicy);
   }
-  return isCentreHead(user); // CENTER_HEAD (default)
+  // CENTER_HEAD (default). A Training Associate's form is also decided by the GG Campus Events Head.
+  return isCentreHead(user) || (form.createdByDivision === 'Training Associate' && isEventsHeadGgCampus(user));
 }
 
 /**

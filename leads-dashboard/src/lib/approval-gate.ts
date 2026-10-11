@@ -256,7 +256,7 @@ export async function gateFormAction(user: ServerUser, action: 'CREATE' | 'EDIT'
   const trusted = user.tier === 1 || p.isCentreHead(user, settings) || p.isFinanceHead(user, settings) || p.isDesignHead(user, settings) || p.isHeadOfEvents(user);
   if (trusted) return { allowed: true, requiresApproval: false };
   const caps = action === 'DELETE' ? ['FORMS_DELETE', 'BUILD_FORMS'] : ['BUILD_FORMS'];
-  const builtInAccess = action === 'DELETE' ? await p.canDeleteForms(user, settings) || p.canBuildForms(user, settings) : p.canBuildForms(user, settings);
+  const builtInAccess = action === 'DELETE' ? await p.canDeleteForms(user, settings) || p.canCreateForms(user, settings) : p.canCreateForms(user, settings);
   const moduleAll = await hasModuleEditAll(user, 'FORMS');
   const policy = await evaluateCapabilityGate(user, caps, false);
   if (!builtInAccess && !moduleAll && !policy.allowed) return { allowed: false, requiresApproval: false };
