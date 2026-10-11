@@ -23,6 +23,9 @@ interface Props {
 
 type SendState = 'idle' | 'sending' | 'ok' | 'failed';
 
+/** "Dr. Selva Kumar D" -> "Selva": the first word that isn't a title. */
+const shortName = (name: string) => name.split(/\s+/).find((w) => !/^(dr|mr|mrs|ms|prof|shri|smt)\.?$/i.test(w)) || name;
+
 /**
  * Review each selected pass and its exact email (← → to move), untick the ones to skip, then send them all.
  * The email preview comes from buildPassEmail(), the same builder dispatchPassEmail() sends.
@@ -173,14 +176,20 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
     }
   };
 
+  // Moving to a pass with no wording of its own: back to editing the shared message, so typing there can't silently fork it.
+  useEffect(() => {
+    if (editScope === 'one' && pass && !overrides[pass.id]) setEditScope('all');
+  }, [pass, editScope, overrides]);
+
   /** Edits made in the editor: shared message (everyone) or only the pass being viewed. */
   const editorTemplate: PassEmailTemplate = editScope === 'one' && ownEdit ? { ...template, subject: ownEdit.subject, body: ownEdit.body } : template;
   const onEditorChange = (t: PassEmailTemplate) => {
     if (editScope === 'one' && pass) {
       setOverrides((m) => ({ ...m, [pass.id]: { subject: t.subject, body: t.body } }));
-    } else {
-      // Extra-button settings (map / WhatsApp) are shared by everyone, even while editing one person's wording.
+      // Extra-button settings (map / WhatsApp) stay shared by everyone, even while editing one person's wording.
       setTemplate({ ...template, includeMap: t.includeMap, mapUrl: t.mapUrl, includeWhatsapp: t.includeWhatsapp, whatsappUrl: t.whatsappUrl });
+    } else {
+      setTemplate(t);
     }
   };
   const startOwnEdit = () => {
@@ -269,7 +278,7 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
                   <Pencil className="h-3 w-3" /> Edit message (everyone)
                 </button>
                 <button type="button" onClick={startOwnEdit} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-white/20 text-[10.5px] font-bold hover:bg-white/10 cursor-pointer">
-                  <Pencil className="h-3 w-3" /> Edit only {pass.attendeeName.split(' ')[0]}&apos;s
+                  <Pencil className="h-3 w-3" /> Edit only {shortName(pass.attendeeName)}&apos;s
                 </button>
                 {ownEdit && <span className="text-[10px] font-bold text-amber-300">custom message for this person</span>}
               </div>
@@ -313,7 +322,7 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
             <div className="space-y-3 min-w-0 rounded-2xl border border-white/10 bg-black/20 p-4">
               <div className="flex items-center gap-1 p-0.5 bg-black/30 border border-white/10 rounded-lg w-fit text-[10.5px] font-bold">
                 <button type="button" onClick={() => setEditScope('all')} className={`px-2.5 py-1 rounded-md cursor-pointer ${editScope === 'all' ? 'bg-sky-600 text-white' : 'text-slate-300'}`}>Everyone</button>
-                <button type="button" onClick={startOwnEdit} className={`px-2.5 py-1 rounded-md cursor-pointer ${editScope === 'one' ? 'bg-sky-600 text-white' : 'text-slate-300'}`}>Only {pass.attendeeName.split(' ')[0]}</button>
+                <button type="button" onClick={startOwnEdit} className={`px-2.5 py-1 rounded-md cursor-pointer ${editScope === 'one' ? 'bg-sky-600 text-white' : 'text-slate-300'}`}>Only {shortName(pass.attendeeName)}</button>
               </div>
               <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 {editScope === 'one' ? `Editing ${pass.attendeeName}'s message only` : 'Edit the message (applies to everyone without their own version)'}
