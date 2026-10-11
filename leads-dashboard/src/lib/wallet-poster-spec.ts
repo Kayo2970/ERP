@@ -83,7 +83,7 @@ export function posterFields(i: PosterFieldInput) {
     // Four across at ~150px each: short values only, the full text lives on the back and on the pass page
     primary: [
       { label: clip((i.guestCategory || 'GUEST').toUpperCase(), 14), value: clip(i.attendeeName || 'Attendee', 22) },
-      { label: 'VENUE', value: clip(i.venue, 18) },
+      { label: 'VENUE', value: clip(i.venue, 24) },
       { label: 'VALID', value: clip(i.validDays && i.validDays.length > 0 ? compactDays(i.validDays) : shortValidity(i.validity), 22) },
     ],
     footer: [{ label: 'ENTRY', value: days > 1 ? `One pass · ${days} days` : i.serial }],

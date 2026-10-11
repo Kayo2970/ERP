@@ -633,6 +633,8 @@
   font-weight: 800;
   color: #0f172a;
   line-height: 1.25;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .backNoticeText {
@@ -923,9 +925,10 @@
   padding: 4px 9px;
   border-radius: 6px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.2;
 }
 
 .leftPanelFooter {
@@ -1159,9 +1162,14 @@
   font-size: calc(9px * var(--pass-font-scale, 1));
   font-weight: 700;
   color: #f1f5f9;
-  white-space: nowrap;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .turnstileQrContainer {

@@ -65,6 +65,35 @@ function truncate(ctx: SKRSContext2D, text: string, maxWidth: number): string {
   return `${t}…`;
 }
 
+/** Shrinks to fit on one line; if that still overflows, wraps to at most `maxLines` lines (last one ellipsised). Leaves ctx.font set. */
+function wrapCell(ctx: SKRSContext2D, text: string, maxWidth: number, startSize: number, minSize: number, maxLines: number): { lines: string[]; size: number } {
+  const fam = ensureFont();
+  const size = fitText(ctx, text, maxWidth, startSize, minSize, 'bold');
+  if (ctx.measureText(text).width <= maxWidth) return { lines: [text], size };
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let line = '';
+  const push = () => { if (line) lines.push(line); line = ''; };
+  for (const word of words) {
+    let w = word;
+    // break words that are wider than the column
+    while (ctx.measureText(w).width > maxWidth && w.length > 1) {
+      let cut = w.length - 1;
+      while (cut > 1 && ctx.measureText(w.slice(0, cut)).width > maxWidth) cut--;
+      push();
+      lines.push(w.slice(0, cut));
+      w = w.slice(cut);
+    }
+    const test = line ? `${line} ${w}` : w;
+    if (line && ctx.measureText(test).width > maxWidth) { push(); line = w; } else line = test;
+  }
+  push();
+  const out = lines.slice(0, maxLines);
+  if (lines.length > maxLines) out[maxLines - 1] = truncate(ctx, `${out[maxLines - 1]} …`, maxWidth);
+  ctx.font = `bold ${size}px ${fam}`;
+  return { lines: out, size };
+}
+
 export async function renderBoardingPassPng(
   pass: EventPassItem,
   passUrl: string,
@@ -159,19 +188,22 @@ export async function renderBoardingPassPng(
     ['VALID', validity],
   ];
   const colW = maxMain / 3;
+  let gridBottom = 362;
   cells.forEach(([k, v], i) => {
     const cx = 70 + i * colW;
     ctx.fillStyle = label;
     ctx.font = `14px ${fam}`;
     ctx.fillText(k, cx, 330);
     ctx.fillStyle = fg;
-    fitText(ctx, v, colW - 16, Math.round(24 * scale), 15, 'bold');
-    ctx.fillText(truncate(ctx, v, colW - 16), cx, 362);
+    // Long values (e.g. a venue) wrap inside their own column instead of running into the next one
+    const lines = wrapCell(ctx, v, colW - 16, Math.round(24 * scale), 15, 3);
+    lines.lines.forEach((l, li) => ctx.fillText(l, cx, 362 + li * (lines.size + 6)));
+    gridBottom = Math.max(gridBottom, 362 + (lines.lines.length - 1) * (lines.size + 6));
   });
   if (validDays.length > 1) {
     ctx.fillStyle = label;
     ctx.font = `15px ${fam}`;
-    ctx.fillText(`One pass · one QR · valid on ${validDays.length} days`, 70, 408);
+    ctx.fillText(`One pass · one QR · valid on ${validDays.length} days`, 70, Math.max(408, gridBottom + 40));
   }
 
   // Stub (white) with QR
