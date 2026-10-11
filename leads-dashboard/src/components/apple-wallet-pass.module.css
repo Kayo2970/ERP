@@ -142,6 +142,7 @@
 .fieldItem {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .fieldLabel {
@@ -158,9 +159,9 @@
   font-weight: 700;
   color: #e2e8f0;
   line-height: 1.25;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .roomHighlight {
@@ -306,4 +307,5 @@
   font-size: 10.5px;
   font-weight: 700;
   color: #f1f5f9;
+  overflow-wrap: anywhere;
 }

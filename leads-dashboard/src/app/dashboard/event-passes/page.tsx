@@ -57,6 +57,7 @@ import { EventPassStudio } from '@/components/event-pass-studio';
 import { EventPassScanner } from '@/components/event-pass-scanner';
 import { EventPassPushModal } from '@/components/event-pass-push-modal';
 import { EventPassBulkDispatchModal } from '@/components/event-pass-bulk-dispatch-modal';
+import { EventPassBulkEditModal } from '@/components/event-pass-bulk-edit-modal';
 import { CertificateModal } from '@/components/certificate-modal';
 import { EventPassEditModal } from '@/components/event-pass-edit-modal';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -100,6 +101,7 @@ export default function EventPassesPage() {
   // Multi-select for "Preview & dispatch" (survives search/filter changes)
   const [selectedPassIds, setSelectedPassIds] = useState<Set<string>>(new Set());
   const [isBulkDispatchOpen, setIsBulkDispatchOpen] = useState(false);
+  const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const [isCertificateOpen, setIsCertificateOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -733,10 +735,10 @@ export default function EventPassesPage() {
                               )}
                             </div>
                           </td>
-                          <td className="py-3 px-4">
-                            <span className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1">
-                              <MapPin className="h-3 w-3 text-accent shrink-0" />
-                              {pass.roomOrVenue || pass.eventVenue || 'Main Auditorium'}
+                          <td className="py-3 px-4 min-w-[140px] max-w-[220px] align-top">
+                            <span className="font-semibold text-slate-800 dark:text-slate-200 flex items-start gap-1 min-w-0">
+                              <MapPin className="h-3 w-3 text-accent shrink-0 mt-0.5" />
+                              <span className="min-w-0 break-words [overflow-wrap:anywhere]">{pass.roomOrVenue || pass.eventVenue || 'Main Auditorium'}</span>
                             </span>
                           </td>
                           <td className="py-3 px-4 text-theme-text-secondary max-w-[180px] truncate">
@@ -1156,6 +1158,11 @@ export default function EventPassesPage() {
                   <button type="button" onClick={() => setSelectedPassIds(new Set())} className="px-3 py-1.5 rounded-lg text-theme-text-secondary font-bold hover:text-theme-text-primary cursor-pointer">
                     Clear
                   </button>
+                  {canEditPass && (
+                    <button type="button" onClick={() => setIsBulkEditOpen(true)} className="px-4 py-1.5 rounded-lg border border-indigo-400/40 text-indigo-300 hover:bg-indigo-500/10 font-black flex items-center gap-1.5 cursor-pointer">
+                      <Edit3 className="h-3.5 w-3.5" /> Bulk edit
+                    </button>
+                  )}
                   <button type="button" onClick={() => setIsBulkDispatchOpen(true)} className="px-4 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-black flex items-center gap-1.5 cursor-pointer">
                     <Send className="h-3.5 w-3.5" /> Preview &amp; dispatch
                   </button>
@@ -1287,10 +1294,10 @@ export default function EventPassesPage() {
                         </td>
 
                         {/* Room / Venue */}
-                        <td className="py-3 px-4">
-                          <span className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1">
-                            <MapPin className="h-3 w-3 text-accent shrink-0" />
-                            {pass.roomOrVenue || pass.eventVenue || 'Main Auditorium'}
+                        <td className="py-3 px-4 min-w-[140px] max-w-[220px] align-top">
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 flex items-start gap-1 min-w-0">
+                            <MapPin className="h-3 w-3 text-accent shrink-0 mt-0.5" />
+                            <span className="min-w-0 break-words [overflow-wrap:anywhere]">{pass.roomOrVenue || pass.eventVenue || 'Main Auditorium'}</span>
                           </span>
                         </td>
 
@@ -1502,6 +1509,14 @@ export default function EventPassesPage() {
         isOpen={isBulkDispatchOpen}
         passes={eventPasses.filter((p) => selectedPassIds.has(p.id))}
         onClose={() => setIsBulkDispatchOpen(false)}
+        onDone={() => setEventPasses(getEventPasses())}
+      />
+
+      <EventPassBulkEditModal
+        isOpen={isBulkEditOpen}
+        passes={eventPasses.filter((p) => selectedPassIds.has(p.id))}
+        currentUserName={user?.name || 'Admin'}
+        onClose={() => setIsBulkEditOpen(false)}
         onDone={() => setEventPasses(getEventPasses())}
       />
 

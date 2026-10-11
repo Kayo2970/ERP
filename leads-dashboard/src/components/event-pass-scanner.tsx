@@ -688,9 +688,9 @@ export function EventPassScanner({
 
                   <div className="space-y-0.5">
                     <span className="text-[9px] text-slate-400 uppercase tracking-wider block font-semibold">Assigned Room / Venue</span>
-                    <span className="text-xs font-bold text-sky-300 block flex items-center gap-1">
-                      <MapPin className="h-3 w-3 text-sky-400 shrink-0" />
-                      {pass.roomOrVenue || pass.eventVenue || 'Main Auditorium'}
+                    <span className="text-xs font-bold text-sky-300 flex items-start gap-1 min-w-0">
+                      <MapPin className="h-3 w-3 text-sky-400 shrink-0 mt-0.5" />
+                      <span className="min-w-0 break-words [overflow-wrap:anywhere]">{pass.roomOrVenue || pass.eventVenue || 'Main Auditorium'}</span>
                     </span>
                     <span className="text-[10.5px] text-slate-300 block">
                       Tier: {pass.passType}
