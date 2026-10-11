@@ -4,6 +4,8 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { beginTask } from '@/lib/background-tasks';
 import { CertificateStatusBadge, CERT_STATUS_FILTERS } from '@/components/certificate-status-badge';
+import { SortableTh } from '@/components/ui/sortable-th';
+import { useSort, type SortGetters } from '@/lib/use-sort';
 import {
   Award,
   Ticket,
@@ -317,8 +319,8 @@ export default function EventPassesPage() {
   };
 
   // CSV Attendance & Delivery Status Exporter
-  const handleExportAttendance = (targetEventId: string = 'ALL') => {
-    const filtered = eventPasses.filter((p) => {
+  const handleExportAttendance = (targetEventId: string = 'ALL', order?: (rows: EventPassItem[]) => EventPassItem[]) => {
+    const filtered = (order ? order(eventPasses) : eventPasses).filter((p) => {
       if (targetEventId !== 'ALL' && p.eventId !== targetEventId) return false;
       return true;
     });
@@ -470,6 +472,23 @@ export default function EventPassesPage() {
     if (deepFilterEventId === 'ALL') return null;
     return events.find((e) => e.id === deepFilterEventId) || null;
   }, [deepFilterEventId, events]);
+
+  // Column sorting for the two passes tables (click a header: ascending, descending, then back to the default order).
+  const studioSort = useSort();
+  const deepSort = useSort();
+  const passSortGetters: SortGetters<EventPassItem> = {
+    serial: (p) => p.serialNumber,
+    name: (p) => p.attendeeName,
+    category: (p) => p.guestCategory,
+    venue: (p) => p.roomOrVenue,
+    event: (p) => p.eventName,
+    tier: (p) => p.passType,
+    email: (p) => p.emailStatus || (p.passViewed ? 'Pass Viewed' : 'Not Sent'),
+    cert: (p) => certStatuses[p.id]?.status || 'Not issued',
+    gate: (p) => p.status,
+    issuedBy: (p) => p.issuedBy,
+    issuedAt: (p) => p.issuedAt,
+  };
 
   // Deep dive filtered passes
   const deepFilteredPasses = useMemo(() => {
@@ -728,7 +747,7 @@ export default function EventPassesPage() {
               <div className="flex flex-wrap items-center gap-2.5">
                 <button
                   type="button"
-                  onClick={() => handleExportAttendance(passFilterEventId)}
+                  onClick={() => handleExportAttendance(passFilterEventId, (rows) => studioSort.apply(rows, passSortGetters))}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-600 dark:text-emerald-400 border border-emerald-500/35 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
                   title="Export Attendance & Registration Roster to CSV for Audits"
                 >
@@ -780,19 +799,19 @@ export default function EventPassesPage() {
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-slate-200/90 dark:border-white/10 text-theme-text-secondary text-[11px] uppercase tracking-wider">
-                      <th className="py-3 px-4">Serial ID</th>
-                      <th className="py-3 px-4">Attendee &amp; Category</th>
-                      <th className="py-3 px-4">Room / Venue</th>
-                      <th className="py-3 px-4">Event</th>
-                      <th className="py-3 px-4">Pass Tier</th>
-                      <th className="py-3 px-4">Email &amp; Pass View Status</th>
-                      {certAllowed && <th className="py-3 px-4">Certificate</th>}
-                      <th className="py-3 px-4">Gate Status</th>
+                      <SortableTh label="Serial ID" columnKey="serial" sort={studioSort.sort} onToggle={studioSort.toggle} />
+                      <SortableTh label="Attendee & Category" columnKey="name" sort={studioSort.sort} onToggle={studioSort.toggle} />
+                      <SortableTh label="Room / Venue" columnKey="venue" sort={studioSort.sort} onToggle={studioSort.toggle} />
+                      <SortableTh label="Event" columnKey="event" sort={studioSort.sort} onToggle={studioSort.toggle} />
+                      <SortableTh label="Pass Tier" columnKey="tier" sort={studioSort.sort} onToggle={studioSort.toggle} />
+                      <SortableTh label="Email & Pass View Status" columnKey="email" sort={studioSort.sort} onToggle={studioSort.toggle} />
+                      {certAllowed && <SortableTh label="Certificate" columnKey="cert" sort={studioSort.sort} onToggle={studioSort.toggle} />}
+                      <SortableTh label="Gate Status" columnKey="gate" sort={studioSort.sort} onToggle={studioSort.toggle} />
                       <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200/50 dark:divide-white/5">
-                    {eventPasses
+                    {studioSort.apply(eventPasses, passSortGetters)
                       .filter((p) => {
                         if (passFilterEventId !== 'ALL' && p.eventId !== passFilterEventId) return false;
                         if (passSearchQuery.trim()) {
@@ -1007,7 +1026,7 @@ export default function EventPassesPage() {
 
                 <button
                   type="button"
-                  onClick={() => handleExportAttendance(deepFilterEventId)}
+                  onClick={() => handleExportAttendance(deepFilterEventId, (rows) => deepSort.apply(rows, passSortGetters))}
                   className="px-3.5 py-2.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/40 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/10"
                 >
                   <FileSpreadsheet className="h-3.5 w-3.5" />
@@ -1343,19 +1362,20 @@ export default function EventPassesPage() {
                           className="h-4 w-4 accent-sky-500 cursor-pointer"
                         />
                       </th>}
-                      <th className="py-3 px-4">Serial ID</th>
-                      <th className="py-3 px-4">Attendee &amp; Details</th>
-                      <th className="py-3 px-4">Room / Venue</th>
-                      <th className="py-3 px-4">Event</th>
-                      <th className="py-3 px-4">Pass Tier</th>
-                      <th className="py-3 px-4">Email &amp; Pass View Status</th>
-                      <th className="py-3 px-4">Gate Turnstile</th>
-                      <th className="py-3 px-4">Issued By</th>
+                      <SortableTh label="Serial ID" columnKey="serial" sort={deepSort.sort} onToggle={deepSort.toggle} />
+                      <SortableTh label="Attendee & Details" columnKey="name" sort={deepSort.sort} onToggle={deepSort.toggle} />
+                      <SortableTh label="Room / Venue" columnKey="venue" sort={deepSort.sort} onToggle={deepSort.toggle} />
+                      <SortableTh label="Event" columnKey="event" sort={deepSort.sort} onToggle={deepSort.toggle} />
+                      <SortableTh label="Pass Tier" columnKey="tier" sort={deepSort.sort} onToggle={deepSort.toggle} />
+                      <SortableTh label="Email & Pass View Status" columnKey="email" sort={deepSort.sort} onToggle={deepSort.toggle} />
+                      <SortableTh label="Gate Turnstile" columnKey="gate" sort={deepSort.sort} onToggle={deepSort.toggle} />
+                      <SortableTh label="Issued By" columnKey="issuedBy" sort={deepSort.sort} onToggle={deepSort.toggle} />
+                      <SortableTh label="Issued On" columnKey="issuedAt" sort={deepSort.sort} onToggle={deepSort.toggle} />
                       <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200/50 dark:divide-white/5">
-                    {deepFilteredPasses.map((pass) => (
+                    {deepSort.apply(deepFilteredPasses, passSortGetters).map((pass) => (
                       <tr key={pass.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
                         {canSelectPasses && (<td className="py-3 px-3 w-8">
                           <input
@@ -1485,9 +1505,13 @@ export default function EventPassesPage() {
                         {/* Issued By */}
                         <td className="py-3 px-4 text-theme-text-secondary text-[11px]">
                           <div>{pass.issuedBy}</div>
-                          <div className="text-[9px] opacity-70">
-                            {new Date(pass.issuedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
-                          </div>
+                        </td>
+
+                        {/* Issued On */}
+                        <td className="py-3 px-4 text-theme-text-secondary text-[11px] whitespace-nowrap">
+                          {pass.issuedAt && !isNaN(Date.parse(pass.issuedAt))
+                            ? new Date(pass.issuedAt).toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                            : '—'}
                         </td>
 
                         {/* Actions */}

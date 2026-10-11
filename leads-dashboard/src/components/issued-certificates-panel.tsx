@@ -5,6 +5,8 @@ import { Award, ChevronDown, ChevronRight, RefreshCw, Search, Trash2 } from 'luc
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EventItem, authHeaders, getEffectiveEventStatus, getEventSortTime, getEvents } from '@/lib/local-data';
 import { CertificateStatusBadge, CERT_STATUS_FILTERS } from '@/components/certificate-status-badge';
+import { SortableTh } from '@/components/ui/sortable-th';
+import { useSort, type SortGetters } from '@/lib/use-sort';
 
 interface IssuedCert {
   id: string;
@@ -27,6 +29,11 @@ interface IssuedCert {
   error?: string;
 }
 
+const fmtDateTime = (iso?: string) =>
+  iso && !isNaN(Date.parse(iso))
+    ? new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : '—';
+
 type EventFilter = 'ALL' | 'ONGOING' | 'COMPLETED' | 'ARCHIVED';
 
 const FILTERS: { key: EventFilter; label: string }[] = [
@@ -35,6 +42,16 @@ const FILTERS: { key: EventFilter; label: string }[] = [
   { key: 'COMPLETED', label: 'Completed' },
   { key: 'ARCHIVED', label: 'Archived' },
 ];
+
+// One sort for every event group: clicking a header re-orders the rows inside each group (the groups keep their own order).
+const CERT_SORT_GETTERS: SortGetters<IssuedCert> = {
+  name: (c) => c.attendeeName,
+  type: (c) => c.typeName || 'Participation',
+  code: (c) => c.code,
+  status: (c) => c.status,
+  issuedAt: (c) => c.issuedAt,
+  sentAt: (c) => c.sentAt,
+};
 
 interface Group {
   eventId: string;
@@ -59,6 +76,7 @@ export function IssuedCertificatesPanel({ eventId, compact = false, canDelete = 
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const certSort = useSort();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -214,14 +232,16 @@ export function IssuedCertificatesPanel({ eventId, compact = false, canDelete = 
                             <input type="checkbox" aria-label="Select all in this event" checked={g.rows.every((r) => picked.has(r.id))} onChange={(e) => togglePick(g.rows.map((r) => r.id), e.target.checked)} />
                           </th>
                         )}
-                        <th className="py-2 px-4 font-semibold">Recipient</th>
-                        <th className="py-2 px-4 font-semibold">Type</th>
-                        <th className="py-2 px-4 font-semibold">Code</th>
-                        <th className="py-2 px-4 font-semibold">Status</th>
+                        <SortableTh label="Recipient" columnKey="name" sort={certSort.sort} onToggle={certSort.toggle} className="py-2 px-4 font-semibold" />
+                        <SortableTh label="Type" columnKey="type" sort={certSort.sort} onToggle={certSort.toggle} className="py-2 px-4 font-semibold" />
+                        <SortableTh label="Code" columnKey="code" sort={certSort.sort} onToggle={certSort.toggle} className="py-2 px-4 font-semibold" />
+                        <SortableTh label="Status" columnKey="status" sort={certSort.sort} onToggle={certSort.toggle} className="py-2 px-4 font-semibold" />
+                        <SortableTh label="Issued" columnKey="issuedAt" sort={certSort.sort} onToggle={certSort.toggle} className="py-2 px-4 font-semibold" />
+                        <SortableTh label="Sent" columnKey="sentAt" sort={certSort.sort} onToggle={certSort.toggle} className="py-2 px-4 font-semibold" />
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-theme-border/20">
-                      {g.rows.map((r) => (
+                      {certSort.apply(g.rows, CERT_SORT_GETTERS).map((r) => (
                         <tr key={r.id} className="hover:bg-theme-border/10">
                           {canDelete && (
                             <td className="py-2 pl-4"><input type="checkbox" aria-label={`Select ${r.attendeeName}`} checked={picked.has(r.id)} onChange={(e) => togglePick([r.id], e.target.checked)} /></td>
@@ -233,6 +253,8 @@ export function IssuedCertificatesPanel({ eventId, compact = false, canDelete = 
                           <td className="py-2 px-4 text-theme-text-secondary">{r.typeName || 'Participation'}</td>
                           <td className="py-2 px-4 font-mono text-[10px] text-theme-text-secondary">{r.code ? <a href={`/certificate/${r.code}`} target="_blank" rel="noreferrer" className="hover:text-accent underline">{r.code}</a> : '—'}</td>
                           <td className="py-2 px-4"><CertificateStatusBadge status={r.status} sentAt={r.sentAt} issuedAt={r.issuedAt} error={r.error} sentBy={r.sentBy} /></td>
+                          <td className="py-2 px-4 text-[11px] text-theme-text-secondary whitespace-nowrap">{fmtDateTime(r.issuedAt)}</td>
+                          <td className="py-2 px-4 text-[11px] text-theme-text-secondary whitespace-nowrap">{fmtDateTime(r.sentAt)}</td>
                         </tr>
                       ))}
                     </tbody>
