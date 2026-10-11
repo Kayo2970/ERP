@@ -8,8 +8,7 @@ import { readCollection, mutateCollection } from '@/lib/server-db';
 import { buildPassEmail, EventPassItem } from '@/lib/local-data';
 import { dispatchEmail } from '@/lib/email-service';
 import type { EmailBackgroundChoice } from '@/lib/email-background';
-import { renderBoardingPassPng } from '@/lib/pass-image';
-import { getPassTheme } from '@/lib/pass-theme';
+import { buildPassImageAttachment } from '@/lib/pass-email-send';
 
 export interface PassEmailScheduleItem {
   passId: string;
@@ -51,22 +50,16 @@ async function sendOne(item: PassEmailScheduleItem, schedule: PassEmailSchedule)
       ...(item.subjectTemplate !== undefined ? { subjectTemplate: item.subjectTemplate } : {}),
       ...(item.bodyTemplate !== undefined ? { bodyTemplate: item.bodyTemplate } : {}),
     });
-    const attachments: Array<{ filename: string; content: Buffer; contentType: string; cid: string }> = [];
-    try {
-      const png = await renderBoardingPassPng(pass, `${schedule.origin}/pass/${pass.serialNumber}`, await getPassTheme(pass.eventId));
-      attachments.push({ filename: `${pass.serialNumber}.png`, content: png, contentType: 'image/png', cid: 'leads-pass-image' });
-    } catch (imgErr) {
-      console.warn('[pass-email-scheduler] Boarding-pass image skipped:', imgErr);
-    }
+    const built = await buildPassImageAttachment(pass, schedule.origin, bodyHtml);
     await dispatchEmail({
       to: item.email,
       subject,
       bodyText,
-      bodyHtml,
+      bodyHtml: built.bodyHtml,
       category: 'EVENT_INVITATION',
       badgeText: 'Official Event Pass',
       badgeColor: '#0284c7',
-      attachments: attachments.length ? attachments : undefined,
+      attachments: built.attachments,
       background: schedule.background,
     });
     const now = new Date().toISOString();

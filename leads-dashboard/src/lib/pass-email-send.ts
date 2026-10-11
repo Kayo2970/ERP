@@ -18,15 +18,38 @@ export interface PassEmailPayload {
   background?: unknown;
 }
 
+/**
+ * Renders the pass image for inline attachment (one retry). If it still fails, the email's `cid:` reference is swapped
+ * for the hosted image URL so the recipient never sees a broken picture.
+ */
+export async function buildPassImageAttachment(pass: EventPassItem, origin: string, bodyHtml?: string) {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const png = await renderBoardingPassPng(pass, `${origin}/pass/${pass.serialNumber}`, await getPassTheme(pass.eventId));
+      return { attachments: [{ filename: `${pass.serialNumber}.png`, content: png, contentType: 'image/png', cid: 'leads-pass-image' }], bodyHtml };
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  console.warn('[pass-email] Boarding-pass image could not be rendered, using hosted image link:', lastErr);
+  return {
+    attachments: undefined,
+    bodyHtml: bodyHtml?.split('cid:leads-pass-image').join(`${origin}/api/pass/${encodeURIComponent(pass.serialNumber)}/image`),
+  };
+}
+
 export async function sendPassEmailFromPayload(p: PassEmailPayload | undefined, origin: string) {
   if (!p || !p.to || !p.subject || !p.bodyText) throw new Error('Pass email request is incomplete.');
-  const attachments: { filename: string; content: Buffer; contentType: string; cid: string }[] = [];
+  let attachments: { filename: string; content: Buffer; contentType: string; cid: string }[] | undefined;
+  let bodyHtml = p.bodyHtml;
   try {
     const passes = await readCollection<EventPassItem>('event_passes');
     const pass = passes.find((x) => x.serialNumber.toLowerCase() === String(p.passSerial).toLowerCase());
     if (pass && pass.status !== 'Cancelled') {
-      const png = await renderBoardingPassPng(pass, `${origin}/pass/${pass.serialNumber}`, await getPassTheme(pass.eventId));
-      attachments.push({ filename: `${pass.serialNumber}.png`, content: png, contentType: 'image/png', cid: 'leads-pass-image' });
+      const built = await buildPassImageAttachment(pass, origin, bodyHtml);
+      attachments = built.attachments;
+      bodyHtml = built.bodyHtml;
     }
   } catch (err) {
     console.warn('[pass-email-send] Boarding-pass image skipped:', err);
@@ -35,11 +58,11 @@ export async function sendPassEmailFromPayload(p: PassEmailPayload | undefined, 
     to: p.to,
     subject: p.subject,
     bodyText: p.bodyText,
-    bodyHtml: p.bodyHtml,
+    bodyHtml,
     badgeText: p.badgeText || 'Official Event Pass',
     badgeColor: p.badgeColor,
     category: (p.category as any) || 'EVENT_INVITATION',
-    attachments: attachments.length ? attachments : undefined,
+    attachments,
     background: cleanBackgroundChoice(p.background),
   });
 }
