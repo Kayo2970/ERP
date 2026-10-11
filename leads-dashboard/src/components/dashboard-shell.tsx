@@ -52,6 +52,7 @@ import { IosInstallPrompt } from '@/components/ios-install-prompt';
 import { NotFoundScreen } from '@/components/not-found-screen';
 import { LoadingScreen } from '@/components/loading-screen';
 import dynamic from 'next/dynamic';
+import { BackgroundTaskTray } from '@/components/background-task-tray';
 const OnboardingTour = dynamic(() => import('@/components/onboarding-tour').then((m) => m.OnboardingTour), { ssr: false });
 import { PromotionModal, PromotionData } from '@/components/promotion-modal';
 import { SyncStatusPill } from '@/components/ui/sync-status-pill';
@@ -1686,6 +1687,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             </div>
           </div>
         </header>
+
+        <BackgroundTaskTray offsetClass={isSidebarCollapsed ? 'md:left-24' : 'md:left-[17rem]'} />
 
         {/* Dashboard Pages Content */}
         <main className="flex-1 overflow-x-hidden">

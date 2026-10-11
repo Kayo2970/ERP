@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { authHeaders } from '@/lib/local-data';
+import { beginTask } from '@/lib/background-tasks';
 import {
   Mail, 
   Server, 
@@ -534,6 +535,7 @@ export default function EmailManagementPage() {
   const handleExecuteDispatch = async () => {
     setShowDispatchConfirm(false);
     setIsSendingDispatch(true);
+    const task = beginTask({ label: dispatchScope === 'SINGLE' ? 'Sending email' : 'Dispatching broadcast email' });
     try {
       let resolvedBadgeText: string | undefined = undefined;
       if (badgeOption === 'INVITATION') resolvedBadgeText = '🎉 Official Invitation';
@@ -560,6 +562,7 @@ export default function EmailManagementPage() {
       const data = await res.json();
       if (res.ok) {
         triggerToast('success', `Dispatched ${data.count} email notification(s) successfully.`);
+        task.finish(`Queued ${data.count} email${data.count === 1 ? '' : 's'} (10-minute hold applies).`);
         setSubject('');
         setBodyText('');
         setCustomRecipient('');
@@ -567,9 +570,11 @@ export default function EmailManagementPage() {
         fetchLogs();
       } else {
         triggerToast('error', data.error || 'Failed to dispatch emails.');
+        task.fail(data.error || 'Failed to dispatch emails.');
       }
     } catch (err: any) {
       triggerToast('error', err?.message || 'Error executing email dispatch.');
+      task.fail(err?.message || 'Error executing email dispatch.');
     } finally {
       setIsSendingDispatch(false);
     }

@@ -2,7 +2,8 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Users, Plus, UserPlus, Pencil, Award, X, Send, RefreshCw, CheckCircle2, AlertCircle, CheckSquare, Square, ImagePlus, Trash2, ChevronDown, ChevronRight, Download, CalendarClock, Check } from 'lucide-react';
-import { EventItem, Member, authHeaders, formatEventDateRange, getMembers } from '@/lib/local-data';
+import { EventItem, Member, TaskItem, authHeaders, formatEventDateRange, getMembers, getTasks } from '@/lib/local-data';
+import { beginTask } from '@/lib/background-tasks';
 import { CertificateStatusBadge, CERT_STATUS_FILTERS } from '@/components/certificate-status-badge';
 import { CertBox, CertBoxKey, CertLayout, CERT_BOX_LABELS, CERT_FONT_OPTIONS, DEFAULT_CERT_EMAIL, CERT_EMAIL_FIELDS, CERT_EMAIL_MAX_SUBJECT, CERT_EMAIL_MAX_BODY, mergeCertEmail } from '@/lib/certificate-layout';
 
@@ -120,9 +121,12 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
   const [pickerSelected, setPickerSelected] = useState<Set<string>>(new Set());
   const [pickerProgress, setPickerProgress] = useState('');
   const [members, setMembers] = useState<Member[]>([]);
+  const [taskList, setTaskList] = useState<TaskItem[]>([]);
+  const [pickerMode, setPickerMode] = useState<'directory' | 'event'>('directory');
+  const [pickerEventId, setPickerEventId] = useState('');
   useEffect(() => {
     if (!canPickMembers) return;
-    const read = () => setMembers(getMembers());
+    const read = () => { setMembers(getMembers()); setTaskList(getTasks()); };
     read();
     window.addEventListener('leads-data-sync', read);
     return () => window.removeEventListener('leads-data-sync', read);
@@ -389,6 +393,8 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     setRecipientSearch('');
     setEventId(nextEvent);
     setTypeId(nextType);
+    setPickerEventId('');
+    setPickerSelected(new Set());
     if (nextEvent !== eventId) setTypes([{ id: 'default', name: 'Participation' }]);
   };
 
@@ -491,6 +497,34 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     const q = pickerSearch.trim().toLowerCase();
     return !q || `${m.name} ${m.email} ${m.role} ${m.department || ''} ${m.division}`.toLowerCase().includes(q);
   });
+  // "By event": the people who organised / worked on an event — its committees (leads and members) and anyone given a task for it.
+  const pickerEvent = events.find((e) => e.id === (pickerEventId || eventId));
+  const pickableById = new Map(pickable.map((m) => [m.id, m]));
+  const matchesSearch = (m: Member) => {
+    const q = pickerSearch.trim().toLowerCase();
+    return !q || `${m.name} ${m.email} ${m.role} ${m.department || ''} ${m.division}`.toLowerCase().includes(q);
+  };
+  const eventGroups: Array<{ key: string; title: string; note?: string; people: Array<{ m: Member; lead?: boolean }> }> = [];
+  if (pickerEvent) {
+    for (const c of pickerEvent.committees || []) {
+      if (c.approvalStatus === 'rejected' || c.approvalStatus === 'pending_create') continue;
+      const ids = Array.from(new Set([...(c.leadMemberId ? [c.leadMemberId] : []), ...(c.memberIds || [])]));
+      const people = ids.map((id) => pickableById.get(id)).filter((m): m is Member => !!m && matchesSearch(m)).map((m) => ({ m, lead: m.id === c.leadMemberId }));
+      if (people.length) eventGroups.push({ key: c.id, title: c.name, people });
+    }
+    const taskIds = new Set<string>();
+    for (const t of taskList) if (t.eventId === pickerEvent.id) { if (t.assigneeId) taskIds.add(t.assigneeId); (t as any).assigneeIds?.forEach((id: string) => taskIds.add(id)); }
+    const taskPeople = Array.from(taskIds).map((id) => pickableById.get(id)).filter((m): m is Member => !!m && matchesSearch(m)).map((m) => ({ m }));
+    if (taskPeople.length) eventGroups.push({ key: 'tasks', title: 'Given a task for this event', note: 'Task assignees', people: taskPeople });
+  }
+  const groupSelectable = (g: { people: Array<{ m: Member }> }) => g.people.filter(({ m }) => !hasCert(m));
+  const toggleGroup = (g: { people: Array<{ m: Member }> }) => {
+    const ids = groupSelectable(g).map(({ m }) => m.id);
+    const allOn = ids.length > 0 && ids.every((id) => pickerSelected.has(id));
+    setPickerSelected((prev) => { const n = new Set(prev); ids.forEach((id) => (allOn ? n.delete(id) : n.add(id))); return n; });
+  };
+  const eventPeopleTotal = new Set(eventGroups.flatMap((g) => g.people.map(({ m }) => m.id))).size;
+  const selectEveryoneInEvent = () => setPickerSelected((prev) => { const n = new Set(prev); eventGroups.forEach((g) => groupSelectable(g).forEach(({ m }) => n.add(m.id))); return n; });
   const hasCert = (m: Member) => existingEmails.has(m.email.trim().toLowerCase());
   const memberDetails = (m: Member) => ({ name: m.name, email: m.email.trim(), organisation: m.department || 'LEADS Next Gen Centre', category: m.division === 'Alumni' ? 'Alumni' : m.role || m.division || '' });
   const togglePick = (id: string) => setPickerSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -513,6 +547,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     setMsg(null);
     let done = 0;
     const failed: string[] = [];
+    const task = beginTask({ label: `Adding ${chosen.length} member${chosen.length === 1 ? '' : 's'} to certificates`, total: chosen.length });
     try {
       if (saveState === 'dirty') await saveDesign();
       for (let i = 0; i < chosen.length; i += 5) {
@@ -525,12 +560,16 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
           }
           done += 1;
           setPickerProgress(`Adding ${done}/${chosen.length}…`);
+          task.progress(done, failed.length ? `${failed.length} could not be added` : undefined);
         }));
       }
       setMsg({ kind: failed.length ? 'err' : 'ok', text: `Added ${chosen.length - failed.length} member${chosen.length - failed.length === 1 ? '' : 's'} to the recipient list${failed.length ? `. Could not add: ${failed.join(', ')}` : ' — tick them and send or schedule below.'}` });
+      task.finish(`Added ${chosen.length - failed.length} of ${chosen.length} to the recipient list.`, { warn: failed.length > 0 });
       setPickerSelected(new Set());
       setPickerOpen(false);
       await load(true);
+    } catch (e: any) {
+      task.fail(e?.message || 'Could not add the selected people.');
     } finally {
       setPickerProgress('');
       setBusy(false);
@@ -559,6 +598,8 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     if (!window.confirm(sendMode === 'later' ? `Schedule ${ids.length} certificate${ids.length === 1 ? '' : 's'} for ${new Date(sendAt).toLocaleString()}?` : `Email ${ids.length} certificate${ids.length === 1 ? '' : 's'} now?`)) return;
     setBusy(true);
     setMsg(null);
+    const evName = events.find((e) => e.id === eventId)?.title || 'event';
+    const task = beginTask({ label: sendMode === 'later' ? `Scheduling ${ids.length} certificate${ids.length === 1 ? '' : 's'}` : `Sending ${ids.length} certificate${ids.length === 1 ? '' : 's'}`, total: 0, detail: `${evName} — generating PDFs and queueing emails…` });
     try {
       if (saveState === 'dirty') await saveDesign();
       const res = await fetch(`/api/events/${eventId}/certificates`, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ typeId, passIds: ids, sendAt: when, message: { subject: emailSubject, bodyText: emailBody } }) });
@@ -567,8 +608,10 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
       setMsg(data.scheduled
         ? { kind: 'ok', text: `Scheduled ${ids.length} certificate${ids.length === 1 ? '' : 's'} for ${new Date(data.schedule.sendAt).toLocaleString()}.` }
         : { kind: data.failed ? 'err' : 'ok', text: `Sent ${data.sent} certificate${data.sent === 1 ? '' : 's'}${data.failed ? `, ${data.failed} failed (see the list)` : ''}.` });
+      task.finish(data.scheduled ? `Scheduled ${ids.length} certificate${ids.length === 1 ? '' : 's'} for ${new Date(data.schedule.sendAt).toLocaleString()}.` : `${data.sent} certificate${data.sent === 1 ? '' : 's'} queued${data.failed ? `, ${data.failed} failed` : ''} (10-minute hold applies).`, { warn: !data.scheduled && data.failed > 0 });
       await load(true);
     } catch (e: any) {
+      task.fail(e.message);
       setMsg({ kind: 'err', text: e.message });
     } finally {
       setBusy(false);
@@ -937,17 +980,71 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                           <div className="rounded-xl border border-slate-200 dark:border-white/10">
                             <button type="button" onClick={() => setPickerOpen((o) => !o)} className="w-full flex items-center gap-2 px-3 py-2 text-left cursor-pointer">
                               <Users className="h-4 w-4 text-accent" />
-                              <span className="flex-1 font-bold text-slate-800 dark:text-white">Pick from Members Directory</span>
+                              <span className="flex-1 font-bold text-slate-800 dark:text-white">Pick people — Members Directory or an event&apos;s team</span>
                               {pickerOpen ? <ChevronDown className="h-4 w-4 text-slate-400" /> : <ChevronRight className="h-4 w-4 text-slate-400" />}
                             </button>
                             {pickerOpen && (
                               <div className="px-3 pb-3 space-y-2">
+                                <div className="flex gap-1.5 text-[11px] font-bold">
+                                  {([['directory', 'Members Directory'], ['event', 'By event (committees & team)']] as const).map(([k, lab]) => (
+                                    <button key={k} type="button" onClick={() => setPickerMode(k)} className={`px-3 py-1.5 rounded-lg border cursor-pointer ${pickerMode === k ? 'bg-accent text-white border-accent' : 'border-slate-300 dark:border-white/15 text-slate-600 dark:text-slate-300'}`}>{lab}</button>
+                                  ))}
+                                </div>
+                                {pickerMode === 'event' && (
+                                  <select className={field} value={pickerEvent?.id || ''} onChange={(e) => setPickerEventId(e.target.value)}>
+                                    {events.filter((e) => !e.isHoliday).map((e) => <option key={e.id} value={e.id} className="bg-slate-900 text-white">{e.title}{e.id === eventId ? ' (this event)' : ''}</option>)}
+                                  </select>
+                                )}
                                 <input className={field} placeholder="Search name, email, role or department" value={pickerSearch} onChange={(e) => setPickerSearch(e.target.value)} />
+                                {pickerMode === 'directory' && (
                                 <div className="flex flex-wrap gap-1.5 text-[10px] font-bold">
                                   {['ALL', ...pickerDivisions].map((d) => (
                                     <button key={d} type="button" onClick={() => setPickerDivision(d)} className={`px-2 py-0.5 rounded-full border cursor-pointer ${pickerDivision === d ? 'bg-accent/20 text-accent border-accent/40' : 'border-slate-300 dark:border-white/15 text-slate-500'}`}>{d === 'ALL' ? 'All' : d}</button>
                                   ))}
                                 </div>
+                                )}
+                                {pickerMode === 'event' && (
+                                  <div className="border border-slate-200 dark:border-white/10 rounded-xl max-h-64 overflow-y-auto">
+                                    {eventGroups.length === 0 ? (
+                                      <div className="py-4 px-3 text-center text-slate-400">{pickerEvent ? 'No committee members or task assignees with an email for this event.' : 'Pick an event.'}</div>
+                                    ) : (
+                                      <>
+                                        <div className="flex items-center justify-between gap-2 px-2 py-1.5 bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10">
+                                          <span className="text-[10px] font-bold text-slate-500">{eventPeopleTotal} {eventPeopleTotal === 1 ? 'person' : 'people'} across {eventGroups.length} group{eventGroups.length === 1 ? '' : 's'}</span>
+                                          <button type="button" onClick={selectEveryoneInEvent} className="text-[11px] font-bold text-accent hover:underline cursor-pointer">Select everyone</button>
+                                        </div>
+                                        {eventGroups.map((g) => {
+                                          const sel = groupSelectable(g);
+                                          const allOn = sel.length > 0 && sel.every(({ m }) => pickerSelected.has(m.id));
+                                          return (
+                                            <div key={g.key} className="border-b last:border-b-0 border-slate-200 dark:border-white/10">
+                                              <div className="flex items-center justify-between gap-2 px-2 py-1.5">
+                                                <span className="font-extrabold text-slate-800 dark:text-white break-words">{g.title} <span className="text-[10px] font-bold text-slate-400">({g.people.length})</span></span>
+                                                <button type="button" disabled={sel.length === 0} onClick={() => toggleGroup(g)} className="text-[11px] font-bold text-accent hover:underline cursor-pointer disabled:opacity-40 shrink-0">{allOn ? 'Deselect group' : 'Select group'}</button>
+                                              </div>
+                                              <div className="divide-y divide-slate-100 dark:divide-white/5">
+                                                {g.people.map(({ m, lead }) => {
+                                                  const has = hasCert(m);
+                                                  return (
+                                                    <label key={m.id} className={`flex items-center gap-2 px-2 py-1.5 ${has ? 'opacity-50' : 'hover:bg-white/10 cursor-pointer'}`}>
+                                                      <input type="checkbox" disabled={has} checked={pickerSelected.has(m.id)} onChange={() => togglePick(m.id)} />
+                                                      <span className="min-w-0 flex-1">
+                                                        <span className="font-bold text-slate-900 dark:text-white block break-words">{m.name}{lead && <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500 align-middle">Lead</span>}</span>
+                                                        <span className="text-[10px] text-slate-400 block break-all">{m.email} · {m.role}</span>
+                                                      </span>
+                                                      {has && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 shrink-0">Already has one</span>}
+                                                    </label>
+                                                  );
+                                                })}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </>
+                                    )}
+                                  </div>
+                                )}
+                                {pickerMode === 'directory' && (
                                 <div className="border border-slate-200 dark:border-white/10 rounded-xl divide-y divide-slate-100 dark:divide-white/5 max-h-48 overflow-y-auto">
                                   {pickerRows.length === 0 && <div className="py-4 text-center text-slate-400">{members.length === 0 ? 'No members loaded yet.' : 'No members match.'}</div>}
                                   {pickerRows.map((m) => {
@@ -964,6 +1061,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                                     );
                                   })}
                                 </div>
+                                )}
                                 <div className="flex flex-wrap items-center gap-2">
                                   <button type="button" disabled={busy || pickerSelected.size !== 1} onClick={fillFromMember} className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-white font-bold cursor-pointer disabled:opacity-50">Fill the form with this member</button>
                                   <button type="button" disabled={busy || !canSend || pickerSelected.size === 0} onClick={addPickedMembers} className="px-3 py-2 rounded-xl bg-accent text-white font-extrabold cursor-pointer disabled:opacity-50">Add {pickerSelected.size || ''} selected as recipients</button>

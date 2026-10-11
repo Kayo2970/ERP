@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { beginTask } from '@/lib/background-tasks';
 import { CertificateStatusBadge, CERT_STATUS_FILTERS } from '@/components/certificate-status-badge';
 import {
   Award,
@@ -262,10 +263,15 @@ export default function EventPassesPage() {
 
     setIsBatchDispatching(true);
     let successCount = 0;
+    let doneCount = 0;
+    const task = beginTask({ label: `Dispatching ${unsent.length} pass email${unsent.length === 1 ? '' : 's'}`, total: unsent.length });
     for (const pass of unsent) {
       const res = await dispatchPassEmail(pass);
       if (res.success) successCount++;
+      doneCount++;
+      task.progress(doneCount, `${successCount} sent${doneCount - successCount ? `, ${doneCount - successCount} failed` : ''}`);
     }
+    task.finish(`${successCount} of ${unsent.length} pass emails dispatched.`, { warn: successCount < unsent.length });
     setIsBatchDispatching(false);
     setEventPasses(getEventPasses());
     triggerSuccess(`Successfully dispatched ${successCount} of ${unsent.length} pass emails!`);

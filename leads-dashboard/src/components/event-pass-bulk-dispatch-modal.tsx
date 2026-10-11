@@ -1,5 +1,6 @@
 'use client';
 
+import { beginTask } from '@/lib/background-tasks';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, X, Send, Mail, CheckCircle2, AlertTriangle, ExternalLink, Loader2 } from 'lucide-react';
 import { PassEmailComposer, usePassEmailTemplate } from '@/components/pass-email-composer';
@@ -68,7 +69,7 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       if (e.key === 'ArrowLeft') go(-1);
       else if (e.key === 'ArrowRight') go(1);
-      else if (e.key === 'Escape' && !isSending) onClose();
+      else if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -88,18 +89,29 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
     if (!only && !window.confirm(`Send ${list.length} pass email${list.length === 1 ? '' : 's'} now? They enter the normal 10-minute email hold before delivery.`)) return;
     setIsSending(true);
     stopRef.current = false;
+    // Tracked in the bottom-left tray, so it keeps going (and stays visible) if the modal is closed or the module changed.
+    const stop = stopRef;
+    const task = beginTask({ label: `Sending ${list.length} pass email${list.length === 1 ? '' : 's'}`, total: list.length, onCancel: () => { stop.current = true; } });
+    let okCount = 0;
+    let failCount = 0;
+    let doneCount = 0;
     for (const p of list) {
       if (stopRef.current) break;
       setStatus((s) => ({ ...s, [p.id]: { state: 'sending' } }));
       try {
         const res = await dispatchPassEmail(p, emails[p.id].trim(), passEmailOptsFromTemplate(template));
         setStatus((s) => ({ ...s, [p.id]: res.success ? { state: 'ok' } : { state: 'failed', error: res.error } }));
+        if (res.success) okCount++; else failCount++;
       } catch (err: any) {
         setStatus((s) => ({ ...s, [p.id]: { state: 'failed', error: err?.message || 'Network error' } }));
+        failCount++;
       }
+      doneCount++;
+      task.progress(doneCount, `${okCount} sent${failCount ? `, ${failCount} failed` : ''}`);
       await new Promise((r) => setTimeout(r, 250)); // gentle pacing
     }
     setIsSending(false);
+    task.finish(`${okCount} of ${list.length} pass email${list.length === 1 ? '' : 's'} sent${stopRef.current ? ' (stopped early)' : ''}${failCount ? `, ${failCount} failed` : ''}.`, { warn: failCount > 0 || stopRef.current });
     onDone();
   };
 
@@ -120,7 +132,7 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
             <h3 className="text-sm font-black truncate">Preview &amp; dispatch passes</h3>
             <span className="text-[11px] font-semibold text-slate-400 shrink-0">{safeIndex + 1} of {total}</span>
           </div>
-          <button type="button" onClick={onClose} disabled={isSending} className="p-1.5 rounded-lg hover:bg-white/10 disabled:opacity-40 cursor-pointer" aria-label="Close">
+          <button type="button" onClick={onClose} title={isSending ? 'Close — sending carries on in the background' : 'Close'} className="p-1.5 rounded-lg hover:bg-white/10 cursor-pointer" aria-label="Close">
             <X className="h-4 w-4" />
           </button>
         </div>

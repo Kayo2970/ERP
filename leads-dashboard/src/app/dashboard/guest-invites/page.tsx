@@ -1,5 +1,6 @@
 'use client';
 
+import { beginTask } from '@/lib/background-tasks';
 import React, { useState, useEffect } from 'react';
 import {
   Send,
@@ -255,6 +256,7 @@ export default function GuestInvitesPage() {
 
     let sent = 0;
     let failed = 0;
+    const task = beginTask({ label: `Sending ${guests.length} guest invite${guests.length === 1 ? '' : 's'}`, total: guests.length });
 
     let resolvedBadgeText: string | undefined = undefined;
     if (badgeOption === 'INVITATION') resolvedBadgeText = '🎉 Official Invitation';
@@ -287,9 +289,11 @@ export default function GuestInvitesPage() {
         failed++;
       }
       setSendProgress(prev => ({ ...prev, sent, failed }));
+      task.progress(sent + failed, `${sent} sent${failed ? `, ${failed} failed` : ''}`);
     }
 
     setIsSending(false);
+    task.finish(failed === 0 ? `All ${sent} invite${sent === 1 ? '' : 's'} sent.` : `${sent} sent, ${failed} failed — see Email Management > Outbox.`, { warn: failed > 0 });
     logAuditEvent(
       'GUEST_INVITES_SENT',
       user?.name || 'Centre Head',
