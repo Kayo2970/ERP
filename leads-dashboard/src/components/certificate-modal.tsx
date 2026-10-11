@@ -296,6 +296,18 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
               <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-5">
                 <div className="space-y-3">
                   {!canEditDesign && <p className="text-amber-500 font-semibold">You can preview the design but not change it.</p>}
+                  <div className="p-3 rounded-2xl border border-slate-200 dark:border-white/10">
+                    <label className={label}>Include on the certificate</label>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                      {(Object.keys(CERT_BOX_LABELS) as CertBoxKey[]).map((k) => (
+                        <label key={k} className={`flex items-center gap-2 font-bold cursor-pointer ${activeBox === k ? 'text-accent' : 'text-slate-700 dark:text-slate-200'}`}>
+                          <input type="checkbox" checked={template.layout[k].enabled} disabled={!canEditDesign} onChange={(e) => { patchBox(k, { enabled: e.target.checked }); if (e.target.checked) setActiveBox(k); }} />
+                          <span onClick={(e) => { e.preventDefault(); setActiveBox(k); }}>{CERT_BOX_LABELS[k]}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1.5">Untick anything you don&apos;t want printed. Click a name to edit its box.</p>
+                  </div>
                   <div><label className={label}>Heading</label><input className={field} value={template.title} onChange={(e) => setTemplate({ ...template, title: e.target.value })} disabled={!canEditDesign} /></div>
                   <div><label className={label}>Intro line (above the name)</label><input className={field} value={template.introText} onChange={(e) => setTemplate({ ...template, introText: e.target.value })} disabled={!canEditDesign} /></div>
                   <div>
