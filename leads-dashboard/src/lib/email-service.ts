@@ -48,7 +48,7 @@ export interface EmailLog {
   status: 'SENT' | 'FAILED' | 'BUFFERED' | 'CANCELLED';
   sentAt: string;
   bufferedUntil?: string; // ISO timestamp when the 10-minute quiet buffer elapses
-  attachmentsMeta?: Array<{ filename: string; contentType?: string }>;
+  attachmentsMeta?: Array<{ filename: string; contentType?: string; cid?: string }>;
   /** Storage keys of the attachment files held while the email waits in the buffer (deleted once it is sent or cancelled). */
   attachmentKeys?: string[];
   attachmentFolder?: string;
@@ -680,7 +680,7 @@ async function sendImmediateEmail(payload: SendEmailPayload): Promise<EmailLog> 
     errorMessage: result.errorMessage,
     smtpResponse: result.smtpResponse,
     rejectedRecipients: result.rejectedRecipients,
-    attachmentsMeta: payload.attachments?.map(a => ({ filename: a.filename, contentType: a.contentType })),
+    attachmentsMeta: payload.attachments?.map(a => ({ filename: a.filename, contentType: a.contentType, ...(a.cid ? { cid: a.cid } : {}) })),
   };
 
   try {
@@ -700,7 +700,7 @@ async function sendImmediateEmail(payload: SendEmailPayload): Promise<EmailLog> 
 const ATTACHMENT_CATEGORY = 'email-attachments';
 
 async function persistAttachments(payload: SendEmailPayload): Promise<{ keys: string[]; folder: string } | null> {
-  const files = (payload.attachments || []).filter((a) => !a.cid && a.content);
+  const files = (payload.attachments || []).filter((a) => a.content);
   if (files.length === 0) return null;
   const folder = crypto.randomBytes(16).toString('hex');
   try {
@@ -725,6 +725,7 @@ async function loadPersistedAttachments(log: EmailLog): Promise<SendEmailPayload
       out.push({
         filename: log.attachmentsMeta?.[i]?.filename || `attachment-${i + 1}`,
         contentType: log.attachmentsMeta?.[i]?.contentType,
+        cid: log.attachmentsMeta?.[i]?.cid,
         content: await readStoredFile(log.attachmentKeys[i]),
       });
     } catch (err) {
@@ -922,7 +923,7 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
     status: 'BUFFERED',
     sentAt: queuedAt,
     bufferedUntil,
-    attachmentsMeta: payload.attachments?.map(a => ({ filename: a.filename, contentType: a.contentType })),
+    attachmentsMeta: payload.attachments?.map(a => ({ filename: a.filename, contentType: a.contentType, ...(a.cid ? { cid: a.cid } : {}) })),
   };
   const persisted = await persistAttachments(payload);
   if (persisted) {
