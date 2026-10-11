@@ -20,7 +20,7 @@ import { getRatings, getMembers, getEvents, getTasks, RatingItem, Member, EventI
 import { getRatingColor } from '@/lib/design-tokens';
 import { buildStudentFinalScores, QUALITY_WEIGHT, TASK_COUNT_WEIGHT, TASK_COUNT_TARGET } from '@/lib/final-score';
 import { canViewRating, isFaculty, isSocialMediaTeamMember } from '@/lib/permissions';
-import type { ReportType, CapturedChartImage } from '@/lib/report-generator';
+import type { ReportType } from '@/lib/report-generator';
 import { BarChart3, Download, FileText, Star, Loader2 } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 import { PeriodFilter } from '@/components/period-filter';
@@ -196,12 +196,35 @@ export default function ReportsPage() {
   const totalEventsInPeriod = events.filter(e => !e.datesTBD && !!e.startDate && e.startDate <= todayIso && isWithinPeriod(e.startDate, periodFilter)).length;
   const studentFinalScores = buildStudentFinalScores(filteredRatings, totalEventsInPeriod || undefined);
 
+  // Unique Targets List for selector — professors and ineligible members strictly excluded
+  const targets = Array.from(new Set(
+    ratings
+      .filter(r => {
+        // Direct correlation check: if there is not any task, then it makes no sense that there would be a rating for said task!
+        if (!r.taskId || !tasks.some(t => t.id === r.taskId)) return false;
+        if (r.isGroupPlaceholder) return false;
+        if (!canViewRating(r, user)) return false;
+        const targetMember = members.find(m => m.id === r.targetId || m.name.toLowerCase() === r.targetName.toLowerCase());
+        if (targetMember && isFaculty(targetMember)) return false;
+        if (/prof\.|professor|faculty/i.test(r.targetName)) return false;
+        return true;
+      })
+      .map(r => r.targetName)
+  )).sort((a, b) => a.localeCompare(b));
+
+  // A student (or anyone who can only see one person's evaluations) downloads a PERSONAL report: only their own
+  // evaluations, with the task-wise and event-wise breakdowns. The same layout is used whenever a single member is in scope.
+  const onlyOwnData = targets.length <= 1;
+  const scopedNames = Array.from(new Set(filteredRatings.map(r => r.targetName)));
+  const personalSubject = selectedTarget !== 'All' ? selectedTarget : scopedNames.length === 1 ? scopedNames[0] : undefined;
+  const effectiveBreakdown = personalSubject && barBreakdown === 'student' ? 'event' : barBreakdown;
+
   // Bar Data with dynamic color tokens from design system — grouped
   // according to barBreakdown so a student (or event) with several rated
   // tasks shows up as ONE bar (their average), instead of one bar per task
   // with the same name repeated across the chart.
   const barData = (() => {
-    if (barBreakdown === 'task') {
+    if (effectiveBreakdown === 'task') {
       // Detailed view: one bar per individual evaluated deliverable —
       // repeated names here are expected, this is the "show me everything" mode.
       return filteredRatings.map(r => ({
@@ -212,7 +235,7 @@ export default function ReportsPage() {
       }));
     }
 
-    const groupKeyOf = (r: RatingItem) => barBreakdown === 'event' ? (r.eventName || 'Standalone / No Event') : r.targetName;
+    const groupKeyOf = (r: RatingItem) => effectiveBreakdown === 'event' ? (r.eventName || 'Standalone / No Event') : r.targetName;
     const groups = new Map<string, RatingItem[]>();
     filteredRatings.forEach(r => {
       const key = groupKeyOf(r);
@@ -223,7 +246,7 @@ export default function ReportsPage() {
     return Array.from(groups.entries())
       .map(([key, group]) => {
         const rawAvg = group.reduce((sum, r) => sum + r.overallScore, 0) / group.length;
-        const finalRow = barBreakdown === 'student' ? studentFinalScores.find(s => s.name === key) : undefined;
+        const finalRow = effectiveBreakdown === 'student' ? studentFinalScores.find(s => s.name === key) : undefined;
         const avg = finalRow ? finalRow.finalScore : parseFloat(rawAvg.toFixed(1));
         return {
           name: key,
@@ -236,21 +259,6 @@ export default function ReportsPage() {
       })
       .sort((a, b) => b.score - a.score);
   })();
-
-  // Unique Targets List for selector — professors and ineligible members strictly excluded
-  const targets = Array.from(new Set(
-    ratings
-      .filter(r => {
-        // Direct correlation check: if there is not any task, then it makes no sense that there would be a rating for said task!
-        if (!r.taskId || !tasks.some(t => t.id === r.taskId)) return false;
-        if (r.isGroupPlaceholder) return false;
-        const targetMember = members.find(m => m.id === r.targetId || m.name.toLowerCase() === r.targetName.toLowerCase());
-        if (targetMember && isFaculty(targetMember)) return false;
-        if (/prof\.|professor|faculty/i.test(r.targetName)) return false;
-        return true;
-      })
-      .map(r => r.targetName)
-  )).sort((a, b) => a.localeCompare(b));
 
   const handleDownloadReport = () => {
     if (filteredRatings.length === 0) {
@@ -273,13 +281,10 @@ export default function ReportsPage() {
     document.body.removeChild(link);
   };
 
-  /** Rasterizes an on-screen chart container to a PNG data URL for embedding in the PDF. */
-  const captureChart = async (el: HTMLDivElement | null): Promise<CapturedChartImage | undefined> => {
-    if (!el) return undefined;
-    const html2canvas = (await import('html2canvas')).default;
-    const canvas = await html2canvas(el, { backgroundColor: '#0f172a', scale: 2, logging: false });
-    return { dataUrl: canvas.toDataURL('image/png'), width: canvas.width, height: canvas.height };
-  };
+  // The personal layout has no "student-wise" section — fall back to the complete report.
+  useEffect(() => {
+    if (personalSubject && reportType === 'student') setReportType('overall');
+  }, [personalSubject, reportType]);
 
   const handleGenerateReport = async () => {
     if (filteredRatings.length === 0) {
@@ -288,28 +293,24 @@ export default function ReportsPage() {
     }
     setIsGeneratingReport(true);
     try {
-      // Capture the same charts currently on screen, so the PDF shows literally
-      // the same graphics as the dashboard rather than rebuilding them.
-      const [radar, bar] = await Promise.all([
-        captureChart(radarChartRef.current),
-        captureChart(barChartRef.current),
-      ]);
-
-      // Loaded on demand — jspdf is large and only needed when a report is exported.
+      // Loaded on demand — jspdf is large and only needed when a report is exported. Charts are drawn natively in the PDF.
       const { generatePerformanceReportPdf } = await import('@/lib/report-generator');
       generatePerformanceReportPdf({
         ratings: filteredRatings,
+        rawRatings: rawFilteredRatings,
         averages,
         scope: {
           division: selectedDivision === 'ALL' ? 'All Divisions' : selectedDivision,
-          member: selectedTarget === 'All' ? 'All Evaluated Members' : selectedTarget,
+          member: personalSubject || (selectedTarget === 'All' ? 'All Evaluated Members' : selectedTarget),
           period: periodLabel(periodFilter),
         },
         generatedBy: user?.name || 'LEADS Dashboard User',
         reportType,
         events,
+        tasks,
+        totalEventsInPeriod,
+        subject: personalSubject,
         members: members.filter(m => !isFaculty(m)),
-        chartImages: { radar, bar },
       });
     } finally {
       setIsGeneratingReport(false);
@@ -334,7 +335,7 @@ export default function ReportsPage() {
             title="Generate a comprehensive PDF report"
           >
             {isGeneratingReport ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-            {isGeneratingReport ? 'Generating...' : 'Download Report (PDF)'}
+            {isGeneratingReport ? 'Generating...' : personalSubject && onlyOwnData ? 'Download My Report (PDF)' : personalSubject ? `Download ${personalSubject}'s Report (PDF)` : 'Download Report (PDF)'}
           </button>
 
           <button
@@ -365,13 +366,25 @@ export default function ReportsPage() {
             onChange={(e) => setReportType(e.target.value as ReportType)}
             className="w-full px-3 py-2 bg-theme-background/30 border border-theme-border/40 rounded-xl text-xs text-theme-text-primary focus:outline-none focus:border-accent"
           >
-            <option value="overall">Overall (Event-wise + Student-wise)</option>
-            <option value="event">Event-wise Breakdown</option>
-            <option value="student">Student-wise Breakdown</option>
+            {personalSubject ? (
+              <>
+                <option value="overall">Complete report (summary + event-wise + task-wise)</option>
+                <option value="event">Event-wise report (summary + each event)</option>
+                <option value="task">Task-wise report (summary + each task)</option>
+              </>
+            ) : (
+              <>
+                <option value="overall">Overall (Event-wise + Student-wise + Task-wise)</option>
+                <option value="event">Event-wise Breakdown</option>
+                <option value="student">Student-wise Breakdown</option>
+                <option value="task">Task-wise Breakdown</option>
+              </>
+            )}
           </select>
         </div>
 
-        {/* Division Filter */}
+        {/* Division Filter — pointless when the viewer can only ever see their own evaluations */}
+        {!onlyOwnData && (
         <div className="space-y-1.5">
           <label className="block text-xs font-semibold text-theme-text-secondary uppercase">Division Scope</label>
           <select
@@ -386,8 +399,10 @@ export default function ReportsPage() {
             <option value="Alumni">Alumni Mentors</option>
           </select>
         </div>
+        )}
 
         {/* Filter by Specific Member */}
+        {!onlyOwnData ? (
         <div className="space-y-1.5">
           <label className="block text-xs font-semibold text-theme-text-secondary uppercase">
             Filter by Member
@@ -400,6 +415,12 @@ export default function ReportsPage() {
             options={targets.map(t => ({ value: t, label: t }))}
           />
         </div>
+        ) : (
+        <div className="space-y-1.5 md:col-span-2">
+          <label className="block text-xs font-semibold text-theme-text-secondary uppercase">Your report</label>
+          <p className="text-xs text-theme-text-secondary leading-relaxed">The PDF contains only your own evaluations — a summary, event-wise breakdown, task-wise breakdown, charts and every evaluator&apos;s remarks.</p>
+        </div>
+        )}
 
         {/* Time Period Selector: month or custom date range */}
         <div className="space-y-1.5">
@@ -505,19 +526,19 @@ export default function ReportsPage() {
               <div>
                 <h3 className="font-bold text-sm text-theme-text-primary">Deliverable Performance Distribution</h3>
                 <p className="text-[11px] text-theme-text-secondary">
-                  {barBreakdown === 'student' && 'One bar per student — final score (average rating weighted with participation across all events)'}
-                  {barBreakdown === 'event' && 'One bar per event — the average score of everyone evaluated on it'}
-                  {barBreakdown === 'task' && 'One bar per individual evaluated deliverable (detailed view)'}
+                  {effectiveBreakdown === 'student' && 'One bar per student — final score (average rating weighted with participation across all events)'}
+                  {effectiveBreakdown === 'event' && (personalSubject ? 'One bar per event — your average score in it' : 'One bar per event — the average score of everyone evaluated on it')}
+                  {effectiveBreakdown === 'task' && 'One bar per individual evaluated deliverable (detailed view)'}
                 </p>
               </div>
               <div className="flex items-center gap-1 p-0.5 bg-theme-background/40 border border-theme-border/40 rounded-lg print:hidden">
-                {(['student', 'event', 'task'] as const).map(mode => (
+                {(personalSubject ? (['event', 'task'] as const) : (['student', 'event', 'task'] as const)).map(mode => (
                   <button
                     key={mode}
                     type="button"
                     onClick={() => setBarBreakdown(mode)}
                     className={`px-2.5 py-1 text-[10px] font-semibold rounded-md transition-all cursor-pointer ${
-                      barBreakdown === mode
+                      effectiveBreakdown === mode
                         ? 'bg-accent text-white'
                         : 'text-theme-text-secondary hover:text-theme-text-primary'
                     }`}
