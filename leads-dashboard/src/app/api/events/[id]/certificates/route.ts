@@ -9,6 +9,7 @@ import { CertificateRecord, cleanTypeId, getCertificateStatuses, getCertificateT
 import { cleanCertEmail } from '@/lib/certificate-layout';
 import { CertificateSchedule } from '@/lib/certificate-scheduler';
 import { scheduledMap } from '@/lib/certificate-selection';
+import { cleanBackgroundChoice } from '@/lib/email-background';
 import { mutateCollection } from '@/lib/server-db';
 
 export const dynamic = 'force-dynamic';
@@ -67,6 +68,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     let passIds = body.passIds;
     const typeId = cleanTypeId(body.typeId);
     const message = cleanCertEmail(body.message);
+    const background = cleanBackgroundChoice((body as { background?: unknown }).background);
     if (!Array.isArray(passIds) || passIds.length === 0) return NextResponse.json({ error: 'Choose at least one attendee.' }, { status: 400 });
     if (passIds.length > 500) return NextResponse.json({ error: 'Send at most 500 certificates at a time.' }, { status: 400 });
     const event = (await readCollection<EventItem>('events')).find((e) => e.id === id);
@@ -95,6 +97,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         sendAt: when.toISOString(),
         origin,
         message,
+        ...(background ? { background } : {}),
         createdBy: auth.user?.name || 'Staff',
         createdAt: new Date().toISOString(),
         status: 'Scheduled',
@@ -104,7 +107,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     if (!isEventOver(event)) return NextResponse.json({ error: "Certificates can be sent from the event's last day." }, { status: 400 });
-    const results = await sendCertificatesBatch(event, passIds, origin, emails, message, auth.user?.name || 'Staff', typeId);
+    const results = await sendCertificatesBatch(event, passIds, origin, emails, message, auth.user?.name || 'Staff', typeId, background);
     return NextResponse.json({ sent: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length, results, skippedScheduled });
   } catch (err) {
     return apiError(err, 'certificates:send');

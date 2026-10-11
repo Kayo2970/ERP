@@ -25,6 +25,7 @@ import {
 import { logAuditEvent, getGuests, getMembers, Guest as DirectoryGuest, Member, authHeaders } from '@/lib/local-data';
 import { canManageGuestInvites } from '@/lib/permissions';
 import { EmptyState } from '@/components/ui/empty-state';
+import { EmailBackgroundPicker, DEFAULT_BACKGROUND_PICK, backgroundChoiceFor, type EmailBackgroundPick } from '@/components/email-background-picker';
 import { ComposedAttachment, filesToAttachments, formatBytes, buildAttachmentNoticeLine, MAX_TOTAL_ATTACHMENT_BYTES } from '@/lib/email-attachments';
 
 interface Guest {
@@ -212,6 +213,7 @@ export default function GuestInvitesPage() {
 
   const [badgeOption, setBadgeOption] = useState<string>('NONE');
   const [customBadgeText, setCustomBadgeText] = useState<string>('');
+  const [bgPick, setBgPick] = useState<EmailBackgroundPick>(DEFAULT_BACKGROUND_PICK);
 
   const [attachments, setAttachments] = useState<ComposedAttachment[]>([]);
   const [isProcessingAttachments, setIsProcessingAttachments] = useState(false);
@@ -281,6 +283,7 @@ export default function GuestInvitesPage() {
             bodyText: applyMailMerge(bodyText, guest.name, guest.email),
             category: 'GUEST_INVITE',
             badgeText: resolvedBadgeText,
+            background: backgroundChoiceFor(bgPick),
             attachments: payloadAttachments,
           }),
         });
@@ -500,6 +503,7 @@ export default function GuestInvitesPage() {
                   />
                 )}
               </div>
+              <EmailBackgroundPicker value={bgPick} onChange={setBgPick} disabled={isSending} />
               <div className="space-y-1.5">
                 <label className="block text-[11px] font-medium text-theme-text-secondary">Subject</label>
                 <input

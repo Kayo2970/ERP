@@ -6,6 +6,7 @@ import { gateEventPassAction } from '@/lib/approval-gate';
 import { getAccessLevelSettingsServer, canManageEmailSettings } from '@/lib/permissions-server';
 import { EventPassItem } from '@/lib/local-data';
 import { PassEmailSchedule, PassEmailScheduleItem } from '@/lib/pass-email-scheduler';
+import { cleanBackgroundChoice } from '@/lib/email-background';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -79,6 +80,7 @@ export async function POST(request: Request) {
         includeWhatsapp: !!t.includeWhatsapp,
         whatsappUrl: clip(t.whatsappUrl, 500),
       },
+      background: cleanBackgroundChoice(body.background),
       sendAt: when.toISOString(),
       origin: new URL(request.url).origin,
       eventNames: Array.from(eventNames),

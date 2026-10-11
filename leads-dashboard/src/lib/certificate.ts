@@ -11,6 +11,7 @@ import { saveBase64File, readStoredFile, deleteStoredFile, deleteStoredFilesForR
 import { dispatchEmail, EmailLog } from '@/lib/email-service';
 import { getAppBaseUrl } from '@/lib/app-url';
 import { drawStyledQr } from '@/lib/qr-style';
+import type { EmailBackgroundChoice } from '@/lib/email-background';
 import { registerCustomFonts } from '@/lib/certificate-fonts';
 import { customFamily } from '@/lib/certificate-fonts';
 import { CERT_W, CERT_H, CERT_FONT_OPTIONS, CertBox, CertLayout, DEFAULT_CERT_LAYOUT, normalizeLayout, isCustomFont, CertEmailMessage, DEFAULT_CERT_EMAIL, mergeCertEmail } from '@/lib/certificate-layout';
@@ -554,7 +555,8 @@ async function sendRecord(
   recipient: string,
   message?: CertEmailMessage,
   sentBy?: string,
-  pass?: EventPassItem
+  pass?: EventPassItem,
+  background?: EmailBackgroundChoice
 ): Promise<{ ok: boolean; error?: string; record: CertificateRecord }> {
   try {
     if (!recipient) throw new Error('No email address.');
@@ -568,6 +570,7 @@ async function sendRecord(
       bodyText: mergeCertEmail(msg.bodyText, vars),
       category: 'CERTIFICATE',
       attachments: [{ filename: `Certificate-${rec.attendeeName.replace(/[^\w]+/g, '_')}.pdf`, content: pdf, contentType: 'application/pdf' }],
+      background,
     });
     const sentAt = new Date().toISOString();
     await mutateCollection<CertificateRecord>('certificates', (cur = []) => cur.map((c) => (c.id === rec.id ? { ...c, status: 'Sent', sentAt, error: undefined, emailLogId: log?.id, sentBy, ...(recipient !== c.attendeeEmail && c.manual ? { attendeeEmail: recipient } : {}) } : c)));
@@ -587,15 +590,16 @@ export async function sendCertificate(
   message?: CertEmailMessage,
   sentBy?: string,
   typeId?: string | null,
-  typeName?: string
+  typeName?: string,
+  background?: EmailBackgroundChoice
 ): Promise<{ ok: boolean; error?: string; record: CertificateRecord }> {
   const rec = await ensureCertificateRecord(pass, event, typeId, typeName);
-  return sendRecord(rec, origin, (to || pass.attendeeEmail || '').trim(), message, sentBy, pass);
+  return sendRecord(rec, origin, (to || pass.attendeeEmail || '').trim(), message, sentBy, pass, background);
 }
 
 /** Emails a certificate that was created by hand (no pass). */
-export async function sendManualCertificate(rec: CertificateRecord, origin: string, to?: string, message?: CertEmailMessage, sentBy?: string) {
-  return sendRecord(rec, origin, (to || rec.attendeeEmail || '').trim(), message, sentBy);
+export async function sendManualCertificate(rec: CertificateRecord, origin: string, to?: string, message?: CertEmailMessage, sentBy?: string, background?: EmailBackgroundChoice) {
+  return sendRecord(rec, origin, (to || rec.attendeeEmail || '').trim(), message, sentBy, undefined, background);
 }
 
 export async function findCertificateByCode(code: string): Promise<CertificateRecord | undefined> {
@@ -622,7 +626,8 @@ export async function sendCertificatesBatch(
   emails?: Record<string, string>,
   message?: CertEmailMessage,
   sentBy?: string,
-  typeId?: string | null
+  typeId?: string | null,
+  background?: EmailBackgroundChoice
 ): Promise<Array<{ passId: string; ok: boolean; error?: string }>> {
   const passes = await readCollection<EventPassItem>('event_passes');
   const type = cleanTypeId(typeId);
@@ -636,7 +641,7 @@ export async function sendCertificatesBatch(
         continue;
       }
       const to = emails?.[passId];
-      const r = await sendManualCertificate(rec, origin, typeof to === 'string' && /^\S+@\S+\.\S+$/.test(to.trim()) ? to : undefined, message, sentBy);
+      const r = await sendManualCertificate(rec, origin, typeof to === 'string' && /^\S+@\S+\.\S+$/.test(to.trim()) ? to : undefined, message, sentBy, background);
       results.push({ passId, ok: r.ok, error: r.error });
       continue;
     }
@@ -646,7 +651,7 @@ export async function sendCertificatesBatch(
       continue;
     }
     const to = emails?.[passId];
-    const r = await sendCertificate(pass, event, origin, typeof to === 'string' && /^\S+@\S+\.\S+$/.test(to.trim()) ? to : undefined, message, sentBy, type, typeName);
+    const r = await sendCertificate(pass, event, origin, typeof to === 'string' && /^\S+@\S+\.\S+$/.test(to.trim()) ? to : undefined, message, sentBy, type, typeName, background);
     results.push({ passId, ok: r.ok, error: r.error });
   }
   return results;

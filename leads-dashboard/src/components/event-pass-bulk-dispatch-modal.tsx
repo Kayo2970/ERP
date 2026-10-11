@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, X, Send, Mail, CheckCircle2, AlertTriangle, ExternalLink, Loader2, Pencil, CalendarClock } from 'lucide-react';
 import { PassEmailComposer, usePassEmailTemplate } from '@/components/pass-email-composer';
 import { passEmailOptsFromTemplate, PassEmailTemplate } from '@/lib/pass-email-template';
+import { EmailBackgroundPicker, DEFAULT_BACKGROUND_PICK, backgroundChoiceFor, type EmailBackgroundPick } from '@/components/email-background-picker';
 import {
   EventPassItem,
   authHeaders,
@@ -47,6 +48,8 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
   const [sendMode, setSendMode] = useState<'now' | 'later'>('now');
   const [sendAt, setSendAt] = useState('');
   const [scheduleNote, setScheduleNote] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  // Blurred picture behind the e-mails (default = the one set in Email Settings, if any)
+  const [bgPick, setBgPick] = useState<EmailBackgroundPick>(DEFAULT_BACKGROUND_PICK);
   const stopRef = useRef(false);
 
   // Reset whenever the modal is (re)opened with a new selection
@@ -65,6 +68,7 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
     setSendMode('now');
     setSendAt('');
     setScheduleNote(null);
+    setBgPick(DEFAULT_BACKGROUND_PICK);
     setShowEditor(true);
     setIncluded(Object.fromEntries(snap.map((p) => [p.id, true])));
     setEmails(Object.fromEntries(snap.map((p) => [p.id, p.attendeeEmail || ''])));
@@ -122,7 +126,7 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
       if (stopRef.current) break;
       setStatus((s) => ({ ...s, [p.id]: { state: 'sending' } }));
       try {
-        const res = await dispatchPassEmail(p, emails[p.id].trim(), optsFor(p.id));
+        const res = await dispatchPassEmail(p, emails[p.id].trim(), optsFor(p.id), backgroundChoiceFor(bgPick) as 'none' | { storageKey: string; blur: number } | undefined);
         setStatus((s) => ({ ...s, [p.id]: res.success ? { state: 'ok' } : { state: 'failed', error: res.error } }));
         if (res.success) okCount++; else failCount++;
       } catch (err: any) {
@@ -154,6 +158,7 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
         headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           sendAt: when.toISOString(),
+          background: backgroundChoiceFor(bgPick),
           template: passEmailOptsFromTemplate(template),
           items: toSend.map((p) => ({
             passId: p.id,
@@ -333,6 +338,7 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
                 </button>
               )}
               <PassEmailComposer template={editorTemplate} onChange={onEditorChange} bodyRows={16} />
+              <EmailBackgroundPicker value={bgPick} onChange={setBgPick} disabled={isSending} />
             </div>
           )}
         </div>

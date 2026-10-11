@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Users, Plus, UserPlus, Pencil, Award, X, Send, RefreshCw, CheckCircle2, AlertCircle, CheckSquare, Square, ImagePlus, Trash2, ChevronDown, ChevronRight, Download, CalendarClock, Check } from 'lucide-react';
 import { EventItem, Member, TaskItem, authHeaders, formatEventDateRange, getMembers, getTasks } from '@/lib/local-data';
 import { beginTask } from '@/lib/background-tasks';
+import { EmailBackgroundPicker, DEFAULT_BACKGROUND_PICK, backgroundChoiceFor, type EmailBackgroundPick } from '@/components/email-background-picker';
 import { defaultSelection, isSelectable, keepSelection, scheduledMap, toggleVisible, visibleSelectionState } from '@/lib/certificate-selection';
 import { CertificateStatusBadge, CERT_STATUS_FILTERS } from '@/components/certificate-status-badge';
 import { CertBox, CertBoxKey, CertLayout, CERT_BOX_LABELS, CERT_FONT_OPTIONS, DEFAULT_CERT_EMAIL, CERT_EMAIL_FIELDS, CERT_EMAIL_MAX_SUBJECT, CERT_EMAIL_MAX_BODY, mergeCertEmail } from '@/lib/certificate-layout';
@@ -152,6 +153,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
   const [openPreviews, setOpenPreviews] = useState<Set<string>>(new Set());
   const [emailSubject, setEmailSubject] = useState(DEFAULT_CERT_EMAIL.subject);
   const [emailBody, setEmailBody] = useState(DEFAULT_CERT_EMAIL.bodyText);
+  const [bgPick, setBgPick] = useState<EmailBackgroundPick>(DEFAULT_BACKGROUND_PICK);
   const emailBodyRef = useRef<HTMLTextAreaElement>(null);
   const [sendMode, setSendMode] = useState<'now' | 'later'>('now');
   const [sendAt, setSendAt] = useState('');
@@ -475,7 +477,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
       const res = await fetch(`/api/events/${eventId}/certificates/manual`, {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ typeId, ...manual, send: mode === 'send', message: { subject: emailSubject, bodyText: emailBody } }),
+        body: JSON.stringify({ typeId, ...manual, send: mode === 'send', message: { subject: emailSubject, bodyText: emailBody }, background: backgroundChoiceFor(bgPick) }),
       });
       const data = await readJson(res, 'creating the certificate');
       if (!res.ok) {
@@ -608,7 +610,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     const task = beginTask({ label: sendMode === 'later' ? `Scheduling ${ids.length} certificate${ids.length === 1 ? '' : 's'}` : `Sending ${ids.length} certificate${ids.length === 1 ? '' : 's'}`, total: 0, detail: `${evName} — generating PDFs and queueing emails…` });
     try {
       if (saveState === 'dirty') await saveDesign();
-      const res = await fetch(`/api/events/${eventId}/certificates`, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ typeId, passIds: ids, sendAt: when, message: { subject: emailSubject, bodyText: emailBody } }) });
+      const res = await fetch(`/api/events/${eventId}/certificates`, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ typeId, passIds: ids, sendAt: when, message: { subject: emailSubject, bodyText: emailBody }, background: backgroundChoiceFor(bgPick) }) });
       const data = await readJson(res, 'sending the certificates');
       if (!res.ok) throw new Error(data.error || 'Failed to send.');
       const skipNote = data.skippedScheduled ? ` ${data.skippedScheduled} ${data.skippedScheduled === 1 ? 'person was' : 'people were'} skipped because they are already in a scheduled send.` : '';
@@ -1138,6 +1140,8 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                     </div>
                     <p className="text-[10px] text-slate-500">Each placeholder is filled in for every attendee. The certificate PDF is always attached.</p>
                   </div>
+
+                  <EmailBackgroundPicker value={bgPick} onChange={setBgPick} disabled={busy} />
 
                   <div className="space-y-2 p-3 rounded-xl border border-slate-200 dark:border-white/10">
                     <div className="flex flex-wrap items-center justify-between gap-2">

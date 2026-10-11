@@ -7,6 +7,7 @@
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { buildPassEmail, EventPassItem } from '@/lib/local-data';
 import { dispatchEmail } from '@/lib/email-service';
+import type { EmailBackgroundChoice } from '@/lib/email-background';
 import { renderBoardingPassPng } from '@/lib/pass-image';
 import { getPassTheme } from '@/lib/pass-theme';
 
@@ -23,6 +24,8 @@ export interface PassEmailSchedule {
   items: PassEmailScheduleItem[];
   /** Shared wording and extra buttons chosen when scheduling. */
   template: { subjectTemplate?: string; bodyTemplate?: string; includeMap?: boolean; mapUrl?: string; includeWhatsapp?: boolean; whatsappUrl?: string };
+  /** Blurred e-mail background chosen when scheduling (absent = the Email Settings default). */
+  background?: EmailBackgroundChoice;
   sendAt: string;
   origin: string;
   eventNames: string[];
@@ -64,6 +67,7 @@ async function sendOne(item: PassEmailScheduleItem, schedule: PassEmailSchedule)
       badgeText: 'Official Event Pass',
       badgeColor: '#0284c7',
       attachments: attachments.length ? attachments : undefined,
+      background: schedule.background,
     });
     const now = new Date().toISOString();
     await mutateCollection<EventPassItem>('event_passes', (cur = []) =>

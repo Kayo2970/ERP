@@ -5,6 +5,7 @@ import { mutateCollection, readCollection } from './server-db';
 import { saveBase64File, readStoredFile, deleteStoredFilesForRecord } from './file-storage';
 import { DirectSendTransport } from './direct-smtp-transport';
 import { getAppBaseUrl } from './app-url';
+import { applyEmailBackground, resolveEmailBackgroundUrl, type EmailBackgroundChoice, type EmailBackgroundSetting } from './email-background';
 import { CAPABILITY_CATALOG, MODULE_CATALOG } from './permissions';
 
 // Referenced as cid:leads-logo in wrapInMasterEmailTemplate — attach this
@@ -61,6 +62,8 @@ export interface EmailLog {
 }
 
 export interface SendEmailPayload {
+  /** Blurred picture behind the e-mail: 'default' (Email Settings, if set; the default when omitted), 'none', or a specific picture. */
+  background?: EmailBackgroundChoice;
   to: string;
   subject: string;
   bodyText: string;
@@ -79,6 +82,8 @@ export interface SendEmailPayload {
 
 export interface EmailSettings {
   id: string; // 'default'
+  /** Default blurred background picture for every e-mail (see email-background.ts). */
+  background?: EmailBackgroundSetting;
   // 'direct_send' is the built-in outbound engine (src/lib/direct-smtp-transport.ts):
   // the app itself resolves each recipient's MX records and delivers straight
   // to their mail server, with no relay/API in between — the other four
@@ -613,6 +618,19 @@ async function executeSmtpSend(payload: SendEmailPayload): Promise<{
   return { status, errorMessage, smtpResponse, rejectedRecipients };
 }
 
+/** Adds the blurred background (this send's choice, else the Email Settings default) to a finished e-mail. */
+async function withBackground(html: string, payload: SendEmailPayload): Promise<string> {
+  try {
+    const choice = payload.background;
+    if (choice === 'none') return html;
+    const url = await resolveEmailBackgroundUrl(choice && choice !== 'default' ? undefined : await getEmailSettings(), choice);
+    return url ? applyEmailBackground(html, url) : html;
+  } catch (err) {
+    console.error('[email-service] Could not apply the e-mail background; sending without it:', err);
+    return html;
+  }
+}
+
 async function sendImmediateEmail(payload: SendEmailPayload): Promise<EmailLog> {
   let badgeTextToUse: string | undefined = payload.badgeText;
   if (!badgeTextToUse) {
@@ -636,7 +654,7 @@ async function sendImmediateEmail(payload: SendEmailPayload): Promise<EmailLog> 
     bodyContentHtml: `<div style="white-space: pre-wrap; font-size: 14px; line-height: 1.7; color: #1e293b;">${payload.bodyText}</div>`
   });
 
-  const bodyHtml = payload.bodyHtml || defaultFormattedHtml;
+  const bodyHtml = await withBackground(payload.bodyHtml || defaultFormattedHtml, payload);
   const result = await executeSmtpSend({
     ...payload,
     bodyHtml,
@@ -905,7 +923,7 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
     bodyContentHtml: `<div style="white-space: pre-wrap; font-size: 14px; line-height: 1.7; color: #1e293b;">${payload.bodyText}</div>`
   });
 
-  const finalBodyHtml = payload.bodyHtml || defaultFormattedHtml;
+  const finalBodyHtml = await withBackground(payload.bodyHtml || defaultFormattedHtml, payload);
   const finalBodyText = payload.bodyText;
 
   const newEmail: EmailLog = {
