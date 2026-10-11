@@ -55,6 +55,7 @@ import {
   canDeleteEventPasses,
   canViewIssuedEventPasses,
   canAccessEventPassesModule,
+  canViewFullDirectory,
 } from '@/lib/permissions';
 import { EventPassStudio } from '@/components/event-pass-studio';
 import dynamic from 'next/dynamic';
@@ -1569,6 +1570,7 @@ export default function EventPassesPage() {
             initialEventId={deepFilterEventId !== 'ALL' ? deepFilterEventId : passFilterEventId}
             canEditDesign={canDesignCerts}
             canSend={canSendCerts}
+            canPickMembers={canViewFullDirectory(user)}
           />
         </div>
       )}
