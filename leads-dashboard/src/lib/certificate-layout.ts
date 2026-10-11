@@ -94,9 +94,9 @@ export function normalizeLayout(input: unknown): CertLayout {
       bold: typeof s.bold === 'boolean' ? s.bold : d.bold,
       italic: typeof s.italic === 'boolean' ? s.italic : d.italic,
       color: typeof s.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(s.color) ? s.color : s.color === '' ? '' : d.color,
-      // The attendee's name is always centred in its box
+      // The attendee's name is always centred horizontally; its vertical position (top / middle / bottom) is the designer's choice
       align: key === 'name' ? 'center' : s.align === 'left' || s.align === 'right' || s.align === 'center' ? s.align : d.align,
-      valign: key === 'name' ? 'middle' : s.valign === 'top' || s.valign === 'bottom' || s.valign === 'middle' ? s.valign : d.valign,
+      valign: s.valign === 'top' || s.valign === 'bottom' || s.valign === 'middle' ? s.valign : d.valign,
       autoFit: typeof s.autoFit === 'boolean' ? s.autoFit : d.autoFit,
       maxLines: Math.round(num(s.maxLines, 0, 12, d.maxLines)),
       underline: typeof s.underline === 'boolean' ? s.underline : d.underline,
