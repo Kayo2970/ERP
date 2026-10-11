@@ -22,8 +22,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const event = (await readCollection<EventItem>('events')).find((e) => e.id === id);
     const pass = (await readCollection<EventPassItem>('event_passes')).find((p) => p.id === passId && p.eventId === id);
     if (!event || !pass) return NextResponse.json({ error: 'Attendee not found.' }, { status: 404 });
-    const png = await renderPassPreview(pass, event, getAppBaseUrl(request));
-    if (url.searchParams.get('format') === 'pdf') {
+    const wantPdf = url.searchParams.get('format') === 'pdf';
+    // The downloadable PDF is rendered at print quality (2x); the on-screen preview stays quick.
+    const png = await renderPassPreview(pass, event, getAppBaseUrl(request), wantPdf ? 2 : 1);
+    if (wantPdf) {
       return new NextResponse(new Uint8Array(pngToPdf(png)), {
         headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="Certificate-${pass.attendeeName.replace(/[^\w]+/g, '_')}.pdf"` },
       });

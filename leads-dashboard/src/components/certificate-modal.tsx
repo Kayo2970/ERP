@@ -54,8 +54,9 @@ function shrinkImage(file: File): Promise<string> {
         if (!ctx) return reject(new Error('Could not process that image.'));
         ctx.fillStyle = '#fff';
         ctx.fillRect(0, 0, c.width, c.height);
+        ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, c.width, c.height);
-        resolve(c.toDataURL('image/jpeg', 0.85));
+        resolve(c.toDataURL('image/jpeg', 0.95));
       };
       img.src = String(reader.result);
     };

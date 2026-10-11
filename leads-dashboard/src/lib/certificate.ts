@@ -106,9 +106,10 @@ export async function saveCertificateTemplate(
     const cctx = c.getContext('2d');
     cctx.fillStyle = '#fff';
     cctx.fillRect(0, 0, c.width, c.height);
+    cctx.imageSmoothingQuality = 'high';
     cctx.drawImage(img, 0, 0, c.width, c.height);
     if (current.backgroundKey) await deleteStoredFile(current.backgroundKey);
-    const saved = await saveBase64File(CATEGORY, eventId, BACKGROUND_FILE_INDEX, 'background.jpg', `data:image/jpeg;base64,${c.toBuffer('image/jpeg', 85).toString('base64')}`);
+    const saved = await saveBase64File(CATEGORY, eventId, BACKGROUND_FILE_INDEX, 'background.jpg', `data:image/jpeg;base64,${c.toBuffer('image/jpeg', 95).toString('base64')}`);
     next.backgroundKey = saved.storageKey;
   }
   const payload = Buffer.from(JSON.stringify(next)).toString('base64');
@@ -269,12 +270,18 @@ function merge(text: string, vars: Record<string, string>): string {
 export async function renderCertificatePng(
   data: { attendeeName: string; eventName: string; eventDate: string; code: string; organisation?: string; category?: string; serial?: string },
   template: CertificateTemplate,
-  verifyUrl: string
+  verifyUrl: string,
+  /** Pixel multiplier on the 1754x1240 design space: 1 = quick preview, 2 = 300 dpi print/PDF quality. */
+  scale = 1
 ): Promise<Buffer> {
   ensureFonts();
   await registerCustomFonts();
-  const canvas = createCanvas(W, H);
+  const canvas = createCanvas(Math.round(W * scale), Math.round(H * scale));
   const ctx = canvas.getContext('2d');
+  // Layouts stay in the 1754x1240 coordinate space; only the pixel density changes.
+  ctx.scale(scale, scale);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   const ink = template.textColor;
   const L = template.layout;
 
@@ -336,7 +343,8 @@ export async function renderCertificatePng(
 
 export function pngToPdf(png: Buffer): Buffer {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  doc.addImage(`data:image/png;base64,${png.toString('base64')}`, 'PNG', 0, 0, 297, 210);
+  // 'FAST' = lossless deflate. jsPDF's default stores the raster uncompressed (~26 MB at 300 dpi).
+  doc.addImage(`data:image/png;base64,${png.toString('base64')}`, 'PNG', 0, 0, 297, 210, undefined, 'FAST');
   return Buffer.from(doc.output('arraybuffer'));
 }
 
@@ -383,7 +391,7 @@ export function passExtras(pass?: EventPassItem) {
 
 export async function renderCertificatePdf(rec: CertificateRecord, origin: string, pass?: EventPassItem): Promise<Buffer> {
   const template = await getCertificateTemplate(rec.eventId);
-  const png = await renderCertificatePng({ ...rec, ...passExtras(pass) }, template, verifyUrlFor(origin, rec.code));
+  const png = await renderCertificatePng({ ...rec, ...passExtras(pass) }, template, verifyUrlFor(origin, rec.code), 2);
   return pngToPdf(png);
 }
 
@@ -425,12 +433,13 @@ export async function findCertificateByCode(code: string): Promise<CertificateRe
 }
 
 /** Renders what one attendee's certificate looks like right now (no record is created, nothing is sent). */
-export async function renderPassPreview(pass: EventPassItem, event: EventItem, origin: string): Promise<Buffer> {
+export async function renderPassPreview(pass: EventPassItem, event: EventItem, origin: string, scale = 1): Promise<Buffer> {
   const template = await getCertificateTemplate(pass.eventId);
   return renderCertificatePng(
     { attendeeName: pass.attendeeName, eventName: event.title || pass.eventName, eventDate: eventDateLabel(event), code: 'PREVIEW000', ...passExtras(pass) },
     template,
-    verifyUrlFor(origin, 'PREVIEW000')
+    verifyUrlFor(origin, 'PREVIEW000'),
+    scale
   );
 }
 
