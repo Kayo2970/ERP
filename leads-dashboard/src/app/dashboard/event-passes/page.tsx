@@ -43,6 +43,7 @@ import {
   saveEventPasses,
   updateEventPassStatus,
   deleteEventPass,
+  deleteEventPassesBulk,
   dispatchPassEmail,
   authHeaders,
 } from '@/lib/local-data';
@@ -211,6 +212,8 @@ export default function EventPassesPage() {
   const canEditPass = canEditEventPasses(user);
   const canDispatchPass = canDispatchEventPasses(user);
   const canDeletePass = canDeleteEventPasses(user);
+  // Row checkboxes are for bulk actions: dispatch, edit and delete each have their own permission.
+  const canSelectPasses = canDispatchPass || canDeletePass || canEditPass;
   const canSendCerts = canSendCertificates(user);
   const canDesignCerts = canDesignCertificates(user);
   const canViewIssued = canViewIssuedEventPasses(user);
@@ -279,6 +282,30 @@ export default function EventPassesPage() {
     setIsBatchDispatching(false);
     setEventPasses(getEventPasses());
     triggerSuccess(`Successfully dispatched ${successCount} of ${unsent.length} pass emails!`);
+  };
+
+  // Bulk delete the ticked passes. Runs as a tracked background task, so it keeps going if the page is left.
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const handleBulkDeletePasses = async () => {
+    const targets = eventPasses.filter((p) => selectedPassIds.has(p.id));
+    if (targets.length === 0) return;
+    const preview = targets.slice(0, 8).map((p) => `• ${p.attendeeName} (${p.serialNumber})`).join('\n');
+    if (!window.confirm(`Permanently delete ${targets.length} issued pass${targets.length === 1 ? '' : 'es'}?\n\n${preview}${targets.length > 8 ? `\n…and ${targets.length - 8} more` : ''}\n\nTheir QR codes stop working. This cannot be undone.`)) return;
+    setIsBulkDeleting(true);
+    const task = beginTask({ label: `Deleting ${targets.length} pass${targets.length === 1 ? '' : 'es'}`, total: targets.length });
+    try {
+      const r = await deleteEventPassesBulk(targets.map((p) => p.id), user?.name || 'Staff', (done) => task.progress(done));
+      const parts = [`${r.deleted} deleted`, r.pending ? `${r.pending} sent for approval` : '', r.failed.length ? `${r.failed.length} failed (${r.failed.slice(0, 3).map((f) => `${f.name}: ${f.error}`).join('; ')})` : ''].filter(Boolean);
+      task.finish(`${parts.join(', ')}.`, { warn: r.failed.length > 0 || r.pending > 0 });
+      setSelectedPassIds(new Set());
+      setEventPasses(getEventPasses());
+      if (r.failed.length) triggerError(`Some passes could not be deleted: ${r.failed.slice(0, 3).map((f) => f.name).join(', ')}.`);
+      else triggerSuccess(`${parts.join(', ')}.`);
+    } catch (err: any) {
+      task.fail(err?.message || 'Bulk delete failed.');
+    } finally {
+      setIsBulkDeleting(false);
+    }
   };
 
   // CSV Attendance & Delivery Status Exporter
@@ -1220,7 +1247,7 @@ export default function EventPassesPage() {
               </span>
             </div>
 
-            {canDispatchPass && selectedPassIds.size > 0 && (
+            {canSelectPasses && selectedPassIds.size > 0 && (
               <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-sky-500/10 border-y border-sky-500/30 text-xs">
                 <div className="font-bold text-sky-300">
                   {selectedPassIds.size} selected
@@ -1241,9 +1268,16 @@ export default function EventPassesPage() {
                       <Edit3 className="h-3.5 w-3.5" /> Bulk edit
                     </button>
                   )}
-                  <button type="button" onClick={() => setIsBulkDispatchOpen(true)} className="px-4 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-black flex items-center gap-1.5 cursor-pointer">
-                    <Send className="h-3.5 w-3.5" /> Preview &amp; dispatch
-                  </button>
+                  {canDeletePass && (
+                    <button type="button" disabled={isBulkDeleting} onClick={handleBulkDeletePasses} className="px-4 py-1.5 rounded-lg border border-rose-500/40 text-rose-400 hover:bg-rose-500/10 font-black flex items-center gap-1.5 cursor-pointer disabled:opacity-50">
+                      <Trash2 className="h-3.5 w-3.5" /> {isBulkDeleting ? 'Deleting…' : `Delete ${selectedPassIds.size}`}
+                    </button>
+                  )}
+                  {canDispatchPass && (
+                    <button type="button" onClick={() => setIsBulkDispatchOpen(true)} className="px-4 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-black flex items-center gap-1.5 cursor-pointer">
+                      <Send className="h-3.5 w-3.5" /> Preview &amp; dispatch
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -1275,7 +1309,7 @@ export default function EventPassesPage() {
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-slate-200/90 dark:border-white/10 text-theme-text-secondary text-[11px] uppercase tracking-wider">
-                      {canDispatchPass && <th className="py-3 px-3 w-8">
+                      {canSelectPasses && <th className="py-3 px-3 w-8">
                         <input
                           type="checkbox"
                           aria-label="Select all passes in this view"
@@ -1310,7 +1344,7 @@ export default function EventPassesPage() {
                   <tbody className="divide-y divide-slate-200/50 dark:divide-white/5">
                     {deepFilteredPasses.map((pass) => (
                       <tr key={pass.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
-                        {canDispatchPass && (<td className="py-3 px-3 w-8">
+                        {canSelectPasses && (<td className="py-3 px-3 w-8">
                           <input
                             type="checkbox"
                             aria-label={`Select ${pass.attendeeName}`}
