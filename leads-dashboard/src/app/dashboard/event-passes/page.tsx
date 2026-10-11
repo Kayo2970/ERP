@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { beginTask } from '@/lib/background-tasks';
 import { CertificateStatusBadge, CERT_STATUS_FILTERS } from '@/components/certificate-status-badge';
@@ -220,7 +220,15 @@ export default function EventPassesPage() {
   const canAccessModule = canAccessEventPassesModule(user);
 
   const canCertificates = canSendCerts || canDesignCerts;
+  const tabBarRef = useRef<HTMLDivElement>(null);
   const canSeeCertLedger = canViewIssuedCertificates(user);
+
+  // Keep the active tab visible when the tab bar scrolls (mobile).
+  useEffect(() => {
+    const bar = tabBarRef.current;
+    const active = bar?.querySelector<HTMLElement>('[data-tab-active="true"]');
+    if (bar && active) bar.scrollTo({ left: Math.max(0, active.offsetLeft - 16), behavior: 'smooth' });
+  }, [activeTab]);
 
   // Auto switch to the first tab the user can actually use
   useEffect(() => {
@@ -586,8 +594,8 @@ export default function EventPassesPage() {
       )}
 
       {/* Header & Main Nav Tabs */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-theme-border/30 pb-4">
-        <div>
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-theme-border/30 pb-4 min-w-0">
+        <div className="min-w-0">
           <h1 className="text-xl md:text-2xl font-black text-theme-text-primary flex items-center gap-2.5">
             <div className="p-2 bg-accent/15 rounded-2xl text-accent border border-accent/20">
               <Ticket className="h-6 w-6" />
@@ -600,13 +608,15 @@ export default function EventPassesPage() {
         </div>
 
         {/* Tab Controls: Studio | Issued Passes Tab | Gate Turnstile */}
-        <div className="flex items-center gap-1.5 bg-slate-200/80 dark:bg-white/5 p-1 rounded-2xl border border-slate-300 dark:border-white/10 text-xs shadow-inner">
+        {/* Scrolls sideways on narrow screens (tabs never wrap or get cut off); the active tab is kept in view. */}
+        <div ref={tabBarRef} className="flex items-center gap-1.5 bg-slate-200/80 dark:bg-white/5 p-1 rounded-2xl border border-slate-300 dark:border-white/10 text-xs shadow-inner max-w-full overflow-x-auto overscroll-x-contain snap-x [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {canManagePasses && (
             <>
               <button
                 type="button"
                 onClick={() => setActiveTab('studio')}
-                className={`px-4 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                data-tab-active={activeTab === 'studio'}
+                className={`px-3 sm:px-4 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-2 shrink-0 whitespace-nowrap snap-start ${
                   activeTab === 'studio'
                     ? 'bg-accent text-white shadow-md shadow-accent/25'
                     : 'text-theme-text-secondary hover:text-theme-text-primary'
@@ -623,7 +633,8 @@ export default function EventPassesPage() {
               <button
                 type="button"
                 onClick={() => setActiveTab('passes')}
-                className={`px-4 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                data-tab-active={activeTab === 'passes'}
+                className={`px-3 sm:px-4 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-2 shrink-0 whitespace-nowrap snap-start ${
                   activeTab === 'passes'
                     ? 'bg-accent text-white shadow-md shadow-accent/25'
                     : 'text-theme-text-secondary hover:text-theme-text-primary'
@@ -650,7 +661,8 @@ export default function EventPassesPage() {
             <button
               type="button"
               onClick={() => setActiveTab('certificates')}
-              className={`px-4 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                data-tab-active={activeTab === 'certificates'}
+              className={`px-3 sm:px-4 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-2 shrink-0 whitespace-nowrap snap-start ${
                 activeTab === 'certificates'
                   ? 'bg-accent text-white shadow-md shadow-accent/25'
                   : 'text-theme-text-secondary hover:text-theme-text-primary'
@@ -665,7 +677,8 @@ export default function EventPassesPage() {
             <button
               type="button"
               onClick={() => setActiveTab('scanner')}
-              className={`px-4 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                data-tab-active={activeTab === 'scanner'}
+              className={`px-3 sm:px-4 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-2 shrink-0 whitespace-nowrap snap-start ${
                 activeTab === 'scanner'
                   ? 'bg-accent text-white shadow-md shadow-accent/25'
                   : 'text-theme-text-secondary hover:text-theme-text-primary'
