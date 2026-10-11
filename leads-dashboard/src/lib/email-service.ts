@@ -34,6 +34,7 @@ export type EmailCategory =
   | 'EVENT_INVITATION'
   | 'PROCUREMENT_DECISION'
   | 'GROUP_POLICY_GRANT'
+  | 'PROPOSAL'
   | 'CERTIFICATE';
 
 export interface EmailLog {

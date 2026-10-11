@@ -43,6 +43,7 @@ import {
   IdCard,
   Ticket,
   Package,
+  Lightbulb,
 } from 'lucide-react';
 import { getAnnouncements, getTasks, getDesigns, getMembers, getBudgets, getReimbursements, getEvents, getEventReports, getApprovalRequests, logAuditEvent, Member, syncWithServer, getSystemSettings, signOutClient, getSessionToken, setSessionToken, authHeaders } from '@/lib/local-data';
 import { canViewTaskExtended, getAnnouncementScopeMatch, isCentreHead, isEventsHeadGgCampus, isFinanceHead, canAccessGuestDirectory, canVerifyBudgetCentreHead, canDecideBudget, canVerifyReimbursementCentreHead, canApproveAsSectorHead, canApproveAsFinanceHead, canSubmitEventReport, canReviewEventReports, canViewEventReports, canAccessEventPassesModule, canAccessGroupPolicies } from '@/lib/permissions';
@@ -88,6 +89,7 @@ const navSections: NavSection[] = [
       { name: 'Festivals', href: '/dashboard/festivals', icon: Sparkles },
       { name: 'Tasks', href: '/dashboard/tasks', icon: CheckSquare },
       { name: 'Approvals', href: '/dashboard/approvals', icon: FileCheck2 },
+      { name: 'Proposals', href: '/dashboard/proposals', icon: Lightbulb },
       { name: 'Ratings', href: '/dashboard/ratings', icon: Star },
       { name: 'Design Portal', href: '/dashboard/designs', icon: Palette },
       { name: 'Visiting Card', href: '/dashboard/visiting-card', icon: IdCard },
