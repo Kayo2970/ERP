@@ -96,7 +96,7 @@ export default function EventPassesPage() {
   const [deepFilterEmailStatus, setDeepFilterEmailStatus] = useState<string>('ALL');
   const [deepFilterCert, setDeepFilterCert] = useState<string>('ALL');
   // Certificate ledger per pass (issued / queued / sent / failed + times); only loaded for people allowed to see certificates.
-  const [certStatuses, setCertStatuses] = useState<Record<string, { status: string; sentAt?: string; issuedAt?: string; sentBy?: string; error?: string }>>({});
+  const [certStatuses, setCertStatuses] = useState<Record<string, { status: string; sentAt?: string; issuedAt?: string; sentBy?: string; error?: string; count?: number; typeName?: string }>>({});
   const [certAllowed, setCertAllowed] = useState(false);
   useEffect(() => {
     if (activeTab === 'certificates') return; // refreshed when returning to the passes tab after sending
@@ -1397,6 +1397,8 @@ export default function EventPassesPage() {
                               issuedAt={certStatuses[pass.id]?.issuedAt}
                               sentBy={certStatuses[pass.id]?.sentBy}
                               error={certStatuses[pass.id]?.error}
+                              count={certStatuses[pass.id]?.count}
+                              typeName={certStatuses[pass.id]?.typeName}
                             />
                           </td>
                         )}

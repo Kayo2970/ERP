@@ -7,7 +7,7 @@ import { randomBytes } from 'crypto';
 import { createCanvas, loadImage, GlobalFonts, SKRSContext2D } from '@napi-rs/canvas';
 import { jsPDF } from 'jspdf';
 import { readCollection, mutateCollection } from '@/lib/server-db';
-import { saveBase64File, readStoredFile, deleteStoredFile } from '@/lib/file-storage';
+import { saveBase64File, readStoredFile, deleteStoredFile, deleteStoredFilesForRecord } from '@/lib/file-storage';
 import { dispatchEmail, EmailLog } from '@/lib/email-service';
 import { drawStyledQr } from '@/lib/qr-style';
 import { registerCustomFonts } from '@/lib/certificate-fonts';
@@ -19,6 +19,20 @@ const CATEGORY = 'certificate-templates';
 const TEMPLATE_FILE_INDEX = 0;
 const BACKGROUND_FILE_INDEX = 1;
 const HEX = /^#[0-9a-fA-F]{6}$/;
+const TYPES_FILE_INDEX = 2;
+
+/** An event can have several kinds of certificate (Participation, Volunteer, Speaker...). `default` is always present. */
+export const DEFAULT_TYPE_ID = 'default';
+export interface CertificateType { id: string; name: string }
+
+export function cleanTypeId(typeId?: string | null): string {
+  return typeof typeId === 'string' && /^[a-z0-9]{3,24}$/.test(typeId) ? typeId : DEFAULT_TYPE_ID;
+}
+/** Upload folder owner: the default type keeps the original per-event folder, so existing designs are untouched. */
+function typeOwner(eventId: string, typeId?: string | null): string {
+  const t = cleanTypeId(typeId);
+  return t === DEFAULT_TYPE_ID ? eventId : `${eventId}__${t}`;
+}
 
 export interface CertificateTemplate {
   title: string;
@@ -61,6 +75,13 @@ export interface CertificateRecord {
   sentAt?: string;
   status: 'Issued' | 'Sent' | 'Failed';
   error?: string;
+  /** Which certificate type of the event this is (absent = the default type). */
+  typeId?: string;
+  typeName?: string;
+  /** Created by hand for someone without a pass; passId is then `manual-…`. */
+  manual?: boolean;
+  organisation?: string;
+  category?: string;
   /** Email log entry the certificate went out in — lets the ledger report real delivery, not just queueing. */
   emailLogId?: string;
   sentBy?: string;
@@ -68,9 +89,9 @@ export interface CertificateRecord {
 
 // ── Template storage ────────────────────────────────────────────────────────────
 
-export async function getCertificateTemplate(eventId: string): Promise<CertificateTemplate> {
+export async function getCertificateTemplate(eventId: string, typeId?: string | null): Promise<CertificateTemplate> {
   try {
-    const buf = await readStoredFile(`${CATEGORY}/${eventId}/${TEMPLATE_FILE_INDEX}__template.json`);
+    const buf = await readStoredFile(`${CATEGORY}/${typeOwner(eventId, typeId)}/${TEMPLATE_FILE_INDEX}__template.json`);
     const stored = JSON.parse(buf.toString('utf8'));
     return { ...DEFAULT_CERTIFICATE_TEMPLATE, ...stored, layout: normalizeLayout(stored.layout) };
   } catch {
@@ -82,9 +103,11 @@ export async function getCertificateTemplate(eventId: string): Promise<Certifica
 export async function saveCertificateTemplate(
   eventId: string,
   input: Partial<CertificateTemplate>,
-  backgroundDataUrl?: string | null
+  backgroundDataUrl?: string | null,
+  typeId?: string | null
 ): Promise<CertificateTemplate> {
-  const current = await getCertificateTemplate(eventId);
+  const owner = typeOwner(eventId, typeId);
+  const current = await getCertificateTemplate(eventId, typeId);
   const clip = (v: unknown, max: number, fallback: string) => (typeof v === 'string' ? v.trim().slice(0, max) : fallback);
   const next: CertificateTemplate = {
     title: clip(input.title, 80, current.title) || DEFAULT_CERTIFICATE_TEMPLATE.title,
@@ -112,12 +135,82 @@ export async function saveCertificateTemplate(
     cctx.imageSmoothingQuality = 'high';
     cctx.drawImage(img, 0, 0, c.width, c.height);
     if (current.backgroundKey) await deleteStoredFile(current.backgroundKey);
-    const saved = await saveBase64File(CATEGORY, eventId, BACKGROUND_FILE_INDEX, 'background.jpg', `data:image/jpeg;base64,${c.toBuffer('image/jpeg', 95).toString('base64')}`);
+    const saved = await saveBase64File(CATEGORY, owner, BACKGROUND_FILE_INDEX, 'background.jpg', `data:image/jpeg;base64,${c.toBuffer('image/jpeg', 95).toString('base64')}`);
     next.backgroundKey = saved.storageKey;
   }
   const payload = Buffer.from(JSON.stringify(next)).toString('base64');
-  await saveBase64File(CATEGORY, eventId, TEMPLATE_FILE_INDEX, 'template.json', `data:application/json;base64,${payload}`);
+  await saveBase64File(CATEGORY, owner, TEMPLATE_FILE_INDEX, 'template.json', `data:application/json;base64,${payload}`);
   return next;
+}
+
+// ── Certificate types (several designs per event) ─────────────────────────────
+
+export async function getCertificateTypes(eventId: string): Promise<CertificateType[]> {
+  let stored: CertificateType[] = [];
+  try {
+    const parsed = JSON.parse((await readStoredFile(`${CATEGORY}/${eventId}/${TYPES_FILE_INDEX}__types.json`)).toString('utf8'));
+    if (Array.isArray(parsed)) stored = parsed.filter((t) => t && typeof t.id === 'string' && typeof t.name === 'string');
+  } catch {
+    /* none yet */
+  }
+  const def = stored.find((t) => t.id === DEFAULT_TYPE_ID);
+  return [{ id: DEFAULT_TYPE_ID, name: def?.name || 'Participation' }, ...stored.filter((t) => t.id !== DEFAULT_TYPE_ID)];
+}
+
+async function saveCertificateTypes(eventId: string, types: CertificateType[]): Promise<void> {
+  const payload = Buffer.from(JSON.stringify(types)).toString('base64');
+  await saveBase64File(CATEGORY, eventId, TYPES_FILE_INDEX, 'types.json', `data:application/json;base64,${payload}`);
+}
+
+const cleanName = (n: unknown) => (typeof n === 'string' ? n.trim().replace(/\s+/g, ' ').slice(0, 60) : '');
+
+/** Adds a type; `copyFrom` clones that type's wording, layout and artwork as the starting point. */
+export async function createCertificateType(eventId: string, name: string, copyFrom?: string | null): Promise<CertificateType[]> {
+  const clean = cleanName(name);
+  if (!clean) throw new Error('Give the certificate type a name.');
+  const types = await getCertificateTypes(eventId);
+  if (types.length >= 12) throw new Error('An event can have at most 12 certificate types.');
+  if (types.some((t) => t.name.toLowerCase() === clean.toLowerCase())) throw new Error('That event already has a certificate type with this name.');
+  const id = `t${randomBytes(4).toString('hex')}`;
+  const base = copyFrom ? await getCertificateTemplate(eventId, copyFrom) : { ...DEFAULT_CERTIFICATE_TEMPLATE, title: clean };
+  const next: CertificateTemplate = { ...base, backgroundKey: undefined };
+  if (copyFrom && base.backgroundKey) {
+    try {
+      const bytes = await readStoredFile(base.backgroundKey);
+      const saved = await saveBase64File(CATEGORY, typeOwner(eventId, id), BACKGROUND_FILE_INDEX, 'background.jpg', `data:image/jpeg;base64,${bytes.toString('base64')}`);
+      next.backgroundKey = saved.storageKey;
+    } catch {
+      /* artwork missing: the copy simply starts without it */
+    }
+  }
+  await saveBase64File(CATEGORY, typeOwner(eventId, id), TEMPLATE_FILE_INDEX, 'template.json', `data:application/json;base64,${Buffer.from(JSON.stringify(next)).toString('base64')}`);
+  const out = [...types, { id, name: clean }];
+  await saveCertificateTypes(eventId, out);
+  return out;
+}
+
+export async function renameCertificateType(eventId: string, typeId: string, name: string): Promise<CertificateType[]> {
+  const clean = cleanName(name);
+  if (!clean) throw new Error('Give the certificate type a name.');
+  const t = cleanTypeId(typeId);
+  const types = await getCertificateTypes(eventId);
+  if (!types.some((x) => x.id === t)) throw new Error('Certificate type not found.');
+  if (types.some((x) => x.id !== t && x.name.toLowerCase() === clean.toLowerCase())) throw new Error('That event already has a certificate type with this name.');
+  const out = types.map((x) => (x.id === t ? { ...x, name: clean } : x));
+  await saveCertificateTypes(eventId, out);
+  return out;
+}
+
+/** Removes a type and its design. Refused while certificates of that type exist, so issued IDs keep verifying. */
+export async function deleteCertificateType(eventId: string, typeId: string): Promise<CertificateType[]> {
+  const t = cleanTypeId(typeId);
+  if (t === DEFAULT_TYPE_ID) throw new Error('The default certificate type cannot be deleted.');
+  const used = (await readCollection<CertificateRecord>('certificates')).some((c) => c.eventId === eventId && cleanTypeId(c.typeId) === t);
+  if (used) throw new Error('Certificates of this type were already created, so it cannot be deleted.');
+  const types = (await getCertificateTypes(eventId)).filter((x) => x.id !== t);
+  await deleteStoredFilesForRecord(CATEGORY, typeOwner(eventId, t));
+  await saveCertificateTypes(eventId, types);
+  return types;
 }
 
 // ── Eligibility ─────────────────────────────────────────────────────────────────
@@ -362,10 +455,11 @@ export function verifyUrlFor(origin: string, code: string): string {
 }
 
 /** Finds or creates the certificate record for a pass (one per pass). */
-export async function ensureCertificateRecord(pass: EventPassItem, event: EventItem): Promise<CertificateRecord> {
+export async function ensureCertificateRecord(pass: EventPassItem, event: EventItem, typeId?: string | null, typeName?: string): Promise<CertificateRecord> {
   let result!: CertificateRecord;
+  const type = cleanTypeId(typeId);
   await mutateCollection<CertificateRecord>('certificates', (current = []) => {
-    const found = current.find((c) => c.passId === pass.id);
+    const found = current.find((c) => c.passId === pass.id && cleanTypeId(c.typeId) === type);
     if (found) {
       result = found;
       return current;
@@ -382,6 +476,8 @@ export async function ensureCertificateRecord(pass: EventPassItem, event: EventI
       eventDate: eventDateLabel(event),
       issuedAt: new Date().toISOString(),
       status: 'Issued',
+      ...(type !== DEFAULT_TYPE_ID ? { typeId: type } : {}),
+      ...(typeName ? { typeName } : {}),
     };
     return [...current, result];
   });
@@ -392,22 +488,59 @@ export function passExtras(pass?: EventPassItem) {
   return { organisation: pass?.attendeeOrg || '', category: String(pass?.guestCategory || ''), serial: pass?.serialNumber || '' };
 }
 
+/** Same merge fields for a record: from its pass when it has one, from the typed-in details for a manual certificate. */
+export function recordExtras(rec: CertificateRecord, pass?: EventPassItem) {
+  return pass ? passExtras(pass) : { organisation: rec.organisation || '', category: rec.category || '', serial: '' };
+}
+
+/** Creates a certificate on the spot for someone without a pass. */
+export async function createManualCertificate(
+  event: EventItem,
+  input: { name: string; email?: string; organisation?: string; category?: string },
+  typeId?: string | null,
+  typeName?: string
+): Promise<CertificateRecord> {
+  const name = (input.name || '').trim().replace(/\s+/g, ' ').slice(0, 120);
+  if (!name) throw new Error('Enter the name to print on the certificate.');
+  const email = (input.email || '').trim();
+  if (email && !/^\S+@\S+\.\S+$/.test(email)) throw new Error('That email address is not valid.');
+  const type = cleanTypeId(typeId);
+  const rec: CertificateRecord = {
+    id: `cert-${Date.now()}-${randomBytes(3).toString('hex')}`,
+    code: randomBytes(9).toString('base64url').replace(/[-_]/g, 'x').toUpperCase(),
+    passId: `manual-${randomBytes(6).toString('hex')}`,
+    eventId: event.id,
+    attendeeName: name,
+    attendeeEmail: email,
+    eventName: event.title,
+    eventDate: eventDateLabel(event),
+    issuedAt: new Date().toISOString(),
+    status: 'Issued',
+    manual: true,
+    organisation: (input.organisation || '').trim().slice(0, 120),
+    category: (input.category || '').trim().slice(0, 80),
+    ...(type !== DEFAULT_TYPE_ID ? { typeId: type } : {}),
+    ...(typeName ? { typeName } : {}),
+  };
+  await mutateCollection<CertificateRecord>('certificates', (cur = []) => [...cur, rec]);
+  return rec;
+}
+
 export async function renderCertificatePdf(rec: CertificateRecord, origin: string, pass?: EventPassItem): Promise<Buffer> {
-  const template = await getCertificateTemplate(rec.eventId);
-  const png = await renderCertificatePng({ ...rec, ...passExtras(pass) }, template, verifyUrlFor(origin, rec.code), 2);
+  const template = await getCertificateTemplate(rec.eventId, rec.typeId);
+  const png = await renderCertificatePng({ ...rec, ...recordExtras(rec, pass) }, template, verifyUrlFor(origin, rec.code), 2);
   return pngToPdf(png);
 }
 
-export async function sendCertificate(
-  pass: EventPassItem,
-  event: EventItem,
+/** Emails the PDF for an existing record and records the outcome. `pass` is absent for manual certificates. */
+async function sendRecord(
+  rec: CertificateRecord,
   origin: string,
-  to?: string,
+  recipient: string,
   message?: CertEmailMessage,
-  sentBy?: string
+  sentBy?: string,
+  pass?: EventPassItem
 ): Promise<{ ok: boolean; error?: string; record: CertificateRecord }> {
-  const rec = await ensureCertificateRecord(pass, event);
-  const recipient = (to || pass.attendeeEmail || '').trim();
   try {
     if (!recipient) throw new Error('No email address.');
     const pdf = await renderCertificatePdf(rec, origin, pass);
@@ -422,7 +555,7 @@ export async function sendCertificate(
       attachments: [{ filename: `Certificate-${rec.attendeeName.replace(/[^\w]+/g, '_')}.pdf`, content: pdf, contentType: 'application/pdf' }],
     });
     const sentAt = new Date().toISOString();
-    await mutateCollection<CertificateRecord>('certificates', (cur = []) => cur.map((c) => (c.id === rec.id ? { ...c, status: 'Sent', sentAt, error: undefined, emailLogId: log?.id, sentBy } : c)));
+    await mutateCollection<CertificateRecord>('certificates', (cur = []) => cur.map((c) => (c.id === rec.id ? { ...c, status: 'Sent', sentAt, error: undefined, emailLogId: log?.id, sentBy, ...(recipient !== c.attendeeEmail && c.manual ? { attendeeEmail: recipient } : {}) } : c)));
     return { ok: true, record: { ...rec, status: 'Sent', sentAt, emailLogId: log?.id, sentBy } };
   } catch (err: any) {
     const error = err?.message || 'Failed to send.';
@@ -431,14 +564,33 @@ export async function sendCertificate(
   }
 }
 
+export async function sendCertificate(
+  pass: EventPassItem,
+  event: EventItem,
+  origin: string,
+  to?: string,
+  message?: CertEmailMessage,
+  sentBy?: string,
+  typeId?: string | null,
+  typeName?: string
+): Promise<{ ok: boolean; error?: string; record: CertificateRecord }> {
+  const rec = await ensureCertificateRecord(pass, event, typeId, typeName);
+  return sendRecord(rec, origin, (to || pass.attendeeEmail || '').trim(), message, sentBy, pass);
+}
+
+/** Emails a certificate that was created by hand (no pass). */
+export async function sendManualCertificate(rec: CertificateRecord, origin: string, to?: string, message?: CertEmailMessage, sentBy?: string) {
+  return sendRecord(rec, origin, (to || rec.attendeeEmail || '').trim(), message, sentBy);
+}
+
 export async function findCertificateByCode(code: string): Promise<CertificateRecord | undefined> {
   const all = await readCollection<CertificateRecord>('certificates');
   return all.find((c) => c.code.toLowerCase() === String(code).toLowerCase());
 }
 
 /** Renders what one attendee's certificate looks like right now (no record is created, nothing is sent). */
-export async function renderPassPreview(pass: EventPassItem, event: EventItem, origin: string, scale = 1): Promise<Buffer> {
-  const template = await getCertificateTemplate(pass.eventId);
+export async function renderPassPreview(pass: EventPassItem, event: EventItem, origin: string, scale = 1, typeId?: string | null): Promise<Buffer> {
+  const template = await getCertificateTemplate(pass.eventId, typeId);
   return renderCertificatePng(
     { attendeeName: pass.attendeeName, eventName: event.title || pass.eventName, eventDate: eventDateLabel(event), code: 'PREVIEW000', ...passExtras(pass) },
     template,
@@ -454,18 +606,32 @@ export async function sendCertificatesBatch(
   origin: string,
   emails?: Record<string, string>,
   message?: CertEmailMessage,
-  sentBy?: string
+  sentBy?: string,
+  typeId?: string | null
 ): Promise<Array<{ passId: string; ok: boolean; error?: string }>> {
   const passes = await readCollection<EventPassItem>('event_passes');
+  const type = cleanTypeId(typeId);
+  const typeName = (await getCertificateTypes(event.id)).find((t) => t.id === type)?.name;
   const results: Array<{ passId: string; ok: boolean; error?: string }> = [];
   for (const passId of passIds) {
+    if (passId.startsWith('manual-')) {
+      const rec = (await readCollection<CertificateRecord>('certificates')).find((c) => c.passId === passId && c.eventId === event.id && cleanTypeId(c.typeId) === type);
+      if (!rec) {
+        results.push({ passId, ok: false, error: 'Certificate not found.' });
+        continue;
+      }
+      const to = emails?.[passId];
+      const r = await sendManualCertificate(rec, origin, typeof to === 'string' && /^\S+@\S+\.\S+$/.test(to.trim()) ? to : undefined, message, sentBy);
+      results.push({ passId, ok: r.ok, error: r.error });
+      continue;
+    }
     const pass = passes.find((p) => p.id === passId && p.eventId === event.id);
     if (!pass || !isCertificateEligible(pass)) {
       results.push({ passId, ok: false, error: 'Not eligible (no check-in or no email).' });
       continue;
     }
     const to = emails?.[passId];
-    const r = await sendCertificate(pass, event, origin, typeof to === 'string' && /^\S+@\S+\.\S+$/.test(to.trim()) ? to : undefined, message, sentBy);
+    const r = await sendCertificate(pass, event, origin, typeof to === 'string' && /^\S+@\S+\.\S+$/.test(to.trim()) ? to : undefined, message, sentBy, type, typeName);
     results.push({ passId, ok: r.ok, error: r.error });
   }
   return results;
@@ -483,19 +649,27 @@ export interface CertStatusInfo {
   sentAt?: string;
   sentBy?: string;
   error?: string;
+  typeId?: string;
+  typeName?: string;
+  /** How many certificates (across types) exist for this pass. */
+  count?: number;
 }
 
+const STATUS_RANK: Record<CertDisplayStatus, number> = { 'Not issued': 0, Issued: 1, Failed: 2, Queued: 3, Sent: 4 };
+
 /**
- * Per-pass certificate status. "Issued" = the certificate exists but has not been emailed; "Queued" = handed to the
- * 10-minute email buffer; "Sent" = the mail server accepted it; "Failed" = could not be sent or the queued mail failed/was cancelled.
- * Passes with no record are simply absent (the caller shows them as "Not issued").
+ * Per-pass certificate status. "Issued" = exists but not emailed; "Queued" = in the 10-minute email buffer; "Sent" = the mail server
+ * accepted it; "Failed" = could not be sent, or the queued mail failed / was cancelled. Passes with no record are absent (shown as "Not issued").
+ * With `typeId` it is that certificate type only; without, it is the most advanced status across all of
+ * the pass's certificates, with `count` saying how many certificates exist for it.
  */
-export async function getCertificateStatuses(eventId?: string): Promise<Record<string, CertStatusInfo>> {
-  const records = (await readCollection<CertificateRecord>('certificates')).filter((c) => !eventId || c.eventId === eventId);
+export async function getCertificateStatuses(eventId?: string, typeId?: string | null): Promise<Record<string, CertStatusInfo>> {
+  const type = typeId ? cleanTypeId(typeId) : undefined;
+  const records = (await readCollection<CertificateRecord>('certificates')).filter((c) => (!eventId || c.eventId === eventId) && (!type || cleanTypeId(c.typeId) === type));
   const logs = new Map((await readCollection<EmailLog>('emails')).filter((l) => l.category === 'CERTIFICATE').map((l) => [l.id, l]));
   const out: Record<string, CertStatusInfo> = {};
   for (const r of records) {
-    const info: CertStatusInfo = { status: 'Issued', code: r.code, issuedAt: r.issuedAt, sentBy: r.sentBy };
+    const info: CertStatusInfo = { status: 'Issued', code: r.code, issuedAt: r.issuedAt, sentBy: r.sentBy, typeId: cleanTypeId(r.typeId), typeName: r.typeName, count: 1 };
     if (r.status === 'Failed') {
       info.status = 'Failed';
       info.error = r.error;
@@ -512,7 +686,9 @@ export async function getCertificateStatuses(eventId?: string): Promise<Record<s
         info.error = log.errorMessage || (log.status === 'CANCELLED' ? 'Email was cancelled before it was sent.' : 'Email failed to send.');
       }
     }
-    out[r.passId] = info;
+    const prev = out[r.passId];
+    if (!prev) out[r.passId] = info;
+    else out[r.passId] = { ...(STATUS_RANK[info.status] > STATUS_RANK[prev.status] ? info : prev), count: (prev.count || 1) + 1 };
   }
   return out;
 }

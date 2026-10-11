@@ -11,6 +11,8 @@ export interface CertificateSchedule {
   id: string;
   eventId: string;
   passIds: string[];
+  /** Which certificate type of the event is sent (absent = default). */
+  typeId?: string;
   sendAt: string;
   origin: string;
   /** Composed email wording chosen when scheduling; absent = the default wording. */
@@ -41,7 +43,7 @@ export async function runDueCertificateSchedules(now: Date = new Date()): Promis
       const event = (await readCollection<EventItem>('events')).find((e) => e.id === s.eventId);
       if (!event) throw new Error('Event no longer exists.');
       if (!isEventOver(event)) throw new Error('The event had not reached its last day at the scheduled time.');
-      const results = await sendCertificatesBatch(event, s.passIds, s.origin, undefined, s.message, s.createdBy);
+      const results = await sendCertificatesBatch(event, s.passIds, s.origin, undefined, s.message, s.createdBy, s.typeId);
       const sent = results.filter((r) => r.ok).length;
       patch = { status: 'Done', sent, failed: results.length - sent };
     } catch (err: any) {

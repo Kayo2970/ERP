@@ -23,7 +23,7 @@ export function formatCertTime(iso?: string): string {
 }
 
 /** Status pill plus the relevant time underneath: sent/queued time, or issued time when not yet emailed. */
-export function CertificateStatusBadge({ status, sentAt, issuedAt, error, sentBy }: { status: CertDisplayStatus | string; sentAt?: string; issuedAt?: string; error?: string; sentBy?: string }) {
+export function CertificateStatusBadge({ status, sentAt, issuedAt, error, sentBy, count, typeName }: { status: CertDisplayStatus | string; sentAt?: string; issuedAt?: string; error?: string; sentBy?: string; count?: number; typeName?: string }) {
   const st = STYLES[(status as CertDisplayStatus)] || STYLES['Not issued'];
   const label = status === 'Not issued' ? 'Not issued' : status === 'Issued' ? 'Issued · not sent' : status === 'Queued' ? 'Queued to send' : status === 'Sent' ? 'Sent' : status;
   const time = status === 'Sent' || status === 'Queued' ? formatCertTime(sentAt) : status === 'Issued' || status === 'Failed' ? formatCertTime(issuedAt) : '';
@@ -33,6 +33,7 @@ export function CertificateStatusBadge({ status, sentAt, issuedAt, error, sentBy
         <st.Icon className="h-3 w-3 shrink-0" />
         <span>{label}</span>
       </span>
+      {(count || 0) > 1 ? <span className="text-[9px] pl-1 text-slate-500">{count} certificates · best status shown</span> : typeName ? <span className="text-[9px] pl-1 text-slate-500">{typeName}</span> : null}
       {time && <span className={`text-[9px] pl-1 font-mono ${st.text}`}>{time}{sentBy && status === 'Sent' ? ` · by ${sentBy}` : ''}</span>}
     </div>
   );
