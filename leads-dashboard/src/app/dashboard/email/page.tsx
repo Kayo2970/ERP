@@ -1919,6 +1919,9 @@ export default function EmailManagementPage() {
               <p className="text-xs text-theme-text-secondary mt-0.5">
                 A picture shown, blurred, behind every email the system sends: certificates, event passes, guest invites, announcements and the Email composer. Any send can turn it off or use a different picture.
               </p>
+              <p className="text-[11px] text-theme-text-secondary mt-1">
+                Emails load their background from this server when they are opened, so the blurred picture is kept for 90 days after the last email that used it, then shrunk to a very small blurred version, and removed after 180 days — older emails then simply show the plain light background. Sending with the picture again rebuilds it.
+              </p>
             </div>
             <label className="flex items-center gap-2 text-xs font-semibold text-theme-text-primary cursor-pointer w-fit">
               <input

@@ -34,6 +34,9 @@ export async function register() {
     const { startPassEmailScheduler } = await import('./lib/pass-email-scheduler');
     startPassEmailScheduler();
 
+    const { startEmailBackgroundScheduler } = await import('./lib/email-background-retention');
+    startEmailBackgroundScheduler();
+
     const { startCommitteeReviewScheduler } = await import('./lib/committee-review-scheduler');
     startCommitteeReviewScheduler();
   }
