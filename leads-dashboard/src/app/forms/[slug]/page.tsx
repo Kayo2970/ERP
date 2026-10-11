@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback, use } from 'react';
 import { CheckCircle2, ChevronLeft, Send, Sparkles, AlertTriangle, ShieldCheck, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 import Link from 'next/link';
-import { getForms, getEvents, addSubmission, PublicFormItem, FormEventInfo, resolveFieldDefault, hasLockedDefault, formatEventDateRange } from '@/lib/local-data';
+import { getForms, getEvents, addSubmission, PublicFormItem, FormEventInfo, resolveFieldDefault, hasLockedDefault, formatEventDateRange, isFormClosed } from '@/lib/local-data';
 import { TermsModal } from '@/components/terms-modal';
 import { PrivacyPolicyModal } from '@/components/privacy-policy-modal';
 import { GhostFibers } from '@/components/ui/ghost-fibers';
@@ -23,6 +23,7 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [closed, setClosed] = useState(false);
   const [isTermsOpen, setIsTermsOpen] = useState(false);
   const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
   // Zoom for the form card: 1 = normal, "Fit" scales it up/down so the whole card fills the screen
@@ -68,6 +69,8 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
         fields: matchedForm.fields.map(f => (f.id === 'f_event_type' && f.type === 'multiselect' ? { ...f, type: 'select' as const } : f)),
       };
       setForm(matchedForm);
+      // Past its close time: the API's own (server-clock) `closed` flag wins; the local check covers the staff-preview cache.
+      setClosed(!!(matchedForm as any).closed || isFormClosed(matchedForm));
       // Linked-event details for "default = event name / date / venue": live from the public API when we have it,
       // else (staff previewing from the local cache) from the locally cached event.
       let eventInfo: FormEventInfo | undefined = (matchedForm as any).eventInfo;
@@ -138,6 +141,11 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form) return;
+    // The page may have been left open past the deadline.
+    if (isFormClosed(form)) {
+      setClosed(true);
+      return;
+    }
 
     // Honeypot spam protection: a real human never fills or fires this field
     // in under a second, so only treat it as a bot when both signals agree —
@@ -161,6 +169,15 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
     const ok = await synced;
     setIsSubmitting(false);
     if (!ok) {
+      // The server refuses responses once a form has closed — check whether that's why, so the respondent sees
+      // the closed message rather than a generic "try again" error.
+      try {
+        const res = await fetch(`/api/public-forms/${encodeURIComponent(form.slug)}`, { cache: 'no-store' });
+        if (res.ok && (await res.json()).closed) {
+          setClosed(true);
+          return;
+        }
+      } catch { /* fall through to the generic error */ }
       setSubmitError(true);
       return;
     }
@@ -218,6 +235,26 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
         <div className="glass-panel rounded-2xl px-6 py-4 flex items-center gap-3 border border-white/15 shadow-2xl backdrop-blur-xl">
           <div className="h-4 w-4 border-2 border-accent border-t-transparent rounded-full animate-spin"></div>
           <span className="text-xs font-semibold text-theme-text-primary">Loading form details...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (closed) {
+    return (
+      <div className="min-h-screen bg-space-theme text-theme-text-primary flex flex-col items-center justify-center p-4 relative z-0 overflow-hidden select-none">
+        {backgroundShader}
+        <div className="glass-panel w-full max-w-md rounded-3xl p-8 flex flex-col items-center text-center space-y-5 border border-white/20 dark:border-white/15 shadow-2xl backdrop-blur-2xl bg-theme-card/90">
+          <div className="h-14 w-14 bg-amber-500/15 rounded-2xl flex items-center justify-center border border-amber-500/30 text-amber-400">
+            <AlertTriangle className="h-7 w-7" />
+          </div>
+          <div className="space-y-1.5">
+            {form?.title && <p className="text-[11px] font-semibold uppercase tracking-wide text-theme-text-secondary">{form.title}</p>}
+            <h1 className="text-lg font-bold text-theme-text-primary">Form Closed</h1>
+            <p className="text-xs text-theme-text-secondary leading-relaxed">
+              Sorry, this form is currently closed. Please contact the administrator.
+            </p>
+          </div>
         </div>
       </div>
     );

@@ -73,7 +73,8 @@ import {
   FormSubmissionItem,
   FormTemplateItem,
   EventItem,
-  TaskItem
+  TaskItem,
+  isFormClosed,
 } from '@/lib/local-data';
 import { canBuildForms, getFormApprovalRequirement, canApprovePendingForm, hasCapability } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
@@ -174,6 +175,22 @@ function slugify(str: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
+/** ISO UTC -> value for <input type="datetime-local"> in the browser's local time ('' when unset/invalid). */
+const toLocalInput = (iso?: string): string => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+/** <input type="datetime-local"> value (browser-local) -> ISO UTC. '' (not undefined) when cleared, so the server-side merge actually clears a previously saved value. */
+const fromLocalInput = (v: string): string => {
+  if (!v) return '';
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? '' : d.toISOString();
+};
+const formatCloseAt = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+
 export default function FormsBuilderPage() {
   const [forms, setForms] = useState<PublicFormItem[]>([]);
   const [submissions, setSubmissions] = useState<FormSubmissionItem[]>([]);
@@ -209,6 +226,7 @@ export default function FormsBuilderPage() {
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
+  const [closeAt, setCloseAt] = useState(''); // datetime-local string; '' = never closes
   const [headerText, setHeaderText] = useState('');
   const [headerImageUrl, setHeaderImageUrl] = useState('');
   const [headerFraming, setHeaderFraming] = useState<HeaderFraming>(DEFAULT_HEADER_FRAMING);
@@ -277,6 +295,7 @@ export default function FormsBuilderPage() {
     setTitle('');
     setSlug('');
     setDescription('');
+    setCloseAt('');
     setHeaderText('');
     setHeaderImageUrl('');
     setHeaderFraming(DEFAULT_HEADER_FRAMING);
@@ -299,6 +318,7 @@ export default function FormsBuilderPage() {
     setTitle(form.title);
     setSlug(form.slug);
     setDescription(form.description);
+    setCloseAt(toLocalInput(form.closeAt));
     setHeaderText(form.headerText || '');
     setHeaderImageUrl(form.headerImageUrl || '');
     setHeaderFraming({
@@ -464,6 +484,7 @@ export default function FormsBuilderPage() {
         title,
         slug: formattedSlug,
         description,
+        closeAt: fromLocalInput(closeAt),
         headerText: headerText.trim() || undefined,
         headerImageUrl: headerImageUrl || undefined,
         headerPosX: headerImageUrl ? headerFraming.posX : undefined,
@@ -501,6 +522,7 @@ export default function FormsBuilderPage() {
         title,
         slug: formattedSlug,
         description,
+        closeAt: fromLocalInput(closeAt),
         headerText: headerText.trim() || undefined,
         headerImageUrl: headerImageUrl || undefined,
         headerPosX: headerImageUrl ? headerFraming.posX : undefined,
@@ -792,6 +814,11 @@ export default function FormsBuilderPage() {
                           )}
                         </div>
                         <p className="text-[10px] text-theme-text-secondary mt-0.5 font-mono">/forms/{form.slug}</p>
+                        {form.closeAt && !isNaN(Date.parse(form.closeAt)) && (
+                          <p className={`text-[10px] mt-0.5 font-semibold ${isFormClosed(form) ? 'text-danger' : 'text-theme-text-secondary'}`}>
+                            {isFormClosed(form) ? 'Closed' : 'Closes'} {formatCloseAt(form.closeAt)}
+                          </p>
+                        )}
                       </div>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-accent/15 text-accent">
                         {formSubs.length} responses
@@ -1368,6 +1395,33 @@ export default function FormsBuilderPage() {
                   rows={2}
                   className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block font-medium text-theme-text-secondary flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5" />
+                  Closes On (optional)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="datetime-local"
+                    value={closeAt}
+                    onChange={(e) => setCloseAt(e.target.value)}
+                    className="flex-1 px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent [color-scheme:dark]"
+                  />
+                  {closeAt && (
+                    <button
+                      type="button"
+                      onClick={() => setCloseAt('')}
+                      className="px-3 py-2.5 border border-theme-card-border rounded-xl text-theme-text-secondary hover:bg-theme-border/10 cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <p className="text-[10px] text-theme-text-secondary">
+                  Leave empty to keep the form open. After this time, respondents see &quot;Sorry, this form is currently closed. Please contact the administrator.&quot;
+                </p>
               </div>
 
               <div className="space-y-1.5">
