@@ -963,13 +963,13 @@ export function canDeleteEventPasses(user: SessionUser): boolean {
 /** Can open the Issued Event Passes roster (managers, or anyone granted edit / dispatch / delete). */
 export function canViewIssuedEventPasses(user: SessionUser): boolean {
   if (!user) return false;
-  return canManageEventPasses(user) || canEditEventPasses(user) || canDispatchEventPasses(user) || canDeleteEventPasses(user) || canSendCertificates(user) || canDesignCertificates(user);
+  return canManageEventPasses(user) || canEditEventPasses(user) || canDispatchEventPasses(user) || canDeleteEventPasses(user);
 }
 
 /** Check if user is authorized to see and open the Event Passes navigation module. */
 export function canAccessEventPassesModule(user: SessionUser): boolean {
   if (!user) return false;
-  return canViewIssuedEventPasses(user) || canScanEventPasses(user) || hasCapability(user, 'MANAGE_EVENT_PASSES') || hasCapability(user, 'SCAN_EVENT_PASSES') || resolveModuleViewOverride(user, 'EVENT_PASSES') === 'ALL';
+  return canViewIssuedEventPasses(user) || canScanEventPasses(user) || canSendCertificates(user) || canDesignCertificates(user) || hasCapability(user, 'MANAGE_EVENT_PASSES') || hasCapability(user, 'SCAN_EVENT_PASSES') || resolveModuleViewOverride(user, 'EVENT_PASSES') === 'ALL';
 }
 
 /** Check if user is authorized to view and manage Group Policies (Super User, Centre Head, Events Head GG Campus, or capability). */

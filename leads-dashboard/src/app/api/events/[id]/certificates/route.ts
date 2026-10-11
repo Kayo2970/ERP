@@ -6,6 +6,7 @@ import { gateCertificateAction } from '@/lib/approval-gate';
 import { getAppBaseUrl } from '@/lib/app-url';
 import { EventItem, EventPassItem } from '@/lib/local-data';
 import { CertificateRecord, isCertificateEligible, isEventOver, sendCertificatesBatch } from '@/lib/certificate';
+import { cleanCertEmail } from '@/lib/certificate-layout';
 import { CertificateSchedule } from '@/lib/certificate-scheduler';
 import { mutateCollection } from '@/lib/server-db';
 
@@ -44,13 +45,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
 }
 
-/** Body: { passIds, emails?, sendAt? } — sends one PDF certificate per attendee now, or (with a future `sendAt` ISO time) schedules the batch. */
+/** Body: { passIds, emails?, sendAt?, message?: { subject, bodyText } } — sends one PDF certificate per attendee now, or (with a future `sendAt` ISO time) schedules the batch. */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await authorise(request);
     if (auth.error) return auth.error;
     const { id } = await params;
-    const { passIds, emails, sendAt } = (await request.json()) as { passIds?: string[]; emails?: Record<string, string>; sendAt?: string };
+    const body = (await request.json()) as { passIds?: string[]; emails?: Record<string, string>; sendAt?: string; message?: unknown };
+    const { passIds, emails, sendAt } = body;
+    const message = cleanCertEmail(body.message);
     if (!Array.isArray(passIds) || passIds.length === 0) return NextResponse.json({ error: 'Choose at least one attendee.' }, { status: 400 });
     if (passIds.length > 500) return NextResponse.json({ error: 'Send at most 500 certificates at a time.' }, { status: 400 });
     const event = (await readCollection<EventItem>('events')).find((e) => e.id === id);
@@ -66,6 +69,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         passIds,
         sendAt: when.toISOString(),
         origin,
+        message,
         createdBy: auth.user?.name || 'Staff',
         createdAt: new Date().toISOString(),
         status: 'Scheduled',
@@ -75,7 +79,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     if (!isEventOver(event)) return NextResponse.json({ error: "Certificates can be sent from the event's last day." }, { status: 400 });
-    const results = await sendCertificatesBatch(event, passIds, origin, emails);
+    const results = await sendCertificatesBatch(event, passIds, origin, emails, message);
     return NextResponse.json({ sent: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length, results });
   } catch (err) {
     return apiError(err, 'certificates:send');

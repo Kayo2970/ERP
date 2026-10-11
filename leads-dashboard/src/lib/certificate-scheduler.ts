@@ -5,6 +5,7 @@
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { EventItem } from '@/lib/local-data';
 import { isEventOver, sendCertificatesBatch } from '@/lib/certificate';
+import { CertEmailMessage } from '@/lib/certificate-layout';
 
 export interface CertificateSchedule {
   id: string;
@@ -12,6 +13,8 @@ export interface CertificateSchedule {
   passIds: string[];
   sendAt: string;
   origin: string;
+  /** Composed email wording chosen when scheduling; absent = the default wording. */
+  message?: CertEmailMessage;
   createdBy: string;
   createdAt: string;
   status: 'Scheduled' | 'Running' | 'Done' | 'Failed' | 'Cancelled';
@@ -38,7 +41,7 @@ export async function runDueCertificateSchedules(now: Date = new Date()): Promis
       const event = (await readCollection<EventItem>('events')).find((e) => e.id === s.eventId);
       if (!event) throw new Error('Event no longer exists.');
       if (!isEventOver(event)) throw new Error('The event had not reached its last day at the scheduled time.');
-      const results = await sendCertificatesBatch(event, s.passIds, s.origin);
+      const results = await sendCertificatesBatch(event, s.passIds, s.origin, undefined, s.message);
       const sent = results.filter((r) => r.ok).length;
       patch = { status: 'Done', sent, failed: results.length - sent };
     } catch (err: any) {
