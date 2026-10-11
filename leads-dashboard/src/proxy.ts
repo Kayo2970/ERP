@@ -30,6 +30,7 @@ const PUBLIC_PATH_PREFIXES = [
   '/api/forms', // public form definitions are read here too (GET), not just submitted
   '/api/centre-socials', // read-only social URLs for the thank-you page
   '/api/pass', // public pass lookup + boarding-pass image (CPU-heavy render) — rate-limited, addressed by unguessable serial
+  '/api/certificate', // public certificate verification + preview — addressed by unguessable code
   '/api/files', // uploaded-file serving — see files/[...key]/route.ts's own doc comment on why it can't require a session
 ];
 
