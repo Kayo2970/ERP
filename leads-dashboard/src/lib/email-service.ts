@@ -448,6 +448,8 @@ interface BufferedEmailEntry {
   queuedAt: string;
   bufferedUntil: string;
   timer: NodeJS.Timeout | null;
+  /** Attachments held on disk (restored at send time) — set when this entry was rebuilt from the database. */
+  persistedAttachments?: number;
 }
 
 const bufferedEmails = new Map<string, BufferedEmailEntry>();
@@ -519,6 +521,7 @@ export async function sweepExpiredBufferedEmails(): Promise<number> {
           queuedAt: item.sentAt || new Date().toISOString(),
           bufferedUntil: item.bufferedUntil || new Date(now + remainingMs).toISOString(),
           timer,
+          persistedAttachments: item.attachmentKeys?.length || 0,
         });
       }
     }
@@ -798,18 +801,26 @@ export async function cancelBufferedEmail(id: string): Promise<boolean> {
   return found;
 }
 
-export async function flushAllBufferedEmails(): Promise<number> {
+/** `only` / `except` narrow a bulk action to (or away from) one category, e.g. certificates have their own Mailroom tab. */
+export interface BufferedScope { only?: EmailCategory; except?: EmailCategory }
+function scopedBufferedIds(scope?: BufferedScope): string[] {
+  return Array.from(bufferedEmails.entries())
+    .filter(([, e]) => (!scope?.only || e.payload.category === scope.only) && (!scope?.except || e.payload.category !== scope.except))
+    .map(([id]) => id);
+}
+
+export async function flushAllBufferedEmails(scope?: BufferedScope): Promise<number> {
   await restoreBufferedQueue();
-  const ids = Array.from(bufferedEmails.keys());
+  const ids = scopedBufferedIds(scope);
   for (const id of ids) {
     await sendBufferedEmailNow(id);
   }
   return ids.length;
 }
 
-export async function cancelAllBufferedEmails(): Promise<number> {
+export async function cancelAllBufferedEmails(scope?: BufferedScope): Promise<number> {
   await restoreBufferedQueue();
-  const ids = Array.from(bufferedEmails.keys());
+  const ids = scopedBufferedIds(scope);
   for (const id of ids) {
     await cancelBufferedEmail(id);
   }
@@ -842,8 +853,8 @@ export async function getBufferedEmails(): Promise<Array<{
       bufferedUntil: entry.bufferedUntil,
       remainingMs,
       remainingSeconds: Math.ceil(remainingMs / 1000),
-      hasAttachments: Boolean(entry.payload.attachments && entry.payload.attachments.length > 0),
-      attachmentCount: entry.payload.attachments?.length || 0,
+      hasAttachments: Boolean((entry.payload.attachments && entry.payload.attachments.length > 0) || entry.persistedAttachments),
+      attachmentCount: entry.payload.attachments?.length || entry.persistedAttachments || 0,
     };
   });
 }

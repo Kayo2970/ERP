@@ -45,11 +45,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'You do not have permission to manage the email queue.' }, { status: 403 });
     }
     const body = await request.json();
-    const { id, email, all } = body;
+    const { id, email, all, only, except } = body;
+    const scope = { only: only === 'CERTIFICATE' ? ('CERTIFICATE' as const) : undefined, except: except === 'CERTIFICATE' ? ('CERTIFICATE' as const) : undefined };
 
     if (all) {
       const [bufferedCount] = await Promise.all([
-        flushAllBufferedEmails(),
+        flushAllBufferedEmails(scope),
       ]);
       return NextResponse.json({ success: true, message: `Successfully flushed all ${bufferedCount} buffered emails` });
     }
@@ -84,11 +85,13 @@ export async function DELETE(request: Request) {
     const id = searchParams.get('id');
     const email = searchParams.get('email');
     const all = searchParams.get('all');
+    const scopeParam = searchParams.get('scope'); // 'certificates' = only certificate emails; 'general' = everything except them
+    const scope = scopeParam === 'certificates' ? { only: 'CERTIFICATE' as const } : scopeParam === 'general' ? { except: 'CERTIFICATE' as const } : undefined;
 
     if (all === 'true') {
       const [bufferedCount, taskCount] = await Promise.all([
-        cancelAllBufferedEmails(),
-        cancelAllTaskEmailQueues(),
+        cancelAllBufferedEmails(scope),
+        scopeParam === 'certificates' ? Promise.resolve(0) : cancelAllTaskEmailQueues(),
       ]);
       return NextResponse.json({ success: true, count: bufferedCount + taskCount, message: `Cancelled all ${bufferedCount + taskCount} queued emails` });
     }

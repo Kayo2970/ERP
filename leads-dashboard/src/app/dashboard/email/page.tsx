@@ -30,7 +30,9 @@ import {
   Play,
   Filter,
   Paperclip,
-  Loader2
+  Loader2,
+  Award,
+  CalendarClock
 } from 'lucide-react';
 import { EmailSettings, EmailLog } from '@/lib/email-service';
 import { canManageEmailSettings } from '@/lib/permissions';
@@ -52,6 +54,21 @@ interface PendingQueueItem {
   }>;
 }
 
+interface CertScheduleItem {
+  id: string;
+  eventTitle: string;
+  typeName: string;
+  recipients: number;
+  sendAt: string;
+  deliverAfter: string;
+  status: 'Scheduled' | 'Running' | 'Done' | 'Failed' | 'Cancelled';
+  sent?: number;
+  failed?: number;
+  error?: string;
+  finishedAt?: string;
+  createdBy: string;
+}
+
 interface BufferedEmailItem {
   id: string;
   to: string;
@@ -67,7 +84,9 @@ interface BufferedEmailItem {
 
 export default function EmailManagementPage() {
   const [user, setUser] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'outbox' | 'queue' | 'composer' | 'settings'>('outbox');
+  const [activeTab, setActiveTab] = useState<'outbox' | 'queue' | 'certificates' | 'composer' | 'settings'>('outbox');
+  const [certSchedules, setCertSchedules] = useState<CertScheduleItem[]>([]);
+  const [isCancellingSchedule, setIsCancellingSchedule] = useState<string | null>(null);
 
   // Email Settings Form State
   const [settings, setSettings] = useState<EmailSettings>({
@@ -133,6 +152,7 @@ export default function EmailManagementPage() {
     fetchSettings();
     fetchLogs();
     fetchQueues();
+    fetchCertSchedules();
 
     // Config may have been changed from another device/session — always
     // re-pull the persisted settings when the user comes back to this tab
@@ -191,6 +211,58 @@ export default function EmailManagementPage() {
     }
   };
 
+  const fetchCertSchedules = async () => {
+    try {
+      const res = await fetch('/api/email/certificates', { headers: authHeaders() });
+      if (res.ok) setCertSchedules((await res.json()).schedules || []);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleCancelSchedule = async (id: string) => {
+    if (!window.confirm('Cancel this scheduled certificate send? Nothing will be emailed for it.')) return;
+    setIsCancellingSchedule(id);
+    try {
+      const res = await fetch(`/api/email/certificates?scheduleId=${encodeURIComponent(id)}`, { method: 'DELETE', headers: authHeaders() });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) triggerToast('success', 'Scheduled certificate send cancelled.');
+      else triggerToast('error', data.error || 'Could not cancel that scheduled send.');
+      fetchCertSchedules();
+    } catch (err: any) {
+      triggerToast('error', err?.message || 'Error cancelling the scheduled send');
+    } finally {
+      setIsCancellingSchedule(null);
+    }
+  };
+
+  // Keep the Scheduled Certificates tab fresh while it is open (batches fire and emails enter the buffer on their own).
+  useEffect(() => {
+    if (activeTab !== 'certificates') return;
+    const refresh = () => { fetchCertSchedules(); fetchQueues(); };
+    refresh();
+    const h = setInterval(refresh, 15000);
+    return () => clearInterval(h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  const handleCertBulk = async (action: 'flush' | 'cancel') => {
+    setIsFlushingQueue('CERT_ALL');
+    try {
+      const res = action === 'flush'
+        ? await fetch('/api/email/queue', { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ all: true, only: 'CERTIFICATE' }) })
+        : await fetch('/api/email/queue?all=true&scope=certificates', { method: 'DELETE', headers: authHeaders() });
+      if (res.ok) triggerToast('success', action === 'flush' ? 'All certificate emails dispatched now.' : 'All buffered certificate emails cancelled.');
+      else triggerToast('error', 'Could not complete that action.');
+      fetchQueues();
+      fetchLogs();
+    } catch (err: any) {
+      triggerToast('error', err?.message || 'Error updating certificate emails');
+    } finally {
+      setIsFlushingQueue(null);
+    }
+  };
+
   // Live countdown timer for buffered outgoing emails
   useEffect(() => {
     if (bufferedEmails.length === 0) return;
@@ -219,7 +291,7 @@ export default function EmailManagementPage() {
   const handleCancelQueue = async (email?: string) => {
     setIsCancellingQueue(email || 'ALL');
     try {
-      const url = email ? `/api/email/queue?email=${encodeURIComponent(email)}` : '/api/email/queue?all=true';
+      const url = email ? `/api/email/queue?email=${encodeURIComponent(email)}` : '/api/email/queue?all=true&scope=general';
       const res = await fetch(url, { method: 'DELETE', headers: authHeaders() });
       if (res.ok) {
         const data = await res.json();
@@ -313,7 +385,7 @@ export default function EmailManagementPage() {
       const res = await fetch('/api/email/queue', {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ all: true }),
+        body: JSON.stringify({ all: true, except: 'CERTIFICATE' }),
       });
       if (res.ok) {
         triggerToast('success', 'All buffered emails dispatched immediately.');
@@ -515,7 +587,12 @@ export default function EmailManagementPage() {
   const sentCount = outboxLogs.filter(l => l.status === 'SENT').length;
   const bufferedCount = outboxLogs.filter(l => l.status === 'BUFFERED').length;
   const failedCount = outboxLogs.filter(l => l.status === 'FAILED').length;
-  const totalQueueCount = pendingQueues.length + bufferedEmails.length;
+  // Certificate emails get their own tab; the general queue shows everything else.
+  const certBuffered = bufferedEmails.filter(b => b.category === 'CERTIFICATE');
+  const otherBuffered = bufferedEmails.filter(b => b.category !== 'CERTIFICATE');
+  const upcomingSchedules = certSchedules.filter(s => s.status === 'Scheduled' || s.status === 'Running');
+  const totalQueueCount = pendingQueues.length + otherBuffered.length;
+  const certTabCount = upcomingSchedules.length + certBuffered.length;
 
   const isSuperUser = user && (user.tier === 1 || user.role === 'Super User' || user.id === 'm1' || user.email?.toLowerCase() === 'kayo2970@gmail.com');
 
@@ -602,6 +679,21 @@ export default function EmailManagementPage() {
           <Clock className="h-4 w-4" />
           Sending Queue & Buffers ({totalQueueCount})
           {totalQueueCount > 0 && (
+            <span className="h-2 w-2 rounded-full bg-amber-400 animate-ping absolute top-1 right-1" />
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('certificates')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all cursor-pointer relative ${
+            activeTab === 'certificates'
+              ? 'bg-accent text-white shadow-md shadow-accent/20'
+              : 'text-theme-text-secondary hover:bg-theme-border/20'
+          }`}
+        >
+          <Award className="h-4 w-4" />
+          Scheduled Certificates ({certTabCount})
+          {certTabCount > 0 && (
             <span className="h-2 w-2 rounded-full bg-amber-400 animate-ping absolute top-1 right-1" />
           )}
         </button>
@@ -850,7 +942,7 @@ export default function EmailManagementPage() {
             </div>
           </div>
 
-          {bufferedEmails.length === 0 && pendingQueues.length === 0 ? (
+          {otherBuffered.length === 0 && pendingQueues.length === 0 ? (
             <EmptyState
               icon={CheckCircle2}
               title="No pending email queues"
@@ -859,12 +951,12 @@ export default function EmailManagementPage() {
           ) : (
             <div className="space-y-6">
               {/* SECTION 1: BUFFERED OUTGOING EMAILS */}
-              {bufferedEmails.length > 0 && (
+              {otherBuffered.length > 0 && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between border-b border-theme-border/20 pb-2">
                     <span className="text-xs font-bold uppercase tracking-wider text-theme-text-secondary flex items-center gap-2">
                       <Mail className="h-3.5 w-3.5 text-accent" />
-                      Buffered Outgoing Emails ({bufferedEmails.length})
+                      Buffered Outgoing Emails ({otherBuffered.length})
                     </span>
                     <span className="text-[11px] text-theme-text-secondary">
                       Auto-sending when timer reaches 00m:00s
@@ -872,7 +964,7 @@ export default function EmailManagementPage() {
                   </div>
 
                   <div className="space-y-3">
-                    {bufferedEmails.map(b => (
+                    {otherBuffered.map(b => (
                       <div key={b.id} className="p-5 bg-theme-background/30 border border-theme-card-border rounded-2xl space-y-3">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-theme-border/20 pb-3">
                           <div className="space-y-1">
@@ -996,6 +1088,136 @@ export default function EmailManagementPage() {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* TAB: SCHEDULED CERTIFICATES — same universal 10-minute buffer as every other email */}
+      {activeTab === 'certificates' && (
+        <div className="glass-panel p-6 rounded-3xl space-y-6 border border-theme-card-border">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-base font-bold text-theme-text-primary flex items-center gap-2">
+                <Award className="h-4 w-4 text-accent" />
+                Scheduled Certificates & Their 10-Minute Buffer
+              </h3>
+              <p className="text-xs text-theme-text-secondary">Every certificate send scheduled from the Certificates tab, across all events, plus the certificate emails now waiting to go out.</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              {certBuffered.length > 0 && (
+                <>
+                  <button onClick={() => handleCertBulk('cancel')} disabled={Boolean(isFlushingQueue)} className="px-3 py-1.5 bg-danger/15 hover:bg-danger/25 text-danger border border-danger/30 text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50">
+                    <X className="h-3.5 w-3.5" /> Cancel All Certificate Emails
+                  </button>
+                  <button onClick={() => handleCertBulk('flush')} disabled={Boolean(isFlushingQueue)} className="px-3 py-1.5 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/20 cursor-pointer flex items-center gap-1.5 disabled:opacity-50">
+                    <Play className="h-3.5 w-3.5" /> Dispatch All Now
+                  </button>
+                </>
+              )}
+              <button onClick={() => { fetchCertSchedules(); fetchQueues(); }} className="px-3 py-1.5 bg-theme-border/20 hover:bg-theme-border/40 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-1.5">
+                <RefreshCw className="h-3.5 w-3.5" /> Refresh
+              </button>
+            </div>
+          </div>
+
+          <div className="p-4 bg-accent/10 border border-accent/20 rounded-2xl flex items-start gap-3">
+            <Clock className="h-5 w-5 text-accent shrink-0 mt-0.5" />
+            <div className="text-xs space-y-1">
+              <span className="font-bold text-theme-text-primary block">Universal 10-Minute Quiet Buffer Applies</span>
+              <p className="text-theme-text-secondary leading-relaxed">
+                At the scheduled time each certificate is generated and queued, then held for 10 minutes before SMTP handoff — so recipients receive it about 10 minutes after the scheduled time. During that window you can cancel it or dispatch it immediately. The PDF stays attached throughout.
+              </p>
+            </div>
+          </div>
+
+          {/* SECTION 1: SCHEDULED BATCHES */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between border-b border-theme-border/20 pb-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-theme-text-secondary flex items-center gap-2">
+                <CalendarClock className="h-3.5 w-3.5 text-accent" /> Scheduled Sends ({certSchedules.length})
+              </span>
+              <span className="text-[11px] text-theme-text-secondary">Upcoming first, then recent history</span>
+            </div>
+            {certSchedules.length === 0 ? (
+              <EmptyState icon={CalendarClock} title="No scheduled certificates" description="Schedule a send from Event Passes → Certificates and it will appear here." />
+            ) : (
+              <div className="space-y-3">
+                {certSchedules.map(s => {
+                  const active = s.status === 'Scheduled' || s.status === 'Running';
+                  const tone = s.status === 'Done' ? 'bg-success/15 text-success border-success/30' : s.status === 'Failed' ? 'bg-danger/15 text-danger border-danger/30' : s.status === 'Cancelled' ? 'bg-theme-border/20 text-theme-text-secondary border-theme-border/30' : 'bg-amber-500/15 text-amber-400 border-amber-500/30';
+                  return (
+                    <div key={s.id} className="p-4 bg-theme-background/30 border border-theme-card-border rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-sm text-theme-text-primary truncate">{s.eventTitle}</span>
+                          <span className="px-2 py-0.5 bg-accent/10 text-accent rounded-md text-[10px] font-semibold">{s.typeName}</span>
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${tone}`}>{s.status === 'Running' ? 'Sending…' : s.status}</span>
+                        </div>
+                        <div className="flex items-center gap-x-2 gap-y-0.5 text-[11px] text-theme-text-secondary flex-wrap">
+                          <span>{s.recipients} certificate{s.recipients === 1 ? '' : 's'}</span><span>&middot;</span>
+                          <span>Scheduled for {new Date(s.sendAt).toLocaleString()}</span><span>&middot;</span>
+                          <span>by {s.createdBy}</span>
+                        </div>
+                        <div className="text-[11px] flex items-center gap-x-2 flex-wrap">
+                          {active && <span className="text-amber-400 font-semibold">Delivered about {new Date(s.deliverAfter).toLocaleString()} (after the 10-minute buffer)</span>}
+                          {s.status === 'Done' && <span className="text-theme-text-secondary">{s.sent} queued{s.failed ? `, ${s.failed} failed` : ''} · released {s.finishedAt ? new Date(s.finishedAt).toLocaleString() : ''} · final delivery about {new Date(s.deliverAfter).toLocaleTimeString()}</span>}
+                          {s.status === 'Failed' && <span className="text-danger">{s.error || 'The scheduled send failed.'}</span>}
+                        </div>
+                      </div>
+                      {s.status === 'Scheduled' && (
+                        <button onClick={() => handleCancelSchedule(s.id)} disabled={isCancellingSchedule === s.id} className="px-3 py-2 bg-danger/15 hover:bg-danger/25 text-danger border border-danger/30 text-xs font-bold rounded-xl transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1 shrink-0">
+                          <X className="h-3.5 w-3.5" /> {isCancellingSchedule === s.id ? 'Cancelling...' : 'Cancel Send'}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* SECTION 2: CERTIFICATE EMAILS IN THE 10-MINUTE BUFFER */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between border-b border-theme-border/20 pb-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-theme-text-secondary flex items-center gap-2">
+                <Mail className="h-3.5 w-3.5 text-accent" /> Certificate Emails in the 10-Minute Buffer ({certBuffered.length})
+              </span>
+              <span className="text-[11px] text-theme-text-secondary">Auto-sending when timer reaches 00m:00s</span>
+            </div>
+            {certBuffered.length === 0 ? (
+              <EmptyState icon={CheckCircle2} title="No certificate emails waiting" description="Certificate emails appear here for 10 minutes after they are sent or released from a schedule, before SMTP handoff." />
+            ) : (
+              <div className="space-y-3">
+                {certBuffered.map(b => (
+                  <div key={b.id} className="p-4 bg-theme-background/30 border border-theme-card-border rounded-2xl space-y-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-sm text-theme-text-primary">{b.to}</span>
+                          {b.hasAttachments && (
+                            <span className="px-2 py-0.5 bg-purple-500/10 text-purple-400 rounded-md text-[10px] font-semibold flex items-center gap-1"><Paperclip className="h-3 w-3" /> Certificate PDF attached</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-[11px] text-theme-text-secondary flex-wrap">
+                          <span className="text-amber-400 font-semibold flex items-center gap-1"><Clock className="h-3 w-3 animate-spin" />{formatCountdown(b.remainingSeconds)}</span>
+                          <span>&middot;</span><span>Queued: {new Date(b.queuedAt).toLocaleTimeString()}</span>
+                          <span>&middot;</span><span>Dispatch at: {new Date(b.bufferedUntil).toLocaleTimeString()}</span>
+                        </div>
+                        <span className="text-xs text-theme-text-primary font-semibold block truncate">{b.subject}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button onClick={() => handleCancelBufferedEmail(b.id)} disabled={isCancellingQueue === b.id} className="px-3 py-2 bg-danger/15 hover:bg-danger/25 text-danger border border-danger/30 text-xs font-bold rounded-xl transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1">
+                          <X className="h-3.5 w-3.5" /> {isCancellingQueue === b.id ? 'Cancelling...' : 'Cancel'}
+                        </button>
+                        <button onClick={() => handleFlushBufferedEmail(b.id)} disabled={isFlushingQueue === b.id} className="px-4 py-2 bg-accent hover:bg-primary-light text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-accent/20 cursor-pointer disabled:opacity-50 flex items-center gap-1.5">
+                          <Play className="h-3.5 w-3.5" /> {isFlushingQueue === b.id ? 'Dispatching...' : 'Dispatch Now'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
