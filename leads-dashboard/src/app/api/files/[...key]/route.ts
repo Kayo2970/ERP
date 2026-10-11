@@ -18,6 +18,8 @@ export async function GET(
   try {
     const { key } = await params;
     const storageKey = key.join('/');
+    // Attachments held for queued emails are private — never served over this public route.
+    if (key[0] === 'email-attachments') return NextResponse.json({ error: 'File not found.' }, { status: 404 });
     const buffer = await readStoredFile(storageKey);
     const fileName = key[key.length - 1]?.replace(/^\d+__/, '') || 'file';
     const download = new URL(request.url).searchParams.get('download') === '1';
