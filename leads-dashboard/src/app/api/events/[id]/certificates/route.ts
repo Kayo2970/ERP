@@ -5,7 +5,7 @@ import { apiError } from '@/lib/api-error';
 import { gateCertificateAction } from '@/lib/approval-gate';
 import { getAppBaseUrl } from '@/lib/app-url';
 import { EventItem, EventPassItem } from '@/lib/local-data';
-import { CertificateRecord, isCertificateEligible, isEventOver, sendCertificatesBatch } from '@/lib/certificate';
+import { getCertificateStatuses, isCertificateEligible, isEventOver, sendCertificatesBatch } from '@/lib/certificate';
 import { cleanCertEmail } from '@/lib/certificate-layout';
 import { CertificateSchedule } from '@/lib/certificate-scheduler';
 import { mutateCollection } from '@/lib/server-db';
@@ -33,10 +33,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const event = (await readCollection<EventItem>('events')).find((e) => e.id === id);
     if (!event) return NextResponse.json({ error: 'Event not found' }, { status: 404 });
     const passes = (await readCollection<EventPassItem>('event_passes')).filter((p) => p.eventId === id);
-    const records = (await readCollection<CertificateRecord>('certificates')).filter((c) => c.eventId === id);
+    const statuses = await getCertificateStatuses(id);
     const attendees = passes.filter(isCertificateEligible).map((p) => {
-      const rec = records.find((c) => c.passId === p.id);
-      return { passId: p.id, name: p.attendeeName, email: p.attendeeEmail, serial: p.serialNumber, organisation: p.attendeeOrg || '', category: String(p.guestCategory || ''), status: rec?.status || 'Not sent', sentAt: rec?.sentAt, error: rec?.error };
+      const info = statuses[p.id];
+      return { passId: p.id, name: p.attendeeName, email: p.attendeeEmail, serial: p.serialNumber, organisation: p.attendeeOrg || '', category: String(p.guestCategory || ''), status: info?.status || 'Not issued', code: info?.code, issuedAt: info?.issuedAt, sentAt: info?.sentAt, sentBy: info?.sentBy, error: info?.error };
     });
     const schedules = (await readCollection<CertificateSchedule>('certificateSchedules')).filter((x) => x.eventId === id).sort((a, b) => b.sendAt.localeCompare(a.sendAt)).slice(0, 10);
     return NextResponse.json({ eventOver: isEventOver(event), eventName: event.title, attendees, schedules });
@@ -79,7 +79,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     if (!isEventOver(event)) return NextResponse.json({ error: "Certificates can be sent from the event's last day." }, { status: 400 });
-    const results = await sendCertificatesBatch(event, passIds, origin, emails, message);
+    const results = await sendCertificatesBatch(event, passIds, origin, emails, message, auth.user?.name || 'Staff');
     return NextResponse.json({ sent: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length, results });
   } catch (err) {
     return apiError(err, 'certificates:send');

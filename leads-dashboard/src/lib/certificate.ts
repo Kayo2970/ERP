@@ -8,7 +8,7 @@ import { createCanvas, loadImage, GlobalFonts, SKRSContext2D } from '@napi-rs/ca
 import { jsPDF } from 'jspdf';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { saveBase64File, readStoredFile, deleteStoredFile } from '@/lib/file-storage';
-import { dispatchEmail } from '@/lib/email-service';
+import { dispatchEmail, EmailLog } from '@/lib/email-service';
 import { drawStyledQr } from '@/lib/qr-style';
 import { registerCustomFonts } from '@/lib/certificate-fonts';
 import { customFamily } from '@/lib/certificate-fonts';
@@ -61,6 +61,9 @@ export interface CertificateRecord {
   sentAt?: string;
   status: 'Issued' | 'Sent' | 'Failed';
   error?: string;
+  /** Email log entry the certificate went out in — lets the ledger report real delivery, not just queueing. */
+  emailLogId?: string;
+  sentBy?: string;
 }
 
 // ── Template storage ────────────────────────────────────────────────────────────
@@ -400,7 +403,8 @@ export async function sendCertificate(
   event: EventItem,
   origin: string,
   to?: string,
-  message?: CertEmailMessage
+  message?: CertEmailMessage,
+  sentBy?: string
 ): Promise<{ ok: boolean; error?: string; record: CertificateRecord }> {
   const rec = await ensureCertificateRecord(pass, event);
   const recipient = (to || pass.attendeeEmail || '').trim();
@@ -410,7 +414,7 @@ export async function sendCertificate(
     const verify = verifyUrlFor(origin, rec.code);
     const msg = message || DEFAULT_CERT_EMAIL;
     const vars = { name: rec.attendeeName, email: recipient, event: rec.eventName, date: rec.eventDate, code: rec.code, verifyUrl: verify };
-    await dispatchEmail({
+    const log = await dispatchEmail({
       to: recipient,
       subject: mergeCertEmail(msg.subject, vars),
       bodyText: mergeCertEmail(msg.bodyText, vars),
@@ -418,8 +422,8 @@ export async function sendCertificate(
       attachments: [{ filename: `Certificate-${rec.attendeeName.replace(/[^\w]+/g, '_')}.pdf`, content: pdf, contentType: 'application/pdf' }],
     });
     const sentAt = new Date().toISOString();
-    await mutateCollection<CertificateRecord>('certificates', (cur = []) => cur.map((c) => (c.id === rec.id ? { ...c, status: 'Sent', sentAt, error: undefined } : c)));
-    return { ok: true, record: { ...rec, status: 'Sent', sentAt } };
+    await mutateCollection<CertificateRecord>('certificates', (cur = []) => cur.map((c) => (c.id === rec.id ? { ...c, status: 'Sent', sentAt, error: undefined, emailLogId: log?.id, sentBy } : c)));
+    return { ok: true, record: { ...rec, status: 'Sent', sentAt, emailLogId: log?.id, sentBy } };
   } catch (err: any) {
     const error = err?.message || 'Failed to send.';
     await mutateCollection<CertificateRecord>('certificates', (cur = []) => cur.map((c) => (c.id === rec.id ? { ...c, status: 'Failed', error } : c)));
@@ -449,7 +453,8 @@ export async function sendCertificatesBatch(
   passIds: string[],
   origin: string,
   emails?: Record<string, string>,
-  message?: CertEmailMessage
+  message?: CertEmailMessage,
+  sentBy?: string
 ): Promise<Array<{ passId: string; ok: boolean; error?: string }>> {
   const passes = await readCollection<EventPassItem>('event_passes');
   const results: Array<{ passId: string; ok: boolean; error?: string }> = [];
@@ -460,8 +465,54 @@ export async function sendCertificatesBatch(
       continue;
     }
     const to = emails?.[passId];
-    const r = await sendCertificate(pass, event, origin, typeof to === 'string' && /^\S+@\S+\.\S+$/.test(to.trim()) ? to : undefined, message);
+    const r = await sendCertificate(pass, event, origin, typeof to === 'string' && /^\S+@\S+\.\S+$/.test(to.trim()) ? to : undefined, message, sentBy);
     results.push({ passId, ok: r.ok, error: r.error });
   }
   return results;
+}
+
+// ── Ledger: what has been issued / sent to whom, and when ───────────────────────
+
+export type CertDisplayStatus = 'Not issued' | 'Issued' | 'Queued' | 'Sent' | 'Failed';
+
+export interface CertStatusInfo {
+  status: CertDisplayStatus;
+  code?: string;
+  issuedAt?: string;
+  /** When the email actually left the server (or, while still queued, when it was queued). */
+  sentAt?: string;
+  sentBy?: string;
+  error?: string;
+}
+
+/**
+ * Per-pass certificate status. "Issued" = the certificate exists but has not been emailed; "Queued" = handed to the
+ * 10-minute email buffer; "Sent" = the mail server accepted it; "Failed" = could not be sent or the queued mail failed/was cancelled.
+ * Passes with no record are simply absent (the caller shows them as "Not issued").
+ */
+export async function getCertificateStatuses(eventId?: string): Promise<Record<string, CertStatusInfo>> {
+  const records = (await readCollection<CertificateRecord>('certificates')).filter((c) => !eventId || c.eventId === eventId);
+  const logs = new Map((await readCollection<EmailLog>('emails')).filter((l) => l.category === 'CERTIFICATE').map((l) => [l.id, l]));
+  const out: Record<string, CertStatusInfo> = {};
+  for (const r of records) {
+    const info: CertStatusInfo = { status: 'Issued', code: r.code, issuedAt: r.issuedAt, sentBy: r.sentBy };
+    if (r.status === 'Failed') {
+      info.status = 'Failed';
+      info.error = r.error;
+    } else if (r.status === 'Sent') {
+      const log = r.emailLogId ? logs.get(r.emailLogId) : undefined;
+      info.sentAt = r.sentAt;
+      if (!log) info.status = 'Sent'; // sent before delivery tracking existed
+      else if (log.status === 'BUFFERED') info.status = 'Queued';
+      else if (log.status === 'SENT') {
+        info.status = 'Sent';
+        info.sentAt = log.sentAt || r.sentAt;
+      } else {
+        info.status = 'Failed';
+        info.error = log.errorMessage || (log.status === 'CANCELLED' ? 'Email was cancelled before it was sent.' : 'Email failed to send.');
+      }
+    }
+    out[r.passId] = info;
+  }
+  return out;
 }

@@ -9,6 +9,10 @@
 // external VPS crontab entry, since this app runs continuously under PM2.
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
+    // Re-arm any buffered emails and start the 30s sweeper at boot (the /api/data poll used to do this implicitly).
+    const { restoreBufferedQueue } = await import('./lib/email-service');
+    restoreBufferedQueue().catch(() => {});
+
     const { startBirthdayScheduler } = await import('./lib/birthday-scheduler');
     startBirthdayScheduler();
 

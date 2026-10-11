@@ -3,11 +3,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Award, X, Send, RefreshCw, CheckCircle2, AlertCircle, CheckSquare, Square, ImagePlus, Trash2, ChevronDown, ChevronRight, Download, CalendarClock, Check } from 'lucide-react';
 import { EventItem, authHeaders, formatEventDateRange } from '@/lib/local-data';
+import { CertificateStatusBadge, CERT_STATUS_FILTERS } from '@/components/certificate-status-badge';
 import { CertBox, CertBoxKey, CertLayout, CERT_BOX_LABELS, CERT_FONT_OPTIONS, DEFAULT_CERT_EMAIL, CERT_EMAIL_FIELDS, CERT_EMAIL_MAX_SUBJECT, CERT_EMAIL_MAX_BODY, mergeCertEmail } from '@/lib/certificate-layout';
 
-interface Attendee { passId: string; name: string; email: string; serial: string; organisation?: string; category?: string; status: string; sentAt?: string; error?: string }
+interface Attendee { passId: string; name: string; email: string; serial: string; organisation?: string; category?: string; status: string; code?: string; issuedAt?: string; sentAt?: string; sentBy?: string; error?: string }
 interface Template { title: string; introText: string; bodyText: string; signatoryName: string; signatoryTitle: string; nameSource: 'name' | 'organisation' | 'category' | 'serial'; textColor: string; layout: CertLayout }
-interface Schedule { id: string; sendAt: string; passIds: string[]; status: string; sent?: number; failed?: number; error?: string }
+interface Schedule { id: string; sendAt: string; passIds: string[]; status: string; sent?: number; failed?: number; error?: string; finishedAt?: string; createdBy?: string }
 
 const field = 'w-full px-3 py-2 bg-slate-50 dark:bg-slate-900/60 border border-slate-300 dark:border-white/15 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:border-accent text-xs';
 const label = 'block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] mb-1';
@@ -83,6 +84,8 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [eventOver, setEventOver] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [recipientSearch, setRecipientSearch] = useState('');
   const [template, setTemplate] = useState<Template | null>(null);
   const [preview, setPreview] = useState('');
   const [background, setBackground] = useState<string | null | undefined>(undefined); // undefined = keep, null = remove
@@ -131,7 +134,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
       setAttendees(aj.attendees);
       setSchedules(aj.schedules || []);
       setEventOver(!!aj.eventOver);
-      setSelected(new Set(aj.attendees.filter((x: Attendee) => x.status !== 'Sent').map((x: Attendee) => x.passId)));
+      setSelected(new Set(aj.attendees.filter((x: Attendee) => x.status !== 'Sent' && x.status !== 'Queued').map((x: Attendee) => x.passId)));
       setPreviewPassId(aj.attendees[0]?.passId || '');
       setFinalPreview('');
       if (t.ok) {
@@ -385,7 +388,27 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
   };
   const emailReady = emailSubject.trim().length > 0 && emailBody.trim().length > 0;
 
-  const pending = attendees.filter((a) => a.status !== 'Sent').length;
+  const pending = attendees.filter((a) => a.status !== 'Sent' && a.status !== 'Queued').length;
+  const counts = CERT_STATUS_FILTERS.reduce((acc, s) => ({ ...acc, [s]: attendees.filter((a) => a.status === s).length }), {} as Record<string, number>);
+  const visibleAttendees = attendees.filter((a) => {
+    if (statusFilter !== 'ALL' && a.status !== statusFilter) return false;
+    const q = recipientSearch.trim().toLowerCase();
+    return !q || `${a.name} ${a.email} ${a.organisation || ''} ${a.serial} ${a.code || ''}`.toLowerCase().includes(q);
+  });
+  const selectFailed = () => { setStatusFilter('Failed'); setSelected(new Set(attendees.filter((a) => a.status === 'Failed').map((a) => a.passId))); };
+  const exportLedgerCsv = () => {
+    const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const rows = [['Name', 'Email', 'Organisation', 'Category', 'Pass Serial', 'Certificate Status', 'Certificate ID', 'Issued At', 'Sent At', 'Sent By', 'Error']].concat(
+      visibleAttendees.map((a) => [a.name, a.email, a.organisation || '', a.category || '', a.serial, a.status, a.code || '', a.issuedAt || '', a.sentAt || '', a.sentBy || '', a.error || ''])
+    );
+    const blob = new Blob([rows.map((r) => r.map(esc).join(',')).join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `certificates_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
   const enabledKeys = template ? (Object.keys(template.layout) as CertBoxKey[]).filter((k) => template.layout[k].enabled) : [];
   const showOverlay = template && (openStep === 2 || openStep === 3);
   const box = template ? template.layout[activeBox] : null;
@@ -621,22 +644,35 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                   <p className="text-[10px] text-slate-500">Merge fields for the wording: <code>@name</code> <code>@organisation</code> <code>@category</code> <code>@serial</code> <code>@event_name</code> <code>@event_date</code>. Each is filled from the attendee&apos;s pass when the PDF is made.</p>
                   <div className="flex items-center justify-between">
                     <span className="font-extrabold text-slate-800 dark:text-white">Recipients ({selected.size}/{attendees.length} selected · {pending} not yet sent)</span>
-                    <button type="button" className="font-bold text-accent hover:underline cursor-pointer" onClick={() => setSelected(selected.size === attendees.length ? new Set() : new Set(attendees.map((a) => a.passId)))}>
-                      {selected.size === attendees.length ? 'Deselect all' : 'Select all'}
+                    <button type="button" className="font-bold text-accent hover:underline cursor-pointer" onClick={() => setSelected(selected.size === visibleAttendees.length && visibleAttendees.length > 0 ? new Set() : new Set(visibleAttendees.map((a) => a.passId)))}>
+                      {selected.size === visibleAttendees.length && visibleAttendees.length > 0 ? 'Deselect all' : 'Select all'}
                     </button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 text-[10px] font-bold">
+                    <button type="button" onClick={() => setStatusFilter('ALL')} className={`px-2 py-0.5 rounded-full border cursor-pointer ${statusFilter === 'ALL' ? 'bg-accent/20 text-accent border-accent/40' : 'border-slate-300 dark:border-white/15 text-slate-500'}`}>All {attendees.length}</button>
+                    {CERT_STATUS_FILTERS.map((s) => (
+                      <button key={s} type="button" onClick={() => setStatusFilter(statusFilter === s ? 'ALL' : s)} className={`px-2 py-0.5 rounded-full border cursor-pointer ${statusFilter === s ? 'bg-accent/20 text-accent border-accent/40' : 'border-slate-300 dark:border-white/15 text-slate-500'}`}>{s} {counts[s] || 0}</button>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input className={`${field} flex-1 min-w-[140px]`} placeholder="Search name, email, organisation, serial or certificate ID" value={recipientSearch} onChange={(e) => setRecipientSearch(e.target.value)} />
+                    {counts['Failed'] > 0 && <button type="button" onClick={selectFailed} className="px-3 py-2 rounded-xl bg-rose-500/15 text-rose-500 border border-rose-500/30 font-bold cursor-pointer">Retry failed ({counts['Failed']})</button>}
+                    <button type="button" onClick={exportLedgerCsv} disabled={visibleAttendees.length === 0} className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-white font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"><Download className="h-3.5 w-3.5" /> CSV</button>
                   </div>
                   <div className="border border-slate-200 dark:border-white/10 rounded-xl divide-y divide-slate-100 dark:divide-white/5 max-h-[40vh] overflow-y-auto">
                     {attendees.length === 0 && <div className="py-6 text-center text-slate-400">{busy ? 'Loading…' : 'No checked-in attendees with an email address for this event.'}</div>}
-                    {attendees.map((a) => (
+                    {attendees.length > 0 && visibleAttendees.length === 0 && <div className="py-6 text-center text-slate-400">No one matches this filter.</div>}
+                    {visibleAttendees.map((a) => (
                       <div key={a.passId} onClick={() => toggle(a.passId)} className="flex items-center justify-between gap-2 p-2 hover:bg-white/10 cursor-pointer">
                         <div className="flex items-center gap-2 min-w-0">
                           {selected.has(a.passId) ? <CheckSquare className="h-4 w-4 text-accent shrink-0" /> : <Square className="h-4 w-4 text-slate-400 shrink-0" />}
                           <div className="min-w-0">
                             <span className="font-bold text-slate-900 dark:text-white block truncate">{a.name}</span>
                             <span className="text-[10px] text-slate-400 block truncate">{a.email}{a.organisation ? ` · ${a.organisation}` : ''}{a.category ? ` · ${a.category}` : ''}</span>
+                            {a.status === 'Failed' && a.error && <span className="text-[10px] text-rose-400 block truncate">{a.error}</span>}
                           </div>
                         </div>
-                        <span title={a.error} className={`text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0 ${a.status === 'Sent' ? 'bg-emerald-500/15 text-emerald-400' : a.status === 'Failed' ? 'bg-rose-500/15 text-rose-400' : 'bg-slate-500/15 text-slate-400'}`}>{a.status}</span>
+                        <div className="shrink-0"><CertificateStatusBadge status={a.status} sentAt={a.sentAt} issuedAt={a.issuedAt} error={a.error} sentBy={a.sentBy} /></div>
                       </div>
                     ))}
                   </div>
@@ -695,7 +731,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                         <div key={s.id} className="flex items-center justify-between gap-2 p-2 rounded-lg border border-slate-200 dark:border-white/10">
                           <span className="min-w-0">
                             <span className="font-bold text-slate-900 dark:text-white block">{new Date(s.sendAt).toLocaleString()} · {s.passIds.length} certificate{s.passIds.length === 1 ? '' : 's'}</span>
-                            <span className="text-[10px] text-slate-500">{s.status}{s.status === 'Done' ? ` — ${s.sent} sent${s.failed ? `, ${s.failed} failed` : ''}` : ''}{s.error ? ` — ${s.error}` : ''}</span>
+                            <span className="text-[10px] text-slate-500">{s.status}{s.status === 'Done' ? ` — ${s.sent} sent${s.failed ? `, ${s.failed} failed` : ''}` : ''}{s.finishedAt ? ` · finished ${new Date(s.finishedAt).toLocaleString()}` : ''}{s.createdBy ? ` · scheduled by ${s.createdBy}` : ''}{s.error ? ` — ${s.error}` : ''}</span>
                           </span>
                           {s.status === 'Scheduled' && <button type="button" onClick={() => cancelSchedule(s.id)} className="px-2.5 py-1 rounded-lg text-rose-400 border border-rose-500/30 font-bold cursor-pointer">Cancel</button>}
                         </div>
