@@ -88,6 +88,12 @@ export function canReviewEventReports(user: SessionUser): boolean {
   return isCentreHead(user) || isEventsHeadGgCampus(user);
 }
 
+/** Who may score a submitted event report — reviewers always can; EVENT_REPORTS_SCORE lets a policy grant scoring alone. */
+export function canScoreEventReports(user: SessionUser): boolean {
+  if (!user) return false;
+  return canReviewEventReports(user) || hasCapability(user, 'EVENT_REPORTS_SCORE');
+}
+
 /** Who may act on a design's pending proofread request — an explicitly assigned
  *  faculty proofreader, Centre Head, Advisor, GG Campus Events Head, Faculty, or Super User. */
 export function canReviewDesignProofread(user: SessionUser, design?: { assignedProofreaderIds?: string[]; assignedProofreaderEmail?: string; assignedProofreaderId?: string }): boolean {
@@ -116,6 +122,7 @@ export function canViewEventReports(user: SessionUser): boolean {
     hasCapability(user, 'EVENT_REPORTS_SUBMIT') ||
     hasCapability(user, 'EVENT_REPORTS_VIEW_ALL') ||
     hasCapability(user, 'EVENT_REPORTS_REVIEW') ||
+    hasCapability(user, 'EVENT_REPORTS_SCORE') ||
     hasModuleViewAllGrant(user, 'EVENT_REPORTS')
   );
 }
@@ -434,6 +441,7 @@ export const CAPABILITY_CATALOG: { key: string; label: string; description: stri
   { key: 'VIEW_ALL_REPORTS', label: 'View All Performance Reports', description: 'See every report/rating record, not just their own or their department’s.', module: 'Ratings & Reports' },
   { key: 'EVENT_REPORTS_SUBMIT', label: 'Submit Event Reports', description: 'Submit formal post-event reports for approval.', module: 'Event Reports' },
   { key: 'EVENT_REPORTS_REVIEW', label: 'Review Event Reports', description: 'Approve or reject submitted event reports.', module: 'Event Reports' },
+  { key: 'EVENT_REPORTS_SCORE', label: 'Score Event Reports', description: 'Give a submitted event report its quality score (clarity, flow, timeliness, errors, geotagged photos) from Event Reports or the Ratings page — without being able to approve or reject it.', module: 'Event Reports' },
   { key: 'EVENT_REPORTS_VIEW_ALL', label: 'View All Event Reports', description: 'See every submitted event report, not just ones this person submitted or is reviewing.', module: 'Event Reports' },
   { key: 'EVENT_REPORTS_DELETE', label: 'Delete Event Reports', description: 'Delete submitted event reports.', module: 'Event Reports' },
   { key: 'MANAGE_GUEST_INVITES', label: 'Manage Mail Merge', description: 'Access the Mail Merge tool (personalized bulk email — formerly "Guest Invites").', module: 'Mail Merge' },
@@ -442,6 +450,8 @@ export const CAPABILITY_CATALOG: { key: string; label: string; description: stri
   { key: 'EVENT_PASSES_DISPATCH', label: 'Email & Dispatch Event Passes', description: 'Preview and email passes to attendees: single send, bulk "Preview & dispatch", and "Email Unsent Passes".', module: 'Event Passes' },
   { key: 'EVENT_PASSES_DELETE', label: 'Delete Event Passes', description: 'Delete issued event passes (also removes their stored files and revokes the wallet pass).', module: 'Event Passes' },
   { key: 'SCAN_EVENT_PASSES', label: 'Scan & Admit Turnstile Passes', description: 'Operate turnstile camera QR scanner and check in attendees at venue gates.', module: 'Event Passes' },
+  { key: 'CERTIFICATES_SEND', label: 'Send Attendance Certificates', description: 'Preview, email and schedule PDF attendance certificates to checked-in attendees of a finished event ("Send Certificates" in Event Passes) — without being able to email passes or change the certificate design.', module: 'Certificates' },
+  { key: 'CERTIFICATES_DESIGN', label: 'Design Certificates & Fonts', description: 'Edit the certificate design for an event (artwork, text boxes, which details are printed) and upload / import / delete custom certificate fonts.', module: 'Certificates' },
   { key: 'MANAGE_BACKUP', label: 'Access Backup & Restore', description: 'Download system backups and restore from an archive.', module: 'Administration' },
   { key: 'MANAGE_EMAIL_SETTINGS', label: 'Access Email Management', description: 'View dispatch logs and manage email settings.', module: 'Administration' },
   { key: 'MANAGE_GROUP_POLICIES', label: 'Manage Group Policies', description: 'Create, edit, and configure group policies and dynamic RBAC tags.', module: 'Administration' },
@@ -932,6 +942,18 @@ export function canDispatchEventPasses(user: SessionUser): boolean {
   return canManageEventPasses(user) || hasCapability(user, 'EVENT_PASSES_DISPATCH');
 }
 
+/** Email / preview / schedule attendance certificates. Anyone who can dispatch passes keeps this; CERTIFICATES_SEND grants it on its own. */
+export function canSendCertificates(user: SessionUser): boolean {
+  if (!user) return false;
+  return canDispatchEventPasses(user) || hasCapability(user, 'CERTIFICATES_SEND');
+}
+
+/** Change an event's certificate design and manage custom certificate fonts. Anyone who can edit passes keeps this; CERTIFICATES_DESIGN grants it on its own. */
+export function canDesignCertificates(user: SessionUser): boolean {
+  if (!user) return false;
+  return canEditEventPasses(user) || hasCapability(user, 'CERTIFICATES_DESIGN');
+}
+
 /** Delete issued event passes. */
 export function canDeleteEventPasses(user: SessionUser): boolean {
   if (!user) return false;
@@ -941,7 +963,7 @@ export function canDeleteEventPasses(user: SessionUser): boolean {
 /** Can open the Issued Event Passes roster (managers, or anyone granted edit / dispatch / delete). */
 export function canViewIssuedEventPasses(user: SessionUser): boolean {
   if (!user) return false;
-  return canManageEventPasses(user) || canEditEventPasses(user) || canDispatchEventPasses(user) || canDeleteEventPasses(user);
+  return canManageEventPasses(user) || canEditEventPasses(user) || canDispatchEventPasses(user) || canDeleteEventPasses(user) || canSendCertificates(user) || canDesignCertificates(user);
 }
 
 /** Check if user is authorized to see and open the Event Passes navigation module. */

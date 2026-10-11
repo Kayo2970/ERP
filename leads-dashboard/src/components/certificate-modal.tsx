@@ -69,9 +69,11 @@ interface Props {
   events: EventItem[];
   initialEventId?: string;
   canEditDesign: boolean;
+  /** Holds the Send Certificates power; false = design/preview only. Defaults to true. */
+  canSend?: boolean;
 }
 
-export function CertificateModal({ isOpen, onClose, events, initialEventId, canEditDesign }: Props) {
+export function CertificateModal({ isOpen, onClose, events, initialEventId, canEditDesign, canSend = true }: Props) {
   const [eventId, setEventId] = useState('');
   const [openStep, setOpenStep] = useState(1);
   const [attendees, setAttendees] = useState<Attendee[]>([]);
@@ -636,7 +638,8 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                     <label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={sendMode === 'later'} onChange={() => setSendMode('later')} /> Schedule</label>
                   </div>
                   {sendMode === 'later' && <input type="datetime-local" className={`${field} max-w-xs`} value={sendAt} onChange={(e) => setSendAt(e.target.value)} />}
-                  <button type="button" disabled={busy || selected.size === 0 || (sendMode === 'now' && !eventOver)} onClick={send} className="px-6 py-2.5 bg-accent text-white font-extrabold rounded-xl text-xs shadow-lg shadow-accent/25 flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                  {!canSend && <p className="text-amber-500 font-semibold">You can design and preview certificates but not send them.</p>}
+                  <button type="button" disabled={!canSend || busy || selected.size === 0 || (sendMode === 'now' && !eventOver)} onClick={send} className="px-6 py-2.5 bg-accent text-white font-extrabold rounded-xl text-xs shadow-lg shadow-accent/25 flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                     {busy ? <RefreshCw className="h-4 w-4 animate-spin" /> : sendMode === 'later' ? <CalendarClock className="h-4 w-4" /> : <Send className="h-4 w-4" />}
                     {sendMode === 'later' ? 'Schedule' : 'Send'} {selected.size} certificate{selected.size === 1 ? '' : 's'}
                   </button>

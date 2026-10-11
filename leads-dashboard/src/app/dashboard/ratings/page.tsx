@@ -51,7 +51,7 @@ import {
 import { groupScoredReportsBySubmitter } from '@/lib/report-scoring';
 import { getEventReports, EventReportItem } from '@/lib/local-data';
 import { ReportScorePanel } from '@/components/report-score-panel';
-import { canReviewEventReports } from '@/lib/permissions';
+import { canScoreEventReports } from '@/lib/permissions';
 
 const CRITERIA_SET_LABEL: Record<RatingCriteriaSet, string> = {
   general: 'General Task',
@@ -719,7 +719,7 @@ export default function RatingsPage() {
   // Report Writing Final Score leaderboard — decay-weighted average of each
   // submitter's scored event reports (see report-scoring.ts). Excludes faculty.
   const reportScoreLeaderboard = groupScoredReportsBySubmitter(eventReports, members);
-  const canScoreReports = !!user && canReviewEventReports(user);
+  const canScoreReports = !!user && canScoreEventReports(user);
 
   return (
     <div className="p-6 md:p-8 space-y-6">

@@ -31,7 +31,7 @@ import {
   authHeaders,
   saveEventReports,
 } from '@/lib/local-data';
-import { canSubmitEventReport, canReviewEventReports, canViewEventReports, isCentreHead, isEventsHeadGgCampus, isChiefCoordinator, isGeneralSecretary, hasCapability, hasModuleViewAllGrant } from '@/lib/permissions';
+import { canSubmitEventReport, canReviewEventReports, canScoreEventReports, canViewEventReports, isCentreHead, isEventsHeadGgCampus, isChiefCoordinator, isGeneralSecretary, hasCapability, hasModuleViewAllGrant } from '@/lib/permissions';
 import { ReportScorePanel } from '@/components/report-score-panel';
 import { FileDropzone, FilePreviewRow, createProgressTracker } from '@/components/ui/file-dropzone';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -152,6 +152,7 @@ export default function EventReportsPage() {
   const approvedReports = reports.filter(r => r.status === 'approved');
   const canSubmit = canSubmitEventReport(user) || myOpenReportTasks.length > 0;
   const canReview = canReviewEventReports(user);
+  const canScore = canScoreEventReports(user);
   const viewerIsCentreHead = isCentreHead(user);
   const viewerIsGgEventsHead = isEventsHeadGgCampus(user);
 
@@ -442,7 +443,7 @@ export default function EventReportsPage() {
                         <Download className="h-3.5 w-3.5" />
                       </a>
                     )}
-                    {(viewerIsCentreHead || viewerIsGgEventsHead) && (
+                    {canScore && (
                       <button onClick={() => openScoring(report)} className="px-3 py-1.5 bg-accent/15 hover:bg-accent/25 text-accent border border-accent/30 text-[11px] font-bold rounded-lg transition-all cursor-pointer">
                         {report.reportScore != null ? 'Edit Score' : 'Score Report'}
                       </button>
@@ -512,7 +513,7 @@ export default function EventReportsPage() {
                         <Download className="h-3.5 w-3.5" />
                       </a>
                     )}
-                    {(viewerIsCentreHead || viewerIsGgEventsHead) && (
+                    {canScore && (
                       <button onClick={() => openScoring(report)} className="px-3 py-1.5 bg-accent/15 hover:bg-accent/25 text-accent border border-accent/30 text-[11px] font-bold rounded-lg transition-all cursor-pointer">
                         {report.reportScore != null ? 'Edit Score' : 'Score Report'}
                       </button>

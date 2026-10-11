@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { readCollection } from '@/lib/server-db';
 import { requireSession } from '@/lib/session';
 import { apiError } from '@/lib/api-error';
-import { gateEventPassAction } from '@/lib/approval-gate';
+import { gateCertificateAction } from '@/lib/approval-gate';
 import { getAppBaseUrl } from '@/lib/app-url';
 import { EventItem, EventPassItem } from '@/lib/local-data';
 import { CertificateRecord, isCertificateEligible, isEventOver, sendCertificatesBatch } from '@/lib/certificate';
@@ -12,9 +12,9 @@ import { mutateCollection } from '@/lib/server-db';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-async function authorise(request: Request) {
+async function authorise(request: Request, action: 'send' | 'view' = 'send') {
   const user = await requireSession(request);
-  const gate = await gateEventPassAction(user, 'dispatch');
+  const gate = await gateCertificateAction(user, action);
   if (!gate.allowed) return { error: NextResponse.json({ error: "You don't have permission to send event certificates." }, { status: 403 }) };
   if (gate.requiresApproval) {
     return { error: NextResponse.json({ error: 'Sending certificates needs an approver for your role — ask a Head or the Centre leadership to send them.' }, { status: 403 }) };
@@ -25,7 +25,8 @@ async function authorise(request: Request) {
 /** Attendees who qualify for a certificate, with whether theirs was already sent. */
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const auth = await authorise(request);
+    // Read-only list: also open to design-only holders so they can preview the design on real attendees.
+    const auth = await authorise(request, 'view');
     if (auth.error) return auth.error;
     const { id } = await params;
     const event = (await readCollection<EventItem>('events')).find((e) => e.id === id);
