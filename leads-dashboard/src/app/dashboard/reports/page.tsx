@@ -16,7 +16,8 @@ import {
   Radar,
   Cell
 } from 'recharts';
-import { getRatings, getMembers, getEvents, getTasks, RatingItem, Member, EventItem, TaskItem } from '@/lib/local-data';
+import { getRatings, getMembers, getEvents, getTasks, getEventReports, RatingItem, Member, EventItem, TaskItem, EventReportItem } from '@/lib/local-data';
+import { groupScoredReportsBySubmitter } from '@/lib/report-scoring';
 import { getRatingColor } from '@/lib/design-tokens';
 import { buildStudentFinalScores, QUALITY_WEIGHT, TASK_COUNT_WEIGHT, TASK_COUNT_TARGET } from '@/lib/final-score';
 import { canViewRating, isFaculty, isSocialMediaTeamMember } from '@/lib/permissions';
@@ -42,6 +43,7 @@ export default function ReportsPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [eventReports, setEventReports] = useState<EventReportItem[]>([]);
   const [user, setUser] = useState<any>(null);
   const [selectedDivision, setSelectedDivision] = useState<string>('ALL');
   const [selectedTarget, setSelectedTarget] = useState('All');
@@ -65,6 +67,8 @@ export default function ReportsPage() {
       setMembers(getMembers());
       setEvents(getEvents());
       setTasks(getTasks());
+      // Report Writing scores live on the event reports; refreshed with everything else on each sync.
+      setEventReports(getEventReports());
     };
     refreshData();
 
@@ -219,6 +223,29 @@ export default function ReportsPage() {
   const personalSubject = selectedTarget !== 'All' ? selectedTarget : scopedNames.length === 1 ? scopedNames[0] : undefined;
   const effectiveBreakdown = personalSubject && barBreakdown === 'student' ? 'event' : barBreakdown;
 
+  // Report Writing Final Score — same decay-weighted calculation as the Ratings page's leaderboard (report-scoring.ts),
+  // narrowed by this page's division / member / period filters. Faculty are excluded inside groupScoredReportsBySubmitter.
+  const myEmail = (user?.email || '').toLowerCase();
+  const reportWritingScores = groupScoredReportsBySubmitter(
+    eventReports.filter(r => {
+      if (!isWithinPeriod(r.submittedAt, periodFilter)) return false;
+      const submitter = members.find(m =>
+        (r.submittedByEmail && m.email && m.email.toLowerCase() === r.submittedByEmail.toLowerCase()) ||
+        (m.name && m.name.toLowerCase() === (r.submittedBy || '').toLowerCase())
+      );
+      if (selectedDivision !== 'ALL' && submitter?.division !== selectedDivision) return false;
+      if (selectedTarget !== 'All' && (r.submittedBy || '').toLowerCase() !== selectedTarget.toLowerCase()) return false;
+      // A single-person view (a student looking at their own data) only ever shows that person's report scores.
+      if (personalSubject) {
+        const isThem = (r.submittedBy || '').toLowerCase() === personalSubject.toLowerCase() ||
+          (!!myEmail && onlyOwnData && (r.submittedByEmail || '').toLowerCase() === myEmail);
+        if (!isThem) return false;
+      }
+      return true;
+    }),
+    members
+  );
+
   // Bar Data with dynamic color tokens from design system — grouped
   // according to barBreakdown so a student (or event) with several rated
   // tasks shows up as ONE bar (their average), instead of one bar per task
@@ -309,6 +336,7 @@ export default function ReportsPage() {
         events,
         tasks,
         totalEventsInPeriod,
+        reportWriting: reportWritingScores,
         subject: personalSubject,
         members: members.filter(m => !isFaculty(m)),
       });
@@ -636,6 +664,47 @@ export default function ReportsPage() {
                       <td className="py-2 pr-2 text-theme-text-secondary">{row.taskCount}</td>
                       <td className="py-2 pr-2 text-theme-text-secondary">{row.avgScore.toFixed(2)} / 5.0</td>
                       <td className="py-2 pr-2 text-theme-text-secondary">{row.countScore.toFixed(2)} / 5.0</td>
+                      <td className="py-2 pr-2">
+                        <span className={`px-2 py-0.5 rounded-lg font-bold ${colorTokens.bg} ${colorTokens.text} ${colorTokens.border} border`}>{row.finalScore.toFixed(2)} / 5.0</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Report Writing — Final Score (from scored event reports; same numbers as the Ratings page leaderboard) */}
+      {reportWritingScores.length > 0 && (
+        <div className="glass-panel rounded-2xl p-6 space-y-4">
+          <div>
+            <h3 className="font-bold text-sm text-theme-text-primary">Report Writing — Final Score</h3>
+            <p className="text-[11px] text-theme-text-secondary">
+              Decay-weighted average of each submitter&apos;s scored event reports on the Report Writing rubric — older reports and submitters with more reports since count for less. Updates as soon as a report is scored.
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="text-theme-text-secondary border-b border-theme-border/30">
+                  <th className="pb-2 font-semibold">#</th>
+                  <th className="pb-2 font-semibold">Submitter</th>
+                  <th className="pb-2 font-semibold">Reports Scored</th>
+                  <th className="pb-2 font-semibold">Last Report</th>
+                  <th className="pb-2 font-semibold">Final Score</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-theme-border/20">
+                {reportWritingScores.map((row, i) => {
+                  const colorTokens = getRatingColor(row.finalScore);
+                  return (
+                    <tr key={row.submittedBy}>
+                      <td className="py-2 pr-2 text-theme-text-secondary">{i + 1}</td>
+                      <td className="py-2 pr-2 font-bold text-theme-text-primary">{row.submittedBy}</td>
+                      <td className="py-2 pr-2 text-theme-text-secondary">{row.reportCount}</td>
+                      <td className="py-2 pr-2 text-theme-text-secondary whitespace-nowrap">{row.lastSubmittedAt?.slice(0, 10)}</td>
                       <td className="py-2 pr-2">
                         <span className={`px-2 py-0.5 rounded-lg font-bold ${colorTokens.bg} ${colorTokens.text} ${colorTokens.border} border`}>{row.finalScore.toFixed(2)} / 5.0</span>
                       </td>

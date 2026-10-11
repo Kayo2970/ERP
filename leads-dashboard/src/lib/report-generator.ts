@@ -17,6 +17,7 @@ import autoTable from 'jspdf-autotable';
 import { RatingItem, EventItem, Member, TaskItem, formatEventDateRange } from './local-data';
 import { RATING_CRITERIA } from './rating-criteria';
 import { buildStudentFinalScores } from './final-score';
+import type { SubmitterReportScore } from './report-scoring';
 
 type RGB = [number, number, number];
 const BRAND_PRIMARY: RGB = [15, 42, 71]; // #0F2A47
@@ -47,6 +48,8 @@ export interface PerformanceReportParams {
   tasks?: TaskItem[];
   /** Events held in the period — the participation part of the final score. */
   totalEventsInPeriod?: number;
+  /** Report Writing Final Score per submitter (decay-weighted over scored event reports), already narrowed to the report's scope. */
+  reportWriting?: SubmitterReportScore[];
   /** Set when the report is about a single person: switches to the personal layout. */
   subject?: string;
 }
@@ -394,6 +397,23 @@ function distributionTable(doc: jsPDF, y: number, ratings: RatingItem[]): number
 const SCORE_HEAD = ['Quality', 'Timeliness', 'Initiative', 'Collab.', 'Overall'];
 const scoreCells = (r: RatingItem) => [r.quality.toFixed(1), r.timeliness.toFixed(1), r.initiative.toFixed(1), r.collaboration.toFixed(1), r.overallScore.toFixed(1)];
 
+/** "Report Writing — Final Score" table (scored event reports). Skipped when nothing in scope has been scored. */
+function reportWritingSection(doc: jsPDF, y: number, rows: SubmitterReportScore[] | undefined, sectionLabel: string): number {
+  if (!rows || rows.length === 0) return y;
+  y = sectionTitle(doc, y, sectionLabel, 'Decay-weighted average of scored event reports on the Report Writing rubric — older reports and submitters with more reports since count for less.');
+  autoTable(doc, {
+    startY: y,
+    margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },
+    head: [['#', 'Submitter', 'Reports scored', 'Last report', 'Final score']],
+    body: rows.map((r, i) => [String(i + 1), r.submittedBy, String(r.reportCount), (r.lastSubmittedAt || '').slice(0, 10), `${r.finalScore.toFixed(2)} / 5`]),
+    theme: 'striped',
+    styles: { fontSize: 8.5, cellPadding: 4, textColor: TEXT_DARK, lineColor: BORDER_LIGHT },
+    headStyles: { fillColor: BRAND_PRIMARY, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
+    alternateRowStyles: { fillColor: PANEL },
+  });
+  return lastY(doc) + 20;
+}
+
 function fullLogAppendix(doc: jsPDF, ratings: RatingItem[], showStudent: boolean) {
   doc.addPage();
   doc.setFont('helvetica', 'bold');
@@ -643,6 +663,8 @@ function buildPersonal(doc: jsPDF, p: PerformanceReportParams) {
     }
   }
 
+  y = reportWritingSection(doc, y, p.reportWriting, 'Report Writing — Final Score');
+
   fullLogAppendix(doc, ratings, false);
 }
 
@@ -791,6 +813,8 @@ function buildTeam(doc: jsPDF, p: PerformanceReportParams) {
       y = lastY(doc) + 20;
     }
   }
+
+  y = reportWritingSection(doc, y, p.reportWriting, 'Report Writing — Final Score');
 
   fullLogAppendix(doc, ratings, true);
 }
