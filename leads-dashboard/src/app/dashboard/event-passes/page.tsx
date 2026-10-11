@@ -55,6 +55,7 @@ import {
   canDispatchEventPasses,
   canDeleteEventPasses,
   canViewIssuedEventPasses,
+  canViewIssuedCertificates,
   canAccessEventPassesModule,
   canViewFullDirectory,
 } from '@/lib/permissions';
@@ -65,6 +66,7 @@ import { EventPassPushModal } from '@/components/event-pass-push-modal';
 import { EventPassBulkDispatchModal } from '@/components/event-pass-bulk-dispatch-modal';
 import { EventPassBulkEditModal } from '@/components/event-pass-bulk-edit-modal';
 import { CertificateModal } from '@/components/certificate-modal';
+import { IssuedCertificatesPanel } from '@/components/issued-certificates-panel';
 import { EventPassEditModal } from '@/components/event-pass-edit-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SearchableSelect } from '@/components/searchable-select';
@@ -214,17 +216,18 @@ export default function EventPassesPage() {
   const canAccessModule = canAccessEventPassesModule(user);
 
   const canCertificates = canSendCerts || canDesignCerts;
+  const canSeeCertLedger = canViewIssuedCertificates(user);
 
   // Auto switch to the first tab the user can actually use
   useEffect(() => {
     if (user && !canManagePasses && canViewIssued) {
       setActiveTab('passes');
-    } else if (user && !canManagePasses && canCertificates) {
+    } else if (user && !canManagePasses && canSeeCertLedger) {
       setActiveTab('certificates');
     } else if (user && !canManagePasses && canScanPasses) {
       setActiveTab('scanner');
     }
-  }, [user, canManagePasses, canViewIssued, canCertificates, canScanPasses]);
+  }, [user, canManagePasses, canViewIssued, canSeeCertLedger, canScanPasses]);
 
   // Dispatch single pass email
   const handleDispatchSinglePass = async (pass: EventPassItem) => {
@@ -615,7 +618,7 @@ export default function EventPassesPage() {
             </>
           )}
 
-          {canCertificates && (
+          {canSeeCertLedger && (
             <button
               type="button"
               onClick={() => setActiveTab('certificates')}
@@ -1060,7 +1063,7 @@ export default function EventPassesPage() {
 
               {/* Action Buttons */}
               <div className="flex items-center gap-2 flex-wrap">
-                {(canSendCerts || canDesignCerts) && (
+                {canSeeCertLedger && (
                 <button
                   type="button"
                   onClick={() => setActiveTab('certificates')}
@@ -1566,18 +1569,22 @@ export default function EventPassesPage() {
 
       {/* TAB 3: GATE TURNSTILE SCANNER */}
       {/* TAB: CERTIFICATES — design, preview, compose the email, send or schedule */}
-      {activeTab === 'certificates' && canCertificates && (
-        <div className="animate-in fade-in duration-300">
-          <CertificateModal
-            inline
-            isOpen
-            onClose={() => setActiveTab(canViewIssued ? 'passes' : canManagePasses ? 'studio' : 'certificates')}
-            events={events}
-            initialEventId={deepFilterEventId !== 'ALL' ? deepFilterEventId : passFilterEventId}
-            canEditDesign={canDesignCerts}
-            canSend={canSendCerts}
-            canPickMembers={canViewFullDirectory(user)}
-          />
+      {activeTab === 'certificates' && canSeeCertLedger && (
+        <div className="animate-in fade-in duration-300 space-y-6">
+          {canCertificates && (
+            <CertificateModal
+              inline
+              isOpen
+              onClose={() => setActiveTab(canViewIssued ? 'passes' : canManagePasses ? 'studio' : 'certificates')}
+              events={events}
+              initialEventId={deepFilterEventId !== 'ALL' ? deepFilterEventId : passFilterEventId}
+              canEditDesign={canDesignCerts}
+              canSend={canSendCerts}
+              canPickMembers={canViewFullDirectory(user)}
+            />
+          )}
+          {/* Issued certificates, grouped per event like the Events page */}
+          <IssuedCertificatesPanel />
         </div>
       )}
 

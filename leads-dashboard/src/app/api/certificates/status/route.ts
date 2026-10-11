@@ -11,7 +11,7 @@ export const runtime = 'nodejs';
 export async function GET(request: Request) {
   try {
     const user = await requireSession(request);
-    const gate = await gateCertificateAction(user, 'view');
+    const gate = await gateCertificateAction(user, 'ledger');
     if (!gate.allowed || gate.requiresApproval) return NextResponse.json({ allowed: false, statuses: {} });
     const eventId = new URL(request.url).searchParams.get('eventId') || undefined;
     return NextResponse.json({ allowed: true, statuses: await getCertificateStatuses(eventId) });
