@@ -722,6 +722,27 @@ export function canBuildForms(user: ServerUser, settings: AccessLevelSettings): 
   return (!!user && (user.tier === 1 || user.tier === 5)) || isHeadRole(user, settings) || isExecutiveRole(user) || hasCap(user, 'BUILD_FORMS');
 }
 
+/** Training Associates may build public forms of their own (always via sign-off). Mirrors permissions.ts. */
+export function isTrainingAssociate(user: ServerUser): boolean {
+  if (!user || isAlumniRole(user)) return false;
+  return user.division === 'Training Associate';
+}
+
+export function canCreateForms(user: ServerUser, settings: AccessLevelSettings): boolean {
+  return canBuildForms(user, settings) || isTrainingAssociate(user);
+}
+
+/** A Training Associate who is not a full form builder some other way sees and touches only forms they created. */
+export function seesOnlyOwnForms(user: ServerUser, settings: AccessLevelSettings): boolean {
+  return isTrainingAssociate(user) && !canBuildForms(user, settings);
+}
+
+export function isOwnForm(form: { createdById?: string; submittedByEmail?: string }, user: ServerUser): boolean {
+  if (!user) return false;
+  if (form.createdById) return form.createdById === user.id;
+  return !!form.submittedByEmail && !!user.email && form.submittedByEmail.toLowerCase() === user.email.toLowerCase();
+}
+
 /**
  * Announcement authoring. Ported from permissions.ts's canCreateAnnouncement
  * (built-in clause only): base leadership, Core Committee, tier 4/5, Faculty,

@@ -1161,6 +1161,10 @@ export interface PublicFormItem {
   fields: FormField[];
   committee: string;
   createdBy: string;
+  // Stamped by the server on creation (never trusted from the client). Training Associates can only see/edit the forms
+  // they created, matched on createdById; createdByDivision routes their approvals (see approval-sync.ts).
+  createdById?: string;
+  createdByDivision?: string;
   createdAt: string;
   isSample?: boolean;
   status: 'active' | 'archived';

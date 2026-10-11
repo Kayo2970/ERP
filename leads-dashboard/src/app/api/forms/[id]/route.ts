@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import { mutateCollection, readCollection } from '@/lib/server-db';
 import { gateFormAction, formEditKeys, holdEditForApproval, classifyApprovalUpdate, canDecidePending } from '@/lib/approval-gate';
 import { requireSession, ForbiddenError } from '@/lib/session';
-import { getAccessLevelSettingsServer, canBuildForms, canDeleteForms } from '@/lib/permissions-server';
-import { fanOutAutoApproval, cascadeCloseAutoApprovals, deleteLinkedApprovalRequests, resolveCustomApprovalPanel } from '@/lib/approval-sync';
+import { getAccessLevelSettingsServer, canCreateForms, canDeleteForms, seesOnlyOwnForms, isOwnForm, isEventsHeadGgCampus } from '@/lib/permissions-server';
+import { fanOutAutoApproval, cascadeCloseAutoApprovals, deleteLinkedApprovalRequests, resolveCustomApprovalPanel, resolveTraineeFormPanel } from '@/lib/approval-sync';
 import { apiError } from '@/lib/api-error';
 
 const PENDING_APPROVAL_MESSAGE: Record<string, string> = {
@@ -26,14 +26,21 @@ export async function PATCH(
     // Chain of command: a genuinely pending form is decided only by its approver (this route used to let any form
     // builder approve their own submission); edits by non-trusted builders are held as pending_edit.
     const storedForm = (await readCollection<any>('forms')).find((f: any) => f.id === id);
+    // Ownership is fixed at creation; a Training Associate can only touch forms they created.
+    delete updates.createdById;
+    delete updates.createdByDivision;
+    if (storedForm && seesOnlyOwnForms(actor, settings) && !isOwnForm(storedForm, actor)) throw new ForbiddenError();
+    if (storedForm?.createdById) { updates.createdById = storedForm.createdById; updates.createdByDivision = storedForm.createdByDivision; }
+    if (!storedForm) { updates.createdById = actor.id; updates.createdByDivision = actor.division; }
     if (classifyApprovalUpdate(storedForm, updates) === 'decision') {
-      if (!(await canDecidePending(storedForm, actor))) {
+      // A Training Associate's form is also decided by the GG Campus Events Head (besides Centre Head / Advisor / Super User).
+      if (!(await canDecidePending(storedForm, actor, (u) => storedForm?.createdByDivision === 'Training Associate' && isEventsHeadGgCampus(u)))) {
         throw new ForbiddenError('You are not authorized to decide this form — it needs sign-off from the designated approver.');
       }
     } else {
       const gate = await gateFormAction(actor, 'EDIT');
       const isPendingRequest = updates.approvalStatus === 'pending_edit' || updates.approvalStatus === 'pending_delete' || updates.approvalStatus === 'pending_create';
-      if (!gate.allowed && !(isPendingRequest && canBuildForms(actor, settings))) throw new ForbiddenError();
+      if (!gate.allowed && !(isPendingRequest && canCreateForms(actor, settings))) throw new ForbiddenError();
       const editKeys = formEditKeys(updates);
       if (editKeys.length > 0 && storedForm && gate.requiresApproval && !PENDING_STATES.has(storedForm.approvalStatus)) {
         holdEditForApproval(storedForm, updates, editKeys, gate, actor);
@@ -61,7 +68,7 @@ export async function PATCH(
         try {
           const customPanel = result.approverType && result.approverType !== 'CENTER_HEAD'
             ? await resolveCustomApprovalPanel(result.approverType, result.approverMemberId, result.approverPolicyTagId)
-            : undefined;
+            : result.createdByDivision === 'Training Associate' ? await resolveTraineeFormPanel() : undefined;
           await fanOutAutoApproval({
             entityType: 'form',
             entityId: result.id,
@@ -98,14 +105,18 @@ export async function DELETE(
   try {
     const actor = await requireSession(request);
     const settings = await getAccessLevelSettingsServer();
-    if (!(await canDeleteForms(actor, settings))) throw new ForbiddenError();
     const { id } = await params;
+    const storedForm = (await readCollection<any>('forms')).find((f: any) => f.id === id);
+    // Besides the usual deleters: a Training Associate may request deletion of a form they created, and the GG Campus
+    // Events Head may confirm a pending deletion of a Training Associate's form (it is carried out only by an approver).
+    const traineeOwner = !!storedForm && seesOnlyOwnForms(actor, settings) && isOwnForm(storedForm, actor);
+    const traineeApprover = storedForm?.createdByDivision === 'Training Associate' && storedForm.approvalStatus === 'pending_delete' && isEventsHeadGgCampus(actor);
+    if (!(await canDeleteForms(actor, settings)) && !traineeOwner && !traineeApprover) throw new ForbiddenError();
 
     // Chain of command: a non-trusted user's delete is held as pending_delete; a pending delete is carried out only by its approver.
-    const storedForm = (await readCollection<any>('forms')).find((f: any) => f.id === id);
     const delGate = await gateFormAction(actor, 'DELETE');
     if (storedForm && delGate.requiresApproval) {
-      if (storedForm.approvalStatus === 'pending_delete' && (await canDecidePending(storedForm, actor))) {
+      if (storedForm.approvalStatus === 'pending_delete' && (await canDecidePending(storedForm, actor, (u) => storedForm.createdByDivision === 'Training Associate' && isEventsHeadGgCampus(u)))) {
         // approver confirming the deletion — fall through
       } else if (PENDING_STATES.has(storedForm.approvalStatus)) {
         return NextResponse.json({ error: 'This form already has a change waiting for approval.' }, { status: 409 });

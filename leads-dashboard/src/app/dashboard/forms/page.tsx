@@ -76,7 +76,7 @@ import {
   TaskItem,
   isFormClosed,
 } from '@/lib/local-data';
-import { canBuildForms, getFormApprovalRequirement, canApprovePendingForm, hasCapability } from '@/lib/permissions';
+import { canCreateForms, seesOnlyOwnForms, isOwnForm, getFormApprovalRequirement, canApprovePendingForm, hasCapability } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SearchableSelect } from '@/components/searchable-select';
@@ -655,7 +655,9 @@ export default function FormsBuilderPage() {
   };
 
   // PRD Gating: Super User (Tier 1) and Core Committee (Tier 5)
-  const canBuild = canBuildForms(user);
+  const canBuild = canCreateForms(user);
+  // Training Associates see (and can manage) only the forms they created; the server filters the data the same way.
+  const onlyOwnForms = seesOnlyOwnForms(user);
   // Response data (submissions, exports, analytics) is more sensitive than
   // the form's own metadata/share link, which stays visible to everyone who
   // can reach this page — form-builders always see it, others only with an
@@ -667,6 +669,7 @@ export default function FormsBuilderPage() {
   const canSeeFormApprovalMeta = (form: PublicFormItem) =>
     user?.tier === 1 || form.submittedByEmail === user?.email || canApprovePendingForm(form, user);
   const displayedForms = forms.filter(form => {
+    if (onlyOwnForms && !isOwnForm(form, user)) return false;
     if (form.approvalStatus === 'pending_create' || form.approvalStatus === 'rejected') {
       return canSeeFormApprovalMeta(form);
     }
@@ -695,17 +698,23 @@ export default function FormsBuilderPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-theme-text-primary">Public Forms & Registration Builder</h1>
-          <p className="text-xs text-theme-text-secondary">Generate responsive, shareable student registration and survey links</p>
+          <p className="text-xs text-theme-text-secondary">
+            {onlyOwnForms
+              ? 'Build your own public forms. You can see only the forms you create, and each one goes live once the Centre Head, Advisor, Super User or GG Campus Events Head approves it.'
+              : 'Generate responsive, shareable student registration and survey links'}
+          </p>
         </div>
         {canBuild ? (
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsManageTemplatesOpen(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer"
-            >
-              <LayoutTemplate className="h-4 w-4" />
-              Manage Templates
-            </button>
+            {!onlyOwnForms && (
+              <button
+                onClick={() => setIsManageTemplatesOpen(true)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer"
+              >
+                <LayoutTemplate className="h-4 w-4" />
+                Manage Templates
+              </button>
+            )}
             <button
               onClick={handleOpenCreate}
               className="flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-primary-light text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-accent/15 cursor-pointer"

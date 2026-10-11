@@ -135,6 +135,23 @@ export async function resolveCustomApprovalPanel(
   return [];
 }
 
+/**
+ * Panel for a form built by a Training Associate: the default panel (Centre Head, Advisor, GG Campus Events Head) plus
+ * the Super User(s), so every approver named for those forms is asked.
+ */
+export async function resolveTraineeFormPanel(): Promise<ApprovalPanelMember[]> {
+  const panel = await resolveApprovalPanel();
+  const seen = new Set(panel.map(p => p.id));
+  const members = await readCollection<any>('members');
+  for (const m of members) {
+    if (m.tier === 1 && m.status !== 'Terminated' && m.email && !seen.has(m.id)) {
+      seen.add(m.id);
+      panel.push({ id: m.id, name: m.name, email: m.email, label: 'Super User' });
+    }
+  }
+  return panel;
+}
+
 export interface FanOutOptions {
   entityType: AutoApprovalEntityType;
   entityId: string;

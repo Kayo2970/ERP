@@ -4,6 +4,8 @@ import { requireSession } from '@/lib/session';
 import { apiError } from '@/lib/api-error';
 import { hasLockedDefault, resolveFieldDefault, isFormClosed } from '@/lib/local-data';
 import { getFormEventInfo } from '@/lib/public-form';
+import { getAccessLevelSettingsServer } from '@/lib/permissions-server';
+import { visibleSubmissionsFor } from '@/lib/forms-visibility';
 
 // GET (listing collected responses) is member-only. POST is deliberately left
 // ungated: forms are filled out publicly at src/app/forms/[slug]/page.tsx by
@@ -12,9 +14,11 @@ import { getFormEventInfo } from '@/lib/public-form';
 // intake endpoint, not an oversight.
 export async function GET(request: Request) {
   try {
-    await requireSession(request);
-    const items = await readCollection('submissions');
-    return NextResponse.json(items);
+    const actor = await requireSession(request);
+    const settings = await getAccessLevelSettingsServer();
+    const items = await readCollection<any>('submissions');
+    // Training Associates only see responses to forms they created.
+    return NextResponse.json(visibleSubmissionsFor(items, await readCollection<any>('forms'), actor, settings));
   } catch (err: any) {
     return apiError(err, 'submissions-api-get', 500);
   }

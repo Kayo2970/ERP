@@ -3,12 +3,15 @@ import { readCollection, mutateCollection } from '@/lib/server-db';
 import { dispatchEmail, wrapInMasterEmailTemplate } from '@/lib/email-service';
 import { requireSession } from '@/lib/session';
 import { apiError } from '@/lib/api-error';
+import { getAccessLevelSettingsServer } from '@/lib/permissions-server';
+import { visibleApprovalRequestsFor } from '@/lib/forms-visibility';
 
 export async function GET(request: Request) {
   try {
-    await requireSession(request);
-    const items = await readCollection('approvalRequests');
-    return NextResponse.json(items);
+    const actor = await requireSession(request);
+    const settings = await getAccessLevelSettingsServer();
+    const items = await readCollection<any>('approvalRequests');
+    return NextResponse.json(visibleApprovalRequestsFor(items, await readCollection<any>('forms'), actor, settings));
   } catch (err: any) {
     return apiError(err, 'approval-requests-api-get', 500);
   }
