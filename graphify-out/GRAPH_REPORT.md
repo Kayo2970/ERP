@@ -1,64 +1,75 @@
-# Graph Report - .  (2026-10-11)
+# Graph Report - .  (2026-10-12)
 
 ## Corpus Check
-- 890 files · ~8,900,721 words
+- 32 files · ~8,908,169 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2083 nodes · 1888 edges · 1074 communities (66 shown, 1008 thin omitted)
-- Extraction: 97% EXTRACTED · 2% INFERRED · 1% AMBIGUOUS · INFERRED: 37 edges (avg confidence: 0.84)
+- 2356 nodes · 4586 edges · 823 communities (77 shown, 746 thin omitted)
+- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 40 edges (avg confidence: 0.82)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
+- [[_COMMUNITY_permissions-server.ts|permissions-server.ts]]
+- [[_COMMUNITY_page.tsx|page.tsx]]
+- [[_COMMUNITY_authHeaders|authHeaders]]
+- [[_COMMUNITY_email-service.ts|email-service.ts]]
+- [[_COMMUNITY_local-data.ts|local-data.ts]]
 - [[_COMMUNITY_page.tsx|page.tsx]]
 - [[_COMMUNITY_1. Errors & Shortfalls|1. Errors & Shortfalls]]
 - [[_COMMUNITY_dependencies|dependencies]]
-- [[_COMMUNITY_page.tsx|page.tsx]]
 - [[_COMMUNITY_LEADS Next Gen All-in-One Dashboard|LEADS Next Gen All-in-One Dashboard]]
+- [[_COMMUNITY_server-db.ts|server-db.ts]]
+- [[_COMMUNITY_report-generator.ts|report-generator.ts]]
 - [[_COMMUNITY_page.tsx|page.tsx]]
+- [[_COMMUNITY_page.tsx|page.tsx]]
+- [[_COMMUNITY_mutateCollection|mutateCollection]]
 - [[_COMMUNITY_page.tsx|page.tsx]]
 - [[_COMMUNITY_🛡️ Administration & Governance Modules|🛡️ Administration & Governance Modules]]
+- [[_COMMUNITY_route.ts|route.ts]]
+- [[_COMMUNITY_logAuditEvent|logAuditEvent]]
+- [[_COMMUNITY_getEvents|getEvents]]
+- [[_COMMUNITY_isCentreHead|isCentreHead]]
 - [[_COMMUNITY_setup-superuser.js|setup-superuser.js]]
 - [[_COMMUNITY_3.0 Reimbursement Claim Submission|3.0 Reimbursement Claim Submission]]
+- [[_COMMUNITY_permissions.ts|permissions.ts]]
+- [[_COMMUNITY_approval-gate.ts|approval-gate.ts]]
 - [[_COMMUNITY_Asset Intake & Validation (section)|Asset Intake & Validation (section)]]
-- [[_COMMUNITY_page.tsx|page.tsx]]
-- [[_COMMUNITY_page.tsx|page.tsx]]
 - [[_COMMUNITY_Member|Member]]
 - [[_COMMUNITY_page.tsx|page.tsx]]
 - [[_COMMUNITY_Actual ER Diagram (Reverse-Engineered)|Actual ER Diagram (Reverse-Engineered)]]
-- [[_COMMUNITY_page.tsx|page.tsx]]
+- [[_COMMUNITY_hasCapability|hasCapability]]
 - [[_COMMUNITY_compilerOptions|compilerOptions]]
-- [[_COMMUNITY_page.tsx|page.tsx]]
-- [[_COMMUNITY_page.tsx|page.tsx]]
-- [[_COMMUNITY_getEvents|getEvents]]
-- [[_COMMUNITY_dashboard-shell.tsx|dashboard-shell.tsx]]
+- [[_COMMUNITY_Member|Member]]
 - [[_COMMUNITY_4. Core Modules|4. Core Modules]]
-- [[_COMMUNITY_gantt-timeline.tsx|gantt-timeline.tsx]]
 - [[_COMMUNITY_page.tsx|page.tsx]]
 - [[_COMMUNITY_4. Comprehensive Module Operating Instructions|4. Comprehensive Module Operating Instructions]]
-- [[_COMMUNITY_Member|Member]]
+- [[_COMMUNITY_getMembers|getMembers]]
+- [[_COMMUNITY_page.tsx|page.tsx]]
 - [[_COMMUNITY_onboarding-tour.tsx|onboarding-tour.tsx]]
 - [[_COMMUNITY_Member table|Member table]]
-- [[_COMMUNITY_page.tsx|page.tsx]]
-- [[_COMMUNITY_page.tsx|page.tsx]]
 - [[_COMMUNITY_avatar.tsx|avatar.tsx]]
 - [[_COMMUNITY_card.tsx|card.tsx]]
+- [[_COMMUNITY_file-storage.ts|file-storage.ts]]
 - [[_COMMUNITY_LEADS All-in-One Dashboard — Technical Specification|LEADS All-in-One Dashboard — Technical Specification]]
 - [[_COMMUNITY_Architecture|Architecture]]
-- [[_COMMUNITY_getMembers|getMembers]]
 - [[_COMMUNITY_LEADS All-in-One Dashboard — Reports & Analytics Specification|LEADS All-in-One Dashboard — Reports & Analytics Specification]]
 - [[_COMMUNITY_Events and Tasks Management Subsystem (Main Module)|Events and Tasks Management Subsystem (Main Module)]]
 - [[_COMMUNITY_PassBarcodeFormat|PassBarcodeFormat]]
+- [[_COMMUNITY_canViewTaskExtended|canViewTaskExtended]]
+- [[_COMMUNITY_isAdvisor|isAdvisor]]
 - [[_COMMUNITY_LEADS All-in-One Dashboard — Design System|LEADS All-in-One Dashboard — Design System]]
 - [[_COMMUNITY_LEADS All-in-One Dashboard — Content & Copy Document|LEADS All-in-One Dashboard — Content & Copy Document]]
 - [[_COMMUNITY_empty-state.tsx|empty-state.tsx]]
+- [[_COMMUNITY_isExecutiveRole|isExecutiveRole]]
+- [[_COMMUNITY_isEventsHeadGgCampus|isEventsHeadGgCampus]]
 - [[_COMMUNITY_Ponytail|Ponytail]]
-- [[_COMMUNITY_authHeaders|authHeaders]]
+- [[_COMMUNITY_page.tsx|page.tsx]]
 - [[_COMMUNITY_Ponytail Help|Ponytail Help]]
 - [[_COMMUNITY_chip.tsx|chip.tsx]]
 - [[_COMMUNITY_sync-status-pill.tsx|sync-status-pill.tsx]]
-- [[_COMMUNITY_student-profile-modal.tsx|student-profile-modal.tsx]]
 - [[_COMMUNITY_progress.tsx|progress.tsx]]
+- [[_COMMUNITY_canViewEventReports|canViewEventReports]]
 - [[_COMMUNITY_LEADS All-in-One Dashboard — Sitemap & URL Structure|LEADS All-in-One Dashboard — Sitemap & URL Structure]]
 - [[_COMMUNITY_LEADS All-in-One Dashboard — Data Model & ERD|LEADS All-in-One Dashboard — Data Model & ERD]]
 - [[_COMMUNITY_LEADS Next Gen Centre — Members & Designations Directory|LEADS Next Gen Centre — Members & Designations Directory]]
@@ -321,8 +332,6 @@
 - [[_COMMUNITY_POST|POST]]
 - [[_COMMUNITY_GET|GET]]
 - [[_COMMUNITY_POST|POST]]
-- [[_COMMUNITY_GET|GET]]
-- [[_COMMUNITY_POST|POST]]
 - [[_COMMUNITY_POST|POST]]
 - [[_COMMUNITY_POST|POST]]
 - [[_COMMUNITY_POST|POST]]
@@ -352,7 +361,6 @@
 - [[_COMMUNITY_GET|GET]]
 - [[_COMMUNITY_POST|POST]]
 - [[_COMMUNITY_DELETE|DELETE]]
-- [[_COMMUNITY_GET|GET]]
 - [[_COMMUNITY_GET|GET]]
 - [[_COMMUNITY_GET|GET]]
 - [[_COMMUNITY_DELETE|DELETE]]
@@ -408,10 +416,6 @@
 - [[_COMMUNITY_PATCH|PATCH]]
 - [[_COMMUNITY_GET|GET]]
 - [[_COMMUNITY_POST|POST]]
-- [[_COMMUNITY_DELETE|DELETE]]
-- [[_COMMUNITY_PATCH|PATCH]]
-- [[_COMMUNITY_POST|POST]]
-- [[_COMMUNITY_GET|GET]]
 - [[_COMMUNITY_POST|POST]]
 - [[_COMMUNITY_DELETE|DELETE]]
 - [[_COMMUNITY_PATCH|PATCH]]
@@ -452,7 +456,6 @@
 - [[_COMMUNITY_PATCH|PATCH]]
 - [[_COMMUNITY_GET|GET]]
 - [[_COMMUNITY_POST|POST]]
-- [[_COMMUNITY_GET|GET]]
 - [[_COMMUNITY_DELETE|DELETE]]
 - [[_COMMUNITY_PATCH|PATCH]]
 - [[_COMMUNITY_GET|GET]]
@@ -464,8 +467,6 @@
 - [[_COMMUNITY_GET|GET]]
 - [[_COMMUNITY_POST|POST]]
 - [[_COMMUNITY_GET|GET]]
-- [[_COMMUNITY_GET|GET]]
-- [[_COMMUNITY_POST|POST]]
 - [[_COMMUNITY_GET|GET]]
 - [[_COMMUNITY_POST|POST]]
 - [[_COMMUNITY_GET|GET]]
@@ -487,6 +488,7 @@
 - [[_COMMUNITY_SetupPage|SetupPage]]
 - [[_COMMUNITY_LEADS Next Gen Centre - RIAS Email Logo|LEADS Next Gen Centre - RIAS Email Logo]]
 - [[_COMMUNITY_AppleWalletPassPreview|AppleWalletPassPreview]]
+- [[_COMMUNITY_BackgroundTaskTray|BackgroundTaskTray]]
 - [[_COMMUNITY_CardQrModal|CardQrModal]]
 - [[_COMMUNITY_CertDisplayStatus|CertDisplayStatus]]
 - [[_COMMUNITY_CertificateStatusBadge|CertificateStatusBadge]]
@@ -496,12 +498,18 @@
 - [[_COMMUNITY_EventPassPushModal|EventPassPushModal]]
 - [[_COMMUNITY_EventPassScanner|EventPassScanner]]
 - [[_COMMUNITY_EventPassStudio|EventPassStudio]]
+- [[_COMMUNITY_FormFieldEditor|FormFieldEditor]]
+- [[_COMMUNITY_HeaderFraming|HeaderFraming]]
+- [[_COMMUNITY_headerImageStyle|headerImageStyle]]
 - [[_COMMUNITY_normalizeImageLink|normalizeImageLink]]
+- [[_COMMUNITY_FormQrModal|FormQrModal]]
 - [[_COMMUNITY_HapticFeedbackProvider|HapticFeedbackProvider]]
 - [[_COMMUNITY_ImageCropModalProps|ImageCropModalProps]]
+- [[_COMMUNITY_NotFoundScreen|NotFoundScreen]]
 - [[_COMMUNITY_usePassEmailTemplate|usePassEmailTemplate]]
 - [[_COMMUNITY_ProfileCardCustomLink|ProfileCardCustomLink]]
 - [[_COMMUNITY_ProfileCardProps|ProfileCardProps]]
+- [[_COMMUNITY_PromotionData|PromotionData]]
 - [[_COMMUNITY_PromotionModalProps|PromotionModalProps]]
 - [[_COMMUNITY_TaskErrorToastProps|TaskErrorToastProps]]
 - [[_COMMUNITY_formatEta|formatEta]]
@@ -514,36 +522,11 @@
 - [[_COMMUNITY_ActivationToken|ActivationToken]]
 - [[_COMMUNITY_createActivationTokenAndSendEmail|createActivationTokenAndSendEmail]]
 - [[_COMMUNITY_dispatchAnnouncementEmails|dispatchAnnouncementEmails]]
+- [[_COMMUNITY_getAnnouncementScopeMatch|getAnnouncementScopeMatch]]
 - [[_COMMUNITY_resolveAnnouncementRecipients|resolveAnnouncementRecipients]]
 - [[_COMMUNITY_apiError|apiError]]
 - [[_COMMUNITY_getAppBaseUrl|getAppBaseUrl]]
 - [[_COMMUNITY_getPassPublicUrl|getPassPublicUrl]]
-- [[_COMMUNITY_canDecidePending|canDecidePending]]
-- [[_COMMUNITY_CertificateAction|CertificateAction]]
-- [[_COMMUNITY_changedKeys|changedKeys]]
-- [[_COMMUNITY_classifyApprovalUpdate|classifyApprovalUpdate]]
-- [[_COMMUNITY_evaluateCapabilityGate|evaluateCapabilityGate]]
-- [[_COMMUNITY_eventEditKeys|eventEditKeys]]
-- [[_COMMUNITY_gateCertificateAction|gateCertificateAction]]
-- [[_COMMUNITY_GateDecision|GateDecision]]
-- [[_COMMUNITY_gateEventAction|gateEventAction]]
-- [[_COMMUNITY_gateEventPassAction|gateEventPassAction]]
-- [[_COMMUNITY_gateFormAction|gateFormAction]]
-- [[_COMMUNITY_gateTaskAction|gateTaskAction]]
-- [[_COMMUNITY_hasModuleEditAll|hasModuleEditAll]]
-- [[_COMMUNITY_holdEditForApproval|holdEditForApproval]]
-- [[_COMMUNITY_isPendingState|isPendingState]]
-- [[_COMMUNITY_PassAction|PassAction]]
-- [[_COMMUNITY_policyTargetsUser|policyTargetsUser]]
-- [[_COMMUNITY_stampPendingCreate|stampPendingCreate]]
-- [[_COMMUNITY_ApprovalPanelMember|ApprovalPanelMember]]
-- [[_COMMUNITY_cascadeCloseAutoApprovals|cascadeCloseAutoApprovals]]
-- [[_COMMUNITY_deleteLinkedApprovalRequests|deleteLinkedApprovalRequests]]
-- [[_COMMUNITY_fanOutAutoApproval|fanOutAutoApproval]]
-- [[_COMMUNITY_FanOutOptions|FanOutOptions]]
-- [[_COMMUNITY_resolveApprovalPanel|resolveApprovalPanel]]
-- [[_COMMUNITY_resolveCentreHeadAdvisorPanel|resolveCentreHeadAdvisorPanel]]
-- [[_COMMUNITY_resolveCustomApprovalPanel|resolveCustomApprovalPanel]]
 - [[_COMMUNITY_BackgroundTask|BackgroundTask]]
 - [[_COMMUNITY_BackgroundTaskState|BackgroundTaskState]]
 - [[_COMMUNITY_dismissTask|dismissTask]]
@@ -622,44 +605,7 @@
 - [[_COMMUNITY_DirectSendTransport|DirectSendTransport]]
 - [[_COMMUNITY_DirectSendTransportOptions|DirectSendTransportOptions]]
 - [[_COMMUNITY_fillFeedbackFormDocx|fillFeedbackFormDocx]]
-- [[_COMMUNITY_ApprovalRecipients|ApprovalRecipients]]
-- [[_COMMUNITY_BufferedScope|BufferedScope]]
-- [[_COMMUNITY_cancelAllBufferedEmails|cancelAllBufferedEmails]]
-- [[_COMMUNITY_cancelBufferedEmail|cancelBufferedEmail]]
-- [[_COMMUNITY_dispatchEmail|dispatchEmail]]
-- [[_COMMUNITY_EmailCategory|EmailCategory]]
-- [[_COMMUNITY_findApprovalRecipients|findApprovalRecipients]]
-- [[_COMMUNITY_flushAllBufferedEmails|flushAllBufferedEmails]]
 - [[_COMMUNITY_flushBufferedEmail|flushBufferedEmail]]
-- [[_COMMUNITY_generateAnnouncementEmailTemplate|generateAnnouncementEmailTemplate]]
-- [[_COMMUNITY_generateApprovalDecisionEmailTemplate|generateApprovalDecisionEmailTemplate]]
-- [[_COMMUNITY_generateBirthdayEmailTemplate|generateBirthdayEmailTemplate]]
-- [[_COMMUNITY_generateCaptionsApprovedEmailTemplate|generateCaptionsApprovedEmailTemplate]]
-- [[_COMMUNITY_generateDesignApprovedEmailTemplate|generateDesignApprovedEmailTemplate]]
-- [[_COMMUNITY_generateDesignDecisionEmailTemplate|generateDesignDecisionEmailTemplate]]
-- [[_COMMUNITY_generateDesignResubmittedEmailTemplate|generateDesignResubmittedEmailTemplate]]
-- [[_COMMUNITY_generateEmailChangeOtpTemplate|generateEmailChangeOtpTemplate]]
-- [[_COMMUNITY_generateEventReportApprovedEmailTemplate|generateEventReportApprovedEmailTemplate]]
-- [[_COMMUNITY_generateEventReportDecisionEmailTemplate|generateEventReportDecisionEmailTemplate]]
-- [[_COMMUNITY_generateEventRosterEmailTemplate|generateEventRosterEmailTemplate]]
-- [[_COMMUNITY_generateGroupPolicyGrantEmailTemplate|generateGroupPolicyGrantEmailTemplate]]
-- [[_COMMUNITY_generateNewEmailConfirmationOtpTemplate|generateNewEmailConfirmationOtpTemplate]]
-- [[_COMMUNITY_generateNewMemberWelcomeTemplate|generateNewMemberWelcomeTemplate]]
-- [[_COMMUNITY_generateOtpEmailTemplate|generateOtpEmailTemplate]]
-- [[_COMMUNITY_generateProcurementDecisionEmailTemplate|generateProcurementDecisionEmailTemplate]]
-- [[_COMMUNITY_generateTaskDeadlineReminderEmailTemplate|generateTaskDeadlineReminderEmailTemplate]]
-- [[_COMMUNITY_generateTaskEmailTemplate|generateTaskEmailTemplate]]
-- [[_COMMUNITY_generateWelcomeActivationEmailTemplate|generateWelcomeActivationEmailTemplate]]
-- [[_COMMUNITY_getBufferedEmails|getBufferedEmails]]
-- [[_COMMUNITY_getEmailSettings|getEmailSettings]]
-- [[_COMMUNITY_resolvePolicyRecipients|resolvePolicyRecipients]]
-- [[_COMMUNITY_restoreBufferedQueue|restoreBufferedQueue]]
-- [[_COMMUNITY_sendBufferedEmailNow|sendBufferedEmailNow]]
-- [[_COMMUNITY_SendEmailPayload|SendEmailPayload]]
-- [[_COMMUNITY_sweepExpiredBufferedEmails|sweepExpiredBufferedEmails]]
-- [[_COMMUNITY_testEmailConnection|testEmailConnection]]
-- [[_COMMUNITY_updateEmailSettings|updateEmailSettings]]
-- [[_COMMUNITY_wrapInMasterEmailTemplate|wrapInMasterEmailTemplate]]
 - [[_COMMUNITY_decryptData|decryptData]]
 - [[_COMMUNITY_encryptData|encryptData]]
 - [[_COMMUNITY_EncryptedPayload|EncryptedPayload]]
@@ -672,13 +618,7 @@
 - [[_COMMUNITY_runEventLapseSocialTasks|runEventLapseSocialTasks]]
 - [[_COMMUNITY_runEventPosterTasks|runEventPosterTasks]]
 - [[_COMMUNITY_startEventSocialScheduler|startEventSocialScheduler]]
-- [[_COMMUNITY_deleteStoredFile|deleteStoredFile]]
-- [[_COMMUNITY_deleteStoredFilesForRecord|deleteStoredFilesForRecord]]
-- [[_COMMUNITY_guessMimeType|guessMimeType]]
-- [[_COMMUNITY_parseDataUrl|parseDataUrl]]
-- [[_COMMUNITY_readStoredFile|readStoredFile]]
-- [[_COMMUNITY_saveBase64File|saveBase64File]]
-- [[_COMMUNITY_StoredFile|StoredFile]]
+- [[_COMMUNITY_buildStudentFinalScores|buildStudentFinalScores]]
 - [[_COMMUNITY_computeFinalScore|computeFinalScore]]
 - [[_COMMUNITY_participationScore|participationScore]]
 - [[_COMMUNITY_StudentFinalScore|StudentFinalScore]]
@@ -687,81 +627,6 @@
 - [[_COMMUNITY_runHolidayApprovalTasks|runHolidayApprovalTasks]]
 - [[_COMMUNITY_runHolidaySync|runHolidaySync]]
 - [[_COMMUNITY_startHolidayScheduler|startHolidayScheduler]]
-- [[_COMMUNITY_addEventPass|addEventPass]]
-- [[_COMMUNITY_addProcurementRequest|addProcurementRequest]]
-- [[_COMMUNITY_buildPassEmail|buildPassEmail]]
-- [[_COMMUNITY_BulkPassDeleteResult|BulkPassDeleteResult]]
-- [[_COMMUNITY_canViewTask|canViewTask]]
-- [[_COMMUNITY_clearOptimisticTaskUpdate|clearOptimisticTaskUpdate]]
-- [[_COMMUNITY_completeProcurementRequest|completeProcurementRequest]]
-- [[_COMMUNITY_countActiveSuperUsers|countActiveSuperUsers]]
-- [[_COMMUNITY_createProcurementTask|createProcurementTask]]
-- [[_COMMUNITY_decideProcurementRequest|decideProcurementRequest]]
-- [[_COMMUNITY_deleteEventPass|deleteEventPass]]
-- [[_COMMUNITY_deleteEventPassesBulk|deleteEventPassesBulk]]
-- [[_COMMUNITY_deleteProcurementRequest|deleteProcurementRequest]]
-- [[_COMMUNITY_DesignProofreadReview|DesignProofreadReview]]
-- [[_COMMUNITY_dispatchPassEmail|dispatchPassEmail]]
-- [[_COMMUNITY_EventGuestCategory|EventGuestCategory]]
-- [[_COMMUNITY_EventPassType|EventPassType]]
-- [[_COMMUNITY_expandDateRange|expandDateRange]]
-- [[_COMMUNITY_formatValidDaysLabel|formatValidDaysLabel]]
-- [[_COMMUNITY_getApprovedEvents|getApprovedEvents]]
-- [[_COMMUNITY_getEventCommittees|getEventCommittees]]
-- [[_COMMUNITY_getPassAttendanceSummary|getPassAttendanceSummary]]
-- [[_COMMUNITY_getPassIssuableEvents|getPassIssuableEvents]]
-- [[_COMMUNITY_getPassValidDays|getPassValidDays]]
-- [[_COMMUNITY_getProcurementRequests|getProcurementRequests]]
-- [[_COMMUNITY_isKayomarzPavriMember|isKayomarzPavriMember]]
-- [[_COMMUNITY_isPassValidOn|isPassValidOn]]
-- [[_COMMUNITY_isSocialMediaHead|isSocialMediaHead]]
-- [[_COMMUNITY_isSocialMediaSrHead|isSocialMediaSrHead]]
-- [[_COMMUNITY_markApprovalRequestsDecided|markApprovalRequestsDecided]]
-- [[_COMMUNITY_mergeAttendance|mergeAttendance]]
-- [[_COMMUNITY_notifyPassApproval|notifyPassApproval]]
-- [[_COMMUNITY_OcrScanIssue|OcrScanIssue]]
-- [[_COMMUNITY_OcrScanPageImage|OcrScanPageImage]]
-- [[_COMMUNITY_PassAttendanceRecord|PassAttendanceRecord]]
-- [[_COMMUNITY_PassEmailStatus|PassEmailStatus]]
-- [[_COMMUNITY_ProcurementItemLine|ProcurementItemLine]]
-- [[_COMMUNITY_ProcurementRequestItem|ProcurementRequestItem]]
-- [[_COMMUNITY_qrFieldsFromOptions|qrFieldsFromOptions]]
-- [[_COMMUNITY_qrOptionsFromPass|qrOptionsFromPass]]
-- [[_COMMUNITY_registerOptimisticTaskUpdate|registerOptimisticTaskUpdate]]
-- [[_COMMUNITY_removeApprovalRequestsForEntity|removeApprovalRequestsForEntity]]
-- [[_COMMUNITY_resolveSocialMediaHeads|resolveSocialMediaHeads]]
-- [[_COMMUNITY_saveAnnouncements|saveAnnouncements]]
-- [[_COMMUNITY_saveBudgets|saveBudgets]]
-- [[_COMMUNITY_saveDesigns|saveDesigns]]
-- [[_COMMUNITY_saveEventPasses|saveEventPasses]]
-- [[_COMMUNITY_saveEvents|saveEvents]]
-- [[_COMMUNITY_saveForms|saveForms]]
-- [[_COMMUNITY_saveFormTemplates|saveFormTemplates]]
-- [[_COMMUNITY_saveGroupPolicies|saveGroupPolicies]]
-- [[_COMMUNITY_saveGuests|saveGuests]]
-- [[_COMMUNITY_saveIncomeSources|saveIncomeSources]]
-- [[_COMMUNITY_saveProcurementRequests|saveProcurementRequests]]
-- [[_COMMUNITY_saveRatings|saveRatings]]
-- [[_COMMUNITY_saveReimbursements|saveReimbursements]]
-- [[_COMMUNITY_saveSubmissions|saveSubmissions]]
-- [[_COMMUNITY_saveSystemSettings|saveSystemSettings]]
-- [[_COMMUNITY_saveTasks|saveTasks]]
-- [[_COMMUNITY_scoreEventReport|scoreEventReport]]
-- [[_COMMUNITY_syncActiveSessionUser|syncActiveSessionUser]]
-- [[_COMMUNITY_syncBudgetLineItemsForEvent|syncBudgetLineItemsForEvent]]
-- [[_COMMUNITY_SystemSettings|SystemSettings]]
-- [[_COMMUNITY_TaskDelegationEvent|TaskDelegationEvent]]
-- [[_COMMUNITY_TaskLateness|TaskLateness]]
-- [[_COMMUNITY_todayIso|todayIso]]
-- [[_COMMUNITY_UnifiedSponsor|UnifiedSponsor]]
-- [[_COMMUNITY_updateEventPass|updateEventPass]]
-- [[_COMMUNITY_updateEventPassEmailStatus|updateEventPassEmailStatus]]
-- [[_COMMUNITY_updateEventPassStatus|updateEventPassStatus]]
-- [[_COMMUNITY_updateMemberCard|updateMemberCard]]
-- [[_COMMUNITY_updateMemberCardPhoto|updateMemberCardPhoto]]
-- [[_COMMUNITY_updateProcurementRequest|updateProcurementRequest]]
-- [[_COMMUNITY_UploadProgressCallback|UploadProgressCallback]]
-- [[_COMMUNITY_wasTaskExtensionGranted|wasTaskExtensionGranted]]
 - [[_COMMUNITY_countActiveSuperUsersServer|countActiveSuperUsersServer]]
 - [[_COMMUNITY_effectiveCardDesignation|effectiveCardDesignation]]
 - [[_COMMUNITY_isKayomarzIdentity|isKayomarzIdentity]]
@@ -793,120 +658,8 @@
 - [[_COMMUNITY_toJpegDataUrl|toJpegDataUrl]]
 - [[_COMMUNITY_updatePassTheme|updatePassTheme]]
 - [[_COMMUNITY_walletDataForPass|walletDataForPass]]
-- [[_COMMUNITY_canDecideProcurementRequest|canDecideProcurementRequest]]
-- [[_COMMUNITY_canDeleteEventPasses|canDeleteEventPasses]]
-- [[_COMMUNITY_canDeleteForms|canDeleteForms]]
-- [[_COMMUNITY_canDesignCertificates|canDesignCertificates]]
-- [[_COMMUNITY_canDispatchEventPasses|canDispatchEventPasses]]
-- [[_COMMUNITY_canEditEventPasses|canEditEventPasses]]
-- [[_COMMUNITY_canManageEventPasses|canManageEventPasses]]
-- [[_COMMUNITY_canScanEventPasses|canScanEventPasses]]
-- [[_COMMUNITY_canSendCertificates|canSendCertificates]]
-- [[_COMMUNITY_canSubmitBudget|canSubmitBudget]]
-- [[_COMMUNITY_canTerminateMember|canTerminateMember]]
-- [[_COMMUNITY_canViewIssuedEventPasses|canViewIssuedEventPasses]]
-- [[_COMMUNITY_canViewProcurementRequest|canViewProcurementRequest]]
-- [[_COMMUNITY_getApprovalRequirement|getApprovalRequirement]]
-- [[_COMMUNITY_hasModuleViewOwnRestriction|hasModuleViewOwnRestriction]]
-- [[_COMMUNITY_isAdvisor|isAdvisor]]
-- [[_COMMUNITY_isAlumniRole|isAlumniRole]]
-- [[_COMMUNITY_isBaseLeadership|isBaseLeadership]]
-- [[_COMMUNITY_isChiefAdvisor|isChiefAdvisor]]
-- [[_COMMUNITY_isCoreCommitteeTier|isCoreCommitteeTier]]
-- [[_COMMUNITY_isDrSubhadeep|isDrSubhadeep]]
-- [[_COMMUNITY_isEventsHeadRtcCampus|isEventsHeadRtcCampus]]
-- [[_COMMUNITY_isExecutiveRole|isExecutiveRole]]
-- [[_COMMUNITY_isHeadOfEvents|isHeadOfEvents]]
-- [[_COMMUNITY_isOwnCreatedGuest|isOwnCreatedGuest]]
-- [[_COMMUNITY_isPresident|isPresident]]
-- [[_COMMUNITY_isSectorHead|isSectorHead]]
-- [[_COMMUNITY_isSocialMediaHead|isSocialMediaHead]]
-- [[_COMMUNITY_isSocialMediaHeadOrSrHead|isSocialMediaHeadOrSrHead]]
-- [[_COMMUNITY_isSocialMediaSrHead|isSocialMediaSrHead]]
-- [[_COMMUNITY_isSuperUser|isSuperUser]]
-- [[_COMMUNITY_RatingReviewerRole|RatingReviewerRole]]
-- [[_COMMUNITY_resolveModuleViewOverride|resolveModuleViewOverride]]
-- [[_COMMUNITY_AccessLevelSettings|AccessLevelSettings]]
-- [[_COMMUNITY_canAccessGroupPoliciesServer|canAccessGroupPoliciesServer]]
-- [[_COMMUNITY_canAccessGuestDirectory|canAccessGuestDirectory]]
-- [[_COMMUNITY_canAddMember|canAddMember]]
-- [[_COMMUNITY_canApproveAnnouncement|canApproveAnnouncement]]
-- [[_COMMUNITY_canApproveAsFinanceHead|canApproveAsFinanceHead]]
-- [[_COMMUNITY_canApproveAsSectorHead|canApproveAsSectorHead]]
-- [[_COMMUNITY_canApprovePendingEvent|canApprovePendingEvent]]
-- [[_COMMUNITY_canApprovePendingTask|canApprovePendingTask]]
-- [[_COMMUNITY_canBuildForms|canBuildForms]]
-- [[_COMMUNITY_canChangeTaskStatus|canChangeTaskStatus]]
-- [[_COMMUNITY_canCreateAnnouncement|canCreateAnnouncement]]
-- [[_COMMUNITY_canCreateEvent|canCreateEvent]]
-- [[_COMMUNITY_canCreateTask|canCreateTask]]
-- [[_COMMUNITY_canDecideBudget|canDecideBudget]]
-- [[_COMMUNITY_canDecideProcurementRequest|canDecideProcurementRequest]]
-- [[_COMMUNITY_canDeleteEvent|canDeleteEvent]]
-- [[_COMMUNITY_canDeleteForms|canDeleteForms]]
-- [[_COMMUNITY_canDeleteTask|canDeleteTask]]
-- [[_COMMUNITY_canEditDirectory|canEditDirectory]]
-- [[_COMMUNITY_canEditEvent|canEditEvent]]
-- [[_COMMUNITY_canEditGuestRecord|canEditGuestRecord]]
-- [[_COMMUNITY_canEditRating|canEditRating]]
-- [[_COMMUNITY_canEditTask|canEditTask]]
-- [[_COMMUNITY_canEvaluateEventStudent|canEvaluateEventStudent]]
-- [[_COMMUNITY_canManageBackup|canManageBackup]]
-- [[_COMMUNITY_canManageEmailSettings|canManageEmailSettings]]
-- [[_COMMUNITY_canManageGuestInvites|canManageGuestInvites]]
-- [[_COMMUNITY_canRemoveGuestContact|canRemoveGuestContact]]
-- [[_COMMUNITY_canReviewDesignProofread|canReviewDesignProofread]]
-- [[_COMMUNITY_canReviewEventReports|canReviewEventReports]]
-- [[_COMMUNITY_canScoreEventReports|canScoreEventReports]]
-- [[_COMMUNITY_canSetMemberPassword|canSetMemberPassword]]
-- [[_COMMUNITY_canSubmitBudget|canSubmitBudget]]
-- [[_COMMUNITY_canSubmitEventReport|canSubmitEventReport]]
-- [[_COMMUNITY_canTerminateMember|canTerminateMember]]
-- [[_COMMUNITY_canVerifyBudgetCentreHead|canVerifyBudgetCentreHead]]
-- [[_COMMUNITY_canVerifyReimbursementCentreHead|canVerifyReimbursementCentreHead]]
-- [[_COMMUNITY_canViewAllDesigns|canViewAllDesigns]]
-- [[_COMMUNITY_canViewEventReports|canViewEventReports]]
+- [[_COMMUNITY_periodLabel|periodLabel]]
 - [[_COMMUNITY_canViewGuestRecord|canViewGuestRecord]]
-- [[_COMMUNITY_canViewProcurementRequest|canViewProcurementRequest]]
-- [[_COMMUNITY_getAccessLevelSettingsServer|getAccessLevelSettingsServer]]
-- [[_COMMUNITY_hasCap|hasCap]]
-- [[_COMMUNITY_hasCapabilityServer|hasCapabilityServer]]
-- [[_COMMUNITY_isAdvisor|isAdvisor]]
-- [[_COMMUNITY_isAlumniRole|isAlumniRole]]
-- [[_COMMUNITY_isBaseLeadership|isBaseLeadership]]
-- [[_COMMUNITY_isCentreHead|isCentreHead]]
-- [[_COMMUNITY_isChiefAdvisor|isChiefAdvisor]]
-- [[_COMMUNITY_isChiefCoordinator|isChiefCoordinator]]
-- [[_COMMUNITY_isCoreCommitteeTier|isCoreCommitteeTier]]
-- [[_COMMUNITY_isDesignHead|isDesignHead]]
-- [[_COMMUNITY_isEventsHeadGgCampus|isEventsHeadGgCampus]]
-- [[_COMMUNITY_isEventsHeadRtcCampus|isEventsHeadRtcCampus]]
-- [[_COMMUNITY_isExecutiveRole|isExecutiveRole]]
-- [[_COMMUNITY_isFaculty|isFaculty]]
-- [[_COMMUNITY_isFinanceHead|isFinanceHead]]
-- [[_COMMUNITY_isGeneralSecretary|isGeneralSecretary]]
-- [[_COMMUNITY_isHeadOfEvents|isHeadOfEvents]]
-- [[_COMMUNITY_isHeadRole|isHeadRole]]
-- [[_COMMUNITY_isOwnCreatedGuest|isOwnCreatedGuest]]
-- [[_COMMUNITY_isSectorHead|isSectorHead]]
-- [[_COMMUNITY_isSocialMediaHead|isSocialMediaHead]]
-- [[_COMMUNITY_isSocialMediaHeadOrSrHead|isSocialMediaHeadOrSrHead]]
-- [[_COMMUNITY_isSocialMediaPostTask|isSocialMediaPostTask]]
-- [[_COMMUNITY_isSocialMediaSrHead|isSocialMediaSrHead]]
-- [[_COMMUNITY_isSocialMediaTeamMember|isSocialMediaTeamMember]]
-- [[_COMMUNITY_isSuperUser|isSuperUser]]
-- [[_COMMUNITY_isTaskAssignee|isTaskAssignee]]
-- [[_COMMUNITY_isTaskRatable|isTaskRatable]]
-- [[_COMMUNITY_loadPermissionContext|loadPermissionContext]]
-- [[_COMMUNITY_moduleEditOverride|moduleEditOverride]]
-- [[_COMMUNITY_PolicyGrants|PolicyGrants]]
-- [[_COMMUNITY_resolvePolicyGrants|resolvePolicyGrants]]
-- [[_COMMUNITY_ServerEvent|ServerEvent]]
-- [[_COMMUNITY_ServerGuest|ServerGuest]]
-- [[_COMMUNITY_ServerRating|ServerRating]]
-- [[_COMMUNITY_ServerTask|ServerTask]]
-- [[_COMMUNITY_ServerUser|ServerUser]]
-- [[_COMMUNITY_SessionUser|SessionUser]]
 - [[_COMMUNITY_getFormEventInfo|getFormEventInfo]]
 - [[_COMMUNITY_drawStyledQr|drawStyledQr]]
 - [[_COMMUNITY_qrMatrix|qrMatrix]]
@@ -933,10 +686,6 @@
 - [[_COMMUNITY_detectContactPlatform|detectContactPlatform]]
 - [[_COMMUNITY_SaveContactFields|SaveContactFields]]
 - [[_COMMUNITY_saveContactToPhone|saveContactToPhone]]
-- [[_COMMUNITY_DbSchema|DbSchema]]
-- [[_COMMUNITY_mutateCollection|mutateCollection]]
-- [[_COMMUNITY_readCollection|readCollection]]
-- [[_COMMUNITY_readDb|readDb]]
 - [[_COMMUNITY_createSession|createSession]]
 - [[_COMMUNITY_ForbiddenError|ForbiddenError]]
 - [[_COMMUNITY_getSession|getSession]]
@@ -1082,16 +831,16 @@
 - [[_COMMUNITY_LEADS Short Logo|LEADS Short Logo]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `TasksPage()` - 35 edges
-2. `DirectoryPage()` - 33 edges
-3. `getMembers` - 29 edges
-4. `getEvents` - 29 edges
-5. `FormsBuilderPage()` - 27 edges
-6. `DashboardShell()` - 27 edges
-7. `getTasks` - 26 edges
-8. `EventsPage()` - 24 edges
-9. `DesignPortalPage()` - 23 edges
-10. `EventDetailPage()` - 22 edges
+1. `logAuditEvent()` - 123 edges
+2. `getMembers()` - 68 edges
+3. `isCentreHead()` - 65 edges
+4. `getEvents()` - 63 edges
+5. `hasCapability()` - 57 edges
+6. `serverPatch()` - 55 edges
+7. `getTasks()` - 55 edges
+8. `authHeaders()` - 48 edges
+9. `FormsBuilderPage()` - 39 edges
+10. `TasksPage()` - 35 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `MEMBER Entity (Actual)` --semantically_similar_to--> `members Collection`  [INFERRED] [semantically similar]
@@ -1108,253 +857,297 @@
 ## Import Cycles
 - None detected.
 
-## Communities (1074 total, 1008 thin omitted)
+## Communities (823 total, 746 thin omitted)
 
-### Community 0 - "page.tsx"
+### Community 0 - "permissions-server.ts"
+Cohesion: 0.07
+Nodes (82): gateEventAction(), gateTaskAction(), anyKeywordMatches(), canAccessGroupPoliciesServer(), canAccessGuestDirectory(), canAddMember(), canApproveAnnouncement(), canApproveAsFinanceHead() (+74 more)
+
+### Community 1 - "page.tsx"
 Cohesion: 0.06
-Nodes (57): DirectoryPage(), EmailManagementPage(), PendingQueueItem, emptyForm, GuestDirectoryPage(), applyMailMerge(), Guest, GuestInvitesPage() (+49 more)
+Nodes (73): BackupRestorePage(), DirectoryPage(), EmailManagementPage(), PendingQueueItem, emptyForm, GuestDirectoryPage(), applyMailMerge(), Guest (+65 more)
 
-### Community 1 - "1. Errors & Shortfalls"
+### Community 2 - "authHeaders"
+Cohesion: 0.09
+Nodes (56): EventPassesPage(), EventPassScanner, addDays(), countInWindow(), daysBetween(), GanttTimeline(), parseDate(), STATUS_COLORS (+48 more)
+
+### Community 3 - "email-service.ts"
+Cohesion: 0.07
+Nodes (55): GET(), POST(), ApprovalRecipients, BufferedEmailEntry, bufferedEmails, BufferedScope, buildTransporter(), cancelAllBufferedEmails() (+47 more)
+
+### Community 4 - "local-data.ts"
 Cohesion: 0.05
-Nodes (45): 10. Audit log is unbounded on the client, capped inconsistently on the server, 1. ✅ RESOLVED — The write mutex permanently breaks after the first error (`src/lib/server-db.ts`), 2. ✅ RESOLVED — Committee-assigned tasks are invisible to everyone (`canViewTask` in `local-data.ts`), 3. ✅ RESOLVED (2026-08-17) — Cross-device polling never actually updates an open screen, 4. ✅ RESOLVED — Test-persona tiers contradict the app's own role/tier table, 5. ✅ RESOLVED — Public form slugs aren't checked for uniqueness server-side, 6. ❌ NOT FIXED — Settings → Change Password is fully decorative, 7. ✅ RESOLVED — Dead, un-mutex'd write path still exists (`src/app/api/data/route.ts`) (+37 more)
-
-### Community 2 - "dependencies"
-Cohesion: 0.04
-Nodes (45): dependencies, adm-zip, dictionary-en, dictionary-en-gb, gsap, html2canvas, isomorphic-dompurify, jspdf (+37 more)
-
-### Community 3 - "page.tsx"
-Cohesion: 0.08
-Nodes (43): AnnouncementsPage(), ApprovalsPage(), entityIcon(), entityLink(), statusBadge(), Tab, EventReportsPage(), addAnnouncement (+35 more)
-
-### Community 4 - "LEADS Next Gen All-in-One Dashboard"
-Cohesion: 0.04
-Nodes (45): 10. Analytics & Reports (`/dashboard/reports`), 11. Announcements Engine (`/dashboard/announcements`), 12. Member Directory & Roster (`/dashboard/directory`), 13. Guest Directory (`/dashboard/guest-directory`), 14. Guest Invites Dispatcher (`/dashboard/guest-invites`), 15. Dynamic Group Policies (`/dashboard/policies`), 16. Backup & Restore (`/dashboard/backup`), 17. Email Management & Client (`/dashboard/email`) (+37 more)
+Nodes (50): addProcurementRequest(), AUTO_RECREATED_WORKFLOW_TYPES, buildPassEmail(), BulkPassDeleteResult, completeProcurementRequest(), createProcurementTask(), decideProcurementRequest(), DEFAULT_ACCESS_LEVEL_SETTINGS (+42 more)
 
 ### Community 5 - "page.tsx"
 Cohesion: 0.09
-Nodes (37): isDesignTask(), RatingsPage(), ReportsPage(), PeriodFilter(), PeriodFilterProps, buildStudentFinalScores, addRating, deleteRating (+29 more)
+Nodes (50): GET(), GET(), POST(), buildCategoryChartData(), buildFieldCounts(), buildScaleChartData(), buildSubmissionsByDay(), CHART_COLORS (+42 more)
 
-### Community 6 - "page.tsx"
-Cohesion: 0.09
-Nodes (36): buildCategoryChartData(), buildFieldCounts(), buildScaleChartData(), buildSubmissionsByDay(), CHART_COLORS, CHARTABLE_TYPES, chartCountDomainMax(), computeAverage() (+28 more)
+### Community 6 - "1. Errors & Shortfalls"
+Cohesion: 0.05
+Nodes (45): 10. Audit log is unbounded on the client, capped inconsistently on the server, 1. ✅ RESOLVED — The write mutex permanently breaks after the first error (`src/lib/server-db.ts`), 2. ✅ RESOLVED — Committee-assigned tasks are invisible to everyone (`canViewTask` in `local-data.ts`), 3. ✅ RESOLVED (2026-08-17) — Cross-device polling never actually updates an open screen, 4. ✅ RESOLVED — Test-persona tiers contradict the app's own role/tier table, 5. ✅ RESOLVED — Public form slugs aren't checked for uniqueness server-side, 6. ❌ NOT FIXED — Settings → Change Password is fully decorative, 7. ✅ RESOLVED — Dead, un-mutex'd write path still exists (`src/app/api/data/route.ts`) (+37 more)
 
-### Community 7 - "🛡️ Administration & Governance Modules"
+### Community 7 - "dependencies"
+Cohesion: 0.04
+Nodes (45): dependencies, adm-zip, dictionary-en, dictionary-en-gb, gsap, html2canvas, isomorphic-dompurify, jspdf (+37 more)
+
+### Community 8 - "LEADS Next Gen All-in-One Dashboard"
+Cohesion: 0.04
+Nodes (45): 10. Analytics & Reports (`/dashboard/reports`), 11. Announcements Engine (`/dashboard/announcements`), 12. Member Directory & Roster (`/dashboard/directory`), 13. Guest Directory (`/dashboard/guest-directory`), 14. Guest Invites Dispatcher (`/dashboard/guest-invites`), 15. Dynamic Group Policies (`/dashboard/policies`), 16. Backup & Restore (`/dashboard/backup`), 17. Email Management & Client (`/dashboard/email`) (+37 more)
+
+### Community 9 - "server-db.ts"
+Cohesion: 0.08
+Nodes (42): initialAccessLevelSettings, initialAnnouncements, initialBudgets, initialDesigns, initialEvents, initialForms, initialFormTemplates, initialGroupPolicies (+34 more)
+
+### Community 10 - "report-generator.ts"
+Cohesion: 0.11
+Nodes (42): average(), BAD, barChart(), BarRow, BORDER_LIGHT, BRAND_ACCENT, BRAND_PRIMARY, buildPersonal() (+34 more)
+
+### Community 11 - "page.tsx"
+Cohesion: 0.18
+Nodes (36): DesignPortalPage(), FestivalsPage(), TasksPage(), addDesign(), addTask(), allotSocialMediaTask(), clearOptimisticTaskUpdate(), completeAllDesignPosting() (+28 more)
+
+### Community 12 - "page.tsx"
+Cohesion: 0.12
+Nodes (36): isDesignTask(), RatingsPage(), DelegateTaskModal(), SearchableSelect, addRating(), delegateAutoTask(), deleteRating(), describeTaskLateness() (+28 more)
+
+### Community 13 - "mutateCollection"
+Cohesion: 0.13
+Nodes (31): DELETE(), PATCH(), RESPONSE_STATUSES, GET(), POST(), ApprovalPanelMember, AutoApprovalEntityType, cascadeCloseAutoApprovals() (+23 more)
+
+### Community 14 - "page.tsx"
+Cohesion: 0.16
+Nodes (33): AnnouncementsPage(), ApprovalsPage(), entityIcon(), entityLink(), statusBadge(), Tab, EventReportsPage(), addAnnouncement() (+25 more)
+
+### Community 15 - "🛡️ Administration & Governance Modules"
 Cohesion: 0.06
 Nodes (33): 10. Analytics & Reports (`/dashboard/reports`), 11. Announcements Engine (`/dashboard/announcements`), 12. Member Directory & Roster (`/dashboard/directory`), 13. Guest Directory (`/dashboard/guest-directory`), 14. Guest Invites Dispatcher (`/dashboard/guest-invites`), 15. Dynamic Group Policies (`/dashboard/policies`), 16. Backup & Restore (`/dashboard/backup`), 17. Email Management & Client (`/dashboard/email`) (+25 more)
 
-### Community 8 - "setup-superuser.js"
+### Community 16 - "route.ts"
+Cohesion: 0.19
+Nodes (29): CLIENT_SYNC_KEYS, GET(), DELETE(), PATCH(), PENDING_APPROVAL_MESSAGE, PENDING_STATES, GET(), PENDING_APPROVAL_MESSAGE (+21 more)
+
+### Community 17 - "logAuditEvent"
+Cohesion: 0.13
+Nodes (32): BudgetPage(), CATEGORY_OPTIONS, CHART_COLORS, CURRENT_FY, CURRENT_FY_START, FINANCIAL_YEARS, MONTH_NAMES, addBudget() (+24 more)
+
+### Community 18 - "getEvents"
+Cohesion: 0.21
+Nodes (29): EventDetailPage(), EventsPage(), EventStatusFilter, downloadEventDetailsCsv, addEventCommittee(), approveEvent(), approveEventCommittee(), deleteEvent() (+21 more)
+
+### Community 19 - "isCentreHead"
+Cohesion: 0.14
+Nodes (29): allSidebarItems, DashboardShell(), GhostFibers, loadSeenActionIds(), NavSection, navSections, OnboardingTour, saveSeenActionIds() (+21 more)
+
+### Community 20 - "setup-superuser.js"
 Cohesion: 0.10
 Nodes (25): Direct Send SMTP Setup, DKIM/SPF/DMARC DNS Configuration, Full DNS Rebuild & Mail Verification, PM2/Nginx/Certbot Bootstrap, VPS Setup Bootstrap Procedure, log(), vps-setup.sh script, ask() (+17 more)
 
-### Community 9 - "3.0 Reimbursement Claim Submission"
+### Community 21 - "3.0 Reimbursement Claim Submission"
 Cohesion: 0.09
 Nodes (28): Allocation Data (input), 1.0 Annual Budget Allocation, 1.1 Budget Module (Stores & Manages Allocation), 3.1 Claim Validation (Syntax Checks), 8.0 Financial Reporting, Funding Available? (Decision), Funding Denied (Holds Claim, Notifies Finance), Grants (input) (+20 more)
 
-### Community 10 - "Asset Intake & Validation (section)"
+### Community 22 - "permissions.ts"
+Cohesion: 0.13
+Nodes (26): GroupPolicy, ApprovalRequirement, canDecideProcurementRequest(), canDeleteAnnouncement(), canEditGuestRecord(), canEditMemberRecordRow(), canManageEmailSettings(), canManageGuestInvites() (+18 more)
+
+### Community 23 - "approval-gate.ts"
+Cohesion: 0.11
+Nodes (24): approverNameFor(), CERT_CAPS, CERT_DESIGN_CAPS, CERT_SEND_CAPS, CertificateAction, evaluateCapabilityGate(), EVENT_NON_EDIT_KEYS, eventEditKeys() (+16 more)
+
+### Community 24 - "Asset Intake & Validation (section)"
 Cohesion: 0.17
 Nodes (25): AI-Powered OCR Scan & Data Extraction, Answer Ingestion & Data Capture, Asset Intake & Validation (section), Auto-Complete Linked Tasks & Requirements, Combined Gates Pass Decision, Data Processing & Document Generation (section), Design Asset Upload, DOCX Document Generated & Stored (+17 more)
 
-### Community 11 - "page.tsx"
-Cohesion: 0.11
-Nodes (24): ALL_DIVISIONS, ALL_TIERS, EVERYONE_ELSE_RULE, GroupPoliciesPage(), memberMatchesCriteria(), ModuleAccessGrant, ModuleAccessMap, slugifyTag() (+16 more)
-
-### Community 12 - "page.tsx"
-Cohesion: 0.14
-Nodes (23): TasksPage(), completeAllDesignPosting, getEventReportCompletionBlocker, isFacultyTaskAssignees, respondToHolidayApproval, submitTaskEdit, TaskAssigneeStatus, updateApprovedCaption (+15 more)
-
-### Community 13 - "Member"
+### Community 25 - "Member"
 Cohesion: 0.16
 Nodes (23): Announcements Engine, Budget & Funds, Design Portal, Dynamic Group Policies, Events Desk, Executive Reports, Guest Directory, Public Forms (+15 more)
 
-### Community 14 - "page.tsx"
+### Community 26 - "page.tsx"
 Cohesion: 0.13
-Nodes (21): BudgetPage(), CATEGORY_OPTIONS, CHART_COLORS, CURRENT_FY, CURRENT_FY_START, FINANCIAL_YEARS, MONTH_NAMES, addBudget (+13 more)
+Nodes (18): INSPIRATIONAL_QUOTES, LoginPage(), QuoteItem, IosInstallPrompt, LoadingScreen(), LoadingScreenProps, PrivacyPolicyModal, SetupWizard() (+10 more)
 
-### Community 15 - "Actual ER Diagram (Reverse-Engineered)"
+### Community 27 - "Actual ER Diagram (Reverse-Engineered)"
 Cohesion: 0.14
 Nodes (21): announcements Collection, auditLogs Collection, events Collection, forms Collection, members Collection, ratings Collection, reimbursements Collection, submissions Collection (+13 more)
 
-### Community 16 - "page.tsx"
-Cohesion: 0.17
-Nodes (19): DesignPortalPage(), addDesign, addEvent, completeDesignPosting, deleteDesign, getDesigns, getEligibleFacultyProofreaders, OcrScanResult (+11 more)
+### Community 28 - "hasCapability"
+Cohesion: 0.26
+Nodes (21): getAccessLevelSettings(), canCreateAnnouncement(), canCreateEvent(), canCreateTask(), canDecideTaskExtension(), canDeleteTask(), canEditEvent(), canEditTask() (+13 more)
 
-### Community 17 - "compilerOptions"
+### Community 29 - "compilerOptions"
 Cohesion: 0.10
 Nodes (19): compilerOptions, allowJs, esModuleInterop, incremental, isolatedModules, jsx, lib, module (+11 more)
 
-### Community 18 - "page.tsx"
-Cohesion: 0.18
-Nodes (18): EventDetailPage(), addEventCommittee, addTask, approveEventCommittee, deleteEventCommittee, deleteTask, getBudgets, getEventById (+10 more)
+### Community 30 - "Member"
+Cohesion: 0.16
+Nodes (17): getQuartile(), ReportsPage(), SCORE_QUARTILES, DelegateTaskModalProps, GanttTimelineProps, RequestApprovalModal(), RequestApprovalModalProps, ApprovalRequest (+9 more)
 
-### Community 19 - "page.tsx"
-Cohesion: 0.18
-Nodes (18): EventsPage(), EventStatusFilter, downloadEventDetailsCsv, deleteEvent, EventCommittee, EventSponsor, getEventSortTime, getEventSponsors (+10 more)
-
-### Community 20 - "getEvents"
-Cohesion: 0.18
-Nodes (17): FestivalsPage(), DashboardHome(), acknowledgeTask, formatEventPlanningNote, getEvents, getStudentLeaderboard, getTasks, hasAcknowledgedTask (+9 more)
-
-### Community 21 - "dashboard-shell.tsx"
-Cohesion: 0.15
-Nodes (18): BackgroundTaskTray, allSidebarItems, DashboardShell(), loadSeenActionIds(), NavSection, navSections, saveSeenActionIds(), SidebarItem (+10 more)
-
-### Community 22 - "4. Core Modules"
+### Community 31 - "4. Core Modules"
 Cohesion: 0.11
 Nodes (18): 1. What This Portal Does, 2. The Problem It Solves, 3. Who Uses It, 4.1 Event Management, 4.2 Task Management, 4.3 Rating & Evaluation, 4.4 Announcements & Email Alerts, 4.5 Reimbursement Portal (+10 more)
 
-### Community 23 - "gantt-timeline.tsx"
-Cohesion: 0.18
-Nodes (17): addDays(), countInWindow(), daysBetween(), GanttTimeline(), GanttTimelineProps, parseDate(), STATUS_COLORS, toDateStr() (+9 more)
+### Community 32 - "page.tsx"
+Cohesion: 0.17
+Nodes (17): ALL_DIVISIONS, ALL_TIERS, EVERYONE_ELSE_RULE, GroupPoliciesPage(), memberMatchesCriteria(), ModuleAccessGrant, ModuleAccessMap, slugifyTag() (+9 more)
 
-### Community 24 - "page.tsx"
-Cohesion: 0.18
-Nodes (14): INSPIRATIONAL_QUOTES, LoginPage(), QuoteItem, IosInstallPrompt, LoadingScreen(), LoadingScreenProps, SetupWizard(), SetupWizardProps (+6 more)
-
-### Community 25 - "4. Comprehensive Module Operating Instructions"
+### Community 33 - "4. Comprehensive Module Operating Instructions"
 Cohesion: 0.13
 Nodes (14): 1. Executive System Overview, 2. One-Time Initial Setup Wizard, 3. Granular Role & Privilege Matrix (Tiers 1 to 7), 4.1 Members Directory & User Management, 4.2 Dynamic Quick Switch (Super User Feature), 4.3 Events & Automated Task Delegation, 4.4 Design Portal & Multi-Gate Proofreading Engine, 4.5 Multi-Stage Financial Reimbursement Pipeline (+6 more)
 
-### Community 26 - "Member"
-Cohesion: 0.19
-Nodes (13): DelegateTaskModal(), DelegateTaskModalProps, RequestApprovalModal(), RequestApprovalModalProps, allotSocialMediaTask, ApprovalRequest, delegateAutoTask, isSocialMediaHeadOrSrHead (+5 more)
+### Community 34 - "getMembers"
+Cohesion: 0.26
+Nodes (13): DashboardHome(), StudentProfileModal(), StudentProfileModalProps, acknowledgeTask(), canViewTask(), formatEventDateRange(), getMembers(), getStudentLeaderboard() (+5 more)
 
-### Community 27 - "onboarding-tour.tsx"
+### Community 35 - "page.tsx"
+Cohesion: 0.33
+Nodes (12): DraftFile, fmtDate(), ProposalsPage(), readAsDataUrl(), statusStyle, Tab, call(), createProposal() (+4 more)
+
+### Community 36 - "onboarding-tour.tsx"
 Cohesion: 0.15
 Nodes (12): OnboardingTourProps, OnboardingTourUser, TourStep, Button(), ButtonColor, ButtonProps, ButtonSize, ButtonVariant (+4 more)
 
-### Community 28 - "Member table"
+### Community 37 - "Member table"
 Cohesion: 0.31
 Nodes (13): Announcement table, Budget table, Design table, Event table, GroupPolicy table, Guest table, Member table, PublicForm table (+5 more)
 
-### Community 29 - "page.tsx"
-Cohesion: 0.28
-Nodes (12): SettingsPage(), formatFileSize, useUploadTask, AuditLogItem, confirmEmailChange, confirmNewEmailChange, getAuditLogs, getEmailLogs (+4 more)
-
-### Community 30 - "page.tsx"
-Cohesion: 0.19
-Nodes (11): PublicFormPage(), headerImageStyle, PrivacyPolicyModal, TermsModal(), TermsModalProps, addSubmission, FormEventInfo, hasLockedDefault (+3 more)
-
-### Community 31 - "avatar.tsx"
+### Community 38 - "avatar.tsx"
 Cohesion: 0.15
-Nodes (9): Avatar(), AvatarColor, AvatarContext, AvatarContextValue, AvatarFallbackProps, AvatarGroupProps, AvatarImageProps, AvatarProps (+1 more)
+Nodes (8): AvatarColor, AvatarContext, AvatarContextValue, AvatarFallbackProps, AvatarGroupProps, AvatarImageProps, AvatarProps, AvatarSize
 
-### Community 32 - "card.tsx"
+### Community 39 - "card.tsx"
 Cohesion: 0.18
 Nodes (7): CardBodyProps, CardFooterProps, CardHeaderProps, CardProps, createParticleElement(), ParticleCard(), ParticleCardProps
 
-### Community 33 - "LEADS All-in-One Dashboard — Technical Specification"
+### Community 40 - "file-storage.ts"
+Cohesion: 0.21
+Nodes (11): loadPersistedAttachments(), deleteStoredFile(), MIME_BY_EXTENSION, parseDataUrl(), readStoredFile(), resolveStoragePath(), sanitizeFileName(), saveBase64File() (+3 more)
+
+### Community 41 - "LEADS All-in-One Dashboard — Technical Specification"
 Cohesion: 0.15
 Nodes (12): 1. Recommended Stack, 2. Data Models (Summary), 3.1 Encryption in Transit, 3.2 Encryption at Rest, 3.3 Field-Level Encryption, 3.4 Access Control (Row-Level Security), 3.5 Operational Hygiene, 3. Security & Encryption Strategy (+4 more)
 
-### Community 34 - "Architecture"
+### Community 42 - "Architecture"
 Cohesion: 0.17
 Nodes (11): API layer (`src/app/api/`), Architecture, Auth & permissions (`src/lib/permissions.ts`), Commands (run from `leads-dashboard/`), Data layer (`src/lib/server-db.ts`), Deployment Workflow (Standing Instruction), Email (`src/lib/email-service.ts`), Frontend (`src/app/dashboard/`) (+3 more)
 
-### Community 35 - "getMembers"
-Cohesion: 0.30
-Nodes (11): ReimbursementsPage(), addReimbursement, getMembers, getReimbursements, ReceiptFile, updateReimbursementStatus, verifyReimbursementByCentreHead, canApproveAsFinanceHead (+3 more)
-
-### Community 36 - "LEADS All-in-One Dashboard — Reports & Analytics Specification"
+### Community 43 - "LEADS All-in-One Dashboard — Reports & Analytics Specification"
 Cohesion: 0.17
 Nodes (11): 1. Purpose, 2.1 By Event, 2.2 By Committee, 2.3 By Individual, 2. Report Types, 3. Chart Requirements, 4. Export, 5. Access to Reports (+3 more)
 
-### Community 37 - "Events and Tasks Management Subsystem (Main Module)"
+### Community 44 - "Events and Tasks Management Subsystem (Main Module)"
 Cohesion: 0.25
 Nodes (11): All Required Tasks Complete? (decision), 2. Committee Rosters Module, 5. Completion Triggers Module, 4. Deliverable Tracking Module, End: Event Concluded, 1. Event Creation Module, Events and Tasks Management Subsystem (Main Module), Reject/Correct Request (+3 more)
 
-### Community 38 - "PassBarcodeFormat"
+### Community 45 - "PassBarcodeFormat"
 Cohesion: 0.22
 Nodes (11): AppleWalletPassPreviewProps, ApplePosterPreviewProps, InteractiveKeycardProps, PassBarcodeFormat, PassQrOptions, PassQrShape, PassTheme, QrDrawOptions (+3 more)
 
-### Community 39 - "LEADS All-in-One Dashboard — Design System"
+### Community 46 - "canViewTaskExtended"
+Cohesion: 0.29
+Nodes (11): canChangeTaskStatus(), canDelegateAutoTask(), canViewTaskExtended(), isEventsHeadRtcCampus(), isFaculty(), isHeadOfEvents(), isSocialMediaHead(), isSocialMediaHeadOrSrHead() (+3 more)
+
+### Community 47 - "isAdvisor"
+Cohesion: 0.24
+Nodes (11): canEditRating(), canEvaluateEventStudent(), canExportEventDetails(), canManageCanvaLibrary(), canReviewDesignProofread(), canSendTaskAllotmentEmail(), isAdvisor(), isChiefAdvisor() (+3 more)
+
+### Community 48 - "LEADS All-in-One Dashboard — Design System"
 Cohesion: 0.18
 Nodes (10): 1. Visual Direction, 2. Color Palette, 3. Rating Color Scale (used across ratings, reports, charts), 4. Typography, 5. Dark Mode, 6. Component Patterns, 7. Charts (Reports Module), 8. Responsive Behavior (+2 more)
 
-### Community 40 - "LEADS All-in-One Dashboard — Content & Copy Document"
+### Community 49 - "LEADS All-in-One Dashboard — Content & Copy Document"
 Cohesion: 0.18
 Nodes (10): 1. Login Page, 2. Task Module, 3. Rating Module, 4. Reimbursement Module, 5. Public Form Module, 6. Reports Module, 7. Announcements, 8. Tone Guidelines (+2 more)
 
-### Community 41 - "empty-state.tsx"
+### Community 50 - "empty-state.tsx"
 Cohesion: 0.24
 Nodes (5): EmptyStateProps, Ripple, RippleButton, RippleButtonProps, SkeletonProps
 
-### Community 42 - "Ponytail"
+### Community 51 - "isExecutiveRole"
+Cohesion: 0.33
+Nodes (10): canAddMember(), canBuildForms(), canCreateForms(), canEditDirectory(), canRemoveGuestContact(), canTerminateMember(), isAlumniRole(), isExecutiveRole() (+2 more)
+
+### Community 52 - "isEventsHeadGgCampus"
+Cohesion: 0.29
+Nodes (10): canApproveAnnouncement(), canApprovePendingEvent(), canApprovePendingForm(), canApprovePendingTask(), canRespondToHolidayApproval(), canViewTaskDelegationTrail(), isCommitteeApprover(), isEventsHeadGgCampus() (+2 more)
+
+### Community 53 - "Ponytail"
 Cohesion: 0.22
 Nodes (8): Boundaries, Intensity, Output, Persistence, Ponytail, Rules, The ladder, When NOT to be lazy
 
-### Community 43 - "authHeaders"
-Cohesion: 0.39
-Nodes (8): BackupRestorePage(), createProgressTracker, FileDropzone, uploadFormData, authHeaders, getSystemSettings, updateSystemSettings, canManageBackup
+### Community 54 - "page.tsx"
+Cohesion: 0.47
+Nodes (8): ReimbursementsPage(), addReimbursement(), getReimbursements(), ReceiptFile, ReimbursementItem, saveReimbursements(), updateReimbursementStatus(), verifyReimbursementByCentreHead()
 
-### Community 44 - "Ponytail Help"
+### Community 55 - "Ponytail Help"
 Cohesion: 0.25
 Nodes (7): Configure Default Mode, Deactivate, Levels, More, Ponytail Help, Skills, Update
 
-### Community 45 - "chip.tsx"
+### Community 56 - "chip.tsx"
 Cohesion: 0.25
 Nodes (7): ChipColor, ChipProps, ChipSize, ChipVariant, COLOR_VARIANTS, DOT_COLORS, SIZES
 
-### Community 46 - "sync-status-pill.tsx"
+### Community 57 - "sync-status-pill.tsx"
 Cohesion: 0.39
 Nodes (6): SyncStatusPill(), dismissSyncEntry, getSyncEntries, getSyncSuccessFlash, subscribeSyncStatus, SyncEntry
 
-### Community 47 - "student-profile-modal.tsx"
-Cohesion: 0.38
-Nodes (6): StudentProfileModal(), StudentProfileModalProps, formatEventDateRange, getStudentProfile, isFacultyMember, StudentProfileData
-
-### Community 48 - "progress.tsx"
+### Community 58 - "progress.tsx"
 Cohesion: 0.29
 Nodes (5): COLOR_TRACKS, ProgressColor, ProgressProps, ProgressSize, SIZES
 
-### Community 49 - "LEADS All-in-One Dashboard — Sitemap & URL Structure"
+### Community 59 - "canViewEventReports"
+Cohesion: 0.47
+Nodes (6): canReviewEventReports(), canScoreEventReports(), canSubmitEventReport(), canViewEventReports(), isChiefCoordinator(), isGeneralSecretary()
+
+### Community 60 - "LEADS All-in-One Dashboard — Sitemap & URL Structure"
 Cohesion: 0.33
 Nodes (5): 1. Site Architecture, 2. Access Matrix by Route Group, 3. Page Notes, LEADS All-in-One Dashboard — Sitemap & URL Structure, Version History
 
-### Community 50 - "LEADS All-in-One Dashboard — Data Model & ERD"
+### Community 61 - "LEADS All-in-One Dashboard — Data Model & ERD"
 Cohesion: 0.33
 Nodes (5): 1. Entity-Relationship Diagram, 2. Key Relationship Notes, 3. Indexing Notes (for the developer), LEADS All-in-One Dashboard — Data Model & ERD, Version History
 
-### Community 51 - "LEADS Next Gen Centre — Members & Designations Directory"
+### Community 62 - "LEADS Next Gen Centre — Members & Designations Directory"
 Cohesion: 0.33
 Nodes (5): 1. Faculty & Institutional Leadership, 2. Student Advisory Council, 3. Student Core Council, LEADS Next Gen Centre — Members & Designations Directory, Organisation Hierarchy (Summary)
 
-### Community 52 - "SKILL.md"
+### Community 63 - "SKILL.md"
 Cohesion: 0.40
 Nodes (4): Boundaries, Hunt, Output, Tags
 
-### Community 53 - "Ponytail Gain"
+### Community 64 - "Ponytail Gain"
 Cohesion: 0.40
 Nodes (4): Boundaries, Honesty boundary, Ponytail Gain, Scoreboard
 
-### Community 54 - "SKILL.md"
+### Community 65 - "SKILL.md"
 Cohesion: 0.40
 Nodes (4): Boundaries, Examples, Format, Scoring
 
-### Community 55 - "decrypt-backup.js"
+### Community 66 - "decrypt-backup.js"
 Cohesion: 0.40
 Nodes (4): crypto, fs, path, resolvedPath
 
-### Community 56 - "SKILL.md"
+### Community 67 - "SKILL.md"
 Cohesion: 0.50
 Nodes (3): Boundaries, Output, Scan
 
-### Community 57 - "canViewTask() Visibility Logic"
+### Community 68 - "canViewTask() Visibility Logic"
 Cohesion: 0.50
 Nodes (4): Committee-Assigned Tasks Invisible to Everyone, canViewTask() Visibility Logic, Ratings Module (Actual Flow), Tasks Module (Actual Flow)
 
-### Community 58 - "generate_manual_docx.py"
+### Community 69 - "generate_manual_docx.py"
 Cohesion: 0.83
 Nodes (3): create_manual(), set_cell_background(), set_cell_margins()
 
-### Community 59 - "Settings Writes Never Reach Server Gap"
+### Community 70 - "Settings Writes Never Reach Server Gap"
 Cohesion: 0.67
 Nodes (3): Settings Change Password Is Fully Decorative, Settings Module (Actual Flow), Settings Writes Never Reach Server Gap
 
-### Community 60 - "7-Second Poll Sync Mechanism"
+### Community 71 - "7-Second Poll Sync Mechanism"
 Cohesion: 0.67
 Nodes (3): Cross-Device Polling Never Actually Updates Open Screen, Login & Session (localStorage-based), 7-Second Poll Sync Mechanism
 
-### Community 61 - "Reimbursements Module (Actual Flow)"
+### Community 72 - "Reimbursements Module (Actual Flow)"
 Cohesion: 0.67
 Nodes (3): Reimbursement Approval Stage Not Enforced by Role, Access Tiers (Actual 7-Tier System), Reimbursements Module (Actual Flow)
 
@@ -1387,9 +1180,9 @@ Nodes (3): Reimbursement Approval Stage Not Enforced by Role, Access Tiers (Actu
   docs/database_er_diagram.png · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **1440 isolated node(s):** `eslintConfig`, `nextConfig`, `name`, `version`, `private` (+1435 more)
+- **1217 isolated node(s):** `eslintConfig`, `nextConfig`, `name`, `version`, `private` (+1212 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **1008 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **746 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
