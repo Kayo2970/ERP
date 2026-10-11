@@ -75,6 +75,7 @@ export interface DbSchema {
   event_passes: any[];
   certificates: any[];
   certificateSchedules: any[];
+  passEmailSchedules: any[];
   approvalRequests: any[];
   procurementRequests: any[];
   // One row per (memberId, date) a birthday email was actually sent for —
@@ -124,6 +125,7 @@ const EMPTY_DB: DbSchema = {
   event_passes: [],
   certificates: [],
   certificateSchedules: [],
+  passEmailSchedules: [],
   approvalRequests: [],
   procurementRequests: [],
   birthdayEmailLog: [],
@@ -178,6 +180,7 @@ const SEED_DB: DbSchema = {
   event_passes: [],
   certificates: [],
   certificateSchedules: [],
+  passEmailSchedules: [],
   approvalRequests: [],
   procurementRequests: initialProcurementRequests,
   birthdayEmailLog: [],

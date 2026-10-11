@@ -31,6 +31,9 @@ export async function register() {
     const { startCertificateScheduler } = await import('./lib/certificate-scheduler');
     startCertificateScheduler();
 
+    const { startPassEmailScheduler } = await import('./lib/pass-email-scheduler');
+    startPassEmailScheduler();
+
     const { startCommitteeReviewScheduler } = await import('./lib/committee-review-scheduler');
     startCommitteeReviewScheduler();
   }
