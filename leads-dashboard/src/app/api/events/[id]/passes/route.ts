@@ -33,6 +33,7 @@ export async function GET(
   }
 }
 
+/** Creates a pass. Never sends email — dispatch is always an explicit, separate action. */
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }

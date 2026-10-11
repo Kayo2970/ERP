@@ -334,10 +334,11 @@ export function EventPassStudio({
       });
 
       setIssuedPass(newPass);
-      setSuccessToast(`Pass ${newPass.serialNumber} issued successfully for ${newPass.attendeeName}!`);
+      // Issuing never emails the attendee — sending is always an explicit Dispatch
+      setSuccessToast(`Pass ${newPass.serialNumber} created for ${newPass.attendeeName}. Not emailed yet — use Dispatch, or Issued Passes → Preview & dispatch.`);
       if (onPassIssued) onPassIssued(newPass);
 
-      setTimeout(() => setSuccessToast(''), 5000);
+      setTimeout(() => setSuccessToast(''), 8000);
     } catch (err: any) {
       console.error('Error issuing event pass:', err);
     } finally {

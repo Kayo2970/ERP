@@ -3104,6 +3104,7 @@ export function notifyPassApproval(message: string, kind: 'pending' | 'error'): 
   window.dispatchEvent(new CustomEvent('leads-pass-approval', { detail: { message, kind } }));
 }
 
+/** Issuing a pass NEVER sends email (emailStatus starts 'Not Sent'); dispatch is always an explicit action. */
 export function addEventPass(
   passData: Omit<EventPassItem, 'id' | 'serialNumber' | 'issuedAt' | 'status' | 'qrPayload'>
 ): EventPassItem {

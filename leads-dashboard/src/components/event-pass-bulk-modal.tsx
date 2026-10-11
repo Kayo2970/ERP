@@ -286,13 +286,14 @@ export function EventPassBulkModal({
         createdCount++;
       }
 
-      setImportSuccess(`Successfully issued ${createdCount} verified passes for ${selectedEvent.title}!`);
+      // Importing never emails anyone — passes are sent later from Issued Passes → Preview & dispatch
+      setImportSuccess(`Issued ${createdCount} pass${createdCount === 1 ? '' : 'es'} for ${selectedEvent.title}. No emails were sent — open Issued Passes, tick the passes and click Preview & dispatch.`);
       onPassesImported(createdCount);
       setTimeout(() => {
         onClose();
         setParsedRows([]);
         setImportSuccess('');
-      }, 2000);
+      }, 5000);
     } catch (err) {
       console.error(err);
       setErrorMessage('An error occurred during bulk pass creation.');
