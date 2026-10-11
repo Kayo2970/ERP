@@ -375,7 +375,7 @@ function merge(text: string, vars: Record<string, string>): string {
 }
 
 export async function renderCertificatePng(
-  data: { attendeeName: string; eventName: string; eventDate: string; code: string; organisation?: string; category?: string; serial?: string },
+  data: { attendeeName: string; eventName: string; eventDate: string; code: string; organisation?: string; category?: string; serial?: string; manual?: boolean },
   template: CertificateTemplate,
   verifyUrl: string,
   /** Pixel multiplier on the 1754x1240 design space: 1 = quick preview, 2 = 300 dpi print/PDF quality. */
@@ -416,7 +416,9 @@ export async function renderCertificatePng(
   }
 
   const vars = { name: data.attendeeName, event_name: data.eventName, event_date: data.eventDate, organisation: data.organisation || '', category: data.category || '', serial: data.serial || '' };
-  const nameText = ({ name: data.attendeeName, organisation: data.organisation || data.attendeeName, category: data.category || data.attendeeName, serial: data.serial || data.attendeeName } as Record<string, string>)[template.nameSource] || data.attendeeName;
+  // A manual certificate (typed in, or picked from the Members Directory) always prints the name that was entered — its
+  // category / organisation are a designation / department there, so "Print in the name box" only applies to pass-based ones.
+  const nameText = data.manual ? data.attendeeName : ({ name: data.attendeeName, organisation: data.organisation || data.attendeeName, category: data.category || data.attendeeName, serial: data.serial || data.attendeeName } as Record<string, string>)[template.nameSource] || data.attendeeName;
   if (L.title.enabled) drawTextBox(ctx, merge(template.title, vars).toUpperCase(), L.title, ink);
   if (L.intro.enabled && template.introText) drawTextBox(ctx, merge(template.introText, vars), L.intro, ink);
   if (L.name.enabled) drawTextBox(ctx, nameText, { ...L.name, align: 'center' }, ink);

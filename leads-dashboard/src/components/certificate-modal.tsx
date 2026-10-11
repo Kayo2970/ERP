@@ -928,6 +928,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                       <option value="serial" className="bg-slate-900">Pass serial number</option>
                     </select>
                   </div>
+                  <p className="text-[10px] text-slate-500">This applies to certificates for event passes. People added manually, including from the Members Directory, always print their own name here.</p>
                   <p className="text-[10px] text-slate-500">Merge fields for the wording: <code>@name</code> <code>@organisation</code> <code>@category</code> <code>@serial</code> <code>@event_name</code> <code>@event_date</code>. Each is filled from the attendee&apos;s pass when the PDF is made.</p>
                   <div className="flex items-center justify-between">
                     <span className="font-extrabold text-slate-800 dark:text-white">Recipients ({selected.size}/{attendees.length} selected · {pending} not yet sent)</span>
