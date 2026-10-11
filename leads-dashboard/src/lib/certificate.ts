@@ -10,7 +10,9 @@ import { readCollection, mutateCollection } from '@/lib/server-db';
 import { saveBase64File, readStoredFile, deleteStoredFile } from '@/lib/file-storage';
 import { dispatchEmail } from '@/lib/email-service';
 import { drawStyledQr } from '@/lib/qr-style';
-import { CERT_W, CERT_H, CERT_FONT_OPTIONS, CertBox, CertLayout, DEFAULT_CERT_LAYOUT, normalizeLayout } from '@/lib/certificate-layout';
+import { registerCustomFonts } from '@/lib/certificate-fonts';
+import { customFamily } from '@/lib/certificate-fonts';
+import { CERT_W, CERT_H, CERT_FONT_OPTIONS, CertBox, CertLayout, DEFAULT_CERT_LAYOUT, normalizeLayout, isCustomFont } from '@/lib/certificate-layout';
 import { EventItem, EventPassItem, getPassAttendanceSummary, getEffectiveEventStatus, formatEventDateRange } from '@/lib/local-data';
 
 const CATEGORY = 'certificate-templates';
@@ -156,7 +158,9 @@ function ensureFonts() {
 }
 
 function fontCss(box: CertBox, size: number): string {
-  const fam = (CERT_FONT_OPTIONS.find((f) => f.id === box.fontFamily) || CERT_FONT_OPTIONS[0]).css;
+  const fam = isCustomFont(box.fontFamily)
+    ? `${customFamily(box.fontFamily.slice(7))}, ${CERT_FONT_OPTIONS[0].css}`
+    : (CERT_FONT_OPTIONS.find((f) => f.id === box.fontFamily) || CERT_FONT_OPTIONS[0]).css;
   return `${box.italic ? 'italic ' : ''}${box.bold ? 'bold ' : ''}${size}px ${fam}`;
 }
 
@@ -259,6 +263,7 @@ export async function renderCertificatePng(
   verifyUrl: string
 ): Promise<Buffer> {
   ensureFonts();
+  await registerCustomFonts();
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
   const ink = template.textColor;
@@ -288,7 +293,7 @@ export async function renderCertificatePng(
   const vars = { name: data.attendeeName, event_name: data.eventName, event_date: data.eventDate };
   if (L.title.enabled) drawTextBox(ctx, merge(template.title, vars).toUpperCase(), L.title, ink);
   if (L.intro.enabled && template.introText) drawTextBox(ctx, merge(template.introText, vars), L.intro, ink);
-  if (L.name.enabled) drawTextBox(ctx, data.attendeeName, L.name, ink);
+  if (L.name.enabled) drawTextBox(ctx, data.attendeeName, { ...L.name, align: 'center', valign: 'middle' }, ink);
   if (L.body.enabled) drawTextBox(ctx, merge(template.bodyText, vars), L.body, ink);
 
   // Signatory: a rule with the name and designation under it

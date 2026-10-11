@@ -6,7 +6,10 @@
 export const CERT_W = 1754;
 export const CERT_H = 1240;
 
-export type CertFontId = 'serif' | 'sans' | 'mono' | 'dejavu';
+/** Built-in ids, or `custom:<id>` for an uploaded / Google font. */
+export type CertFontId = string;
+
+export const isCustomFont = (id: string) => /^custom:[a-z0-9-]{1,40}$/.test(id);
 
 export const CERT_FONT_OPTIONS: Array<{ id: CertFontId; label: string; css: string }> = [
   { id: 'serif', label: 'Serif (Times style)', css: "CertSerif, CertSerifFallback, 'Times New Roman', serif" },
@@ -86,13 +89,14 @@ export function normalizeLayout(input: unknown): CertLayout {
       y,
       w: num(s.w, 2, 100 - x, Math.min(d.w, 100 - x)),
       h: num(s.h, 1, 100 - y, Math.min(d.h, 100 - y)),
-      fontFamily: CERT_FONT_OPTIONS.some((f) => f.id === s.fontFamily) ? (s.fontFamily as CertFontId) : d.fontFamily,
+      fontFamily: typeof s.fontFamily === 'string' && (CERT_FONT_OPTIONS.some((f) => f.id === s.fontFamily) || isCustomFont(s.fontFamily)) ? s.fontFamily : d.fontFamily,
       fontSize: num(s.fontSize, 8, 300, d.fontSize),
       bold: typeof s.bold === 'boolean' ? s.bold : d.bold,
       italic: typeof s.italic === 'boolean' ? s.italic : d.italic,
       color: typeof s.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(s.color) ? s.color : s.color === '' ? '' : d.color,
-      align: s.align === 'left' || s.align === 'right' || s.align === 'center' ? s.align : d.align,
-      valign: s.valign === 'top' || s.valign === 'bottom' || s.valign === 'middle' ? s.valign : d.valign,
+      // The attendee's name is always centred in its box
+      align: key === 'name' ? 'center' : s.align === 'left' || s.align === 'right' || s.align === 'center' ? s.align : d.align,
+      valign: key === 'name' ? 'middle' : s.valign === 'top' || s.valign === 'bottom' || s.valign === 'middle' ? s.valign : d.valign,
       autoFit: typeof s.autoFit === 'boolean' ? s.autoFit : d.autoFit,
       maxLines: Math.round(num(s.maxLines, 0, 12, d.maxLines)),
       underline: typeof s.underline === 'boolean' ? s.underline : d.underline,

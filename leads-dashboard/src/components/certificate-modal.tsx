@@ -31,6 +31,8 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
   const [hasBackground, setHasBackground] = useState(false);
   const [activeBox, setActiveBox] = useState<CertBoxKey>('name');
   const stageRef = useRef<HTMLDivElement>(null);
+  const [customFonts, setCustomFonts] = useState<Array<{ id: string; label: string }>>([]);
+  const [googleLink, setGoogleLink] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
@@ -44,6 +46,13 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     setMsg(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
+
+  const loadFonts = useCallback(async () => {
+    try {
+      const r = await fetch('/api/certificate-fonts', { headers: authHeaders() });
+      if (r.ok) setCustomFonts((await r.json()).fonts || []);
+    } catch { /* built-in fonts still work */ }
+  }, []);
 
   const load = useCallback(async () => {
     if (!eventId) return;
@@ -74,8 +83,8 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
   }, [eventId]);
 
   useEffect(() => {
-    if (isOpen) load();
-  }, [isOpen, load]);
+    if (isOpen) { load(); loadFonts(); }
+  }, [isOpen, load, loadFonts]);
 
   if (!isOpen) return null;
 
@@ -175,6 +184,37 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     } finally {
       setBusy(false);
     }
+  };
+
+  const addFont = async (payload: { googleUrl?: string; name?: string; dataUrl?: string }, applyTo: CertBoxKey) => {
+    setBusy(true);
+    try {
+      const res = await fetch('/api/certificate-fonts', { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not add the font.');
+      setCustomFonts(data.fonts || []);
+      patchBox(applyTo, { fontFamily: `custom:${data.id}` });
+      setGoogleLink('');
+      setMsg({ kind: 'ok', text: 'Font added and selected — save to see it in the preview.' });
+    } catch (e: any) {
+      setMsg({ kind: 'err', text: e.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const pickFont = (file: File | undefined, applyTo: CertBoxKey) => {
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) return setMsg({ kind: 'err', text: 'Font must be under 8 MB.' });
+    const reader = new FileReader();
+    reader.onload = () => addFont({ name: file.name, dataUrl: String(reader.result) }, applyTo);
+    reader.readAsDataURL(file);
+  };
+
+  const removeFont = async (id: string) => {
+    if (!window.confirm('Delete this font? Boxes using it fall back to the default serif.')) return;
+    const res = await fetch(`/api/certificate-fonts?id=${encodeURIComponent(id)}`, { method: 'DELETE', headers: authHeaders() });
+    if (res.ok) setCustomFonts((await res.json()).fonts || []);
   };
 
   const pending = attendees.filter((a) => a.status !== 'Sent').length;
@@ -292,10 +332,29 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                             <label className={label}>Font</label>
                             <select className={field} value={box.fontFamily} disabled={!canEditDesign} onChange={(e) => patchBox(activeBox, { fontFamily: e.target.value as CertBox['fontFamily'] })}>
                               {CERT_FONT_OPTIONS.map((f) => <option key={f.id} value={f.id} className="bg-slate-900 text-white">{f.label}</option>)}
+                              {customFonts.map((f) => <option key={f.id} value={`custom:${f.id}`} className="bg-slate-900 text-white">{f.label} (custom)</option>)}
+                              {box.fontFamily.startsWith('custom:') && !customFonts.some((f) => `custom:${f.id}` === box.fontFamily) && <option value={box.fontFamily} className="bg-slate-900 text-white">{box.fontFamily.slice(7)} (missing)</option>}
                             </select>
                           </div>
                           {numField('Font size (px)', box.fontSize, (n) => patchBox(activeBox, { fontSize: n }), 1)}
                         </div>
+                        {canEditDesign && (
+                          <div className="space-y-1.5 p-2 rounded-xl bg-slate-500/5 border border-slate-300/40 dark:border-white/10">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <label className="px-3 py-1.5 rounded-lg bg-accent/15 text-accent border border-accent/30 font-bold cursor-pointer">
+                                Upload font (.ttf .otf .woff)
+                                <input type="file" accept=".ttf,.otf,.woff,.woff2" className="hidden" disabled={busy} onChange={(e) => { pickFont(e.target.files?.[0], activeBox); e.target.value = ''; }} />
+                              </label>
+                              {box.fontFamily.startsWith('custom:') && (
+                                <button type="button" className="px-3 py-1.5 rounded-lg text-rose-400 border border-rose-500/30 font-bold cursor-pointer" onClick={() => removeFont(box.fontFamily.slice(7))}>Delete this font</button>
+                              )}
+                            </div>
+                            <div className="flex gap-2">
+                              <input className={field} placeholder="Google Fonts link, e.g. https://fonts.google.com/specimen/Great+Vibes" value={googleLink} onChange={(e) => setGoogleLink(e.target.value)} />
+                              <button type="button" disabled={busy || !googleLink.trim()} onClick={() => addFont({ googleUrl: googleLink }, activeBox)} className="px-3 py-1.5 rounded-lg bg-accent text-white font-bold cursor-pointer disabled:opacity-50 shrink-0">Import</button>
+                            </div>
+                          </div>
+                        )}
                         <div className="flex flex-wrap items-center gap-3">
                           {([['bold', 'Bold'], ['italic', 'Italic'], ['autoFit', 'Shrink to fit box'], ['underline', 'Underline']] as const).map(([k, lab]) => (
                             <label key={k} className="flex items-center gap-1.5 font-bold text-slate-600 dark:text-slate-300">
@@ -303,7 +362,8 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                             </label>
                           ))}
                         </div>
-                        <div className="grid grid-cols-3 gap-2">
+                        {activeBox === 'name' && <p className="text-[10px] text-slate-500">The name is always centred horizontally and vertically in its box.</p>}
+                        <div className={`grid grid-cols-3 gap-2 ${activeBox === 'name' ? 'hidden' : ''}`}>
                           <div>
                             <label className={label}>Align</label>
                             <select className={field} value={box.align} disabled={!canEditDesign} onChange={(e) => patchBox(activeBox, { align: e.target.value as CertBox['align'] })}>
