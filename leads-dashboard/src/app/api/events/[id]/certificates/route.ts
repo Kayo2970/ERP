@@ -5,7 +5,9 @@ import { apiError } from '@/lib/api-error';
 import { gateEventPassAction } from '@/lib/approval-gate';
 import { getAppBaseUrl } from '@/lib/app-url';
 import { EventItem, EventPassItem } from '@/lib/local-data';
-import { CertificateRecord, isCertificateEligible, isEventOver, sendCertificate } from '@/lib/certificate';
+import { CertificateRecord, isCertificateEligible, isEventOver, sendCertificatesBatch } from '@/lib/certificate';
+import { CertificateSchedule } from '@/lib/certificate-scheduler';
+import { mutateCollection } from '@/lib/server-db';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -32,42 +34,71 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const records = (await readCollection<CertificateRecord>('certificates')).filter((c) => c.eventId === id);
     const attendees = passes.filter(isCertificateEligible).map((p) => {
       const rec = records.find((c) => c.passId === p.id);
-      return { passId: p.id, name: p.attendeeName, email: p.attendeeEmail, serial: p.serialNumber, status: rec?.status || 'Not sent', sentAt: rec?.sentAt, error: rec?.error };
+      return { passId: p.id, name: p.attendeeName, email: p.attendeeEmail, serial: p.serialNumber, organisation: p.attendeeOrg || '', category: String(p.guestCategory || ''), status: rec?.status || 'Not sent', sentAt: rec?.sentAt, error: rec?.error };
     });
-    return NextResponse.json({ eventOver: isEventOver(event), eventName: event.title, attendees });
+    const schedules = (await readCollection<CertificateSchedule>('certificateSchedules')).filter((x) => x.eventId === id).sort((a, b) => b.sendAt.localeCompare(a.sendAt)).slice(0, 10);
+    return NextResponse.json({ eventOver: isEventOver(event), eventName: event.title, attendees, schedules });
   } catch (err) {
     return apiError(err, 'certificates:list');
   }
 }
 
-/** Body: { passIds: string[], emails?: Record<passId, string> } — sends one PDF certificate per attendee. */
+/** Body: { passIds, emails?, sendAt? } — sends one PDF certificate per attendee now, or (with a future `sendAt` ISO time) schedules the batch. */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await authorise(request);
     if (auth.error) return auth.error;
     const { id } = await params;
-    const { passIds, emails } = (await request.json()) as { passIds?: string[]; emails?: Record<string, string> };
+    const { passIds, emails, sendAt } = (await request.json()) as { passIds?: string[]; emails?: Record<string, string>; sendAt?: string };
     if (!Array.isArray(passIds) || passIds.length === 0) return NextResponse.json({ error: 'Choose at least one attendee.' }, { status: 400 });
     if (passIds.length > 500) return NextResponse.json({ error: 'Send at most 500 certificates at a time.' }, { status: 400 });
     const event = (await readCollection<EventItem>('events')).find((e) => e.id === id);
     if (!event) return NextResponse.json({ error: 'Event not found' }, { status: 404 });
-    if (!isEventOver(event)) return NextResponse.json({ error: 'Certificates can be sent once the event has ended.' }, { status: 400 });
-
-    const passes = await readCollection<EventPassItem>('event_passes');
     const origin = getAppBaseUrl(request);
-    const results: Array<{ passId: string; ok: boolean; error?: string }> = [];
-    for (const passId of passIds) {
-      const pass = passes.find((p) => p.id === passId && p.eventId === id);
-      if (!pass || !isCertificateEligible(pass)) {
-        results.push({ passId, ok: false, error: 'Not eligible (no check-in or no email).' });
-        continue;
-      }
-      const to = emails?.[passId];
-      const r = await sendCertificate(pass, event, origin, typeof to === 'string' && /^\S+@\S+\.\S+$/.test(to.trim()) ? to : undefined);
-      results.push({ passId, ok: r.ok, error: r.error });
+
+    if (sendAt) {
+      const when = new Date(sendAt);
+      if (Number.isNaN(when.getTime()) || when.getTime() < Date.now() + 30_000) return NextResponse.json({ error: 'Pick a send time in the future.' }, { status: 400 });
+      const schedule: CertificateSchedule = {
+        id: `certsch-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        eventId: id,
+        passIds,
+        sendAt: when.toISOString(),
+        origin,
+        createdBy: auth.user?.name || 'Staff',
+        createdAt: new Date().toISOString(),
+        status: 'Scheduled',
+      };
+      await mutateCollection<CertificateSchedule>('certificateSchedules', (cur = []) => [...cur, schedule]);
+      return NextResponse.json({ scheduled: true, schedule });
     }
+
+    if (!isEventOver(event)) return NextResponse.json({ error: 'Certificates can be sent once the event has ended.' }, { status: 400 });
+    const results = await sendCertificatesBatch(event, passIds, origin, emails);
     return NextResponse.json({ sent: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length, results });
   } catch (err) {
     return apiError(err, 'certificates:send');
+  }
+}
+
+/** ?scheduleId=… cancels a scheduled send that has not started. */
+export async function DELETE(request: Request) {
+  try {
+    const auth = await authorise(request);
+    if (auth.error) return auth.error;
+    const scheduleId = new URL(request.url).searchParams.get('scheduleId') || '';
+    let cancelled = false;
+    await mutateCollection<CertificateSchedule>('certificateSchedules', (cur = []) =>
+      cur.map((x) => {
+        if (x.id === scheduleId && x.status === 'Scheduled') {
+          cancelled = true;
+          return { ...x, status: 'Cancelled' as const };
+        }
+        return x;
+      })
+    );
+    return cancelled ? NextResponse.json({ cancelled: true }) : NextResponse.json({ error: 'That send already started or does not exist.' }, { status: 409 });
+  } catch (err) {
+    return apiError(err, 'certificates:cancel-schedule');
   }
 }

@@ -24,6 +24,9 @@ export async function register() {
     const { startPassRetentionScheduler } = await import('./lib/pass-retention-scheduler');
     startPassRetentionScheduler();
 
+    const { startCertificateScheduler } = await import('./lib/certificate-scheduler');
+    startCertificateScheduler();
+
     const { startCommitteeReviewScheduler } = await import('./lib/committee-review-scheduler');
     startCommitteeReviewScheduler();
   }

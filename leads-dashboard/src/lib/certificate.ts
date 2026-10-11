@@ -28,6 +28,8 @@ export interface CertificateTemplate {
   bodyText: string;
   signatoryName: string;
   signatoryTitle: string;
+  /** Which attendee field is printed in the name box. */
+  nameSource: 'name' | 'organisation' | 'category' | 'serial';
   /** Default ink; a box with its own colour overrides it. */
   textColor: string;
   /** Position, size and font of every text box (name, content, heading, ...). */
@@ -41,6 +43,7 @@ export const DEFAULT_CERTIFICATE_TEMPLATE: CertificateTemplate = {
   bodyText: 'has successfully attended @event_name held on @event_date, organised by LEADS Next Gen Centre, RUAS.',
   signatoryName: '',
   signatoryTitle: 'LEADS Next Gen Centre',
+  nameSource: 'name',
   textColor: '#1e293b',
   layout: DEFAULT_CERT_LAYOUT,
 };
@@ -86,6 +89,7 @@ export async function saveCertificateTemplate(
     bodyText: clip(input.bodyText, 400, current.bodyText) || DEFAULT_CERTIFICATE_TEMPLATE.bodyText,
     signatoryName: clip(input.signatoryName, 80, current.signatoryName),
     signatoryTitle: clip(input.signatoryTitle, 80, current.signatoryTitle),
+    nameSource: ['name', 'organisation', 'category', 'serial'].includes(input.nameSource as string) ? (input.nameSource as CertificateTemplate['nameSource']) : current.nameSource,
     textColor: typeof input.textColor === 'string' && HEX.test(input.textColor) ? input.textColor : current.textColor,
     layout: input.layout === undefined ? current.layout : normalizeLayout(input.layout),
     backgroundKey: current.backgroundKey,
@@ -254,11 +258,11 @@ function drawTextBox(ctx: SKRSContext2D, text: string, box: CertBox, fallbackCol
 }
 
 function merge(text: string, vars: Record<string, string>): string {
-  return text.replace(/@(name|event_name|event_date)\b/gi, (_, k: string) => vars[k.toLowerCase()] ?? '');
+  return text.replace(/@(name|event_name|event_date|organisation|category|serial)\b/gi, (_, k: string) => vars[k.toLowerCase()] ?? '');
 }
 
 export async function renderCertificatePng(
-  data: { attendeeName: string; eventName: string; eventDate: string; code: string },
+  data: { attendeeName: string; eventName: string; eventDate: string; code: string; organisation?: string; category?: string; serial?: string },
   template: CertificateTemplate,
   verifyUrl: string
 ): Promise<Buffer> {
@@ -290,10 +294,11 @@ export async function renderCertificatePng(
     ctx.strokeRect(75, 75, W - 150, H - 150);
   }
 
-  const vars = { name: data.attendeeName, event_name: data.eventName, event_date: data.eventDate };
+  const vars = { name: data.attendeeName, event_name: data.eventName, event_date: data.eventDate, organisation: data.organisation || '', category: data.category || '', serial: data.serial || '' };
+  const nameText = ({ name: data.attendeeName, organisation: data.organisation || data.attendeeName, category: data.category || data.attendeeName, serial: data.serial || data.attendeeName } as Record<string, string>)[template.nameSource] || data.attendeeName;
   if (L.title.enabled) drawTextBox(ctx, merge(template.title, vars).toUpperCase(), L.title, ink);
   if (L.intro.enabled && template.introText) drawTextBox(ctx, merge(template.introText, vars), L.intro, ink);
-  if (L.name.enabled) drawTextBox(ctx, data.attendeeName, { ...L.name, align: 'center', valign: 'middle' }, ink);
+  if (L.name.enabled) drawTextBox(ctx, nameText, { ...L.name, align: 'center', valign: 'middle' }, ink);
   if (L.body.enabled) drawTextBox(ctx, merge(template.bodyText, vars), L.body, ink);
 
   // Signatory: a rule with the name and designation under it
@@ -367,9 +372,13 @@ export async function ensureCertificateRecord(pass: EventPassItem, event: EventI
   return result;
 }
 
-export async function renderCertificatePdf(rec: CertificateRecord, origin: string): Promise<Buffer> {
+export function passExtras(pass?: EventPassItem) {
+  return { organisation: pass?.attendeeOrg || '', category: String(pass?.guestCategory || ''), serial: pass?.serialNumber || '' };
+}
+
+export async function renderCertificatePdf(rec: CertificateRecord, origin: string, pass?: EventPassItem): Promise<Buffer> {
   const template = await getCertificateTemplate(rec.eventId);
-  const png = await renderCertificatePng(rec, template, verifyUrlFor(origin, rec.code));
+  const png = await renderCertificatePng({ ...rec, ...passExtras(pass) }, template, verifyUrlFor(origin, rec.code));
   return pngToPdf(png);
 }
 
@@ -383,7 +392,7 @@ export async function sendCertificate(
   const recipient = (to || pass.attendeeEmail || '').trim();
   try {
     if (!recipient) throw new Error('No email address.');
-    const pdf = await renderCertificatePdf(rec, origin);
+    const pdf = await renderCertificatePdf(rec, origin, pass);
     const verify = verifyUrlFor(origin, rec.code);
     await dispatchEmail({
       to: recipient,
@@ -405,4 +414,36 @@ export async function sendCertificate(
 export async function findCertificateByCode(code: string): Promise<CertificateRecord | undefined> {
   const all = await readCollection<CertificateRecord>('certificates');
   return all.find((c) => c.code.toLowerCase() === String(code).toLowerCase());
+}
+
+/** Renders what one attendee's certificate looks like right now (no record is created, nothing is sent). */
+export async function renderPassPreview(pass: EventPassItem, event: EventItem, origin: string): Promise<Buffer> {
+  const template = await getCertificateTemplate(pass.eventId);
+  return renderCertificatePng(
+    { attendeeName: pass.attendeeName, eventName: event.title || pass.eventName, eventDate: eventDateLabel(event), code: 'PREVIEW000', ...passExtras(pass) },
+    template,
+    verifyUrlFor(origin, 'PREVIEW000')
+  );
+}
+
+/** Sends one certificate per eligible pass; shared by the send route and the scheduler. */
+export async function sendCertificatesBatch(
+  event: EventItem,
+  passIds: string[],
+  origin: string,
+  emails?: Record<string, string>
+): Promise<Array<{ passId: string; ok: boolean; error?: string }>> {
+  const passes = await readCollection<EventPassItem>('event_passes');
+  const results: Array<{ passId: string; ok: boolean; error?: string }> = [];
+  for (const passId of passIds) {
+    const pass = passes.find((p) => p.id === passId && p.eventId === event.id);
+    if (!pass || !isCertificateEligible(pass)) {
+      results.push({ passId, ok: false, error: 'Not eligible (no check-in or no email).' });
+      continue;
+    }
+    const to = emails?.[passId];
+    const r = await sendCertificate(pass, event, origin, typeof to === 'string' && /^\S+@\S+\.\S+$/.test(to.trim()) ? to : undefined);
+    results.push({ passId, ok: r.ok, error: r.error });
+  }
+  return results;
 }
