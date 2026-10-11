@@ -106,9 +106,30 @@ const PASS_CAPS: Record<PassAction, string[]> = {
 /** Gate for an Event Passes action. Leadership / Heads / Super User are trusted; everyone else needs a policy grant. */
 export async function gateEventPassAction(user: ServerUser, action: PassAction): Promise<GateDecision> {
   if (!user) return NOT_ALLOWED;
+  return evaluateCapabilityGate(user, PASS_CAPS[action], await passesBuiltInAccess(user));
+}
+
+async function passesBuiltInAccess(user: ServerUser): Promise<boolean> {
   const settings = await getAccessLevelSettingsServer();
-  const builtIn = user.tier === 1 || isBaseLeadership(user, settings) || isHeadRole(user, settings) || user.tier === 2.5 || (await hasModuleEditAll(user, 'EVENT_PASSES'));
-  return evaluateCapabilityGate(user, PASS_CAPS[action], builtIn);
+  return user?.tier === 1 || isBaseLeadership(user, settings) || isHeadRole(user, settings) || user?.tier === 2.5 || (await hasModuleEditAll(user, 'EVENT_PASSES'));
+}
+
+export type CertificateAction = 'send' | 'design' | 'view';
+
+// Certificates have their own capabilities so they can be granted without the matching pass powers; anyone who already
+// had the pass-dispatch / pass-edit power keeps the same certificate access they had before these existed.
+const CERT_SEND_CAPS = ['CERTIFICATES_SEND', ...PASS_CAPS.dispatch];
+const CERT_DESIGN_CAPS = ['CERTIFICATES_DESIGN', ...PASS_CAPS.edit];
+const CERT_CAPS: Record<CertificateAction, string[]> = {
+  send: CERT_SEND_CAPS,
+  design: CERT_DESIGN_CAPS,
+  view: [...CERT_SEND_CAPS, ...CERT_DESIGN_CAPS],
+};
+
+/** Gate for the attendance-certificate tools: send / preview / schedule ('send'), design + fonts ('design'), open the editor ('view'). */
+export async function gateCertificateAction(user: ServerUser, action: CertificateAction): Promise<GateDecision> {
+  if (!user) return NOT_ALLOWED;
+  return evaluateCapabilityGate(user, CERT_CAPS[action], await passesBuiltInAccess(user));
 }
 
 /** Same rule as permissions.ts getEventApprovalRequirement, evaluated on the server. */

@@ -3,7 +3,7 @@ import { mutateCollection, readCollection } from '@/lib/server-db';
 import { saveBase64File, deleteStoredFile, deleteStoredFilesForRecord, readStoredFile } from '@/lib/file-storage';
 import { cascadeCloseAutoApprovals, deleteLinkedApprovalRequests } from '@/lib/approval-sync';
 import { requireSession, ForbiddenError } from '@/lib/session';
-import { getAccessLevelSettingsServer, canReviewEventReports, hasCapabilityServer } from '@/lib/permissions-server';
+import { getAccessLevelSettingsServer, canReviewEventReports, canScoreEventReports, hasCapabilityServer } from '@/lib/permissions-server';
 import { apiError } from '@/lib/api-error';
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
@@ -35,11 +35,17 @@ export async function PATCH(
     const settings = await getAccessLevelSettingsServer();
     const isApprovalAction = Object.prototype.hasOwnProperty.call(body, 'centreHeadApproved')
       || Object.prototype.hasOwnProperty.call(body, 'eventsHeadGgApproved')
-      || Object.prototype.hasOwnProperty.call(body, 'reportScores')
-      || Object.prototype.hasOwnProperty.call(body, 'reportScore')
       || body.status === 'approved'
       || body.status === 'rejected';
-    if (isApprovalAction) {
+    // Scoring alone (no approve/reject fields alongside) can be granted separately via EVENT_REPORTS_SCORE.
+    const isScoreAction = !isApprovalAction
+      && (Object.prototype.hasOwnProperty.call(body, 'reportScores') || Object.prototype.hasOwnProperty.call(body, 'reportScore'));
+    if (isScoreAction) {
+      if (!canScoreEventReports(actor, settings)) throw new ForbiddenError();
+      // A scorer who isn't a reviewer may only write the score fields, never anything else on the report.
+      const SCORE_KEYS = new Set(['reportScores', 'reportScore', 'scoredBy', 'scoredAt']);
+      if (!canReviewEventReports(actor, settings) && Object.keys(body).some((k) => !SCORE_KEYS.has(k))) throw new ForbiddenError();
+    } else if (isApprovalAction) {
       if (!canReviewEventReports(actor, settings)) throw new ForbiddenError();
     } else {
       const existingReports = await readCollection<any>('eventReports');

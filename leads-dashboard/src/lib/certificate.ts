@@ -125,8 +125,13 @@ export function isCertificateEligible(pass: EventPassItem): boolean {
   return pass.status === 'Checked In' || getPassAttendanceSummary(pass).attended > 0;
 }
 
+/** Certificates open on the event's last day itself (not only the day after), so they can go out the same day. */
 export function isEventOver(event: EventItem | undefined): boolean {
-  return !!event && !event.datesTBD && getEffectiveEventStatus(event) === 'completed';
+  if (!event || event.datesTBD) return false;
+  if (getEffectiveEventStatus(event) === 'completed') return true;
+  if (event.status === 'archived') return false;
+  const lastDay = event.endDate || event.startDate;
+  return !!lastDay && lastDay <= new Date().toISOString().split('T')[0];
 }
 
 // ── Rendering ───────────────────────────────────────────────────────────────────

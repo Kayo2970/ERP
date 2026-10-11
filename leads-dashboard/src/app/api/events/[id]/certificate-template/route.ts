@@ -2,16 +2,16 @@ import { NextResponse } from 'next/server';
 import { readCollection } from '@/lib/server-db';
 import { requireSession } from '@/lib/session';
 import { apiError } from '@/lib/api-error';
-import { gateEventPassAction } from '@/lib/approval-gate';
+import { gateCertificateAction } from '@/lib/approval-gate';
 import { EventItem } from '@/lib/local-data';
 import { getCertificateTemplate, saveCertificateTemplate, renderCertificatePng, eventDateLabel, CertificateTemplate } from '@/lib/certificate';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-async function authorise(request: Request, action: 'dispatch' | 'edit') {
+async function authorise(request: Request, action: 'view' | 'design') {
   const user = await requireSession(request);
-  const gate = await gateEventPassAction(user, action);
+  const gate = await gateCertificateAction(user, action);
   if (!gate.allowed || gate.requiresApproval) {
     return { error: NextResponse.json({ error: "You don't have permission to change the certificate design." }, { status: 403 }) };
   }
@@ -30,7 +30,7 @@ async function withPreview(eventId: string, template: CertificateTemplate) {
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const auth = await authorise(request, 'dispatch');
+    const auth = await authorise(request, 'view');
     if (auth.error) return auth.error;
     const { id } = await params;
     const template = await getCertificateTemplate(id);
@@ -43,7 +43,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 /** Body: template text fields + optional `background` (image data URL, or null to remove). */
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const auth = await authorise(request, 'edit');
+    const auth = await authorise(request, 'design');
     if (auth.error) return auth.error;
     const { id } = await params;
     const body = await request.json();

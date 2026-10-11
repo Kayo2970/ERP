@@ -386,9 +386,14 @@ export function canReviewEventReports(user: ServerUser, settings: AccessLevelSet
   return isCentreHead(user, settings) || isEventsHeadGgCampus(user);
 }
 
+/** Scoring a report: reviewers, or a policy granting EVENT_REPORTS_SCORE on its own. */
+export function canScoreEventReports(user: ServerUser, settings: AccessLevelSettings): boolean {
+  return canReviewEventReports(user, settings) || hasCap(user, 'EVENT_REPORTS_SCORE');
+}
+
 export function canViewEventReports(user: ServerUser, settings: AccessLevelSettings): boolean {
   if (!user) return false;
-  return canReviewEventReports(user, settings) || canSubmitEventReport(user) || isGeneralSecretary(user) || isChiefCoordinator(user) || isExecutiveRole(user) || user.tier === 1 || hasCap(user, 'EVENT_REPORTS_SUBMIT') || hasCap(user, 'EVENT_REPORTS_VIEW_ALL') || hasCap(user, 'EVENT_REPORTS_REVIEW');
+  return canReviewEventReports(user, settings) || canSubmitEventReport(user) || isGeneralSecretary(user) || isChiefCoordinator(user) || isExecutiveRole(user) || user.tier === 1 || hasCap(user, 'EVENT_REPORTS_SUBMIT') || hasCap(user, 'EVENT_REPORTS_VIEW_ALL') || hasCap(user, 'EVENT_REPORTS_REVIEW') || hasCap(user, 'EVENT_REPORTS_SCORE');
 }
 
 export function canReviewDesignProofread(user: ServerUser, settings: AccessLevelSettings, design?: { assignedProofreaderIds?: string[]; assignedProofreaderEmail?: string; assignedProofreaderId?: string }): boolean {

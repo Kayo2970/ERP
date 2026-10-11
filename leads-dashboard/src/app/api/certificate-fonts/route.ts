@@ -1,22 +1,22 @@
 import { NextResponse } from 'next/server';
 import { requireSession } from '@/lib/session';
 import { apiError } from '@/lib/api-error';
-import { gateEventPassAction } from '@/lib/approval-gate';
+import { gateCertificateAction } from '@/lib/approval-gate';
 import { listCustomFonts, saveUploadedFont, importGoogleFont, deleteCustomFont } from '@/lib/certificate-fonts';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-async function authorise(request: Request, action: 'dispatch' | 'edit') {
+async function authorise(request: Request, action: 'view' | 'design') {
   const user = await requireSession(request);
-  const gate = await gateEventPassAction(user, action);
+  const gate = await gateCertificateAction(user, action);
   if (!gate.allowed || gate.requiresApproval) return NextResponse.json({ error: "You don't have permission to manage certificate fonts." }, { status: 403 });
   return null;
 }
 
 export async function GET(request: Request) {
   try {
-    const denied = await authorise(request, 'dispatch');
+    const denied = await authorise(request, 'view');
     if (denied) return denied;
     return NextResponse.json({ fonts: await listCustomFonts() });
   } catch (err) {
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
 /** Body: { name, dataUrl } to upload a font file, or { googleUrl } to import from Google Fonts. */
 export async function POST(request: Request) {
   try {
-    const denied = await authorise(request, 'edit');
+    const denied = await authorise(request, 'design');
     if (denied) return denied;
     const body = await request.json();
     let id: string;
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const denied = await authorise(request, 'edit');
+    const denied = await authorise(request, 'design');
     if (denied) return denied;
     const id = new URL(request.url).searchParams.get('id') || '';
     if (!/^[a-z0-9-]{1,40}$/.test(id)) return NextResponse.json({ error: 'Invalid font.' }, { status: 400 });

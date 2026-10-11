@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { readCollection } from '@/lib/server-db';
 import { requireSession } from '@/lib/session';
 import { apiError } from '@/lib/api-error';
-import { gateEventPassAction } from '@/lib/approval-gate';
+import { gateCertificateAction } from '@/lib/approval-gate';
 import { getAppBaseUrl } from '@/lib/app-url';
 import { EventItem, EventPassItem } from '@/lib/local-data';
 import { renderPassPreview, pngToPdf } from '@/lib/certificate';
@@ -14,7 +14,7 @@ export const runtime = 'nodejs';
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireSession(request);
-    const gate = await gateEventPassAction(user, 'dispatch');
+    const gate = await gateCertificateAction(user, 'view');
     if (!gate.allowed || gate.requiresApproval) return NextResponse.json({ error: "You don't have permission to preview certificates." }, { status: 403 });
     const { id } = await params;
     const url = new URL(request.url);

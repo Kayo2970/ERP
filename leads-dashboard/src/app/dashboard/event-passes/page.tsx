@@ -48,6 +48,8 @@ import {
   canManageEventPasses,
   canScanEventPasses,
   canEditEventPasses,
+  canSendCertificates,
+  canDesignCertificates,
   canDispatchEventPasses,
   canDeleteEventPasses,
   canViewIssuedEventPasses,
@@ -186,6 +188,8 @@ export default function EventPassesPage() {
   const canEditPass = canEditEventPasses(user);
   const canDispatchPass = canDispatchEventPasses(user);
   const canDeletePass = canDeleteEventPasses(user);
+  const canSendCerts = canSendCertificates(user);
+  const canDesignCerts = canDesignCertificates(user);
   const canViewIssued = canViewIssuedEventPasses(user);
   const canAccessModule = canAccessEventPassesModule(user);
 
@@ -1002,7 +1006,7 @@ export default function EventPassesPage() {
 
               {/* Action Buttons */}
               <div className="flex items-center gap-2 flex-wrap">
-                {canDispatchPass && (
+                {(canSendCerts || canDesignCerts) && (
                 <button
                   type="button"
                   onClick={() => setIsCertificateOpen(true)}
@@ -1525,7 +1529,8 @@ export default function EventPassesPage() {
         onClose={() => setIsCertificateOpen(false)}
         events={events}
         initialEventId={passFilterEventId}
-        canEditDesign={canManagePasses}
+        canEditDesign={canDesignCerts}
+        canSend={canSendCerts}
       />
 
       <EventPassPushModal
