@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Award, ChevronDown, ChevronRight, RefreshCw, Search, Trash2 } from 'lucide-react';
+import { Award, ChevronDown, ChevronRight, RefreshCw, Search, Send, Trash2 } from 'lucide-react';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EventItem, authHeaders, getEffectiveEventStatus, getEventSortTime, getEvents } from '@/lib/local-data';
 import { CertificateStatusBadge, CERT_STATUS_FILTERS } from '@/components/certificate-status-badge';
+import { CertificateSendDialog, type SendableCertificate } from '@/components/certificate-send-dialog';
 import { SortableTh } from '@/components/ui/sortable-th';
 import { useSort, type SortGetters } from '@/lib/use-sort';
 
@@ -21,6 +22,7 @@ interface IssuedCert {
   category?: string;
   manual?: boolean;
   archivedAt?: string;
+  typeId?: string;
   typeName?: string;
   status: string;
   issuedAt?: string;
@@ -64,7 +66,7 @@ interface Group {
  * Read-only ledger of issued certificates, grouped per event the way the Events page groups events
  * (Ongoing / Completed / Archived tabs). Used under the certificate designer and on the event page (`eventId`).
  */
-export function IssuedCertificatesPanel({ eventId, compact = false, canDelete = false }: { eventId?: string; compact?: boolean; canDelete?: boolean }) {
+export function IssuedCertificatesPanel({ eventId, compact = false, canDelete = false, canSend = false }: { eventId?: string; compact?: boolean; canDelete?: boolean; canSend?: boolean }) {
   const [certs, setCerts] = useState<IssuedCert[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -76,6 +78,8 @@ export function IssuedCertificatesPanel({ eventId, compact = false, canDelete = 
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // The certificates handed to the Send dialog: a snapshot taken when it opens, so the list refreshing behind it doesn't reset it.
+  const [sendRows, setSendRows] = useState<SendableCertificate[] | null>(null);
   const certSort = useSort();
 
   const load = useCallback(async () => {
@@ -166,6 +170,11 @@ export function IssuedCertificatesPanel({ eventId, compact = false, canDelete = 
           <p className="text-[11px] text-theme-text-secondary">Every certificate issued, grouped by event, with its delivery status.</p>
         </div>
         <div className="flex items-center gap-2">
+        {canSend && picked.size > 0 && (
+          <button type="button" onClick={() => setSendRows(certs.filter((c) => picked.has(c.id)) as SendableCertificate[])} className="px-3 py-1.5 text-xs font-bold rounded-xl bg-accent hover:bg-primary-light text-white flex items-center gap-1.5 cursor-pointer shadow-md shadow-accent/20">
+            <Send className="h-3.5 w-3.5" /> Send {picked.size}
+          </button>
+        )}
         {canDelete && picked.size > 0 && (
           <button type="button" onClick={() => setConfirmOpen(true)} className="px-3 py-1.5 text-xs font-bold rounded-xl bg-red-600 hover:bg-red-700 text-white flex items-center gap-1.5 cursor-pointer">
             <Trash2 className="h-3.5 w-3.5" /> Delete {picked.size}
@@ -227,7 +236,7 @@ export function IssuedCertificatesPanel({ eventId, compact = false, canDelete = 
                   <table className="min-w-full text-xs text-left">
                     <thead>
                       <tr className="text-theme-text-secondary border-b border-theme-border/40">
-                        {canDelete && (
+                        {(canDelete || canSend) && (
                           <th className="py-2 pl-4 w-8">
                             <input type="checkbox" aria-label="Select all in this event" checked={g.rows.every((r) => picked.has(r.id))} onChange={(e) => togglePick(g.rows.map((r) => r.id), e.target.checked)} />
                           </th>
@@ -243,7 +252,7 @@ export function IssuedCertificatesPanel({ eventId, compact = false, canDelete = 
                     <tbody className="divide-y divide-theme-border/20">
                       {certSort.apply(g.rows, CERT_SORT_GETTERS).map((r) => (
                         <tr key={r.id} className="hover:bg-theme-border/10">
-                          {canDelete && (
+                          {(canDelete || canSend) && (
                             <td className="py-2 pl-4"><input type="checkbox" aria-label={`Select ${r.attendeeName}`} checked={picked.has(r.id)} onChange={(e) => togglePick([r.id], e.target.checked)} /></td>
                           )}
                           <td className="py-2 px-4">
@@ -265,6 +274,13 @@ export function IssuedCertificatesPanel({ eventId, compact = false, canDelete = 
           );
         })}
       </div>
+      {sendRows && (
+        <CertificateSendDialog
+          certificates={sendRows}
+          onClose={() => setSendRows(null)}
+          onDone={() => { setPicked(new Set()); load(); }}
+        />
+      )}
       <ConfirmModal
         isOpen={confirmOpen}
         title={`Delete ${picked.size} certificate${picked.size === 1 ? '' : 's'}?`}

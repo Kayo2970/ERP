@@ -631,7 +631,11 @@ async function withBackground(html: string, payload: SendEmailPayload): Promise<
   }
 }
 
-async function sendImmediateEmail(payload: SendEmailPayload): Promise<EmailLog> {
+/**
+ * The finished HTML of an e-mail exactly as it will be sent: the caller's own HTML, or the standard LEADS template around the
+ * text, with the blurred background (this send's choice, else the Email Settings default). Also used for the send-dialog preview.
+ */
+export async function buildEmailHtml(payload: SendEmailPayload): Promise<string> {
   let badgeTextToUse: string | undefined = payload.badgeText;
   if (!badgeTextToUse) {
     if (payload.category === 'ANNOUNCEMENT') badgeTextToUse = 'Official Announcement';
@@ -654,7 +658,11 @@ async function sendImmediateEmail(payload: SendEmailPayload): Promise<EmailLog> 
     bodyContentHtml: `<div style="white-space: pre-wrap; font-size: 14px; line-height: 1.7; color: #1e293b;">${payload.bodyText}</div>`
   });
 
-  const bodyHtml = await withBackground(payload.bodyHtml || defaultFormattedHtml, payload);
+  return withBackground(payload.bodyHtml || defaultFormattedHtml, payload);
+}
+
+async function sendImmediateEmail(payload: SendEmailPayload): Promise<EmailLog> {
+  const bodyHtml = await buildEmailHtml(payload);
   const result = await executeSmtpSend({
     ...payload,
     bodyHtml,
@@ -901,29 +909,7 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
   const queuedAt = new Date().toISOString();
   const bufferedUntil = new Date(Date.now() + BUFFER_DELAY_MS).toISOString();
 
-  let badgeTextToUse: string | undefined = payload.badgeText;
-  if (!badgeTextToUse) {
-    if (payload.category === 'ANNOUNCEMENT') badgeTextToUse = 'Official Announcement';
-    else if (payload.category === 'TASK_ASSIGNMENT') badgeTextToUse = 'Task Assignment';
-    else if (payload.category === 'TASK_DEADLINE_REMINDER') badgeTextToUse = 'Deadline Reminder';
-    else if (payload.category === 'EVENT_ROSTER') badgeTextToUse = 'Event Roster';
-    else if (payload.category === 'ACCOUNT_ACTIVATION') badgeTextToUse = 'Account Notice';
-    else if (payload.category === 'BIRTHDAY') badgeTextToUse = 'Greetings';
-    else if (payload.category === 'EVENT_PASS' || payload.category === 'EVENT_INVITATION') badgeTextToUse = 'Official Event Pass';
-    else if (payload.category === 'GROUP_POLICY_GRANT') badgeTextToUse = 'Special Access Granted';
-    else if (payload.category === 'CERTIFICATE') badgeTextToUse = 'Certificate of Participation';
-    else badgeTextToUse = undefined;
-  }
-
-  const defaultFormattedHtml = wrapInMasterEmailTemplate({
-    pageTitle: payload.subject,
-    headerTitle: payload.subject,
-    badgeText: badgeTextToUse,
-    badgeColor: payload.badgeColor,
-    bodyContentHtml: `<div style="white-space: pre-wrap; font-size: 14px; line-height: 1.7; color: #1e293b;">${payload.bodyText}</div>`
-  });
-
-  const finalBodyHtml = await withBackground(payload.bodyHtml || defaultFormattedHtml, payload);
+  const finalBodyHtml = await buildEmailHtml(payload);
   const finalBodyText = payload.bodyText;
 
   const newEmail: EmailLog = {

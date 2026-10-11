@@ -1656,7 +1656,7 @@ export default function EventPassesPage() {
             />
           )}
           {/* Issued certificates, grouped per event like the Events page */}
-          <IssuedCertificatesPanel canDelete={canDeleteCertificates(user)} />
+          <IssuedCertificatesPanel canDelete={canDeleteCertificates(user)} canSend={canSendCerts} />
         </div>
       )}
 
