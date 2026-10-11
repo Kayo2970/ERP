@@ -1,13 +1,15 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Award, X, Send, RefreshCw, CheckCircle2, AlertCircle, CheckSquare, Square, ImagePlus, Trash2, ChevronDown, ChevronRight, Download, CalendarClock, Check } from 'lucide-react';
+import { Plus, UserPlus, Pencil, Award, X, Send, RefreshCw, CheckCircle2, AlertCircle, CheckSquare, Square, ImagePlus, Trash2, ChevronDown, ChevronRight, Download, CalendarClock, Check } from 'lucide-react';
 import { EventItem, authHeaders, formatEventDateRange } from '@/lib/local-data';
+import { CertificateStatusBadge, CERT_STATUS_FILTERS } from '@/components/certificate-status-badge';
 import { CertBox, CertBoxKey, CertLayout, CERT_BOX_LABELS, CERT_FONT_OPTIONS, DEFAULT_CERT_EMAIL, CERT_EMAIL_FIELDS, CERT_EMAIL_MAX_SUBJECT, CERT_EMAIL_MAX_BODY, mergeCertEmail } from '@/lib/certificate-layout';
 
-interface Attendee { passId: string; name: string; email: string; serial: string; organisation?: string; category?: string; status: string; sentAt?: string; error?: string }
+interface CertType { id: string; name: string }
+interface Attendee { manual?: boolean; passId: string; name: string; email: string; serial: string; organisation?: string; category?: string; status: string; code?: string; issuedAt?: string; sentAt?: string; sentBy?: string; error?: string }
 interface Template { title: string; introText: string; bodyText: string; signatoryName: string; signatoryTitle: string; nameSource: 'name' | 'organisation' | 'category' | 'serial'; textColor: string; layout: CertLayout }
-interface Schedule { id: string; sendAt: string; passIds: string[]; status: string; sent?: number; failed?: number; error?: string }
+interface Schedule { id: string; sendAt: string; passIds: string[]; status: string; sent?: number; failed?: number; error?: string; finishedAt?: string; createdBy?: string }
 
 const field = 'w-full px-3 py-2 bg-slate-50 dark:bg-slate-900/60 border border-slate-300 dark:border-white/15 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:border-accent text-xs';
 const label = 'block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] mb-1';
@@ -21,6 +23,33 @@ const BOX_HINTS: Record<CertBoxKey, string> = {
   signatory: 'Signature line, name and designation',
   qr: 'Verify QR code and certificate ID',
 };
+
+/** Placeholder shown while the event's design and recipients load, instead of an empty page. */
+function CertificateSkeleton() {
+  const bar = 'rounded-lg bg-slate-200/80 dark:bg-white/10';
+  return (
+    <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[minmax(520px,5fr)_minmax(0,7fr)] gap-5 animate-pulse" role="status" aria-label="Loading certificate design">
+      <div className="space-y-2.5">
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="rounded-2xl border border-slate-200 dark:border-white/10 px-4 py-3 flex items-center gap-3">
+            <div className={`h-6 w-6 rounded-full ${bar}`} />
+            <div className={`h-3.5 flex-1 max-w-[220px] ${bar}`} />
+            <div className={`h-3.5 w-3.5 ${bar}`} />
+          </div>
+        ))}
+        <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-4 space-y-2">
+          <div className={`h-3 w-3/4 ${bar}`} />
+          <div className={`h-9 w-40 rounded-xl ${bar}`} />
+        </div>
+      </div>
+      <div className="space-y-3">
+        <div className={`h-3 w-40 ${bar}`} />
+        <div className={`w-full aspect-[297/210] rounded-2xl ${bar}`} />
+      </div>
+      <span className="sr-only">Loading…</span>
+    </div>
+  );
+}
 
 const STEPS = ['Background', 'Choose content', 'Adjust position & font', 'Link to data', 'Preview final files', 'Schedule & send'];
 
@@ -54,8 +83,9 @@ function shrinkImage(file: File): Promise<string> {
         if (!ctx) return reject(new Error('Could not process that image.'));
         ctx.fillStyle = '#fff';
         ctx.fillRect(0, 0, c.width, c.height);
+        ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, c.width, c.height);
-        resolve(c.toDataURL('image/jpeg', 0.85));
+        resolve(c.toDataURL('image/jpeg', 0.95));
       };
       img.src = String(reader.result);
     };
@@ -77,11 +107,18 @@ interface Props {
 
 export function CertificateModal({ isOpen, onClose, events, initialEventId, canEditDesign, canSend = true, inline = false }: Props) {
   const [eventId, setEventId] = useState('');
+  const [typeId, setTypeId] = useState('default');
+  const [types, setTypes] = useState<CertType[]>([{ id: 'default', name: 'Participation' }]);
+  const [loading, setLoading] = useState(true);
+  const [manual, setManual] = useState({ name: '', email: '', organisation: '', category: '' });
+  const [manualOpen, setManualOpen] = useState(false);
   const [openStep, setOpenStep] = useState(1);
   const [attendees, setAttendees] = useState<Attendee[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [eventOver, setEventOver] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [recipientSearch, setRecipientSearch] = useState('');
   const [template, setTemplate] = useState<Template | null>(null);
   const [preview, setPreview] = useState('');
   const [background, setBackground] = useState<string | null | undefined>(undefined); // undefined = keep, null = remove
@@ -112,25 +149,34 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     if (!isOpen) return;
     const preferred = initialEventId && initialEventId !== 'ALL' ? initialEventId : '';
     setEventId(preferred || endedEvents[0]?.id || events[0]?.id || '');
+    setTypeId('default');
     setOpenStep(1);
     setMsg(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
-  const load = useCallback(async () => {
-    if (!eventId) return;
+  const load = useCallback(async (silent = false) => {
+    if (!eventId) {
+      setLoading(false);
+      return;
+    }
+    if (!silent) {
+      setLoading(true);
+      setTemplate(null);
+    }
     setBusy(true);
     try {
       const [a, t] = await Promise.all([
-        fetch(`/api/events/${eventId}/certificates`, { headers: authHeaders() }),
-        fetch(`/api/events/${eventId}/certificate-template`, { headers: authHeaders() }),
+        fetch(`/api/events/${eventId}/certificates?typeId=${typeId}`, { headers: authHeaders() }),
+        fetch(`/api/events/${eventId}/certificate-template?typeId=${typeId}`, { headers: authHeaders() }),
       ]);
       const aj = await readJson(a, 'loading attendees');
       if (!a.ok) throw new Error(aj.error || 'Could not load attendees.');
       setAttendees(aj.attendees);
+      if (Array.isArray(aj.types) && aj.types.length) setTypes(aj.types);
       setSchedules(aj.schedules || []);
       setEventOver(!!aj.eventOver);
-      setSelected(new Set(aj.attendees.filter((x: Attendee) => x.status !== 'Sent').map((x: Attendee) => x.passId)));
+      setSelected(new Set(aj.attendees.filter((x: Attendee) => x.status !== 'Sent' && x.status !== 'Queued').map((x: Attendee) => x.passId)));
       setPreviewPassId(aj.attendees[0]?.passId || '');
       setFinalPreview('');
       if (t.ok) {
@@ -146,8 +192,9 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
       setMsg({ kind: 'err', text: e.message || 'Could not load certificates.' });
     } finally {
       setBusy(false);
+      setLoading(false);
     }
-  }, [eventId]);
+  }, [eventId, typeId]);
 
   const loadFonts = useCallback(async () => {
     try {
@@ -173,7 +220,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     const version = versionRef.current;
     setSaveState('saving');
     try {
-      const res = await fetch(`/api/events/${eventId}/certificate-template`, { method: 'PUT', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ ...t, background: backgroundRef.current }) });
+      const res = await fetch(`/api/events/${eventId}/certificate-template?typeId=${typeId}`, { method: 'PUT', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ ...t, background: backgroundRef.current }) });
       const data = await readJson(res, 'saving the design');
       if (!res.ok) throw new Error(data.error || 'Failed to save.');
       setPreview(data.preview);
@@ -187,7 +234,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
       setSaveState('dirty');
       setMsg({ kind: 'err', text: e.message });
     }
-  }, [eventId]);
+  }, [eventId, typeId]);
 
   // Auto-save shortly after the last edit so the preview always matches
   useEffect(() => {
@@ -201,7 +248,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     setBusy(true);
     try {
       if (saveState === 'dirty') await saveDesign();
-      const res = await fetch(`/api/events/${eventId}/certificates/preview?passId=${encodeURIComponent(previewPassId)}`, { headers: authHeaders() });
+      const res = await fetch(`/api/events/${eventId}/certificates/preview?typeId=${typeId}&passId=${encodeURIComponent(previewPassId)}`, { headers: authHeaders() });
       const data = await readJson(res, 'building the preview');
       if (!res.ok) throw new Error(data.error || 'Could not build the preview.');
       setFinalPreview(data.preview);
@@ -210,7 +257,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     } finally {
       setBusy(false);
     }
-  }, [previewPassId, eventId, saveState, saveDesign]);
+  }, [previewPassId, eventId, typeId, saveState, saveDesign]);
 
   useEffect(() => {
     if (isOpen && openStep === 5) loadFinalPreview();
@@ -318,11 +365,112 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     }
   };
 
+  /** Saves any pending design edit before moving to another event / certificate type, so nothing is lost. */
+  const switchTo = async (nextEvent: string, nextType: string) => {
+    if (saveState === 'dirty') await saveDesign();
+    setFinalPreview('');
+    setStatusFilter('ALL');
+    setRecipientSearch('');
+    setEventId(nextEvent);
+    setTypeId(nextType);
+    if (nextEvent !== eventId) setTypes([{ id: 'default', name: 'Participation' }]);
+  };
+
+  const typeCall = async (method: 'POST' | 'PATCH' | 'DELETE', body?: object, query = '') => {
+    const res = await fetch(`/api/events/${eventId}/certificate-types${query}`, { method, headers: authHeaders({ 'Content-Type': 'application/json' }), body: body ? JSON.stringify(body) : undefined });
+    const data = await readJson(res, 'updating certificate types');
+    if (!res.ok) throw new Error(data.error || 'Could not update certificate types.');
+    return data;
+  };
+
+  const addType = async () => {
+    const name = window.prompt('Name of the new certificate type (e.g. Volunteer, Speaker, Winner):');
+    if (!name?.trim()) return;
+    const copy = window.confirm(`Start "${name.trim()}" as a copy of the current "${types.find((t) => t.id === typeId)?.name}" design?\n\nOK = copy the current design, Cancel = start from the blank default.`);
+    setBusy(true);
+    try {
+      if (saveState === 'dirty') await saveDesign();
+      const data = await typeCall('POST', { name, copyFrom: copy ? typeId : null });
+      setTypes(data.types);
+      setMsg({ kind: 'ok', text: `Certificate type "${data.created.name}" added.` });
+      await switchTo(eventId, data.created.id);
+    } catch (e: any) {
+      setMsg({ kind: 'err', text: e.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const renameType = async () => {
+    const current = types.find((t) => t.id === typeId);
+    const name = window.prompt('Rename this certificate type:', current?.name || '');
+    if (!name?.trim() || name.trim() === current?.name) return;
+    try {
+      const data = await typeCall('PATCH', { typeId, name });
+      setTypes(data.types);
+    } catch (e: any) {
+      setMsg({ kind: 'err', text: e.message });
+    }
+  };
+
+  const removeType = async () => {
+    const current = types.find((t) => t.id === typeId);
+    if (typeId === 'default' || !window.confirm(`Delete the "${current?.name}" certificate type and its design?`)) return;
+    try {
+      const data = await typeCall('DELETE', undefined, `?typeId=${typeId}`);
+      setTypes(data.types);
+      setMsg({ kind: 'ok', text: 'Certificate type deleted.' });
+      await switchTo(eventId, 'default');
+    } catch (e: any) {
+      setMsg({ kind: 'err', text: e.message });
+    }
+  };
+
+  const downloadRecordPdf = async (passId: string, name: string) => {
+    const res = await fetch(`/api/events/${eventId}/certificates/preview?typeId=${typeId}&passId=${encodeURIComponent(passId)}&format=pdf`, { headers: authHeaders() });
+    if (!res.ok) return setMsg({ kind: 'err', text: 'Could not build the PDF.' });
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Certificate-${name.replace(/[^\w]+/g, '_')}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  /** Creates a certificate for someone without a pass; optionally emails it, and downloads the PDF straight away otherwise. */
+  const createManual = async (mode: 'download' | 'send') => {
+    if (!manual.name.trim()) return setMsg({ kind: 'err', text: 'Enter the name to print on the certificate.' });
+    if (mode === 'send' && !manual.email.trim()) return setMsg({ kind: 'err', text: 'Enter an email address to send it.' });
+    setBusy(true);
+    setMsg(null);
+    try {
+      if (saveState === 'dirty') await saveDesign();
+      const res = await fetch(`/api/events/${eventId}/certificates/manual`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ typeId, ...manual, send: mode === 'send', message: { subject: emailSubject, bodyText: emailBody } }),
+      });
+      const data = await readJson(res, 'creating the certificate');
+      if (!res.ok) {
+        if (data.record) await load(true);
+        throw new Error(data.error || 'Could not create the certificate.');
+      }
+      if (mode === 'download') await downloadRecordPdf(data.record.passId, data.record.attendeeName);
+      setMsg({ kind: 'ok', text: mode === 'send' ? `Certificate created and emailed to ${manual.email.trim()}.` : `Certificate created for ${data.record.attendeeName} and downloaded.` });
+      setManual({ name: '', email: '', organisation: '', category: '' });
+      await load(true);
+    } catch (e: any) {
+      setMsg({ kind: 'err', text: e.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const toggle = (id: string) => setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   const downloadPdf = async () => {
     if (!previewPassId) return;
-    const res = await fetch(`/api/events/${eventId}/certificates/preview?passId=${encodeURIComponent(previewPassId)}&format=pdf`, { headers: authHeaders() });
+    const res = await fetch(`/api/events/${eventId}/certificates/preview?typeId=${typeId}&passId=${encodeURIComponent(previewPassId)}&format=pdf`, { headers: authHeaders() });
     if (!res.ok) return setMsg({ kind: 'err', text: 'Could not build the PDF.' });
     const url = URL.createObjectURL(await res.blob());
     const a = document.createElement('a');
@@ -342,13 +490,13 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     setMsg(null);
     try {
       if (saveState === 'dirty') await saveDesign();
-      const res = await fetch(`/api/events/${eventId}/certificates`, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ passIds: ids, sendAt: when, message: { subject: emailSubject, bodyText: emailBody } }) });
+      const res = await fetch(`/api/events/${eventId}/certificates`, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ typeId, passIds: ids, sendAt: when, message: { subject: emailSubject, bodyText: emailBody } }) });
       const data = await readJson(res, 'sending the certificates');
       if (!res.ok) throw new Error(data.error || 'Failed to send.');
       setMsg(data.scheduled
         ? { kind: 'ok', text: `Scheduled ${ids.length} certificate${ids.length === 1 ? '' : 's'} for ${new Date(data.schedule.sendAt).toLocaleString()}.` }
         : { kind: data.failed ? 'err' : 'ok', text: `Sent ${data.sent} certificate${data.sent === 1 ? '' : 's'}${data.failed ? `, ${data.failed} failed (see the list)` : ''}.` });
-      await load();
+      await load(true);
     } catch (e: any) {
       setMsg({ kind: 'err', text: e.message });
     } finally {
@@ -361,7 +509,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     let data: any = {};
     try { data = await readJson(res, 'cancelling the scheduled send'); } catch (e: any) { data = { error: e.message }; }
     setMsg(res.ok ? { kind: 'ok', text: 'Scheduled send cancelled.' } : { kind: 'err', text: data.error || 'Could not cancel.' });
-    load();
+    load(true);
   };
 
   const insertField = (token: string) => {
@@ -384,7 +532,27 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
   };
   const emailReady = emailSubject.trim().length > 0 && emailBody.trim().length > 0;
 
-  const pending = attendees.filter((a) => a.status !== 'Sent').length;
+  const pending = attendees.filter((a) => a.status !== 'Sent' && a.status !== 'Queued').length;
+  const counts = CERT_STATUS_FILTERS.reduce((acc, s) => ({ ...acc, [s]: attendees.filter((a) => a.status === s).length }), {} as Record<string, number>);
+  const visibleAttendees = attendees.filter((a) => {
+    if (statusFilter !== 'ALL' && a.status !== statusFilter) return false;
+    const q = recipientSearch.trim().toLowerCase();
+    return !q || `${a.name} ${a.email} ${a.organisation || ''} ${a.serial} ${a.code || ''}`.toLowerCase().includes(q);
+  });
+  const selectFailed = () => { setStatusFilter('Failed'); setSelected(new Set(attendees.filter((a) => a.status === 'Failed').map((a) => a.passId))); };
+  const exportLedgerCsv = () => {
+    const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const rows = [['Name', 'Email', 'Organisation', 'Category', 'Pass Serial', 'Certificate Status', 'Certificate ID', 'Issued At', 'Sent At', 'Sent By', 'Error']].concat(
+      visibleAttendees.map((a) => [a.name, a.email, a.organisation || '', a.category || '', a.serial, a.status, a.code || '', a.issuedAt || '', a.sentAt || '', a.sentBy || '', a.error || ''])
+    );
+    const blob = new Blob([rows.map((r) => r.map(esc).join(',')).join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `certificates_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
   const enabledKeys = template ? (Object.keys(template.layout) as CertBoxKey[]).filter((k) => template.layout[k].enabled) : [];
   const showOverlay = template && (openStep === 2 || openStep === 3);
   const box = template ? template.layout[activeBox] : null;
@@ -443,11 +611,26 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
         <div className="flex flex-wrap items-end gap-3 text-xs">
           <div className="flex-1 min-w-[220px] max-w-xl">
             <label className={label}>Event</label>
-            <select value={eventId} onChange={(e) => setEventId(e.target.value)} className={field}>
+            <select value={eventId} onChange={(e) => switchTo(e.target.value, 'default')} className={field}>
               {events.filter((e) => !e.isHoliday).map((e) => (
                 <option key={e.id} value={e.id} className="bg-slate-900 text-white">{e.title}{endedEvents.some((x) => x.id === e.id) ? '' : ' (not ended)'}</option>
               ))}
             </select>
+          </div>
+          <div className="min-w-[200px]">
+            <label className={label}>Certificate type</label>
+            <div className="flex items-center gap-1.5">
+              <select value={typeId} onChange={(e) => switchTo(eventId, e.target.value)} disabled={loading} className={`${field} !w-auto min-w-[160px]`}>
+                {types.map((t) => <option key={t.id} value={t.id} className="bg-slate-900 text-white">{t.name}</option>)}
+              </select>
+              {canEditDesign && (
+                <>
+                  <button type="button" title="Add a certificate type" onClick={addType} disabled={busy || loading} className="h-9 px-2.5 rounded-xl bg-accent/15 text-accent border border-accent/30 font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"><Plus className="h-3.5 w-3.5" /> New type</button>
+                  <button type="button" title="Rename this type" onClick={renameType} disabled={busy || loading} className="h-9 w-9 rounded-xl border border-slate-300 dark:border-white/15 text-slate-500 flex items-center justify-center cursor-pointer disabled:opacity-50"><Pencil className="h-3.5 w-3.5" /></button>
+                  {typeId !== 'default' && <button type="button" title="Delete this type" onClick={removeType} disabled={busy || loading} className="h-9 w-9 rounded-xl border border-rose-500/30 text-rose-400 flex items-center justify-center cursor-pointer disabled:opacity-50"><Trash2 className="h-3.5 w-3.5" /></button>}
+                </>
+              )}
+            </div>
           </div>
           {!canEditDesign && <p className="text-amber-500 font-semibold">You can preview the design but not change it.</p>}
         </div>
@@ -458,6 +641,8 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
             <span>{msg.text}</span>
           </div>
         )}
+
+        {loading && !template && <CertificateSkeleton />}
 
         {template && (
           <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[minmax(520px,5fr)_minmax(0,7fr)] gap-5 text-xs">
@@ -620,24 +805,64 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                   <p className="text-[10px] text-slate-500">Merge fields for the wording: <code>@name</code> <code>@organisation</code> <code>@category</code> <code>@serial</code> <code>@event_name</code> <code>@event_date</code>. Each is filled from the attendee&apos;s pass when the PDF is made.</p>
                   <div className="flex items-center justify-between">
                     <span className="font-extrabold text-slate-800 dark:text-white">Recipients ({selected.size}/{attendees.length} selected · {pending} not yet sent)</span>
-                    <button type="button" className="font-bold text-accent hover:underline cursor-pointer" onClick={() => setSelected(selected.size === attendees.length ? new Set() : new Set(attendees.map((a) => a.passId)))}>
-                      {selected.size === attendees.length ? 'Deselect all' : 'Select all'}
+                    <button type="button" className="font-bold text-accent hover:underline cursor-pointer" onClick={() => setSelected(selected.size === visibleAttendees.length && visibleAttendees.length > 0 ? new Set() : new Set(visibleAttendees.map((a) => a.passId)))}>
+                      {selected.size === visibleAttendees.length && visibleAttendees.length > 0 ? 'Deselect all' : 'Select all'}
                     </button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 text-[10px] font-bold">
+                    <button type="button" onClick={() => setStatusFilter('ALL')} className={`px-2 py-0.5 rounded-full border cursor-pointer ${statusFilter === 'ALL' ? 'bg-accent/20 text-accent border-accent/40' : 'border-slate-300 dark:border-white/15 text-slate-500'}`}>All {attendees.length}</button>
+                    {CERT_STATUS_FILTERS.map((s) => (
+                      <button key={s} type="button" onClick={() => setStatusFilter(statusFilter === s ? 'ALL' : s)} className={`px-2 py-0.5 rounded-full border cursor-pointer ${statusFilter === s ? 'bg-accent/20 text-accent border-accent/40' : 'border-slate-300 dark:border-white/15 text-slate-500'}`}>{s} {counts[s] || 0}</button>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input className={`${field} flex-1 min-w-[140px]`} placeholder="Search name, email, organisation, serial or certificate ID" value={recipientSearch} onChange={(e) => setRecipientSearch(e.target.value)} />
+                    {counts['Failed'] > 0 && <button type="button" onClick={selectFailed} className="px-3 py-2 rounded-xl bg-rose-500/15 text-rose-500 border border-rose-500/30 font-bold cursor-pointer">Retry failed ({counts['Failed']})</button>}
+                    <button type="button" onClick={exportLedgerCsv} disabled={visibleAttendees.length === 0} className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-white font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"><Download className="h-3.5 w-3.5" /> CSV</button>
                   </div>
                   <div className="border border-slate-200 dark:border-white/10 rounded-xl divide-y divide-slate-100 dark:divide-white/5 max-h-[40vh] overflow-y-auto">
                     {attendees.length === 0 && <div className="py-6 text-center text-slate-400">{busy ? 'Loading…' : 'No checked-in attendees with an email address for this event.'}</div>}
-                    {attendees.map((a) => (
+                    {attendees.length > 0 && visibleAttendees.length === 0 && <div className="py-6 text-center text-slate-400">No one matches this filter.</div>}
+                    {visibleAttendees.map((a) => (
                       <div key={a.passId} onClick={() => toggle(a.passId)} className="flex items-center justify-between gap-2 p-2 hover:bg-white/10 cursor-pointer">
                         <div className="flex items-center gap-2 min-w-0">
                           {selected.has(a.passId) ? <CheckSquare className="h-4 w-4 text-accent shrink-0" /> : <Square className="h-4 w-4 text-slate-400 shrink-0" />}
                           <div className="min-w-0">
-                            <span className="font-bold text-slate-900 dark:text-white block truncate">{a.name}</span>
+                            <span className="font-bold text-slate-900 dark:text-white block truncate">{a.name}{a.manual && <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-400 align-middle">Manual</span>}</span>
                             <span className="text-[10px] text-slate-400 block truncate">{a.email}{a.organisation ? ` · ${a.organisation}` : ''}{a.category ? ` · ${a.category}` : ''}</span>
+                            {a.status === 'Failed' && a.error && <span className="text-[10px] text-rose-400 block truncate">{a.error}</span>}
                           </div>
                         </div>
-                        <span title={a.error} className={`text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0 ${a.status === 'Sent' ? 'bg-emerald-500/15 text-emerald-400' : a.status === 'Failed' ? 'bg-rose-500/15 text-rose-400' : 'bg-slate-500/15 text-slate-400'}`}>{a.status}</span>
+                        <div className="shrink-0 flex items-center gap-2">
+                          {a.manual && <button type="button" title="Download this certificate as a PDF" onClick={(ev) => { ev.stopPropagation(); downloadRecordPdf(a.passId, a.name); }} className="h-7 w-7 rounded-lg border border-slate-300 dark:border-white/15 text-slate-500 flex items-center justify-center cursor-pointer"><Download className="h-3.5 w-3.5" /></button>}
+                          <CertificateStatusBadge status={a.status} sentAt={a.sentAt} issuedAt={a.issuedAt} error={a.error} sentBy={a.sentBy} />
+                        </div>
                       </div>
                     ))}
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 dark:border-white/10">
+                    <button type="button" onClick={() => setManualOpen((o) => !o)} className="w-full flex items-center gap-2 px-3 py-2.5 text-left cursor-pointer">
+                      <UserPlus className="h-4 w-4 text-accent" />
+                      <span className="flex-1 font-extrabold text-slate-900 dark:text-white">Add someone manually</span>
+                      {manualOpen ? <ChevronDown className="h-4 w-4 text-slate-400" /> : <ChevronRight className="h-4 w-4 text-slate-400" />}
+                    </button>
+                    {manualOpen && (
+                      <div className="px-3 pb-3 space-y-2">
+                        <p className="text-[10px] text-slate-500">For someone without an event pass. Uses the &ldquo;{types.find((t) => t.id === typeId)?.name}&rdquo; design, and the person is added to the list above.</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div><label className={label}>Name on certificate *</label><input className={field} value={manual.name} maxLength={120} onChange={(e) => setManual({ ...manual, name: e.target.value })} /></div>
+                          <div><label className={label}>Email (to send it)</label><input type="email" className={field} value={manual.email} onChange={(e) => setManual({ ...manual, email: e.target.value })} /></div>
+                          <div><label className={label}>Organisation</label><input className={field} value={manual.organisation} maxLength={120} onChange={(e) => setManual({ ...manual, organisation: e.target.value })} /></div>
+                          <div><label className={label}>Category</label><input className={field} value={manual.category} maxLength={80} onChange={(e) => setManual({ ...manual, category: e.target.value })} /></div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" disabled={busy || !canSend || !manual.name.trim()} onClick={() => createManual('download')} className="px-3 py-2 rounded-xl bg-accent text-white font-extrabold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"><Download className="h-3.5 w-3.5" /> Create &amp; download PDF</button>
+                          <button type="button" disabled={busy || !canSend || !manual.name.trim() || !manual.email.trim()} onClick={() => createManual('send')} className="px-3 py-2 rounded-xl bg-accent/15 text-accent border border-accent/30 font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"><Send className="h-3.5 w-3.5" /> Create &amp; email</button>
+                        </div>
+                        {!canSend && <p className="text-[10px] text-amber-500">You need the Send Certificates permission to create certificates.</p>}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -694,7 +919,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                         <div key={s.id} className="flex items-center justify-between gap-2 p-2 rounded-lg border border-slate-200 dark:border-white/10">
                           <span className="min-w-0">
                             <span className="font-bold text-slate-900 dark:text-white block">{new Date(s.sendAt).toLocaleString()} · {s.passIds.length} certificate{s.passIds.length === 1 ? '' : 's'}</span>
-                            <span className="text-[10px] text-slate-500">{s.status}{s.status === 'Done' ? ` — ${s.sent} sent${s.failed ? `, ${s.failed} failed` : ''}` : ''}{s.error ? ` — ${s.error}` : ''}</span>
+                            <span className="text-[10px] text-slate-500">{s.status}{s.status === 'Done' ? ` — ${s.sent} sent${s.failed ? `, ${s.failed} failed` : ''}` : ''}{s.finishedAt ? ` · finished ${new Date(s.finishedAt).toLocaleString()}` : ''}{s.createdBy ? ` · scheduled by ${s.createdBy}` : ''}{s.error ? ` — ${s.error}` : ''}</span>
                           </span>
                           {s.status === 'Scheduled' && <button type="button" onClick={() => cancelSchedule(s.id)} className="px-2.5 py-1 rounded-lg text-rose-400 border border-rose-500/30 font-bold cursor-pointer">Cancel</button>}
                         </div>

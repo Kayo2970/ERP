@@ -2,6 +2,7 @@ import nodemailer, { Transporter } from 'nodemailer';
 import path from 'path';
 import crypto from 'crypto';
 import { mutateCollection, readCollection } from './server-db';
+import { saveBase64File, readStoredFile, deleteStoredFilesForRecord } from './file-storage';
 import { DirectSendTransport } from './direct-smtp-transport';
 import { getAppBaseUrl } from './app-url';
 import { CAPABILITY_CATALOG, MODULE_CATALOG } from './permissions';
@@ -46,6 +47,9 @@ export interface EmailLog {
   sentAt: string;
   bufferedUntil?: string; // ISO timestamp when the 10-minute quiet buffer elapses
   attachmentsMeta?: Array<{ filename: string; contentType?: string }>;
+  /** Storage keys of the attachment files held while the email waits in the buffer (deleted once it is sent or cancelled). */
+  attachmentKeys?: string[];
+  attachmentFolder?: string;
   // Diagnostics for "shows SENT but never arrives" — a resolved sendMail()
   // only means the SMTP server ACCEPTED the message for delivery, not that
   // it reached the recipient's inbox. These surface what the server
@@ -658,6 +662,52 @@ async function sendImmediateEmail(payload: SendEmailPayload): Promise<EmailLog> 
   return newEmail;
 }
 
+// ── Buffered-email attachments ─────────────────────────────────────────────────
+// A buffered email can be sent by a different server process/module instance than the one that queued it (scheduled
+// certificate sends, a restart, the 30s sweeper...). Attachments only lived in memory, so such sends went out without
+// the PDF. They are therefore written to disk, under an unguessable folder, until the email is sent or cancelled.
+
+const ATTACHMENT_CATEGORY = 'email-attachments';
+
+async function persistAttachments(payload: SendEmailPayload): Promise<{ keys: string[]; folder: string } | null> {
+  const files = (payload.attachments || []).filter((a) => !a.cid && a.content);
+  if (files.length === 0) return null;
+  const folder = crypto.randomBytes(16).toString('hex');
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const buf = Buffer.isBuffer(files[i].content) ? files[i].content : Buffer.from(String(files[i].content));
+      const saved = await saveBase64File(ATTACHMENT_CATEGORY, folder, i, files[i].filename, `data:application/octet-stream;base64,${buf.toString('base64')}`);
+      keys.push(saved.storageKey);
+    }
+    return { keys, folder };
+  } catch (err) {
+    console.error('[email-service] Failed to persist email attachments:', err);
+    return null;
+  }
+}
+
+async function loadPersistedAttachments(log: EmailLog): Promise<SendEmailPayload['attachments']> {
+  if (!log.attachmentKeys?.length) return undefined;
+  const out: NonNullable<SendEmailPayload['attachments']> = [];
+  for (let i = 0; i < log.attachmentKeys.length; i++) {
+    try {
+      out.push({
+        filename: log.attachmentsMeta?.[i]?.filename || `attachment-${i + 1}`,
+        contentType: log.attachmentsMeta?.[i]?.contentType,
+        content: await readStoredFile(log.attachmentKeys[i]),
+      });
+    } catch (err) {
+      console.error(`[email-service] Attachment ${log.attachmentKeys[i]} could not be read for email ${log.id}:`, err);
+    }
+  }
+  return out;
+}
+
+async function discardPersistedAttachments(log: EmailLog): Promise<void> {
+  if (log.attachmentFolder) await deleteStoredFilesForRecord(ATTACHMENT_CATEGORY, log.attachmentFolder);
+}
+
 export async function sendBufferedEmailNow(id: string): Promise<EmailLog | null> {
   if (sendingInProgress.has(id)) return null;
   sendingInProgress.add(id);
@@ -684,6 +734,15 @@ export async function sendBufferedEmailNow(id: string): Promise<EmailLog | null>
       bodyHtml: target.bodyHtml,
       category: target.category,
     };
+    // This process may not be the one that queued the email (or may have restarted): restore its files from disk.
+    if (!payloadToSend.attachments?.length && target.attachmentKeys?.length) {
+      payloadToSend.attachments = await loadPersistedAttachments(target);
+      if (target.attachmentsMeta?.length && payloadToSend.attachments?.length !== target.attachmentKeys.length) {
+        const failed: EmailLog = { ...target, status: 'FAILED', sentAt: new Date().toISOString(), errorMessage: 'The attachment could not be read, so the email was not sent without it.' };
+        await mutateCollection<EmailLog>('emails', (current) => (current || []).map((item) => (item.id === id ? failed : item)));
+        return failed;
+      }
+    }
 
     const sendResult = await executeSmtpSend(payloadToSend);
 
@@ -699,6 +758,7 @@ export async function sendBufferedEmailNow(id: string): Promise<EmailLog | null>
     await mutateCollection<EmailLog>('emails', (current) => {
       return (current || []).map(item => item.id === id ? updatedLog : item);
     });
+    if (sendResult.status === 'SENT') await discardPersistedAttachments(target);
 
     console.log(`[email-service] Buffered email ${id} dispatch complete. Result: ${sendResult.status} (SMTP: ${sendResult.smtpResponse || sendResult.errorMessage || 'OK'})`);
     return updatedLog;
@@ -718,10 +778,12 @@ export async function cancelBufferedEmail(id: string): Promise<boolean> {
   bufferedEmails.delete(id);
 
   let found = false;
+  let cancelled: EmailLog | undefined;
   await mutateCollection<EmailLog>('emails', (current) => {
     return (current || []).map(item => {
       if (item.id === id) {
         found = true;
+        cancelled = item;
         return {
           ...item,
           status: 'CANCELLED',
@@ -732,6 +794,7 @@ export async function cancelBufferedEmail(id: string): Promise<boolean> {
     });
   });
 
+  if (cancelled) await discardPersistedAttachments(cancelled);
   return found;
 }
 
@@ -845,6 +908,11 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
     bufferedUntil,
     attachmentsMeta: payload.attachments?.map(a => ({ filename: a.filename, contentType: a.contentType })),
   };
+  const persisted = await persistAttachments(payload);
+  if (persisted) {
+    newEmail.attachmentKeys = persisted.keys;
+    newEmail.attachmentFolder = persisted.folder;
+  }
 
   try {
     await mutateCollection<EmailLog>('emails', (current) => [newEmail, ...(current || [])]);

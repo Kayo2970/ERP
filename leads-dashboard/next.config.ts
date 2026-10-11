@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
   // 9.5 MB PDF is already past that and request.json() fails with a 500. The
   // largest allowed upload is 25 MB (~34 MB encoded) — leave headroom.
   experimental: {
+    optimizePackageImports: ['lucide-react', 'recharts'],
     proxyClientMaxBodySize: '50mb',
   },
   // iOS Safari heuristically caches GET responses that carry no explicit

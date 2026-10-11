@@ -46,8 +46,16 @@ export interface EncryptedPayload {
 }
 
 /** Derive a 256-bit (32 byte) key from a passphrase and salt using PBKDF2 */
+const keyCache = new Map<string, Buffer>();
 function deriveKey(passphrase: string, salt: Buffer = FIXED_SALT): Buffer {
-  return crypto.pbkdf2Sync(passphrase, salt, 100000, 32, 'sha256');
+  // PBKDF2 at 100k rounds is synchronous and slow; the inputs rarely change, so memoise.
+  const cacheKey = `${salt.toString('hex')}|${passphrase}`;
+  let key = keyCache.get(cacheKey);
+  if (!key) {
+    key = crypto.pbkdf2Sync(passphrase, salt, 100000, 32, 'sha256');
+    keyCache.set(cacheKey, key);
+  }
+  return key;
 }
 
 /**

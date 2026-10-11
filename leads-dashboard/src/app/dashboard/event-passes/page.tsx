@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { CertificateStatusBadge, CERT_STATUS_FILTERS } from '@/components/certificate-status-badge';
 import {
   Award,
   Ticket,
@@ -56,7 +57,8 @@ import {
   canAccessEventPassesModule,
 } from '@/lib/permissions';
 import { EventPassStudio } from '@/components/event-pass-studio';
-import { EventPassScanner } from '@/components/event-pass-scanner';
+import dynamic from 'next/dynamic';
+const EventPassScanner = dynamic(() => import('@/components/event-pass-scanner').then((m) => m.EventPassScanner), { ssr: false });
 import { EventPassPushModal } from '@/components/event-pass-push-modal';
 import { EventPassBulkDispatchModal } from '@/components/event-pass-bulk-dispatch-modal';
 import { EventPassBulkEditModal } from '@/components/event-pass-bulk-edit-modal';
@@ -92,6 +94,23 @@ export default function EventPassesPage() {
   // Filters for Dedicated "Issued Passes" Tab (Deep Dive)
   const [deepFilterEventId, setDeepFilterEventId] = useState<string>('ALL');
   const [deepFilterEmailStatus, setDeepFilterEmailStatus] = useState<string>('ALL');
+  const [deepFilterCert, setDeepFilterCert] = useState<string>('ALL');
+  // Certificate ledger per pass (issued / queued / sent / failed + times); only loaded for people allowed to see certificates.
+  const [certStatuses, setCertStatuses] = useState<Record<string, { status: string; sentAt?: string; issuedAt?: string; sentBy?: string; error?: string; count?: number; typeName?: string }>>({});
+  const [certAllowed, setCertAllowed] = useState(false);
+  useEffect(() => {
+    if (activeTab === 'certificates') return; // refreshed when returning to the passes tab after sending
+    let cancelled = false;
+    fetch('/api/certificates/status', { cache: 'no-store', headers: authHeaders() })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (cancelled || !j) return;
+        setCertAllowed(!!j.allowed);
+        setCertStatuses(j.statuses || {});
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [activeTab]);
   const [deepFilterAttendance, setDeepFilterAttendance] = useState<string>('ALL');
   const [deepFilterTier, setDeepFilterTier] = useState<string>('ALL');
   const [deepFilterCategory, setDeepFilterCategory] = useState<string>('ALL');
@@ -277,6 +296,8 @@ export default function EventPassesPage() {
       'Email & Pass View Status',
       'Email Sent At',
       'Email Received At',
+      'Certificate Status',
+      'Certificate Sent At',
       'Pass Viewed',
       'Pass Viewed At',
       'Pass View Count',
@@ -302,6 +323,8 @@ export default function EventPassesPage() {
       `"${p.emailStatus || (p.passViewed ? 'Pass Viewed' : 'Not Sent')}"`,
       `"${p.emailSentAt || ''}"`,
       `"${p.emailReceivedAt || ''}"`,
+      `"${certAllowed ? (certStatuses[p.id]?.status || 'Not issued') : ''}"`,
+      `"${certAllowed ? (certStatuses[p.id]?.sentAt || '') : ''}"`,
       `"${p.passViewed ? 'Yes' : 'No'}"`,
       `"${p.passViewedAt || ''}"`,
       `"${p.passViewCount || 0}"`,
@@ -415,6 +438,8 @@ export default function EventPassesPage() {
         if (deepFilterEmailStatus === 'Not Sent' && currentEmailStatus !== 'Not Sent') return false;
       }
 
+      if (certAllowed && deepFilterCert !== 'ALL' && (certStatuses[p.id]?.status || 'Not issued') !== deepFilterCert) return false;
+
       if (deepFilterAttendance !== 'ALL') {
         if (deepFilterAttendance === 'Checked In' && p.status !== 'Checked In') return false;
         if (deepFilterAttendance === 'Pending' && p.status === 'Checked In') return false;
@@ -444,6 +469,9 @@ export default function EventPassesPage() {
     eventPasses,
     deepFilterEventId,
     deepFilterEmailStatus,
+    deepFilterCert,
+    certStatuses,
+    certAllowed,
     deepFilterAttendance,
     deepFilterTier,
     deepFilterCategory,
@@ -707,6 +735,7 @@ export default function EventPassesPage() {
                       <th className="py-3 px-4">Event</th>
                       <th className="py-3 px-4">Pass Tier</th>
                       <th className="py-3 px-4">Email &amp; Pass View Status</th>
+                      {certAllowed && <th className="py-3 px-4">Certificate</th>}
                       <th className="py-3 px-4">Gate Status</th>
                       <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
@@ -1087,6 +1116,20 @@ export default function EventPassesPage() {
                 <option value="Not Sent">Not Sent</option>
               </select>
 
+              {/* Certificate Filter */}
+              {certAllowed && (
+                <select
+                  value={deepFilterCert}
+                  onChange={(e) => setDeepFilterCert(e.target.value)}
+                  className="px-3 py-1.5 bg-theme-background/60 border border-theme-border/40 rounded-xl text-theme-text-primary text-xs focus:outline-none focus:border-accent cursor-pointer"
+                >
+                  <option value="ALL">All Certificate States</option>
+                  {CERT_STATUS_FILTERS.map((s) => (
+                    <option key={s} value={s}>{s === 'Issued' ? 'Issued (not sent)' : s}</option>
+                  ))}
+                </select>
+              )}
+
               {/* Turnstile Gate Filter */}
               <select
                 value={deepFilterAttendance}
@@ -1132,6 +1175,7 @@ export default function EventPassesPage() {
 
               {/* Clear filters shortcut */}
               {(deepFilterEmailStatus !== 'ALL' ||
+                deepFilterCert !== 'ALL' ||
                 deepFilterAttendance !== 'ALL' ||
                 deepFilterTier !== 'ALL' ||
                 deepFilterCategory !== 'ALL' ||
@@ -1140,6 +1184,7 @@ export default function EventPassesPage() {
                   type="button"
                   onClick={() => {
                     setDeepFilterEmailStatus('ALL');
+                    setDeepFilterCert('ALL');
                     setDeepFilterAttendance('ALL');
                     setDeepFilterTier('ALL');
                     setDeepFilterCategory('ALL');
@@ -1342,6 +1387,21 @@ export default function EventPassesPage() {
                         <td className="py-3 px-4">
                           {renderEmailViewBadge(pass)}
                         </td>
+
+                        {/* Certificate: issued / sent, and when */}
+                        {certAllowed && (
+                          <td className="py-3 px-4">
+                            <CertificateStatusBadge
+                              status={certStatuses[pass.id]?.status || 'Not issued'}
+                              sentAt={certStatuses[pass.id]?.sentAt}
+                              issuedAt={certStatuses[pass.id]?.issuedAt}
+                              sentBy={certStatuses[pass.id]?.sentBy}
+                              error={certStatuses[pass.id]?.error}
+                              count={certStatuses[pass.id]?.count}
+                              typeName={certStatuses[pass.id]?.typeName}
+                            />
+                          </td>
+                        )}
 
                         {/* Turnstile Gate Status */}
                         <td className="py-3 px-4">

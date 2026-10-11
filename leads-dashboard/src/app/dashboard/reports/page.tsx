@@ -20,7 +20,7 @@ import { getRatings, getMembers, getEvents, getTasks, RatingItem, Member, EventI
 import { getRatingColor } from '@/lib/design-tokens';
 import { buildStudentFinalScores, QUALITY_WEIGHT, TASK_COUNT_WEIGHT, TASK_COUNT_TARGET } from '@/lib/final-score';
 import { canViewRating, isFaculty, isSocialMediaTeamMember } from '@/lib/permissions';
-import { generatePerformanceReportPdf, ReportType, CapturedChartImage } from '@/lib/report-generator';
+import type { ReportType, CapturedChartImage } from '@/lib/report-generator';
 import { BarChart3, Download, FileText, Star, Loader2 } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 import { PeriodFilter } from '@/components/period-filter';
@@ -295,6 +295,8 @@ export default function ReportsPage() {
         captureChart(barChartRef.current),
       ]);
 
+      // Loaded on demand — jspdf is large and only needed when a report is exported.
+      const { generatePerformanceReportPdf } = await import('@/lib/report-generator');
       generatePerformanceReportPdf({
         ratings: filteredRatings,
         averages,

@@ -993,7 +993,7 @@ async function writeCollectionFile<T = any>(key: keyof DbSchema, data: T[]): Pro
   await fs.mkdir(DATA_DIR, { recursive: true });
   const jsonString = JSON.stringify(data);
   const encryptedPayload = encryptData(jsonString);
-  await fs.writeFile(collectionPath(key), JSON.stringify(encryptedPayload, null, 2), 'utf-8');
+  await fs.writeFile(collectionPath(key), JSON.stringify(encryptedPayload), 'utf-8');
 }
 
 /** Best-effort shared freshness marker — nothing depends on this for correctness. */
@@ -1007,9 +1007,10 @@ async function touchMeta(): Promise<void> {
 }
 
 /** Read every collection and assemble the full DbSchema shape (used by the /api/data aggregate poll). */
-export async function readDb(): Promise<DbSchema> {
+export async function readDb(keys?: readonly (keyof DbSchema)[]): Promise<DbSchema> {
+  const wanted = keys ? COLLECTION_KEYS.filter(k => keys.includes(k)) : COLLECTION_KEYS;
   const entries = await Promise.all(
-    COLLECTION_KEYS.map(async key => [key, await readCollectionFile(key)] as const)
+    wanted.map(async key => [key, await readCollectionFile(key)] as const)
   );
   const db = Object.fromEntries(entries) as unknown as DbSchema;
   try {
