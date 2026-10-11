@@ -51,7 +51,11 @@ This platform replaces a scattered mix of WhatsApp groups, spreadsheets, and ema
 
 ## 🆕 Recent Updates
 
-Everything that's changed since this README was last updated (2026-09-15). Full detail is in the git history (`git log`); this is the summary.
+Everything that's changed since this README was last updated (2026-10-11). Full detail is in the git history (`git log`); this is the summary.
+
+### 2026-10-11
+- **Event pass emails — extra buttons (`/dashboard/event-passes`)**: the pass-email composer (Mail-Merge Dispatch and bulk Preview & dispatch) has an "Extra buttons in the email" section. Tick *Send the venue location* to add a Google Maps button (paste a Maps link, or leave it blank to search the pass's venue), and/or *Invite them to the event WhatsApp group* to add a "Join WhatsApp Group" button for the invite link you paste. Both also appear in the plain-text email and the live preview. Settings are saved in the browser with the shared email template.
+- **Attendance certificates**: once an event has ended, **Send Certificates** (event-passes page) emails a PDF certificate to everyone who checked in at least once (needs an email; cancelled / approval-held passes are skipped). Each event has its own certificate design — heading, wording with `@event_name` / `@event_date`, signatory, text colour and optional uploaded A4-landscape artwork — with a live preview. Every certificate carries an ID and a QR code to a public verify page (`/certificate/[code]`) that shows only name, event and date. Records live in the new `certificates` collection (one per pass, so re-sending never duplicates) and artwork in `data/uploads/certificate-templates/`, which the 30-day pass-retention purge does not touch. Needs the pass **dispatch** permission; roles whose dispatch needs approval cannot send certificates.
 
 ### 2026-10-03
 - **Universal 10-Minute Quiet Buffer Queue (`/dashboard/email`)**: Every outgoing email across the ERP (announcements, event passes, passes push, event reports, procurement requests, committee assignments, approvals, direct broadcasts, guest invites, group policies) is routed through a universal 10-minute quiet buffer before SMTP dispatch. Users can review, dispatch immediately, or cancel pending sends directly from the Outbox, Queue, or Payload Inspector. Process restarts recover and reschedule active buffered emails seamlessly.
@@ -281,6 +285,8 @@ Configuration lives in `leads-dashboard/.env`:
 - **Digital Event Passes**: High-resolution event pass cards with unique serial numbers, security QR codes, and automated email dispatch with pass attachments.
 - **Gate QR Scanner**: Integrated in-app camera scanner for event security and coordinators with authenticated instant validation.
 - **Pass Governance**: Re-send pass emails, revoke invalid passes, or delete records.
+- **Pass Email Extras**: Optional Google Maps venue button and WhatsApp-group invite button in pass emails.
+- **Attendance Certificates**: After the event, email a PDF certificate (per-event design, verify QR + public `/certificate/[code]` page) to everyone who checked in. API: `/api/events/[id]/certificates`, `/api/events/[id]/certificate-template`, public `/api/certificate/[code]`.
 
 #### 9. Digital Visiting Card & Wallet Passes (`/dashboard/visiting-card` & `/card/[slug]`)
 - **Public Visiting Card**: Dynamic `/card/[slug]` landing page featuring member profile, designation, direct phone/LinkedIn links, and instant VCF vCard download.

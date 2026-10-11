@@ -39,6 +39,29 @@ LEADS Next Gen Centre • RUAS`;
 export interface PassEmailTemplate {
   subject: string;
   body: string;
+  /** Optional extras: a Google Maps button (blank link = search the pass's venue) and a WhatsApp group button. */
+  includeMap?: boolean;
+  mapUrl?: string;
+  includeWhatsapp?: boolean;
+  whatsappUrl?: string;
+}
+
+/** Only http(s) links are ever put in an email button. */
+export function safeHttpUrl(u?: string): string | undefined {
+  const t = (u || '').trim();
+  return /^https?:\/\/\S+$/i.test(t) ? t : undefined;
+}
+
+/** Template fields -> the options buildPassEmail()/dispatchPassEmail() take. */
+export function passEmailOptsFromTemplate(t: PassEmailTemplate) {
+  return {
+    subjectTemplate: t.subject,
+    bodyTemplate: t.body,
+    includeMap: t.includeMap,
+    mapUrl: t.mapUrl,
+    includeWhatsapp: t.includeWhatsapp,
+    whatsappUrl: t.whatsappUrl,
+  };
 }
 
 export const IMAGE_MARKER = '[[PASS_IMAGE]]';
@@ -68,6 +91,10 @@ export function loadPassEmailTemplate(): PassEmailTemplate {
     return {
       subject: typeof parsed.subject === 'string' && parsed.subject.trim() ? parsed.subject : fallback.subject,
       body: typeof parsed.body === 'string' && parsed.body.trim() ? parsed.body : fallback.body,
+      includeMap: parsed.includeMap === true,
+      mapUrl: typeof parsed.mapUrl === 'string' ? parsed.mapUrl : '',
+      includeWhatsapp: parsed.includeWhatsapp === true,
+      whatsappUrl: typeof parsed.whatsappUrl === 'string' ? parsed.whatsappUrl : '',
     };
   } catch {
     return fallback;

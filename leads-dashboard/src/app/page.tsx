@@ -229,6 +229,9 @@ export default function LoginPage() {
     } else if (localStorage.getItem('logoutReason') === 'terminated') {
       setError('Your account has been terminated and you have lost access to the portal. Contact your Centre Head if you believe this is a mistake.');
       localStorage.removeItem('logoutReason');
+    } else if (localStorage.getItem('logoutReason') === 'session_expired') {
+      setError('Your session has ended (for example after a password reset request). Please sign in again.');
+      localStorage.removeItem('logoutReason');
     }
 
     // If already logged in with an active session token, route to home or target URL
@@ -840,7 +843,7 @@ export default function LoginPage() {
       {/* Super User Admin Override Modal (No OTP Required) */}
       {showAdminOverrideModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="glass-panel w-full max-w-md rounded-3xl p-7 flex flex-col space-y-5 border border-amber-500/30 shadow-2xl relative">
+          <div className="glass-panel w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-3xl p-5 sm:p-7 flex flex-col space-y-5 border border-amber-500/30 shadow-2xl relative">
             <div className="flex items-center justify-between border-b border-theme-card-border/60 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-amber-500/20 rounded-xl text-amber-400 border border-amber-500/30">

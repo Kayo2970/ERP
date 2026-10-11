@@ -14,6 +14,7 @@
  */
 import { randomBytes, createHash } from 'crypto';
 import { readCollection, mutateCollection } from './server-db';
+import { resolvePolicyGrants } from './permissions-server';
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
@@ -92,6 +93,9 @@ export async function getSessionMember(request: Request): Promise<any | null> {
   const members = await readCollection<any>('members');
   const member = members.find(m => m.id === session.memberId);
   if (!member || member.status === 'Terminated') return null;
+  // Attach this member's Group Policy grants (capabilities + module edit overrides) so server-side can*() checks honor
+  // them. Non-enumerable: never persisted if the member object is spread/merged into a record, never serialized.
+  Object.defineProperty(member, '__policyGrants', { value: await resolvePolicyGrants(member), enumerable: false });
   return member;
 }
 

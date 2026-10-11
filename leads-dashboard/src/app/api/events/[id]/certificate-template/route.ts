@@ -1,0 +1,56 @@
+import { NextResponse } from 'next/server';
+import { readCollection } from '@/lib/server-db';
+import { requireSession } from '@/lib/session';
+import { apiError } from '@/lib/api-error';
+import { gateEventPassAction } from '@/lib/approval-gate';
+import { EventItem } from '@/lib/local-data';
+import { getCertificateTemplate, saveCertificateTemplate, renderCertificatePng, eventDateLabel, CertificateTemplate } from '@/lib/certificate';
+
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
+async function authorise(request: Request, action: 'dispatch' | 'edit') {
+  const user = await requireSession(request);
+  const gate = await gateEventPassAction(user, action);
+  if (!gate.allowed || gate.requiresApproval) {
+    return { error: NextResponse.json({ error: "You don't have permission to change the certificate design." }, { status: 403 }) };
+  }
+  return { user };
+}
+
+async function withPreview(eventId: string, template: CertificateTemplate) {
+  const event = (await readCollection<EventItem>('events')).find((e) => e.id === eventId);
+  const png = await renderCertificatePng(
+    { attendeeName: 'Aarav Sharma', eventName: event?.title || 'Your Event', eventDate: event ? eventDateLabel(event) : '', code: 'SAMPLE000' },
+    template,
+    'https://example.com/certificate/SAMPLE000'
+  );
+  return `data:image/png;base64,${png.toString('base64')}`;
+}
+
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const auth = await authorise(request, 'dispatch');
+    if (auth.error) return auth.error;
+    const { id } = await params;
+    const template = await getCertificateTemplate(id);
+    return NextResponse.json({ template, hasBackground: !!template.backgroundKey, preview: await withPreview(id, template) });
+  } catch (err) {
+    return apiError(err, 'certificate-template:get');
+  }
+}
+
+/** Body: template text fields + optional `background` (image data URL, or null to remove). */
+export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const auth = await authorise(request, 'edit');
+    if (auth.error) return auth.error;
+    const { id } = await params;
+    const body = await request.json();
+    const template = await saveCertificateTemplate(id, body, body.background === null ? null : typeof body.background === 'string' ? body.background : undefined);
+    return NextResponse.json({ template, hasBackground: !!template.backgroundKey, preview: await withPreview(id, template) });
+  } catch (err: any) {
+    if (err?.message?.startsWith('Artwork')) return NextResponse.json({ error: err.message }, { status: 400 });
+    return apiError(err, 'certificate-template:put');
+  }
+}

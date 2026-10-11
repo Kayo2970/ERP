@@ -32,7 +32,8 @@ export type EmailCategory =
   | 'EVENT_PASS'
   | 'EVENT_INVITATION'
   | 'PROCUREMENT_DECISION'
-  | 'GROUP_POLICY_GRANT';
+  | 'GROUP_POLICY_GRANT'
+  | 'CERTIFICATE';
 
 export interface EmailLog {
   id: string;
@@ -546,7 +547,7 @@ async function executeSmtpSend(payload: SendEmailPayload): Promise<{
     const domain = (settings.fromEmail || 'leadsnextgencentre.online').split('@')[1] || 'leadsnextgencentre.online';
     const messageId = `<${Date.now()}.${Math.random().toString(36).substring(2, 9)}@${domain}>`;
 
-    const isBulkCategory = payload.category === 'ANNOUNCEMENT' || payload.category === 'EVENT_ROSTER' || payload.category === 'GUEST_INVITE';
+    const isBulkCategory = payload.category === 'ANNOUNCEMENT' || payload.category === 'EVENT_ROSTER' || payload.category === 'GUEST_INVITE' || payload.category === 'CERTIFICATE';
     const unsubscribeAddress = settings.replyTo || settings.fromEmail;
     const headers: Record<string, string> = {
       'Auto-Submitted': 'auto-generated',
@@ -615,6 +616,7 @@ async function sendImmediateEmail(payload: SendEmailPayload): Promise<EmailLog> 
     else if (payload.category === 'BIRTHDAY') badgeTextToUse = 'Greetings';
     else if (payload.category === 'EVENT_PASS' || payload.category === 'EVENT_INVITATION') badgeTextToUse = 'Official Event Pass';
     else if (payload.category === 'GROUP_POLICY_GRANT') badgeTextToUse = 'Special Access Granted';
+    else if (payload.category === 'CERTIFICATE') badgeTextToUse = 'Certificate of Participation';
     else badgeTextToUse = undefined;
   }
 
@@ -816,6 +818,7 @@ export async function dispatchEmail(payload: SendEmailPayload): Promise<EmailLog
     else if (payload.category === 'BIRTHDAY') badgeTextToUse = 'Greetings';
     else if (payload.category === 'EVENT_PASS' || payload.category === 'EVENT_INVITATION') badgeTextToUse = 'Official Event Pass';
     else if (payload.category === 'GROUP_POLICY_GRANT') badgeTextToUse = 'Special Access Granted';
+    else if (payload.category === 'CERTIFICATE') badgeTextToUse = 'Certificate of Participation';
     else badgeTextToUse = undefined;
   }
 

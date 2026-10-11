@@ -28,10 +28,10 @@ export const RATING_CRITERIA: Record<RatingCriteriaSet, RatingCriterion[]> = {
   ],
   reportWriting: [
     { key: 'clarity', label: 'Clarity', description: 'Ease of understanding the written content' },
-    { key: 'analysis', label: 'Analysis', description: 'Depth of critical thinking and examination of data' },
-    { key: 'structure', label: 'Structure', description: 'Logical organization of the report' },
-    { key: 'comprehensiveness', label: 'Comprehensiveness', description: 'Thorough coverage of the event or topic' },
-    { key: 'accuracy', label: 'Accuracy', description: 'Correctness of facts and data presented' },
+    { key: 'flowStructure', label: 'Flow / Structure of the Event Report', description: 'Logical flow and organization of the report from start to finish' },
+    { key: 'timeliness', label: 'Timeliness of Submission', description: 'Report submitted within the expected deadline after the event' },
+    { key: 'errors', label: 'Number of Errors', description: 'Fewer spelling, grammar, and factual errors scores higher' },
+    { key: 'photos', label: 'Geotagged Photos & Other Pictures Attached', description: 'Geotagged photos and other supporting pictures are attached and relevant' },
   ],
 };
 
@@ -287,9 +287,9 @@ export function projectLegacyRatingFields(
     };
   }
   return {
-    quality: scores.accuracy ?? overall,
-    timeliness: overall,
-    initiative: scores.analysis ?? overall,
-    collaboration: scores.structure ?? overall,
+    quality: scores.errors ?? overall,
+    timeliness: scores.timeliness ?? overall,
+    initiative: scores.photos ?? overall,
+    collaboration: scores.flowStructure ?? overall,
   };
 }

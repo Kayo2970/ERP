@@ -21,7 +21,6 @@ import {
   resubmitEventReport,
   approveEventReport,
   rejectEventReport,
-  scoreEventReport,
   deleteEventReport,
   isApprovedEvent,
   getTasks,
@@ -33,7 +32,7 @@ import {
   saveEventReports,
 } from '@/lib/local-data';
 import { canSubmitEventReport, canReviewEventReports, canViewEventReports, isCentreHead, isEventsHeadGgCampus, isChiefCoordinator, isGeneralSecretary, hasCapability, hasModuleViewAllGrant } from '@/lib/permissions';
-import { RATING_CRITERIA } from '@/lib/rating-criteria';
+import { ReportScorePanel } from '@/components/report-score-panel';
 import { FileDropzone, FilePreviewRow, createProgressTracker } from '@/components/ui/file-dropzone';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SearchableSelect } from '@/components/searchable-select';
@@ -66,8 +65,6 @@ export default function EventReportsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const [scoringId, setScoringId] = useState<string | null>(null);
-  const [scoringValues, setScoringValues] = useState<Record<string, number>>({});
-  const [isScoring, setIsScoring] = useState(false);
 
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -280,27 +277,12 @@ export default function EventReportsPage() {
     }
   };
 
-  const openScoring = (report: EventReportItem) => {
-    setScoringId(report.id);
-    const initial: Record<string, number> = {};
-    RATING_CRITERIA.reportWriting.forEach(c => { initial[c.key] = report.reportScores?.[c.key] ?? 5; });
-    setScoringValues(initial);
-  };
+  const openScoring = (report: EventReportItem) => setScoringId(report.id);
 
-  const handleSubmitScore = async () => {
-    if (!scoringId) return;
-    setIsScoring(true);
-    try {
-      const result = await scoreEventReport(scoringId, scoringValues, user?.name || 'Reviewer');
-      if (!result) { triggerError('Failed to save the report score.'); return; }
-      setReports(getEventReports());
-      setScoringId(null);
-      triggerSuccess(`Scored ${result.reportScore?.toFixed(1)}/5.0 on the Report Writing rubric.`);
-    } catch (err: any) {
-      triggerError(err.message || 'Failed to save the report score.');
-    } finally {
-      setIsScoring(false);
-    }
+  const handleScoreSaved = (result: EventReportItem) => {
+    setReports(getEventReports());
+    setScoringId(null);
+    triggerSuccess(`Scored ${result.reportScore?.toFixed(1)}/5.0 on the Report Writing rubric.`);
   };
 
   const handleConfirmReject = async () => {
@@ -486,34 +468,7 @@ export default function EventReportsPage() {
                   </div>
 
                   {scoringId === report.id && (
-                    <div className="space-y-2.5 p-3 bg-accent/5 border border-accent/20 rounded-xl">
-                      {RATING_CRITERIA.reportWriting.map(criterion => (
-                        <div className="space-y-1" key={criterion.key} title={criterion.description}>
-                          <div className="flex justify-between items-center text-[11px]">
-                            <span className="font-semibold text-theme-text-primary">{criterion.label}</span>
-                            <span className="font-bold text-accent">{(scoringValues[criterion.key] ?? 5).toFixed(1)} / 5</span>
-                          </div>
-                          <input
-                            type="range" min="1" max="5" step="0.5"
-                            value={scoringValues[criterion.key] ?? 5}
-                            onChange={(e) => setScoringValues(v => ({ ...v, [criterion.key]: parseFloat(e.target.value) }))}
-                            className="w-full accent-accent h-1.5 bg-theme-border/40 rounded-lg appearance-none cursor-pointer"
-                          />
-                        </div>
-                      ))}
-                      <div className="flex gap-2 pt-1">
-                        <button
-                          onClick={handleSubmitScore}
-                          disabled={isScoring}
-                          className="flex-1 py-1.5 bg-accent hover:bg-primary-light text-white text-[11px] font-bold rounded-lg transition-all cursor-pointer disabled:opacity-50"
-                        >
-                          {isScoring ? 'Saving...' : 'Save Score'}
-                        </button>
-                        <button onClick={() => setScoringId(null)} className="px-3 py-1.5 bg-theme-border/20 hover:bg-theme-border/30 text-theme-text-secondary text-[11px] font-bold rounded-lg transition-all cursor-pointer">
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
+                    <ReportScorePanel report={report} actorName={user?.name || 'Reviewer'} onSaved={handleScoreSaved} onCancel={() => setScoringId(null)} onError={triggerError} />
                   )}
                 </div>
               );
@@ -568,6 +523,9 @@ export default function EventReportsPage() {
                       </button>
                     )}
                   </div>
+                  {scoringId === report.id && (
+                    <ReportScorePanel report={report} actorName={user?.name || 'Reviewer'} onSaved={handleScoreSaved} onCancel={() => setScoringId(null)} onError={triggerError} />
+                  )}
                 </div>
               ))}
             </div>

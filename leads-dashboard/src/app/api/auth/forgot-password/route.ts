@@ -62,13 +62,26 @@ export async function POST(request: Request) {
     const template = generateOtpEmailTemplate(member.name, otp);
 
     // Dispatch email
-    await dispatchEmail({
+    const sent = await dispatchEmail({
       to: member.email,
       subject: template.subject,
       bodyText: template.bodyText,
       bodyHtml: template.bodyHtml,
       category: 'AUTH_OTP',
     });
+
+    // Never tell someone a code is on its way when the mail server rejected or couldn't send it — that left people
+    // waiting for an email that was never going to arrive. Drop the unusable code and say what to do instead.
+    if (sent.status !== 'SENT') {
+      await mutateCollection('passwordResets', (current) => (current || []).filter((r: any) => r.id !== resetToken.id));
+      console.error(`[forgot-password-api] OTP email to ${member.email} was not delivered (${sent.status}): ${sent.errorMessage || 'unknown error'}`);
+      return NextResponse.json(
+        {
+          error: "We couldn't email your verification code right now (the mail server isn't reachable or rejected it). Please try again in a few minutes, or ask a Super User to reset your password from the Members Directory.",
+        },
+        { status: 503 }
+      );
+    }
 
     return NextResponse.json({
       success: true,

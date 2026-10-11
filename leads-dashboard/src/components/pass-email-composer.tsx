@@ -50,7 +50,7 @@ export function PassEmailComposer({ template, onChange, bodyRows = 12 }: Props) 
     });
   };
 
-  const isDefault = template.subject === DEFAULT_PASS_EMAIL_SUBJECT && template.body === DEFAULT_PASS_EMAIL_BODY;
+  const isDefault = template.subject === DEFAULT_PASS_EMAIL_SUBJECT && template.body === DEFAULT_PASS_EMAIL_BODY && !template.includeMap && !template.includeWhatsapp;
   const field = 'w-full px-3 py-2 bg-slate-50 dark:bg-slate-900/60 border border-slate-300 dark:border-white/15 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:border-accent text-xs';
 
   return (
@@ -58,7 +58,7 @@ export function PassEmailComposer({ template, onChange, bodyRows = 12 }: Props) 
       <div className="flex items-center justify-between gap-2">
         <span className="text-[10px] text-slate-500">One message for Mail-Merge and Preview &amp; dispatch — saved in this browser.</span>
         {!isDefault && (
-          <button type="button" onClick={() => onChange({ subject: DEFAULT_PASS_EMAIL_SUBJECT, body: DEFAULT_PASS_EMAIL_BODY })} className="flex items-center gap-1 text-[10.5px] font-bold text-sky-400 hover:underline cursor-pointer shrink-0">
+          <button type="button" onClick={() => onChange({ subject: DEFAULT_PASS_EMAIL_SUBJECT, body: DEFAULT_PASS_EMAIL_BODY, includeMap: false, mapUrl: '', includeWhatsapp: false, whatsappUrl: '' })} className="flex items-center gap-1 text-[10.5px] font-bold text-sky-400 hover:underline cursor-pointer shrink-0">
             <RotateCcw className="h-3 w-3" /> Reset to default
           </button>
         )}
@@ -83,6 +83,27 @@ export function PassEmailComposer({ template, onChange, bodyRows = 12 }: Props) 
         <p className="text-[10px] text-slate-500">
           <code>@pass_image</code> and <code>@details</code> choose where the wide ticket and the details table sit; if you leave them out, the ticket goes first and the details after your message. The wallet / calendar buttons always follow.
         </p>
+      </div>
+      <div className="space-y-2.5 rounded-xl border border-slate-200 dark:border-white/10 p-3">
+        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Extra buttons in the email</span>
+        <label className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
+          <input type="checkbox" checked={!!template.includeMap} onChange={(e) => onChange({ ...template, includeMap: e.target.checked })} />
+          Send the venue location (Google Maps)
+        </label>
+        {template.includeMap && (
+          <input type="url" placeholder="Google Maps link (leave blank to search the pass's venue)" value={template.mapUrl || ''} onChange={(e) => onChange({ ...template, mapUrl: e.target.value })} className={field} />
+        )}
+        <label className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
+          <input type="checkbox" checked={!!template.includeWhatsapp} onChange={(e) => onChange({ ...template, includeWhatsapp: e.target.checked })} />
+          Invite them to the event WhatsApp group
+        </label>
+        {template.includeWhatsapp && (
+          <input type="url" placeholder="WhatsApp group invite link (https://chat.whatsapp.com/…)" value={template.whatsappUrl || ''} onChange={(e) => onChange({ ...template, whatsappUrl: e.target.value })} className={field} />
+        )}
+        {template.includeWhatsapp && !/^https?:\/\/\S+$/i.test((template.whatsappUrl || '').trim()) && (
+          <p className="text-[10px] text-amber-500">Paste the group invite link — the WhatsApp button is left out until you do.</p>
+        )}
+        <p className="text-[10px] text-slate-500">Links are saved in this browser. Change them when you switch to another event.</p>
       </div>
     </div>
   );

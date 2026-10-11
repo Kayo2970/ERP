@@ -75,6 +75,8 @@ export async function POST(request: Request) {
       id: `audit-${Date.now()}`,
       action: 'PASSWORD_RESET',
       user: memberName,
+      actorName: memberName,
+      actorEmail: trimmedEmail,
       details: `Password reset successfully via 5-minute OTP for email ${trimmedEmail}`,
       timestamp: new Date().toISOString(),
     };

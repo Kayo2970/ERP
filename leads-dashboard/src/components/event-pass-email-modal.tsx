@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { EventItem, EventPassItem, buildPassEmail, dispatchPassEmail } from '@/lib/local-data';
 import { PassEmailComposer, usePassEmailTemplate } from '@/components/pass-email-composer';
+import { passEmailOptsFromTemplate } from '@/lib/pass-email-template';
 
 interface EventPassEmailModalProps {
   isOpen: boolean;
@@ -91,7 +92,7 @@ export function EventPassEmailModal({
   const previewPass = eventPasses.find((p) => p.id === previewPassId) || eventPasses[0];
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://portal-leads.msruas.ac.in';
   const previewEmail = previewPass
-    ? buildPassEmail(previewPass, origin, { forPreview: true, subjectTemplate: template.subject, bodyTemplate: template.body })
+    ? buildPassEmail(previewPass, origin, { forPreview: true, ...passEmailOptsFromTemplate(template) })
     : null;
 
   const handleSendEmails = async () => {
@@ -114,7 +115,7 @@ export function EventPassEmailModal({
         if (!pass.attendeeEmail) continue;
 
         try {
-          const res = await dispatchPassEmail(pass, pass.attendeeEmail, { subjectTemplate: template.subject, bodyTemplate: template.body });
+          const res = await dispatchPassEmail(pass, pass.attendeeEmail, passEmailOptsFromTemplate(template));
           if (!res.success) {
             failCount++;
             console.warn(`Failed to dispatch email to ${pass.attendeeEmail}:`, res.error);

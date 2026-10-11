@@ -3,7 +3,7 @@ import { mutateCollection, readCollection } from '@/lib/server-db';
 import { deleteStoredFile, deleteStoredFilesForRecord, saveBase64File, readStoredFile } from '@/lib/file-storage';
 import { cascadeCloseAutoApprovals, deleteLinkedApprovalRequests, fanOutAutoApproval } from '@/lib/approval-sync';
 import { requireSession, ForbiddenError } from '@/lib/session';
-import { getAccessLevelSettingsServer, canReviewDesignProofread, canViewAllDesigns } from '@/lib/permissions-server';
+import { getAccessLevelSettingsServer, canReviewDesignProofread, canViewAllDesigns, hasCap } from '@/lib/permissions-server';
 import { apiError } from '@/lib/api-error';
 
 /**
@@ -46,7 +46,9 @@ export async function PATCH(
     const isReviewAction = incomingStyleStatus === 'Style Approved' || incomingStyleStatus === 'Style Rejected'
       || incomingReviewStatus === 'Proofread Approved' || incomingReviewStatus === 'Changes Requested';
     if (isReviewAction) {
-      if (!canReviewDesignProofread(actor, settings, existing)) throw new ForbiddenError();
+      const isStyleAction = incomingStyleStatus === 'Style Approved' || incomingStyleStatus === 'Style Rejected';
+      // A Group Policy DESIGN_STYLE_APPROVE grant lets someone approve/reject on the Style Review step
+      if (!canReviewDesignProofread(actor, settings, existing) && !(isStyleAction && hasCap(actor, 'DESIGN_STYLE_APPROVE'))) throw new ForbiddenError();
     } else if (!isOwner && !canViewAllDesigns(actor, settings)) {
       throw new ForbiddenError();
     }
@@ -412,7 +414,7 @@ export async function DELETE(
     const existingDesigns = await readCollection<any>('designs');
     const existing = existingDesigns.find((d: any) => d.id === id);
     const isOwner = !!existing && actor.id === existing.designerId;
-    if (!isOwner && !canViewAllDesigns(actor, settings) && actor.tier !== 1) {
+    if (!isOwner && !canViewAllDesigns(actor, settings) && actor.tier !== 1 && !hasCap(actor, 'DESIGN_DELETE')) {
       throw new ForbiddenError();
     }
     const updated = await mutateCollection('designs', (current) =>

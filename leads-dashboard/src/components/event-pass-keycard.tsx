@@ -53,6 +53,7 @@ export function EventPassKeycard({
       qrEye={pass.qrEyeColor}
       qrShape={pass.qrShape}
       qrLogo={pass.qrLogo !== false}
+      logoUrl={theme?.logoUrl}
       theme={{
         ...(theme || {}),
         // artwork off: drop the picture so the pass's own colours/gradient show

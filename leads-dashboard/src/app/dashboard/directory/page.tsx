@@ -43,6 +43,7 @@ import { useDropTarget } from '@/components/ui/file-dropzone';
 import { parseCsvLine, splitCsvLines, toCsvRow, downloadCsv } from '@/lib/csv';
 import {
   getMembers,
+  getEvents,
   addMember,
   submitMemberCreate,
   approveMemberCreate,
@@ -58,13 +59,15 @@ import {
   requestMemberPasswordReset,
   adminSetMemberPassword,
   Member,
+  EventItem,
   MemberDivision,
   authHeaders
 } from '@/lib/local-data';
+import { downloadEventDetailsCsv } from '@/lib/event-participants-export';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { StudentProfileModal } from '@/components/student-profile-modal';
 import { RequestApprovalModal } from '@/components/request-approval-modal';
-import { canViewFullDirectory, canEditDirectory, canAddMember, getMemberApprovalRequirement, canApprovePendingMember, canEditMemberRecordRow, isRestrictedDirectoryEditor, isCentreHead, canViewHiddenAccounts, canSetMemberPassword, isKayomarzPavri } from '@/lib/permissions';
+import { canViewFullDirectory, canEditDirectory, canAddMember, getMemberApprovalRequirement, canApprovePendingMember, canEditMemberRecordRow, isRestrictedDirectoryEditor, isCentreHead, canExportEventDetails, canViewHiddenAccounts, canSetMemberPassword, isKayomarzPavri } from '@/lib/permissions';
 
 const capitalizeFirstLetter = (value: string) =>
   value.length > 0 ? value.charAt(0).toUpperCase() + value.slice(1) : value;
@@ -74,6 +77,8 @@ export default function DirectoryPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [user, setUser] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [exportEventId, setExportEventId] = useState('');
+  const [exportEvents, setExportEvents] = useState<EventItem[]>([]);
   const [selectedDivision, setSelectedDivision] = useState<string>('ALL');
   
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -230,9 +235,15 @@ export default function DirectoryPage() {
       }
     } else if (div === 'Training Associate') {
       tier = 6;
-      const dept = opts.departmentSelect || STANDARDIZED_DEPARTMENTS[0];
-      role = `Associate - ${dept}`;
-      department = dept;
+      if (opts.associatePosition === 'Department Associate' || opts.associatePosition === undefined) {
+        const dept = opts.departmentSelect || STANDARDIZED_DEPARTMENTS[0];
+        role = `Associate - ${dept}`;
+        department = dept;
+      } else {
+        // General Associate: a Training Associate who isn't attached to any department
+        role = 'Training Associate';
+        department = 'General';
+      }
     } else if (div === 'Alumni') {
       tier = 7;
       role = 'Alumni Member';
@@ -298,6 +309,7 @@ export default function DirectoryPage() {
   useEffect(() => {
     const refreshData = () => {
       setMembers(getMembers());
+      setExportEvents(getEvents().filter(e => !e.isHoliday));
     };
     refreshData();
 
@@ -1205,6 +1217,34 @@ export default function DirectoryPage() {
           <p className="text-xs text-theme-text-secondary">Explore center divisions: Advisory Board, Core Committee, Training Associates, and Alumni</p>
         </div>
 
+        {canExportEventDetails(user) && (
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={exportEventId}
+              onChange={(e) => setExportEventId(e.target.value)}
+              className="px-3 py-2 bg-theme-border/20 border border-theme-border/40 rounded-xl text-xs text-theme-text-primary max-w-[220px]"
+              aria-label="Choose an event to download"
+            >
+              <option value="">Select event…</option>
+              {exportEvents.map(ev => (
+                <option key={ev.id} value={ev.id}>{ev.title}</option>
+              ))}
+            </select>
+            <button
+              disabled={!exportEventId}
+              onClick={() => {
+                const ev = exportEvents.find(e => e.id === exportEventId);
+                if (ev) downloadEventDetailsCsv(ev, members);
+              }}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer border border-theme-border/40 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Download the event's details and its students' details (CSV)"
+            >
+              <Download className="h-4 w-4" />
+              Event & Student Details (CSV)
+            </button>
+          </div>
+        )}
+
         {(isAdmin || canAdd) && (
           <div className="flex flex-wrap items-center gap-2">
             {isAdmin && (
@@ -1868,7 +1908,7 @@ export default function DirectoryPage() {
                         onChange={(e) => setAssociatePosition(e.target.value as AssociatePosition)}
                         className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
                       >
-                        <option value="Associate">General Associate</option>
+                        <option value="Associate">General Associate (no department)</option>
                         <option value="Department Associate">Department Associate</option>
                       </select>
                     </div>
@@ -2103,6 +2143,20 @@ export default function DirectoryPage() {
                   )}
 
                   {editDivision === 'Training Associate' && (
+                    <div className="space-y-1.5">
+                      <label className="block font-medium text-theme-text-secondary">Associate Role</label>
+                      <select
+                        value={editAssociatePosition}
+                        onChange={(e) => setEditAssociatePosition(e.target.value as AssociatePosition)}
+                        className="w-full px-4 py-2.5 bg-theme-background/30 border border-theme-card-border rounded-xl text-theme-text-primary focus:outline-none focus:border-accent"
+                      >
+                        <option value="Associate">General Associate (no department)</option>
+                        <option value="Department Associate">Department Associate</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {editDivision === 'Training Associate' && editAssociatePosition === 'Department Associate' && (
                     <div className="space-y-1.5">
                       <label className="block font-medium text-theme-text-secondary">Select Department *</label>
                       <select

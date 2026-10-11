@@ -11,15 +11,12 @@
  * one. This module re-derives the same built-in tier/role rules against the
  * real server-side collections (read via server-db.ts) instead.
  *
- * Scope: this intentionally covers the hardcoded tier/role/keyword rules
- * only — not the dynamic Group Policy capability/moduleAccess override
- * system (per-member custom grants configured in Policies). A member who
- * only has access to an action through a Group Policy grant (rather than
- * their built-in tier/role) will be correctly authorized on the client's UI
- * but may see a 403 from the API until that system is ported here too. This
- * is a deliberate, disclosed limitation — porting the dynamic policy engine
- * safely is its own follow-up, not something to rush alongside the base
- * session/authorization rollout.
+ * Group Policies: the dynamic capability / moduleAccess-edit grants are
+ * resolved once per request (resolvePolicyGrants) and attached to the
+ * signed-in member by session.ts, so every can*() check here consults them
+ * the same way the client's permissions.ts does (hasCap / moduleEditOverride).
+ * Still client-only: moduleAccess *view* scopes (ALL/OWN record filtering) and
+ * the one-time "own record" edit grants, which need per-record context.
  */
 import { readCollection } from './server-db';
 
@@ -73,6 +70,66 @@ export async function getAccessLevelSettingsServer(): Promise<AccessLevelSetting
 
 export type ServerUser = { id?: string; tier?: number; role?: string; division?: string; department?: string; email?: string; name?: string } | null | undefined;
 
+/** Same matching rules as permissions.ts memberMatchesPolicy, against a plain member/user record. */
+function policyTargetsUser(p: any, user: NonNullable<ServerUser>): boolean {
+  if (user.id && p.targetMemberIds?.includes(user.id)) return true;
+  if (p.targetDivisions?.length && user.division && p.targetDivisions.includes(user.division)) return true;
+  if (p.targetTiers?.length && typeof user.tier === 'number' && p.targetTiers.includes(user.tier)) return true;
+  if (p.targetDesignationKeyword?.trim()) {
+    const kw = p.targetDesignationKeyword.trim().toLowerCase();
+    if ((user.role || '').toLowerCase().includes(kw)) return true;
+  }
+  return false;
+}
+
+export interface PolicyGrants {
+  capabilities: string[];
+  /** Per module key, the strongest Edit override from matching policies (ALL > OWN > NONE), like permissions.ts's resolveModuleEditOverride. */
+  moduleEdit: Record<string, 'ALL' | 'OWN' | 'NONE'>;
+}
+
+/**
+ * Resolve everything the member's enabled, unexpired Group Policies grant, once per request. session.ts attaches the
+ * result to the signed-in member (non-enumerable, so it is never persisted or sent back), which lets every synchronous
+ * can*() check below consult Group Policies exactly like the client's permissions.ts does.
+ */
+export async function resolvePolicyGrants(user: ServerUser): Promise<PolicyGrants> {
+  const grants: PolicyGrants = { capabilities: [], moduleEdit: {} };
+  if (!user || user.tier === 1) return grants; // Super User holds everything implicitly
+  const policies = await readCollection<any>('groupPolicies');
+  const now = new Date().toISOString();
+  const caps = new Set<string>();
+  const rank = { NONE: 0, OWN: 1, ALL: 2 } as const;
+  for (const p of policies || []) {
+    if (p.enabled === false) continue;
+    if (p.expiresAt && p.expiresAt <= now) continue;
+    if (!policyTargetsUser(p, user)) continue;
+    (p.capabilities || []).forEach((c: string) => caps.add(c));
+    for (const [moduleKey, access] of Object.entries<any>(p.moduleAccess || {})) {
+      const edit = access?.edit as 'ALL' | 'OWN' | 'NONE' | undefined;
+      if (!edit) continue;
+      const current = grants.moduleEdit[moduleKey];
+      if (!current || rank[edit] > rank[current]) grants.moduleEdit[moduleKey] = edit;
+    }
+  }
+  grants.capabilities = Array.from(caps);
+  return grants;
+}
+
+/** Synchronous capability check against the grants session.ts attached to the signed-in member. Super User always true. */
+export function hasCap(user: ServerUser, capability: string): boolean {
+  if (!user) return false;
+  if (user.tier === 1) return true;
+  return !!(user as any).__policyGrants?.capabilities?.includes(capability);
+}
+
+/** Explicit Edit override a Group Policy sets for `moduleKey` (undefined when none). Super User is always 'ALL'. */
+export function moduleEditOverride(user: ServerUser, moduleKey: string): 'ALL' | 'OWN' | 'NONE' | undefined {
+  if (!user) return undefined;
+  if (user.tier === 1) return 'ALL';
+  return (user as any).__policyGrants?.moduleEdit?.[moduleKey];
+}
+
 /**
  * Server-side port of permissions.ts's hasCapability/isPolicyActive/
  * memberMatchesPolicy — the "deliberate, disclosed limitation" this file's
@@ -87,6 +144,7 @@ export type ServerUser = { id?: string; tier?: number; role?: string; division?:
 export async function hasCapabilityServer(user: ServerUser, capability: string): Promise<boolean> {
   if (!user) return false;
   if (user.tier === 1) return true;
+  if ((user as any).__policyGrants) return hasCap(user, capability);
   const policies = await readCollection<any>('groupPolicies');
   const now = new Date().toISOString();
   return (policies || []).some((p: any) => {
@@ -137,7 +195,7 @@ export function isSectorHead(user: ServerUser, settings: AccessLevelSettings): b
   const role = user.role || '';
   const isSectorOrCentreHead = anyKeywordMatches(role, settings.sectorHeadKeywords);
   const isGeneralHead = isHeadRole(user, settings) && !keywordMatches(role, settings.financeKeyword);
-  return (typeof user.tier === 'number' && user.tier <= settings.sectorHeadMaxTier) || isSectorOrCentreHead || isGeneralHead;
+  return (typeof user.tier === 'number' && user.tier <= settings.sectorHeadMaxTier) || isSectorOrCentreHead || isGeneralHead || hasCap(user, 'APPROVE_REIMBURSEMENTS_SECTOR');
 }
 
 export function isFinanceHead(user: ServerUser, settings: AccessLevelSettings): boolean {
@@ -146,7 +204,7 @@ export function isFinanceHead(user: ServerUser, settings: AccessLevelSettings): 
   const dept = user.department || '';
   const isFinanceRole = keywordMatches(role, settings.financeKeyword);
   const isFinanceDept = keywordMatches(dept, settings.financeKeyword);
-  return user.tier === 1 || isFinanceRole || isFinanceDept;
+  return user.tier === 1 || isFinanceRole || isFinanceDept || hasCap(user, 'APPROVE_REIMBURSEMENTS_FINANCE');
 }
 
 // Mirrors permissions.ts's isChiefAdvisor — the view-only Faculty position,
@@ -194,7 +252,7 @@ export async function loadPermissionContext() {
 
 export function canTerminateMember(user: ServerUser, settings: AccessLevelSettings): boolean {
   if (isExecutiveRole(user) || isAlumniRole(user)) return false;
-  return isCentreHead(user, settings) || user?.tier === 1;
+  return isCentreHead(user, settings) || user?.tier === 1 || hasCap(user, 'TERMINATE_MEMBER');
 }
 
 export function canSetMemberPassword(user: ServerUser): boolean {
@@ -244,7 +302,7 @@ export function canDecideBudget(user: ServerUser, settings: AccessLevelSettings,
 }
 
 export function canSubmitBudget(user: ServerUser, settings: AccessLevelSettings): boolean {
-  return isCentreHead(user, settings);
+  return isCentreHead(user, settings) || hasCap(user, 'PROPOSE_BUDGET') || hasCap(user, 'MANAGE_BUDGET');
 }
 
 // Mirrors permissions.ts's canDecideProcurementRequest — deliberately just
@@ -264,12 +322,12 @@ export function canViewProcurementRequest(user: ServerUser, settings: AccessLeve
 
 export function canApproveAnnouncement(user: ServerUser, settings: AccessLevelSettings): boolean {
   if (!user) return false;
-  return isCentreHead(user, settings) || isEventsHeadGgCampus(user) || user.tier === 1 || user.tier === 2.5;
+  return isCentreHead(user, settings) || isEventsHeadGgCampus(user) || user.tier === 1 || user.tier === 2.5 || hasCap(user, 'APPROVE_ANNOUNCEMENT');
 }
 
 export function canRemoveGuestContact(user: ServerUser, settings: AccessLevelSettings): boolean {
   if (isExecutiveRole(user) || isAlumniRole(user)) return false;
-  return isCentreHead(user, settings) || user?.tier === 1;
+  return isCentreHead(user, settings) || user?.tier === 1 || hasCap(user, 'GUEST_DIRECTORY_DELETE');
 }
 
 export async function canDeleteForms(user: ServerUser, settings: AccessLevelSettings): Promise<boolean> {
@@ -279,25 +337,25 @@ export async function canDeleteForms(user: ServerUser, settings: AccessLevelSett
 }
 
 export function canDeleteEvent(user: ServerUser, settings: AccessLevelSettings): boolean {
-  return isBaseLeadership(user, settings);
+  return isBaseLeadership(user, settings) || hasCap(user, 'EVENTS_DELETE');
 }
 
 export function canDeleteTask(user: ServerUser, settings: AccessLevelSettings, task?: any): boolean {
-  if (isBaseLeadership(user, settings)) return true;
+  if (isBaseLeadership(user, settings) || hasCap(user, 'TASKS_DELETE')) return true;
   if (task && user?.name && task.creatorName === user.name) return true;
   return false;
 }
 
 export function canManageBackup(user: ServerUser): boolean {
-  return user?.tier === 1;
+  return user?.tier === 1 || hasCap(user, 'MANAGE_BACKUP');
 }
 
 export function canManageEmailSettings(user: ServerUser, settings: AccessLevelSettings): boolean {
-  return user?.tier === 1 || isCentreHead(user, settings);
+  return user?.tier === 1 || isCentreHead(user, settings) || hasCap(user, 'MANAGE_EMAIL_SETTINGS');
 }
 
 export function canManageGuestInvites(user: ServerUser, settings: AccessLevelSettings): boolean {
-  return isCentreHead(user, settings);
+  return isCentreHead(user, settings) || hasCap(user, 'MANAGE_GUEST_INVITES');
 }
 
 export function isChiefCoordinator(user: ServerUser): boolean {
@@ -314,16 +372,23 @@ export function isGeneralSecretary(user: ServerUser): boolean {
 
 export function canSubmitEventReport(user: ServerUser): boolean {
   if (!user) return false;
-  return isGeneralSecretary(user) || isChiefCoordinator(user) || user.tier === 1;
+  if (user.tier === 1) return true;
+  const override = moduleEditOverride(user, 'EVENT_REPORTS');
+  if (override === 'NONE') return false;
+  if (override === 'ALL' || override === 'OWN') return true;
+  if (hasCap(user, 'EVENT_REPORTS_SUBMIT')) return true;
+  return isGeneralSecretary(user) || isChiefCoordinator(user);
 }
 
 export function canReviewEventReports(user: ServerUser, settings: AccessLevelSettings): boolean {
+  if (!user) return false;
+  if (user.tier === 1 || hasCap(user, 'EVENT_REPORTS_REVIEW') || moduleEditOverride(user, 'EVENT_REPORTS') === 'ALL') return true;
   return isCentreHead(user, settings) || isEventsHeadGgCampus(user);
 }
 
 export function canViewEventReports(user: ServerUser, settings: AccessLevelSettings): boolean {
   if (!user) return false;
-  return canReviewEventReports(user, settings) || canSubmitEventReport(user) || isGeneralSecretary(user) || isChiefCoordinator(user) || isExecutiveRole(user) || user.tier === 1;
+  return canReviewEventReports(user, settings) || canSubmitEventReport(user) || isGeneralSecretary(user) || isChiefCoordinator(user) || isExecutiveRole(user) || user.tier === 1 || hasCap(user, 'EVENT_REPORTS_SUBMIT') || hasCap(user, 'EVENT_REPORTS_VIEW_ALL') || hasCap(user, 'EVENT_REPORTS_REVIEW');
 }
 
 export function canReviewDesignProofread(user: ServerUser, settings: AccessLevelSettings, design?: { assignedProofreaderIds?: string[]; assignedProofreaderEmail?: string; assignedProofreaderId?: string }): boolean {
@@ -350,7 +415,7 @@ export function isAdvisor(user: ServerUser): boolean {
 
 export function canAccessGroupPoliciesServer(user: ServerUser, settings: AccessLevelSettings): boolean {
   if (!user) return false;
-  return isSuperUser(user) || isCentreHead(user, settings) || isEventsHeadGgCampus(user);
+  return isSuperUser(user) || isCentreHead(user, settings) || isEventsHeadGgCampus(user) || hasCap(user, 'MANAGE_GROUP_POLICIES') || moduleEditOverride(user, 'POLICIES') === 'ALL';
 }
 
 // --- Events / Tasks / Ratings composite checks (ported from permissions.ts) ---
@@ -444,22 +509,28 @@ export async function isTaskAssignee(task: ServerTask, user: ServerUser): Promis
 
 /** Event creation baseline — leadership, Core Committee, or any Head role. Ported from permissions.ts's canCreateEvent (Group Policy EVENTS_CREATE grant out of scope). */
 export function canCreateEvent(user: ServerUser, settings: AccessLevelSettings): boolean {
-  return isBaseLeadership(user, settings) || isCoreCommitteeTier(user, settings) || isHeadRole(user, settings);
+  return isBaseLeadership(user, settings) || isCoreCommitteeTier(user, settings) || isHeadRole(user, settings) || hasCap(user, 'EVENTS_CREATE');
 }
 
 /** Event editing baseline — same as canCreateEvent. Ported from permissions.ts's canEditEvent (Group Policy moduleAccess/hasCapability override out of scope). */
 export function canEditEvent(user: ServerUser, settings: AccessLevelSettings): boolean {
-  return isBaseLeadership(user, settings) || isCoreCommitteeTier(user, settings) || isHeadRole(user, settings);
+  const override = moduleEditOverride(user, 'EVENTS');
+  if (override === 'NONE') return false;
+  if (override === 'ALL') return true;
+  return isBaseLeadership(user, settings) || isCoreCommitteeTier(user, settings) || isHeadRole(user, settings) || hasCap(user, 'EVENTS_EDIT');
 }
 
 /** Task creation baseline — leadership, Core Committee, or any Head role. Ported from permissions.ts's canCreateTask (Group Policy TASKS_CREATE grant out of scope). */
 export function canCreateTask(user: ServerUser, settings: AccessLevelSettings): boolean {
-  return isBaseLeadership(user, settings) || isCoreCommitteeTier(user, settings) || isHeadRole(user, settings);
+  return isBaseLeadership(user, settings) || isCoreCommitteeTier(user, settings) || isHeadRole(user, settings) || hasCap(user, 'TASKS_CREATE');
 }
 
 /** Task editing baseline — same as canCreateTask. Ported from permissions.ts's canEditTask (Group Policy moduleAccess/hasCapability override out of scope). */
 export function canEditTask(user: ServerUser, settings: AccessLevelSettings): boolean {
-  return isBaseLeadership(user, settings) || isCoreCommitteeTier(user, settings) || isHeadRole(user, settings);
+  const override = moduleEditOverride(user, 'TASKS');
+  if (override === 'NONE') return false;
+  if (override === 'ALL') return true;
+  return isBaseLeadership(user, settings) || isCoreCommitteeTier(user, settings) || isHeadRole(user, settings) || hasCap(user, 'TASKS_EDIT');
 }
 
 /**
@@ -556,7 +627,7 @@ export function isTaskRatable(task: { workflowType?: string; isProcurement?: boo
 export function canEditRating(rating: ServerRating, user: ServerUser, settings: AccessLevelSettings): boolean {
   if (!user || !rating) return false;
   const isAuthor = user.name === rating.raterName;
-  return user.tier === 1 || isAuthor || isCentreHead(user, settings) || isAdvisor(user);
+  return user.tier === 1 || isAuthor || isCentreHead(user, settings) || isAdvisor(user) || hasCap(user, 'RATING_EDIT_ANY');
 }
 
 // --- Designs / Forms / Announcements / Guests / Event Reports (ported from
@@ -634,7 +705,7 @@ export function isSocialMediaPostTask(task: {
  */
 export function canViewAllDesigns(user: ServerUser, settings: AccessLevelSettings): boolean {
   if (isAlumniRole(user) || isExecutiveRole(user)) return false;
-  return isBaseLeadership(user, settings) || isDesignHead(user, settings);
+  return isBaseLeadership(user, settings) || isDesignHead(user, settings) || hasCap(user, 'VIEW_ALL_DESIGNS');
 }
 
 /**
@@ -643,7 +714,7 @@ export function canViewAllDesigns(user: ServerUser, settings: AccessLevelSetting
  */
 export function canBuildForms(user: ServerUser, settings: AccessLevelSettings): boolean {
   if (isAlumniRole(user)) return false;
-  return (!!user && (user.tier === 1 || user.tier === 5)) || isHeadRole(user, settings) || isExecutiveRole(user);
+  return (!!user && (user.tier === 1 || user.tier === 5)) || isHeadRole(user, settings) || isExecutiveRole(user) || hasCap(user, 'BUILD_FORMS');
 }
 
 /**
@@ -654,7 +725,7 @@ export function canBuildForms(user: ServerUser, settings: AccessLevelSettings): 
 export function canCreateAnnouncement(user: ServerUser, settings: AccessLevelSettings): boolean {
   if (!user || isAlumniRole(user)) return false;
   if (isChiefAdvisor(user)) return false; // view-only
-  return isBaseLeadership(user, settings) || isCoreCommitteeTier(user, settings) || user.tier === 4 || user.tier === 5 || isFaculty(user) || isHeadRole(user, settings);
+  return isBaseLeadership(user, settings) || isCoreCommitteeTier(user, settings) || user.tier === 4 || user.tier === 5 || isFaculty(user) || isHeadRole(user, settings) || hasCap(user, 'CREATE_ANNOUNCEMENT');
 }
 
 /**
@@ -664,7 +735,7 @@ export function canCreateAnnouncement(user: ServerUser, settings: AccessLevelSet
  */
 export function canAccessGuestDirectory(user: ServerUser, settings: AccessLevelSettings): boolean {
   if (isAlumniRole(user)) return false;
-  return isCentreHead(user, settings) || isFaculty(user) || isExecutiveRole(user);
+  return isCentreHead(user, settings) || isFaculty(user) || isExecutiveRole(user) || hasCap(user, 'GUEST_DIRECTORY_ACCESS') || !!moduleEditOverride(user, 'GUEST_DIRECTORY');
 }
 
 export type ServerGuest = { createdBy?: string; metBy?: string } | null | undefined;

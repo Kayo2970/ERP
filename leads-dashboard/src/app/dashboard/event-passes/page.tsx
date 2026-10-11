@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  Award,
   Ticket,
   QrCode,
   Search,
@@ -56,6 +57,7 @@ import { EventPassStudio } from '@/components/event-pass-studio';
 import { EventPassScanner } from '@/components/event-pass-scanner';
 import { EventPassPushModal } from '@/components/event-pass-push-modal';
 import { EventPassBulkDispatchModal } from '@/components/event-pass-bulk-dispatch-modal';
+import { CertificateModal } from '@/components/certificate-modal';
 import { EventPassEditModal } from '@/components/event-pass-edit-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SearchableSelect } from '@/components/searchable-select';
@@ -98,6 +100,7 @@ export default function EventPassesPage() {
   // Multi-select for "Preview & dispatch" (survives search/filter changes)
   const [selectedPassIds, setSelectedPassIds] = useState<Set<string>>(new Set());
   const [isBulkDispatchOpen, setIsBulkDispatchOpen] = useState(false);
+  const [isCertificateOpen, setIsCertificateOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Push Alert Modal State
@@ -1000,6 +1003,17 @@ export default function EventPassesPage() {
                 {canDispatchPass && (
                 <button
                   type="button"
+                  onClick={() => setIsCertificateOpen(true)}
+                  className="px-3 py-2 bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/30 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+                  title="Email PDF certificates to everyone who attended a finished event"
+                >
+                  <Award className="h-3.5 w-3.5" />
+                  <span>Send Certificates</span>
+                </button>
+                )}
+                {canDispatchPass && (
+                <button
+                  type="button"
                   disabled={isBatchDispatching}
                   onClick={() => handleBatchDispatchUnsent(deepFilteredPasses)}
                   className="px-3 py-2 bg-sky-500/15 hover:bg-sky-500/25 text-sky-400 border border-sky-500/30 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
@@ -1489,6 +1503,14 @@ export default function EventPassesPage() {
         passes={eventPasses.filter((p) => selectedPassIds.has(p.id))}
         onClose={() => setIsBulkDispatchOpen(false)}
         onDone={() => setEventPasses(getEventPasses())}
+      />
+
+      <CertificateModal
+        isOpen={isCertificateOpen}
+        onClose={() => setIsCertificateOpen(false)}
+        events={events}
+        initialEventId={passFilterEventId}
+        canEditDesign={canManagePasses}
       />
 
       <EventPassPushModal

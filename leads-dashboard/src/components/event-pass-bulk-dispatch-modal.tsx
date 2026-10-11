@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, X, Send, Mail, CheckCircle2, AlertTriangle, ExternalLink, Loader2 } from 'lucide-react';
 import { PassEmailComposer, usePassEmailTemplate } from '@/components/pass-email-composer';
+import { passEmailOptsFromTemplate } from '@/lib/pass-email-template';
 import {
   EventPassItem,
   buildPassEmail,
@@ -74,7 +75,7 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
   }, [isOpen, go, isSending, onClose]);
 
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const preview = useMemo(() => (pass ? buildPassEmail(pass, origin, { forPreview: true, subjectTemplate: template.subject, bodyTemplate: template.body }) : null), [pass, origin, template]);
+  const preview = useMemo(() => (pass ? buildPassEmail(pass, origin, { forPreview: true, ...passEmailOptsFromTemplate(template) }) : null), [pass, origin, template]);
 
   const validEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
   const toSend = passes.filter((p) => included[p.id] && validEmail(emails[p.id] || ''));
@@ -91,7 +92,7 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
       if (stopRef.current) break;
       setStatus((s) => ({ ...s, [p.id]: { state: 'sending' } }));
       try {
-        const res = await dispatchPassEmail(p, emails[p.id].trim(), { subjectTemplate: template.subject, bodyTemplate: template.body });
+        const res = await dispatchPassEmail(p, emails[p.id].trim(), passEmailOptsFromTemplate(template));
         setStatus((s) => ({ ...s, [p.id]: res.success ? { state: 'ok' } : { state: 'failed', error: res.error } }));
       } catch (err: any) {
         setStatus((s) => ({ ...s, [p.id]: { state: 'failed', error: err?.message || 'Network error' } }));

@@ -1,5 +1,6 @@
 import { trackSync } from './sync-status';
-import { averageScore, computeFinalStudentScore, groupRatingsByTask, isWithinCurrentScoringCycle } from './rating-criteria';
+import { averageScore } from './rating-criteria';
+import { buildStudentFinalScores } from './final-score';
 
 // -------------------------------------------------------------
 // Session token — attached to every authenticated API call so the server
@@ -311,7 +312,7 @@ export type EventGuestCategory =
   | string;
 
 import { passEmailButtonsHtml } from '@/lib/pass-email-buttons';
-import { mergePassTemplate, DEFAULT_PASS_EMAIL_SUBJECT, DEFAULT_PASS_EMAIL_BODY, IMAGE_MARKER, DETAILS_MARKER } from '@/lib/pass-email-template';
+import { mergePassTemplate, DEFAULT_PASS_EMAIL_SUBJECT, DEFAULT_PASS_EMAIL_BODY, IMAGE_MARKER, DETAILS_MARKER, safeHttpUrl } from '@/lib/pass-email-template';
 
 export interface PassAttendanceRecord {
   day: string; // e.g. "Day 1", "Day 2", "2026-10-13"
@@ -593,6 +594,13 @@ export interface TaskItem {
   assigneeIds?: string[]; // set when assigneeType === 'group'
   dueDate: string;
   status: 'Assigned' | 'In Progress' | 'Completed' | 'Pending Extension';
+  /** ISO timestamp the task was assigned/created. Older tasks don't have it (see getTaskAssignedDate for the fallback). */
+  assignedAt?: string;
+  /** ISO timestamp the task was marked Completed (cleared if it is reopened). Not recorded for tasks completed before this existed. */
+  completedAt?: string;
+  /** True once an extension request on this task was approved; originalDueDate is the deadline before the first extension. */
+  extensionGranted?: boolean;
+  originalDueDate?: string;
   creatorName?: string;
   extensionReason?: string;
   decidedBy?: string;
@@ -889,6 +897,8 @@ export interface ApprovalRequest {
 
 export interface RatingItem {
   id: string;
+  /** Auto-generated when the task was completed late with no extension (see describeTaskLateness). */
+  lateNote?: string;
   taskId: string;
   taskTitle: string;
   eventId?: string;
@@ -1720,6 +1730,12 @@ async function doSyncWithServer(): Promise<boolean> {
   const timeout = setTimeout(() => controller.abort(), 20000);
   try {
     const res = await fetch('/api/data', { cache: 'no-store', headers: authHeaders(), signal: controller.signal });
+    if (res.status === 401 && getSessionToken()) {
+      // The server no longer recognises this session (signed out elsewhere, password reset by an admin, terminated...).
+      // Tell the app shell so it can send the person back to the login page instead of showing stale data forever.
+      window.dispatchEvent(new Event('leads-session-expired'));
+      return false;
+    }
     if (!res.ok) return false;
     const data = await res.json();
     if (data && typeof data === 'object') {
@@ -3330,7 +3346,7 @@ export async function updateEventPass(
 export function buildPassEmail(
   pass: EventPassItem,
   origin: string,
-  opts: { forPreview?: boolean; subjectTemplate?: string; bodyTemplate?: string } = {}
+  opts: { forPreview?: boolean; subjectTemplate?: string; bodyTemplate?: string; includeMap?: boolean; mapUrl?: string; includeWhatsapp?: boolean; whatsappUrl?: string } = {}
 ): { subject: string; bodyText: string; bodyHtml: string } {
   const passUrl = `${origin}/pass/${pass.serialNumber}`;
   const trackPixelUrl = `${origin}/api/pass/${pass.serialNumber}/track`;
@@ -3355,6 +3371,12 @@ export function buildPassEmail(
   const subject = mergePassTemplate(opts.subjectTemplate || DEFAULT_PASS_EMAIL_SUBJECT, vars)
     .split(IMAGE_MARKER).join('').split(DETAILS_MARKER).join('').trim();
   const merged = mergePassTemplate(opts.bodyTemplate || DEFAULT_PASS_EMAIL_BODY, vars);
+
+  // Optional extras: a venue map link (explicit link, else a Google Maps search of the venue) and a WhatsApp group invite
+  const mapUrl = opts.includeMap
+    ? safeHttpUrl(opts.mapUrl) || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([venue, pass.eventVenue].filter((v, i, a) => v && a.indexOf(v) === i).join(', '))}`
+    : undefined;
+  const whatsappUrl = opts.includeWhatsapp ? safeHttpUrl(opts.whatsappUrl) : undefined;
 
   const detailRows: Array<[string, string]> = [
     ['Pass Tier', String(pass.passType)],
@@ -3391,7 +3413,7 @@ export function buildPassEmail(
   const detailsText = detailRows.map(([k, v]) => `• ${k}: ${v}`).join('\n');
   const bodyText = (merged.split(IMAGE_MARKER).join('').split(DETAILS_MARKER).join(detailsText) + (hasDetails ? '' : `\n\n${detailsText}`))
     .replace(/\n{3,}/g, '\n\n')
-    .trim() + `\n\nYour digital pass: ${passUrl}`;
+    .trim() + `\n\nYour digital pass: ${passUrl}${mapUrl ? `\nVenue location: ${mapUrl}` : ''}${whatsappUrl ? `\nJoin the event WhatsApp group: ${whatsappUrl}` : ''}`;
 
   const bodyHtml = `
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;padding:24px;background:#0f172a;color:#f8fafc;border-radius:16px;">
@@ -3405,7 +3427,7 @@ export function buildPassEmail(
         ${messageHtml}
         ${hasDetails ? '' : detailsBlock}
       </div>
-      ${passEmailButtonsHtml(origin, pass.serialNumber)}
+      ${passEmailButtonsHtml(origin, pass.serialNumber, { mapUrl, whatsappUrl })}
       <p style="margin:0;font-size:12px;color:#64748b;text-align:center;border-top:1px solid rgba(255,255,255,0.08);padding-top:16px;">
         Please present your digital pass or QR code at official event turnstiles upon arrival.<br/>
         &copy; ${new Date().getFullYear()} LEADS Next Gen Centre &bull; MSRUAS
@@ -3424,7 +3446,7 @@ export function buildPassEmail(
 export async function dispatchPassEmail(
   pass: EventPassItem,
   targetEmail?: string,
-  template?: { subjectTemplate?: string; bodyTemplate?: string }
+  template?: { subjectTemplate?: string; bodyTemplate?: string; includeMap?: boolean; mapUrl?: string; includeWhatsapp?: boolean; whatsappUrl?: string }
 ): Promise<{ success: boolean; error?: string; pending?: boolean }> {
   const recipient = (targetEmail || pass.attendeeEmail || '').trim();
   if (!recipient) {
@@ -3689,8 +3711,8 @@ export async function approveEventReport(id: string, as: 'centre_head' | 'gg_eve
   return current[idx] || null;
 }
 
-/** Score a report against the Report Writing rubric (Clarity, Analysis,
- *  Structure, Comprehensiveness, Accuracy — see rating-criteria.ts). Either
+/** Score a report against the Report Writing rubric (Clarity, Flow/Structure,
+ *  Timeliness of Submission, Number of Errors, Geotagged Photos & Pictures — see rating-criteria.ts). Either
  *  reviewer (Centre Head or GG Campus Head of Events) can enter or edit the
  *  score, same trust level as approving the report. Feeds the decay-weighted
  *  Final Score leaderboard on the Ratings page (report-scoring.ts). */
@@ -3995,6 +4017,56 @@ export async function uploadTaskAttachments(
   return (data.files || []) as ReceiptFile[];
 }
 
+const localDateStr = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/** 'YYYY-MM-DD' the task was assigned: its recorded assignedAt, else the timestamp baked into manual task ids ('t_<ms>'), else undefined. */
+export function getTaskAssignedDate(task: Pick<TaskItem, 'id' | 'assignedAt'>): string | undefined {
+  if (task.assignedAt) {
+    const d = new Date(task.assignedAt);
+    if (!Number.isNaN(d.getTime())) return localDateStr(d);
+  }
+  const m = /^t_(\d{12,})$/.exec(task.id || '');
+  if (m) {
+    const d = new Date(Number(m[1]));
+    if (!Number.isNaN(d.getTime())) return localDateStr(d);
+  }
+  return undefined;
+}
+
+/** Whether an extension request on this task was approved (older tasks: inferred from an approving decision on a requested extension). */
+export function wasTaskExtensionGranted(task: Pick<TaskItem, 'extensionGranted' | 'decidedBy' | 'extensionReason'>): boolean {
+  if (task.extensionGranted) return true;
+  return !!task.extensionReason && !!task.decidedBy && !/\(denied\)/i.test(task.decidedBy);
+}
+
+export interface TaskLateness {
+  daysLate: number;
+  dueDate: string;
+  completedOn: string;
+  assignedOn?: string;
+}
+
+/**
+ * Set when a task was completed after its deadline and no extension was granted. Null when it was on time, still open,
+ * had an extension, or has no recorded completion time (tasks completed before completion times were recorded).
+ */
+export function getTaskLateness(task: TaskItem | undefined | null): TaskLateness | null {
+  if (!task || task.status !== 'Completed' || !task.completedAt || !task.dueDate) return null;
+  if (wasTaskExtensionGranted(task)) return null;
+  const completed = new Date(task.completedAt);
+  if (Number.isNaN(completed.getTime())) return null;
+  const completedOn = localDateStr(completed);
+  const daysLate = Math.round((new Date(`${completedOn}T00:00:00`).getTime() - new Date(`${task.dueDate}T00:00:00`).getTime()) / 86400000);
+  if (daysLate <= 0) return null;
+  return { daysLate, dueDate: task.dueDate, completedOn, assignedOn: getTaskAssignedDate(task) };
+}
+
+/** Human-readable line for ratings/reports: how late it was, with the deadline and when the task was assigned. */
+export function describeTaskLateness(l: TaskLateness): string {
+  const days = `${l.daysLate} day${l.daysLate === 1 ? '' : 's'}`;
+  return `Submitted ${days} after the deadline (due ${l.dueDate}, completed ${l.completedOn}, no extension)${l.assignedOn ? ` · task assigned ${l.assignedOn}` : ''}`;
+}
+
 export function addTask(task: Omit<TaskItem, 'id' | 'status'> & { status?: TaskItem['status'] }): TaskItem {
   const tasks = getTasks();
 
@@ -4017,6 +4089,7 @@ export function addTask(task: Omit<TaskItem, 'id' | 'status'> & { status?: TaskI
     ...task,
     id: 't_' + Date.now(),
     status: task.status || 'Assigned',
+    assignedAt: task.assignedAt || new Date().toISOString(),
     delegationTrail: trail.length > 0 ? trail : undefined,
   };
   tasks.unshift(newTask);
@@ -4040,7 +4113,17 @@ export function updateTask(id: string, updates: Partial<TaskItem>, actorName: st
     delete updates.status;
   }
 
+  // An event report request can only be completed by uploading the report
+  if (updates.status === 'Completed' && previousStatus !== 'Completed' && getEventReportCompletionBlocker(tasks[idx])) {
+    delete updates.status;
+  }
+
   tasks[idx] = { ...tasks[idx], ...updates };
+  if (updates.status === 'Completed' && previousStatus !== 'Completed') {
+    tasks[idx].completedAt = new Date().toISOString();
+  } else if (updates.status && updates.status !== 'Completed' && previousStatus === 'Completed') {
+    delete tasks[idx].completedAt;
+  }
 
   // Chain reaction: the moment the Centre Head / Advisor / GG Campus Events
   // Head's "who should prepare this report" assignment task is delegated to
@@ -4249,7 +4332,24 @@ export function allotSocialMediaTask(
   return updated;
 }
 
+export const EVENT_REPORT_UPLOAD_REQUIRED_MESSAGE =
+  'Upload the event report (Event Reports module) to complete this task — it can\'t be marked completed any other way.';
+
+/**
+ * An "Event Report Request" task is only done once the report itself has been uploaded for that event, so it can't be
+ * marked Completed by hand. Uploading the report completes it automatically (see the event-reports page). A rejected
+ * report doesn't count — it has to be re-uploaded. Returns the message to show, or null when completing is allowed.
+ */
+export function getEventReportCompletionBlocker(task: Pick<TaskItem, 'workflowType' | 'eventId'> | undefined | null): string | null {
+  if (!task || task.workflowType !== 'event_report_request') return null;
+  const hasReport = !!task.eventId && getEventReports().some(r => r.eventId === task.eventId && r.status !== 'rejected');
+  return hasReport ? null : EVENT_REPORT_UPLOAD_REQUIRED_MESSAGE;
+}
+
 export function updateTaskStatus(id: string, status: TaskItem['status'], actorName?: string): TaskItem | null {
+  if (status === 'Completed' && getEventReportCompletionBlocker(getTasks().find(t => t.id === id))) {
+    return getTasks().find(t => t.id === id) || null;
+  }
   registerOptimisticTaskUpdate(id, { status });
   return updateTask(id, { status }, actorName || 'User');
 }
@@ -4262,12 +4362,16 @@ export async function updateTaskStatusAsync(
   const tasks = getTasks();
   const idx = tasks.findIndex(t => t.id === id);
   if (idx === -1) return { success: false, error: 'Task not found' };
+  if (status === 'Completed') {
+    const blocker = getEventReportCompletionBlocker(tasks[idx]);
+    if (blocker) return { success: false, error: blocker };
+  }
 
   const previousTask = { ...tasks[idx] };
   const previousStatus = previousTask.status;
 
   // Optimistic update locally
-  const optimisticTask: TaskItem = { ...tasks[idx], status };
+  const optimisticTask: TaskItem = { ...tasks[idx], status, ...(status === 'Completed' && tasks[idx].status !== 'Completed' ? { completedAt: new Date().toISOString() } : {}) };
   tasks[idx] = optimisticTask;
 
   // Register in optimistic registry to shield against background sync polls
@@ -4881,7 +4985,25 @@ export function saveRatings(ratings: RatingItem[]): void {
  * the committee/group identifier for a fan-out task). The score is the live average
  * of whichever reviewers have submitted so far.
  */
+function isCommitteeReviewerRole(role?: string): boolean {
+  return role === 'SUPER_USER' || role === 'CENTRE_HEAD' || role === 'ADVISOR' || role === 'GG_HEAD';
+}
+
 function recomputeTaskAggregateScore(taskId: string, targetId: string, actorName: string): void {
+  const task = getTasks().find(t => t.id === taskId);
+  const isFanOutTask = !!task && (task.assigneeType === 'committee' || !!task.eventCommitteeId || task.assigneeType === 'group');
+  if (isFanOutTask) {
+    // A committee/group's score is the average of its members' own ratings
+    // (the per-student rows), so students rated individually count at their
+    // own score. Falls back to the bookkeeping row if nothing fanned out.
+    const rows = getRatings().filter(r => r.taskId === taskId && isCommitteeReviewerRole(r.reviewerRole));
+    const perStudent = rows.filter(r => !r.isGroupPlaceholder);
+    const basis = perStudent.length > 0 ? perStudent : rows;
+    if (basis.length === 0) return;
+    const committeeAvg = parseFloat((basis.reduce((sum, r) => sum + r.overallScore, 0) / basis.length).toFixed(2));
+    updateTask(taskId, { ratingScore: committeeAvg, ratedAt: new Date().toISOString().split('T')[0] }, actorName);
+    return;
+  }
   const relevant = getRatings().filter(
     r => r.taskId === taskId && r.targetId === targetId && (
       r.reviewerRole === 'SUPER_USER' ||
@@ -5051,6 +5173,66 @@ function propagateGroupRating(task: TaskItem, parentRating: RatingItem): void {
   }
 }
 
+/**
+ * Rate only some of a committee's/group's members (or a single student) with
+ * one scorecard, leaving the rest to be rated separately. Writes real
+ * per-student rows only -- no committee-level bookkeeping row -- so each
+ * student keeps exactly the score they were given, and the task's overall
+ * score becomes the average across all its per-student ratings.
+ * Re-rating a student this reviewer already rated edits that row in place.
+ */
+export function rateTaskMembers(
+  task: TaskItem,
+  memberIds: string[],
+  input: Pick<RatingItem, 'raterName' | 'reviewerRole' | 'criteriaSet' | 'scores' | 'quality' | 'timeliness' | 'initiative' | 'collaboration' | 'overallScore' | 'notes' | 'lateNote'>
+): RatingItem[] {
+  const members = getMembers();
+  const ratings = getRatings();
+  const today = new Date().toISOString().split('T')[0];
+  const touched: RatingItem[] = [];
+  const label = task.assigneeType === 'group' ? 'Group Evaluation' : `Committee Evaluation: ${task.eventCommitteeName || task.assignee}`;
+  const notes = `[${label} \u2014 individual/subset rating] ${input.notes || ''}`.trim();
+
+  memberIds.forEach(mId => {
+    const memberObj = members.find(m => m.id === mId);
+    if (!memberObj || isFacultyMember(memberObj)) return;
+    if (isSocialMediaPostTask(task) && !isSocialMediaTeamMember(memberObj)) return;
+
+    const existingIdx = ratings.findIndex(
+      r => r.taskId === task.id && !r.isGroupPlaceholder && r.targetId === memberObj.id &&
+        ((input.reviewerRole && r.reviewerRole === input.reviewerRole) || r.raterName === input.raterName)
+    );
+    if (existingIdx !== -1) {
+      ratings[existingIdx] = { ...ratings[existingIdx], ...input, notes, updatedAt: today };
+      serverPatch('/api/ratings', ratings[existingIdx].id, ratings[existingIdx]);
+      touched.push(ratings[existingIdx]);
+      return;
+    }
+    const row: RatingItem = {
+      ...input,
+      id: 'r_sub_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      taskId: task.id,
+      taskTitle: task.title,
+      eventId: task.eventId,
+      eventName: task.event,
+      targetId: memberObj.id,
+      targetName: memberObj.name,
+      notes,
+      createdAt: today,
+    };
+    ratings.unshift(row);
+    serverPost('/api/ratings', row);
+    touched.push(row);
+  });
+
+  if (touched.length > 0) {
+    saveRatings(ratings);
+    recomputeTaskAggregateScore(task.id, touched[0].targetId, input.raterName);
+    logAuditEvent('RATING_SUBMITTED', input.raterName, `Evaluated ${touched.length} member(s) (${input.overallScore}/5.0) individually on "${task.title}": ${touched.map(r => r.targetName).join(', ')}`);
+  }
+  return touched;
+}
+
 export function addRating(rating: Omit<RatingItem, 'id' | 'createdAt'>): RatingItem {
   // Direct correlation check: every rating MUST directly correlate to an existing task
   if (!rating.taskId || typeof rating.taskId !== 'string' || !rating.taskId.trim()) {
@@ -5091,6 +5273,8 @@ export function addRating(rating: Omit<RatingItem, 'id' | 'createdAt'>): RatingI
     } else if (task && task.assigneeType === 'group') {
       propagateGroupRating(task, newRating);
     }
+    // Re-average now that the per-student rows exist.
+    recomputeTaskAggregateScore(rating.taskId, rating.targetId, rating.raterName);
   }
 
   logAuditEvent('RATING_SUBMITTED', rating.raterName, `Evaluated task performance (${rating.overallScore}/5.0) for ${rating.targetName} on "${rating.taskTitle}"`);
@@ -5244,65 +5428,63 @@ export function getStudentLeaderboard(): {
   completedTasks: number;
   totalTasks: number;
   ratingsCount: number;
+  eventsParticipated: number;
+  totalEvents: number;
 }[] {
   const members = getMembers();
-  // Filter for student contributors: Core Committee, Training Associates, Alumni
-  const studentMembers = members.filter(m => m.division !== 'Advisory Board' && m.tier >= 5);
+  // Student contributors (Core Committee, Training Associates, Alumni) plus Super Users, who are evaluated on their
+  // tasks like everyone else and are ranked alongside the students.
+  const studentMembers = members.filter(m => m.tier === 1 || (m.division !== 'Advisory Board' && m.tier >= 5));
 
-  const now = new Date();
+  // The leaderboard shows exactly what the Reports module's "Student Final Score" shows (same ratings, same
+  // formula — see final-score.ts), so the two never disagree. Same rating filter as the Reports page: only
+  // ratings of an existing task, no committee/group placeholder rows, no faculty/professors.
+  const validTaskIds = new Set(getTasks().map(t => t.id));
+  const validRatings = getRatings().filter(r => {
+    if (r.isGroupPlaceholder || !r.taskId || !validTaskIds.has(r.taskId)) return false;
+    const target = members.find(m => m.id === r.targetId || m.name.toLowerCase() === r.targetName.toLowerCase());
+    if (target && (target.division === 'Faculty' || /prof\.|professor|faculty/i.test(target.role || ''))) return false;
+    if (/prof\.|professor|faculty/i.test(r.targetName)) return false;
+    return true;
+  });
 
-  // Everything below only looks at ratings from the current annual scoring
-  // cycle (resets every 1 August, see currentScoringCycleStart) — last
-  // year's volume, recency, and consistency history doesn't carry over.
-  // Excludes committee/group placeholder rows (see RatingItem.isGroupPlaceholder)
-  // so the same evaluation isn't counted once for the placeholder AND again
-  // for every student it was fanned out to, which would skew this baseline.
-  // Direct correlation check: only count ratings correlated to an existing task.
-  const allCurrentTasks = getTasks();
-  const validCycleTaskIds = new Set(allCurrentTasks.map(t => t.id));
-  const cycleRatings = getRatings().filter(r =>
-    !r.isGroupPlaceholder &&
-    r.taskId &&
-    validCycleTaskIds.has(r.taskId) &&
-    isWithinCurrentScoringCycle(r.createdAt, now)
+  // Several reviewers rating the same student on the same task count as ONE evaluation (their average)
+  const byStudentTask = new Map<string, RatingItem[]>();
+  validRatings.forEach(r => {
+    const key = `${r.targetId || r.targetName}_${r.taskId || r.taskTitle}`;
+    const group = byStudentTask.get(key);
+    if (group) group.push(r); else byStudentTask.set(key, [r]);
+  });
+  const evaluations = Array.from(byStudentTask.values()).map(group => ({
+    targetName: group[0].targetName,
+    eventName: group[0].eventName,
+    overallScore: group.reduce((sum, r) => sum + r.overallScore, 0) / group.length,
+  }));
+
+  // Events held so far count toward participation, not only the ones a student was rated on
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const totalEvents = getEvents().filter(e => !e.datesTBD && !!e.startDate && e.startDate <= todayIso).length;
+  const finalByName = new Map(
+    buildStudentFinalScores(evaluations, totalEvents || undefined).map(f => [f.name.toLowerCase(), f])
   );
-
-  // Org-wide baseline for the confidence weighting below — the mean overall
-  // score across every in-cycle rating. Falls back to the neutral midpoint
-  // (3.0) when nothing has been rated yet this cycle.
-  const baseline = cycleRatings.length > 0
-    ? cycleRatings.reduce((sum, r) => sum + r.overallScore, 0) / cycleRatings.length
-    : 3.0;
 
   const results = studentMembers.map(m => {
     const profile = getStudentProfile(m.id);
-    const inCycle = (profile?.ratings || []).filter(r => isWithinCurrentScoringCycle(r.createdAt, now));
-    // Collapse independent multi-reviewer rows (Super User / Centre Head /
-    // Advisor / GG Head each rate the same task separately) into one data
-    // point per distinct task, so volume tracks tasks actually done, not
-    // how many reviewers happened to rate each one — see groupRatingsByTask.
-    const datedScores = groupRatingsByTask(
-      inCycle.map(r => ({ score: r.overallScore, date: r.createdAt, taskKey: r.taskId || r.taskTitle }))
-    );
-    // Final score blends three signals — see computeFinalStudentScore in
-    // rating-criteria.ts: (1) a recency-weighted average so current
-    // performance outweighs a stale one-off, (2) confidence weighting by
-    // task count so volume of contribution matters, and (3) a consistency
-    // multiplier so steady contribution relative to TODAY beats an old
-    // burst of activity. This is what the leaderboard ranks by.
-    const breakdown = computeFinalStudentScore(datedScores, baseline, now);
+    const f = finalByName.get(m.name.toLowerCase());
     return {
       id: m.id,
       name: m.name,
       role: m.role,
       division: m.division,
-      score: breakdown.finalScore,
-      rawScore: breakdown.rawAverage,
-      recencyScore: breakdown.recencyAverage,
-      consistencyRatio: breakdown.consistencyRatio,
+      score: f ? f.finalScore : 0,
+      rawScore: f ? f.avgScore : 0,
+      recencyScore: f ? f.avgScore : 0,
+      consistencyRatio: 1,
       completedTasks: profile?.stats.completedTasks || 0,
       totalTasks: profile?.stats.totalTasks || 0,
-      ratingsCount: breakdown.ratingCount,
+      ratingsCount: f ? f.taskCount : 0,
+      eventsParticipated: f ? f.eventsParticipated : 0,
+      totalEvents,
     };
   });
 
@@ -6419,12 +6601,30 @@ export function addSubmission(sub: Omit<FormSubmissionItem, 'id' | 'submittedAt'
 // Audit Logs
 // -------------------------------------------------------------
 
+/**
+ * Some server routes (password reset, account activation, email change, setup...) wrote audit entries as
+ * `{ user: name }` / `{ actor: name }` with no actorName/actorEmail. Every consumer assumes the AuditLogItem shape, so
+ * a missing string field made searching the Audit Trail throw and blank the whole Settings page. Fill the gaps here.
+ */
+function normalizeAuditLog(raw: any): AuditLogItem {
+  return {
+    ...raw,
+    id: String(raw?.id ?? ''),
+    action: String(raw?.action ?? ''),
+    actorName: String(raw?.actorName ?? raw?.user ?? raw?.actor ?? ''),
+    actorEmail: String(raw?.actorEmail ?? raw?.targetEmail ?? ''),
+    details: String(raw?.details ?? ''),
+    timestamp: String(raw?.timestamp ?? ''),
+  };
+}
+
 export function getAuditLogs(): AuditLogItem[] {
   if (typeof window === 'undefined') return [];
   const saved = localStorage.getItem('leads_audit_logs');
   if (saved) {
     try {
-      return JSON.parse(saved);
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed.map(normalizeAuditLog) : [];
     } catch (e) {
       console.error(e);
     }

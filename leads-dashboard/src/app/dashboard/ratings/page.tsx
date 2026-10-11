@@ -24,7 +24,12 @@ import {
   deleteRating,
   getMembers,
   getTasks,
+  getTaskAssignedDate,
+  getTaskLateness,
+  describeTaskLateness,
   getEvents,
+  getTaskAssigneeStatuses,
+  rateTaskMembers,
   Member,
   TaskItem,
   RatingItem,
@@ -44,7 +49,9 @@ import {
   projectLegacyRatingFields,
 } from '@/lib/rating-criteria';
 import { groupScoredReportsBySubmitter } from '@/lib/report-scoring';
-import { getEventReports } from '@/lib/local-data';
+import { getEventReports, EventReportItem } from '@/lib/local-data';
+import { ReportScorePanel } from '@/components/report-score-panel';
+import { canReviewEventReports } from '@/lib/permissions';
 
 const CRITERIA_SET_LABEL: Record<RatingCriteriaSet, string> = {
   general: 'General Task',
@@ -55,6 +62,27 @@ const CRITERIA_SET_LABEL: Record<RatingCriteriaSet, string> = {
 // Sliders default to the midpoint (3 = Satisfactory), not the maximum score —
 // defaulting to 5 meant a reviewer who opened the modal and submitted without
 // touching a single slider silently handed out a perfect rating.
+/** Assigned / due / completed dates of a task, plus a red callout when it was completed after the deadline with no extension. */
+function TaskTimingLine({ task }: { task: TaskItem | undefined }) {
+  if (!task) return null;
+  const assigned = getTaskAssignedDate(task);
+  const late = getTaskLateness(task);
+  return (
+    <div className="space-y-1 mt-1">
+      <p className="text-[10px] text-theme-text-secondary">
+        {assigned ? <>Assigned <strong className="text-theme-text-primary">{assigned}</strong> &middot; </> : null}
+        Due <strong className="text-theme-text-primary">{task.dueDate}</strong>
+        {task.status === 'Completed' && task.completedAt ? <> &middot; Completed <strong className="text-theme-text-primary">{task.completedAt.slice(0, 10)}</strong></> : null}
+      </p>
+      {late && (
+        <p className="text-[10px] font-bold text-danger bg-danger/10 border border-danger/30 rounded-lg px-2 py-1">
+          Submitted {late.daysLate} day{late.daysLate === 1 ? '' : 's'} after the deadline — no extension was given
+        </p>
+      )}
+    </div>
+  );
+}
+
 function defaultScoresFor(set: RatingCriteriaSet): Record<string, number> {
   const scores: Record<string, number> = {};
   RATING_CRITERIA[set].forEach(c => { scores[c.key] = 3; });
@@ -86,6 +114,7 @@ export default function RatingsPage() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [user, setUser] = useState<any>(null);
   const [eventReports, setEventReports] = useState<ReturnType<typeof getEventReports>>([]);
+  const [scoringReportId, setScoringReportId] = useState<string | null>(null);
 
   // Search & Filter state
   const [taskSearchQuery, setTaskSearchQuery] = useState('');
@@ -127,6 +156,10 @@ export default function RatingsPage() {
   const [activeCriteriaSet, setActiveCriteriaSet] = useState<RatingCriteriaSet>('general');
   const [scores, setScores] = useState<Record<string, number>>(defaultScoresFor('general'));
   const [notes, setNotes] = useState('');
+  // Committee/group tasks: rate everyone with one scorecard, or just the
+  // students ticked in `selectedMemberIds` (so people can be scored on their own merit).
+  const [rateMode, setRateMode] = useState<'all' | 'selected'>('all');
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
 
   // Notification Alerts
   const [alertMsg, setAlertMsg] = useState('');
@@ -173,6 +206,21 @@ export default function RatingsPage() {
     return assigneeMember ? assigneeMember.id : (task.assigneeId || task.assignee);
   };
 
+  const isFanOutTask = (task: TaskItem) => task.assigneeType === 'committee' || Boolean(task.eventCommitteeId) || task.assigneeType === 'group';
+
+  // Students that can actually be rated on a committee/group task (faculty excluded).
+  const getRateableRoster = (task: TaskItem) => {
+    if (!isFanOutTask(task)) return [];
+    const forLookup: TaskItem = task.assigneeType === 'group' ? task : { ...task, assigneeType: 'committee' };
+    return getTaskAssigneeStatuses(forLookup, members, events).filter(m => !m.isFaculty && members.some(mb => mb.id === m.id));
+  };
+
+  // This reviewer's own per-student rating rows for a task.
+  const myMemberRatings = (task: TaskItem): RatingItem[] => {
+    const role = resolveRatingReviewerRole(user, isDesignTask(task));
+    return ratings.filter(r => r.taskId === task.id && !r.isGroupPlaceholder && ((role && r.reviewerRole === role) || r.raterName === user?.name));
+  };
+
   const openEvaluationForTask = (task: TaskItem) => {
     if (!isTaskRatable(task)) {
       setAlertMsg(`Procurement tasks are administrative operations and not subject to ratings or reviews.`);
@@ -196,6 +244,25 @@ export default function RatingsPage() {
     setScores(defaultScoresFor(criteriaSet));
     setNotes('');
     setFormError('');
+    const roster = getRateableRoster(task);
+    if (roster.length > 1) {
+      const rated = new Set(myMemberRatings(task).map(r => r.targetId));
+      const unrated = roster.filter(m => !rated.has(m.id)).map(m => m.id);
+      // Already rated some members? Default to the ones still outstanding.
+      if (rated.size > 0 && unrated.length > 0) {
+        setRateMode('selected');
+        setSelectedMemberIds(unrated);
+      } else if (rated.size > 0) {
+        setRateMode('selected');
+        setSelectedMemberIds([]);
+      } else {
+        setRateMode('all');
+        setSelectedMemberIds(roster.map(m => m.id));
+      }
+    } else {
+      setRateMode('all');
+      setSelectedMemberIds([]);
+    }
     setIsModalOpen(true);
   };
 
@@ -205,7 +272,15 @@ export default function RatingsPage() {
     setSelectedTask(matchedTask);
     const criteriaSet = rating.criteriaSet ?? criteriaSetForTaskCategory(matchedTask?.taskCategory);
     setActiveCriteriaSet(criteriaSet);
-    setScores(rating.scores ?? (rating.criteriaSet ? defaultScoresFor(criteriaSet) : legacyRatingAsGeneralScores(rating)));
+    if (rating.scores) {
+      // Keep only the current rubric's criteria (older ratings may carry retired keys).
+      const base = defaultScoresFor(criteriaSet);
+      const kept: Record<string, number> = {};
+      Object.keys(base).forEach(k => { kept[k] = rating.scores?.[k] ?? base[k]; });
+      setScores(kept);
+    } else {
+      setScores(rating.criteriaSet ? defaultScoresFor(criteriaSet) : legacyRatingAsGeneralScores(rating));
+    }
     setNotes(rating.notes || '');
     setFormError('');
     setIsModalOpen(true);
@@ -259,12 +334,14 @@ export default function RatingsPage() {
         setFormError('Evaluation Access Denied: Procurement tasks are administrative operations and not subject to ratings or reviews.');
         return;
       }
+      const editLate = getTaskLateness(correlatedTask);
       updateRating(editingRating.id, {
         criteriaSet: activeCriteriaSet,
         scores,
         ...legacy,
         overallScore: overall,
         notes,
+        lateNote: editLate ? describeTaskLateness(editLate) : undefined,
       }, user?.name || 'User');
       triggerSuccess(`Updated evaluation scorecard for ${editingRating.targetName}`);
     } else if (selectedTask) {
@@ -282,6 +359,37 @@ export default function RatingsPage() {
         r => r.taskId === selectedTask.id && r.targetId === targetId && reviewerRole !== null && (r.reviewerRole === reviewerRole || r.raterName === user.name)
       );
 
+      const lateInfo = getTaskLateness(selectedTask);
+
+      // Subset / individual rating on a committee or group task: write per-student
+      // ratings for just the ticked students; everyone else stays unrated for now.
+      const roster = getRateableRoster(selectedTask);
+      const coversEveryone = roster.length > 0 && roster.every(m => selectedMemberIds.includes(m.id));
+      if (roster.length > 1 && rateMode === 'selected' && !coversEveryone) {
+        const chosen = roster.filter(m => selectedMemberIds.includes(m.id));
+        if (chosen.length === 0) {
+          setFormError('Select at least one student to rate, or switch to "All members".');
+          return;
+        }
+        const done = rateTaskMembers(selectedTask, chosen.map(m => m.id), {
+          raterName: user.name,
+          reviewerRole: reviewerRole ?? undefined,
+          criteriaSet: activeCriteriaSet,
+          scores,
+          ...legacy,
+          overallScore: overall,
+          notes,
+          lateNote: lateInfo ? describeTaskLateness(lateInfo) : undefined,
+        });
+        triggerSuccess(`Submitted ${overall}/5.0 for ${done.length} student${done.length === 1 ? '' : 's'} on "${selectedTask.title}": ${done.map(r => r.targetName).join(', ')}`);
+        setIsModalOpen(false);
+        setEditingRating(null);
+        setSelectedTask(null);
+        setRatings(getRatings());
+        setTasks(getTasks());
+        return;
+      }
+
       if (ownExisting) {
         updateRating(ownExisting.id, {
           criteriaSet: activeCriteriaSet,
@@ -289,6 +397,7 @@ export default function RatingsPage() {
           ...legacy,
           overallScore: overall,
           notes,
+          lateNote: lateInfo ? describeTaskLateness(lateInfo) : undefined,
         }, user.name);
       } else {
         addRating({
@@ -305,6 +414,7 @@ export default function RatingsPage() {
           ...legacy,
           overallScore: overall,
           notes,
+          lateNote: lateInfo ? describeTaskLateness(lateInfo) : undefined,
           // Committee/group tasks don't have a real person as their target —
           // targetId/targetName here is the committee's or group's
           // placeholder string. Flag it so it never surfaces as if it were
@@ -351,7 +461,12 @@ export default function RatingsPage() {
     const reviewerRole = resolveRatingReviewerRole(user, isDesignTask(task));
     if (!reviewerRole) return false;
     const targetId = getRatingTargetId(task);
-    return ratings.some(r => r.taskId === task.id && r.targetId === targetId && (r.reviewerRole === reviewerRole || r.raterName === user?.name));
+    if (ratings.some(r => r.taskId === task.id && r.targetId === targetId && (r.reviewerRole === reviewerRole || r.raterName === user?.name))) return true;
+    // Rated member-by-member: done once every student has this reviewer's rating.
+    const roster = getRateableRoster(task);
+    if (roster.length === 0) return false;
+    const rated = new Set(myMemberRatings(task).map(r => r.targetId));
+    return roster.every(m => rated.has(m.id));
   };
 
   // The actual rating record hasMyRating found, if any — used by the
@@ -604,6 +719,7 @@ export default function RatingsPage() {
   // Report Writing Final Score leaderboard — decay-weighted average of each
   // submitter's scored event reports (see report-scoring.ts). Excludes faculty.
   const reportScoreLeaderboard = groupScoredReportsBySubmitter(eventReports, members);
+  const canScoreReports = !!user && canReviewEventReports(user);
 
   return (
     <div className="p-6 md:p-8 space-y-6">
@@ -621,6 +737,52 @@ export default function RatingsPage() {
         <h1 className="text-xl font-bold text-theme-text-primary">Task-Based Performance Ratings</h1>
         <p className="text-xs text-theme-text-secondary">Evaluate student members against the General, Design, or Report Writing rubric — whichever matches the task</p>
       </div>
+
+      {/* Score event reports on the Report Writing rubric (same data as the Event Reports page) */}
+      {canScoreReports && eventReports.length > 0 && (
+        <div className="bg-theme-card border border-theme-card-border rounded-2xl p-5 space-y-3">
+          <div>
+            <h2 className="text-sm font-bold text-theme-text-primary mb-1">Score Event Reports</h2>
+            <p className="text-[11px] text-theme-text-secondary">
+              Rate submitted event reports on the Report Writing rubric. Scores here are the same as on the Event Reports page and feed the Final Score below.
+            </p>
+          </div>
+          <div className="space-y-2 max-h-[420px] overflow-y-auto">
+            {eventReports.filter(r => r.status !== 'rejected').map(report => (
+              <div key={report.id} className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl space-y-2 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-bold text-theme-text-primary truncate">{report.eventTitle}</p>
+                    <p className="text-[10px] text-theme-text-secondary">
+                      Submitted by {report.submittedBy}
+                      {report.reportScore != null && <> &middot; Score {report.reportScore.toFixed(1)}/5.0 (by {report.scoredBy})</>}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setScoringReportId(scoringReportId === report.id ? null : report.id)}
+                    className="shrink-0 px-3 py-1.5 bg-accent/15 hover:bg-accent/25 text-accent border border-accent/30 text-[11px] font-bold rounded-lg transition-all cursor-pointer"
+                  >
+                    {report.reportScore != null ? 'Edit Score' : 'Score Report'}
+                  </button>
+                </div>
+                {scoringReportId === report.id && (
+                  <ReportScorePanel
+                    report={report}
+                    actorName={user?.name || 'Reviewer'}
+                    onSaved={(r: EventReportItem) => {
+                      setEventReports(getEventReports());
+                      setScoringReportId(null);
+                      triggerSuccess(`Scored ${r.reportScore?.toFixed(1)}/5.0 on the Report Writing rubric.`);
+                    }}
+                    onCancel={() => setScoringReportId(null)}
+                    onError={(m) => window.alert(m)}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Report Writing Final Score leaderboard */}
       {reportScoreLeaderboard.length > 0 && (
@@ -798,7 +960,12 @@ export default function RatingsPage() {
                       const targetId = getRatingTargetId(task);
                       
                       // Look up ratings already submitted for this task deliverable
-                      const existingTaskRatings = ratings.filter(r => r.taskId === task.id && r.targetId === targetId);
+                      // Committee/group tasks average their students' own ratings (so individually rated students count at their own score).
+                      const fanOut = isFanOutTask(task);
+                      const memberRows = fanOut ? ratings.filter(r => r.taskId === task.id && !r.isGroupPlaceholder) : [];
+                      const existingTaskRatings = fanOut && memberRows.length > 0
+                        ? memberRows
+                        : ratings.filter(r => r.taskId === task.id && r.targetId === targetId);
                       const avgScoreSoFar = existingTaskRatings.length > 0
                         ? (existingTaskRatings.reduce((sum, r) => sum + r.overallScore, 0) / existingTaskRatings.length).toFixed(1)
                         : null;
@@ -814,6 +981,7 @@ export default function RatingsPage() {
                               <p className="text-[10px] text-theme-text-secondary mt-0.5">
                                 Assignee: <strong className="text-theme-text-primary">{task.assignee}</strong>
                               </p>
+                              <TaskTimingLine task={task} />
                               <div className="flex items-center flex-wrap gap-1.5 mt-1">
                                 {task.event ? (
                                   <span className="text-[10px] text-accent font-semibold">{task.event}</span>
@@ -857,7 +1025,9 @@ export default function RatingsPage() {
                                 </span>
                               </div>
                               <div className="flex items-center flex-wrap gap-1.5 text-[9px]">
-                                {existingTaskRatings.map(r => (
+                                {fanOut && memberRows.length > 0
+                                  ? <span className="text-success font-semibold">✓ {memberRows.length} student rating{memberRows.length === 1 ? '' : 's'} so far</span>
+                                  : existingTaskRatings.map(r => (
                                   <span key={r.id} className="text-success font-semibold flex items-center gap-0.5">
                                     ✓ {r.raterName} ({r.reviewerRole ? r.reviewerRole.replace('_', ' ') : 'Evaluator'})
                                   </span>
@@ -891,6 +1061,16 @@ export default function RatingsPage() {
                               </button>
                             )}
                             {canEval && queueTab === 'evaluated' && (() => {
+                              if (fanOut) {
+                                return (
+                                  <button
+                                    onClick={() => openEvaluationForTask(task)}
+                                    className="px-3 py-1 text-[11px] font-medium rounded-lg cursor-pointer transition-all bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary"
+                                  >
+                                    Re-rate Members
+                                  </button>
+                                );
+                              }
                               const myRating = getMyRatingForTask(task);
                               return myRating ? (
                                 <button
@@ -1115,7 +1295,7 @@ export default function RatingsPage() {
                                   {RATING_CRITERIA[rating.criteriaSet].map((c, i) => (
                                     <React.Fragment key={c.key}>
                                       {i > 0 && ' · '}
-                                      <span className="font-semibold text-theme-text-primary" title={c.label}>{(rating.scores as Record<string, number>)[c.key]}</span>
+                                      <span className="font-semibold text-theme-text-primary" title={c.label}>{(rating.scores as Record<string, number>)[c.key] ?? '–'}</span>
                                     </React.Fragment>
                                   ))}
                                 </span>
@@ -1148,6 +1328,14 @@ export default function RatingsPage() {
 
                         {/* Remarks */}
                         <td className="py-3.5 text-theme-text-secondary max-w-xs align-top space-y-1">
+                          {(() => {
+                            const taskForRow = tasks.find(t => t.id === group.ratings[0]?.taskId);
+                            const liveLate = taskForRow ? getTaskLateness(taskForRow) : null;
+                            const note = group.ratings.find(r => r.lateNote)?.lateNote || (liveLate ? describeTaskLateness(liveLate) : '');
+                            return note ? (
+                              <p className="text-[11px] font-bold text-danger" title={note}>{note}</p>
+                            ) : null;
+                          })()}
                           {group.ratings.map(r => r.notes ? (
                             <p key={r.id} className="text-[11px] truncate" title={`${r.raterName}: ${r.notes}`}>
                               {group.ratings.length > 1 ? <strong className="text-theme-text-primary">{r.raterName.split(' ')[0]}: </strong> : null}
@@ -1246,6 +1434,109 @@ export default function RatingsPage() {
               <p className="text-[11px] text-theme-text-secondary">
                 Student Assignee: <strong className="text-theme-text-primary">{editingRating ? editingRating.targetName : selectedTask?.assignee}</strong>
               </p>
+              <TaskTimingLine task={editingRating ? tasks.find(t => t.id === editingRating.taskId) : selectedTask || undefined} />
+              {(() => {
+                const modalTask = editingRating ? tasks.find(t => t.id === editingRating.taskId) : selectedTask;
+                if (!modalTask) return null;
+                const isCommitteeTask = modalTask.assigneeType === 'committee' || Boolean(modalTask.eventCommitteeId);
+                if (!isCommitteeTask && modalTask.assigneeType !== 'group') return null;
+                const roster = getTaskAssigneeStatuses(
+                  isCommitteeTask ? { ...modalTask, assigneeType: 'committee' } : modalTask,
+                  members,
+                  events
+                );
+                if (roster.length === 0) return null;
+                const kind = isCommitteeTask ? 'Committee' : 'Group';
+
+                // Editing one student's existing scorecard: just list the members for context.
+                if (editingRating || roster.length < 2) {
+                  return (
+                    <div className="pt-1.5 space-y-1">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-theme-text-secondary">
+                        {kind} Members ({roster.length})
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {roster.map(m => (
+                          <span key={m.id} className="px-2 py-0.5 rounded-lg bg-theme-background/40 border border-theme-border/40 text-[11px] font-medium text-theme-text-primary">
+                            {m.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                }
+
+                const rateable = roster.filter(m => !m.isFaculty);
+                const myRows = myMemberRatings(modalTask);
+                const toggle = (id: string) =>
+                  setSelectedMemberIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+                return (
+                  <div className="pt-2 space-y-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-theme-text-secondary">
+                      Who is this rating for? ({rateable.length} {kind.toLowerCase()} members)
+                    </p>
+                    <div className="grid grid-cols-2 gap-1.5 text-[11px] font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => { setRateMode('all'); setSelectedMemberIds(rateable.map(m => m.id)); }}
+                        className={`px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer ${rateMode === 'all' ? 'bg-accent text-white border-accent' : 'bg-theme-background/40 border-theme-border/40 text-theme-text-primary hover:bg-theme-border/20'}`}
+                      >
+                        All members
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRateMode('selected')}
+                        className={`px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer ${rateMode === 'selected' ? 'bg-accent text-white border-accent' : 'bg-theme-background/40 border-theme-border/40 text-theme-text-primary hover:bg-theme-border/20'}`}
+                      >
+                        Selected students
+                      </button>
+                    </div>
+                    {rateMode === 'selected' ? (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-[10px] text-theme-text-secondary">
+                          <span>{selectedMemberIds.length} selected &mdash; this score applies only to them</span>
+                          <span className="flex gap-2">
+                            <button type="button" className="text-accent font-semibold cursor-pointer" onClick={() => setSelectedMemberIds(rateable.map(m => m.id))}>Select all</button>
+                            <button type="button" className="text-accent font-semibold cursor-pointer" onClick={() => setSelectedMemberIds([])}>Clear</button>
+                          </span>
+                        </div>
+                        <div className="max-h-40 overflow-y-auto space-y-1 pr-1">
+                          {rateable.map(m => {
+                            const mine = myRows.find(r => r.targetId === m.id);
+                            return (
+                              <label key={m.id} className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-theme-background/40 border border-theme-border/40 cursor-pointer text-[11px]">
+                                <span className="flex items-center gap-2 text-theme-text-primary font-medium">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedMemberIds.includes(m.id)}
+                                    onChange={() => toggle(m.id)}
+                                    className="accent-accent"
+                                  />
+                                  {m.name}
+                                </span>
+                                {mine && (
+                                  <span className="text-[10px] font-bold text-success whitespace-nowrap">Rated {mine.overallScore.toFixed(1)}</span>
+                                )}
+                              </label>
+                            );
+                          })}
+                        </div>
+                        <p className="text-[10px] text-theme-text-secondary/80 italic">
+                          Submit once per group of students. Each student keeps their own score, and the {kind.toLowerCase()}&apos;s overall score is the average of all its students&apos; ratings.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {rateable.map(m => (
+                          <span key={m.id} className="px-2 py-0.5 rounded-lg bg-theme-background/40 border border-theme-border/40 text-[11px] font-medium text-theme-text-primary">
+                            {m.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               {!editingRating && selectedTask && (() => {
                 const role = resolveRatingReviewerRole(user, isDesignTask(selectedTask));
                 if (role === 'SUPER_USER' || role === 'CENTRE_HEAD' || role === 'ADVISOR' || role === 'GG_HEAD') {

@@ -602,6 +602,18 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
   }, [router]);
 
+  // The server dropped this session (an admin required a password reset, the account was signed out elsewhere...):
+  // clear the stale login and go back to the login page.
+  useEffect(() => {
+    const onExpired = () => {
+      signOutClient();
+      localStorage.setItem('logoutReason', 'session_expired');
+      router.replace('/');
+    };
+    window.addEventListener('leads-session-expired', onExpired);
+    return () => window.removeEventListener('leads-session-expired', onExpired);
+  }, [router]);
+
   // Re-check the lockdown flag and rebuild notifications every time a server
   // sync lands (initial load, the 7-second poll, or another tab's write) — the
   // notification list used to be computed once at mount, before that first
