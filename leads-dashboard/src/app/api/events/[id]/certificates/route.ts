@@ -74,7 +74,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ scheduled: true, schedule });
     }
 
-    if (!isEventOver(event)) return NextResponse.json({ error: 'Certificates can be sent from the event's last day.' }, { status: 400 });
+    if (!isEventOver(event)) return NextResponse.json({ error: "Certificates can be sent from the event's last day." }, { status: 400 });
     const results = await sendCertificatesBatch(event, passIds, origin, emails);
     return NextResponse.json({ sent: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length, results });
   } catch (err) {
