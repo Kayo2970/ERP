@@ -9,6 +9,7 @@ import { jsPDF } from 'jspdf';
 import { readCollection, mutateCollection } from '@/lib/server-db';
 import { saveBase64File, readStoredFile, deleteStoredFile, deleteStoredFilesForRecord } from '@/lib/file-storage';
 import { dispatchEmail, EmailLog } from '@/lib/email-service';
+import { getAppBaseUrl } from '@/lib/app-url';
 import { drawStyledQr } from '@/lib/qr-style';
 import { registerCustomFonts } from '@/lib/certificate-fonts';
 import { customFamily } from '@/lib/certificate-fonts';
@@ -85,6 +86,9 @@ export interface CertificateRecord {
   /** Email log entry the certificate went out in — lets the ledger report real delivery, not just queueing. */
   emailLogId?: string;
   sentBy?: string;
+  /** Set by the 30-day retention run: the full-size render is dropped and only this small background-free thumbnail is kept for the verify page. */
+  thumbKey?: string;
+  archivedAt?: string;
 }
 
 // ── Template storage ────────────────────────────────────────────────────────────
@@ -375,7 +379,9 @@ export async function renderCertificatePng(
   template: CertificateTemplate,
   verifyUrl: string,
   /** Pixel multiplier on the 1754x1240 design space: 1 = quick preview, 2 = 300 dpi print/PDF quality. */
-  scale = 1
+  scale = 1,
+  /** Leave the artwork out (thumbnails after the retention period) — plain paper with the thin frame. */
+  skipBackground = false
 ): Promise<Buffer> {
   ensureFonts();
   await registerCustomFonts();
@@ -391,7 +397,7 @@ export async function renderCertificatePng(
   ctx.fillStyle = '#fffdf7';
   ctx.fillRect(0, 0, W, H);
   let hasArt = false;
-  if (template.backgroundKey) {
+  if (template.backgroundKey && !skipBackground) {
     try {
       const art = await loadImage(await readStoredFile(template.backgroundKey));
       const s = Math.max(W / art.width, H / art.height);
@@ -707,6 +713,8 @@ export interface IssuedCertificateRow extends CertStatusInfo {
   organisation?: string;
   category?: string;
   manual?: boolean;
+  /** Past the 30-day retention: only a thumbnail is kept. */
+  archivedAt?: string;
 }
 
 /** Every certificate ever issued (one row each, newest first) with its live delivery status — feeds the Issued Certificates box. */
@@ -726,6 +734,7 @@ export async function listIssuedCertificates(eventId?: string): Promise<IssuedCe
       organisation: r.organisation,
       category: r.category,
       manual: r.manual,
+      archivedAt: r.archivedAt,
     }))
     .sort((a, b) => String(b.issuedAt || '').localeCompare(String(a.issuedAt || '')));
 }
@@ -742,4 +751,86 @@ export async function getCertificateStatuses(eventId?: string, typeId?: string |
     else out[r.passId] = { ...(STATUS_RANK[info.status] > STATUS_RANK[prev.status] ? info : prev), count: (prev.count || 1) + 1 };
   }
   return out;
+}
+
+// ── Delete & 30-day retention ───────────────────────────────────────────────────
+
+const THUMB_CATEGORY = 'certificate-thumbs';
+export const CERTIFICATE_RETENTION_DAYS = 30;
+
+/** Permanently removes issued certificates (and their kept thumbnails). Their verify links stop working. Returns how many were removed. */
+export async function deleteCertificates(ids: string[]): Promise<number> {
+  const wanted = new Set(ids.filter((i) => typeof i === 'string' && i));
+  if (wanted.size === 0) return 0;
+  let removed: CertificateRecord[] = [];
+  await mutateCollection<CertificateRecord>('certificates', (current = []) => {
+    removed = current.filter((c) => wanted.has(c.id));
+    return current.filter((c) => !wanted.has(c.id));
+  });
+  for (const r of removed) await deleteStoredFilesForRecord(THUMB_CATEGORY, r.id);
+  return removed.length;
+}
+
+/** Last day of an event (YYYY-MM-DD): its end/start date, else the latest ISO date found in the stored date label. */
+function eventEndIso(event: EventItem | undefined, label: string): string | undefined {
+  if (event && !event.datesTBD) {
+    const d = event.endDate || event.startDate;
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+  }
+  const found = (label || '').match(/\d{4}-\d{2}-\d{2}/g);
+  return found ? found.sort()[found.length - 1] : undefined;
+}
+
+export function isCertificateArchivable(event: EventItem | undefined, label: string, now: Date = new Date()): boolean {
+  const end = eventEndIso(event, label);
+  if (!end) return false;
+  const cutoff = new Date(`${end}T23:59:59`);
+  cutoff.setDate(cutoff.getDate() + CERTIFICATE_RETENTION_DAYS);
+  return now.getTime() > cutoff.getTime();
+}
+
+/**
+ * 30 days after an event ends: every certificate that was actually sent keeps only a small background-free thumbnail (served on
+ * the public verify page) and the event's artwork images are deleted to free disk space. Text settings are kept.
+ */
+export async function runCertificateRetention(now: Date = new Date()): Promise<{ archived: number; artworkRemoved: number }> {
+  const [records, events] = await Promise.all([readCollection<CertificateRecord>('certificates'), readCollection<EventItem>('events')]);
+  const eventById = new Map(events.map((e) => [e.id, e]));
+  const due = records.filter((r) => !r.archivedAt && r.status === 'Sent' && isCertificateArchivable(eventById.get(r.eventId), r.eventDate, now));
+  const done = new Map<string, string>();
+  for (const r of due) {
+    try {
+      const template = await getCertificateTemplate(r.eventId, r.typeId);
+      const png = await renderCertificatePng({ ...r, ...recordExtras(r) }, template, verifyUrlFor(getAppBaseUrl(), r.code), 0.5, true);
+      const img = await loadImage(png);
+      const c = createCanvas(img.width, img.height);
+      const cctx = c.getContext('2d');
+      cctx.fillStyle = '#fff';
+      cctx.fillRect(0, 0, c.width, c.height);
+      cctx.drawImage(img, 0, 0);
+      const saved = await saveBase64File(THUMB_CATEGORY, r.id, 0, 'thumb.jpg', `data:image/jpeg;base64,${c.toBuffer('image/jpeg', 80).toString('base64')}`);
+      done.set(r.id, saved.storageKey);
+    } catch (err) {
+      console.error('[certificate-retention] thumbnail failed for', r.code, err);
+    }
+  }
+  if (done.size === 0) return { archived: 0, artworkRemoved: 0 };
+  const stamp = now.toISOString();
+  await mutateCollection<CertificateRecord>('certificates', (current = []) =>
+    current.map((c) => (done.has(c.id) ? { ...c, thumbKey: done.get(c.id), archivedAt: stamp } : c))
+  );
+  // Artwork of an event can go once none of its certificates is still waiting to be sent
+  const after = await readCollection<CertificateRecord>('certificates');
+  let artworkRemoved = 0;
+  for (const eventId of new Set(due.filter((r) => done.has(r.id)).map((r) => r.eventId))) {
+    if (after.some((c) => c.eventId === eventId && !c.archivedAt)) continue;
+    for (const t of await getCertificateTypes(eventId)) {
+      const tpl = await getCertificateTemplate(eventId, t.id);
+      if (tpl.backgroundKey) {
+        await saveCertificateTemplate(eventId, {}, null, t.id);
+        artworkRemoved += 1;
+      }
+    }
+  }
+  return { archived: done.size, artworkRemoved };
 }

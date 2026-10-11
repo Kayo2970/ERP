@@ -114,7 +114,7 @@ async function passesBuiltInAccess(user: ServerUser): Promise<boolean> {
   return user?.tier === 1 || isBaseLeadership(user, settings) || isHeadRole(user, settings) || user?.tier === 2.5 || (await hasModuleEditAll(user, 'EVENT_PASSES'));
 }
 
-export type CertificateAction = 'send' | 'design' | 'view' | 'ledger';
+export type CertificateAction = 'send' | 'design' | 'view' | 'ledger' | 'delete';
 
 // Certificates have their own capabilities so they can be granted without the matching pass powers; anyone who already
 // had the pass-dispatch / pass-edit power keeps the same certificate access they had before these existed.
@@ -125,6 +125,7 @@ const CERT_CAPS: Record<CertificateAction, string[]> = {
   design: CERT_DESIGN_CAPS,
   view: [...CERT_SEND_CAPS, ...CERT_DESIGN_CAPS],
   // Read-only ledger of issued certificates: also open to the read-only guest-list grant.
+  delete: ['CERTIFICATES_DELETE', ...PASS_CAPS.delete],
   ledger: [...CERT_SEND_CAPS, ...CERT_DESIGN_CAPS, 'EVENT_PASSES_VIEW'],
 };
 

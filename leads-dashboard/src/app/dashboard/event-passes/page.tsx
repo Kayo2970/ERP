@@ -56,6 +56,7 @@ import {
   canDeleteEventPasses,
   canViewIssuedEventPasses,
   canViewIssuedCertificates,
+  canDeleteCertificates,
   canAccessEventPassesModule,
   canViewFullDirectory,
 } from '@/lib/permissions';
@@ -1584,7 +1585,7 @@ export default function EventPassesPage() {
             />
           )}
           {/* Issued certificates, grouped per event like the Events page */}
-          <IssuedCertificatesPanel />
+          <IssuedCertificatesPanel canDelete={canDeleteCertificates(user)} />
         </div>
       )}
 
