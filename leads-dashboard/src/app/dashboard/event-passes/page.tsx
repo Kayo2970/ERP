@@ -72,7 +72,7 @@ export default function EventPassesPage() {
   const [eventPasses, setEventPasses] = useState<EventPassItem[]>([]);
   
   // 3 Primary Tabs: Studio | Issued Passes Deep-Dive | Gate Turnstile Scanner
-  const [activeTab, setActiveTab] = useState<'studio' | 'passes' | 'scanner'>('studio');
+  const [activeTab, setActiveTab] = useState<'studio' | 'passes' | 'certificates' | 'scanner'>('studio');
 
   // Handle any direct/legacy pass param navigations
   useEffect(() => {
@@ -104,7 +104,6 @@ export default function EventPassesPage() {
   const [selectedPassIds, setSelectedPassIds] = useState<Set<string>>(new Set());
   const [isBulkDispatchOpen, setIsBulkDispatchOpen] = useState(false);
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
-  const [isCertificateOpen, setIsCertificateOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Push Alert Modal State
@@ -193,14 +192,18 @@ export default function EventPassesPage() {
   const canViewIssued = canViewIssuedEventPasses(user);
   const canAccessModule = canAccessEventPassesModule(user);
 
-  // Auto switch to scanner if user can only scan
+  const canCertificates = canSendCerts || canDesignCerts;
+
+  // Auto switch to the first tab the user can actually use
   useEffect(() => {
     if (user && !canManagePasses && canViewIssued) {
       setActiveTab('passes');
+    } else if (user && !canManagePasses && canCertificates) {
+      setActiveTab('certificates');
     } else if (user && !canManagePasses && canScanPasses) {
       setActiveTab('scanner');
     }
-  }, [user, canManagePasses, canViewIssued, canScanPasses]);
+  }, [user, canManagePasses, canViewIssued, canCertificates, canScanPasses]);
 
   // Dispatch single pass email
   const handleDispatchSinglePass = async (pass: EventPassItem) => {
@@ -575,6 +578,21 @@ export default function EventPassesPage() {
                 )}
               </button>
             </>
+          )}
+
+          {canCertificates && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('certificates')}
+              className={`px-4 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                activeTab === 'certificates'
+                  ? 'bg-accent text-white shadow-md shadow-accent/25'
+                  : 'text-theme-text-secondary hover:text-theme-text-primary'
+              }`}
+            >
+              <Award className="h-4 w-4" />
+              Certificates
+            </button>
           )}
 
           {canScanPasses && (
@@ -1009,12 +1027,12 @@ export default function EventPassesPage() {
                 {(canSendCerts || canDesignCerts) && (
                 <button
                   type="button"
-                  onClick={() => setIsCertificateOpen(true)}
+                  onClick={() => setActiveTab('certificates')}
                   className="px-3 py-2 bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/30 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
                   title="Email PDF certificates to everyone who attended a finished event"
                 >
                   <Award className="h-3.5 w-3.5" />
-                  <span>Send Certificates</span>
+                  <span>Certificates</span>
                 </button>
                 )}
                 {canDispatchPass && (
@@ -1480,6 +1498,21 @@ export default function EventPassesPage() {
       )}
 
       {/* TAB 3: GATE TURNSTILE SCANNER */}
+      {/* TAB: CERTIFICATES — design, preview, compose the email, send or schedule */}
+      {activeTab === 'certificates' && canCertificates && (
+        <div className="animate-in fade-in duration-300">
+          <CertificateModal
+            inline
+            isOpen
+            onClose={() => setActiveTab(canViewIssued ? 'passes' : canManagePasses ? 'studio' : 'certificates')}
+            events={events}
+            initialEventId={deepFilterEventId !== 'ALL' ? deepFilterEventId : passFilterEventId}
+            canEditDesign={canDesignCerts}
+            canSend={canSendCerts}
+          />
+        </div>
+      )}
+
       {activeTab === 'scanner' && canScanPasses && (
         <div className="animate-in fade-in duration-300">
           <EventPassScanner
@@ -1522,15 +1555,6 @@ export default function EventPassesPage() {
         currentUserName={user?.name || 'Admin'}
         onClose={() => setIsBulkEditOpen(false)}
         onDone={() => setEventPasses(getEventPasses())}
-      />
-
-      <CertificateModal
-        isOpen={isCertificateOpen}
-        onClose={() => setIsCertificateOpen(false)}
-        events={events}
-        initialEventId={passFilterEventId}
-        canEditDesign={canDesignCerts}
-        canSend={canSendCerts}
       />
 
       <EventPassPushModal

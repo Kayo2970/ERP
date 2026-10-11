@@ -71,9 +71,11 @@ interface Props {
   canEditDesign: boolean;
   /** Holds the Send Certificates power; false = design/preview only. Defaults to true. */
   canSend?: boolean;
+  /** Render as a page section (the Certificates tab) instead of a pop-up overlay. */
+  inline?: boolean;
 }
 
-export function CertificateModal({ isOpen, onClose, events, initialEventId, canEditDesign, canSend = true }: Props) {
+export function CertificateModal({ isOpen, onClose, events, initialEventId, canEditDesign, canSend = true, inline = false }: Props) {
   const [eventId, setEventId] = useState('');
   const [openStep, setOpenStep] = useState(1);
   const [attendees, setAttendees] = useState<Attendee[]>([]);
@@ -104,7 +106,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
   templateRef.current = template;
   backgroundRef.current = background;
 
-  const endedEvents = events.filter((e) => !e.datesTBD && !e.isHoliday && e.status !== 'archived' && (e.endDate || e.startDate) && (e.endDate || e.startDate) < new Date().toISOString().split('T')[0]);
+  const endedEvents = events.filter((e) => !e.datesTBD && !e.isHoliday && e.status !== 'archived' && (e.endDate || e.startDate) && (e.endDate || e.startDate) <= new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -422,8 +424,8 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-2 md:p-4">
-      <div className="glass-panel w-[98vw] max-w-[1700px] rounded-3xl p-4 md:p-6 space-y-3 border border-slate-200/90 dark:border-white/15 bg-white/95 dark:bg-[#0D1F38]/95 shadow-2xl h-[95vh] flex flex-col">
+    <div className={inline ? '' : 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-2 md:p-4'}>
+      <div className={`glass-panel rounded-3xl p-4 md:p-6 space-y-3 border border-slate-200/90 dark:border-white/15 bg-white/95 dark:bg-[#0D1F38]/95 shadow-2xl flex flex-col ${inline ? 'w-full h-[calc(100vh-14rem)] min-h-[640px]' : 'w-[98vw] max-w-[1700px] h-[95vh]'}`}>
         <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-white/10 pb-3">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-2xl bg-accent/20 border border-accent/30 flex items-center justify-center text-accent"><Award className="h-5 w-5" /></div>
@@ -434,7 +436,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
           </div>
           <div className="flex items-center gap-3">
             <span className="text-[11px] font-bold text-slate-500">{saveState === 'saving' ? 'Saving…' : saveState === 'dirty' ? 'Unsaved changes…' : saveState === 'saved' ? 'All changes saved' : ''}</span>
-            <button onClick={onClose} className="h-8 w-8 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400 cursor-pointer"><X className="h-5 w-5" /></button>
+            {!inline && <button onClick={onClose} className="h-8 w-8 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400 cursor-pointer"><X className="h-5 w-5" /></button>}
           </div>
         </div>
 
