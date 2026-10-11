@@ -25,6 +25,7 @@ import {
 import { logAuditEvent, getGuests, getMembers, Guest as DirectoryGuest, Member, authHeaders } from '@/lib/local-data';
 import { canManageGuestInvites } from '@/lib/permissions';
 import { EmptyState } from '@/components/ui/empty-state';
+import { EmailHtmlPreview } from '@/components/email-html-preview';
 import { EmailBackgroundPicker, DEFAULT_BACKGROUND_PICK, backgroundChoiceFor, type EmailBackgroundPick } from '@/components/email-background-picker';
 import { ComposedAttachment, filesToAttachments, formatBytes, buildAttachmentNoticeLine, MAX_TOTAL_ATTACHMENT_BYTES } from '@/lib/email-attachments';
 
@@ -250,6 +251,16 @@ export default function GuestInvitesPage() {
     setBodyText(prev => (prev.trim() ? `${prev}\n\n${line}` : line));
   };
 
+  /** The header tag chosen for the invite (shared by the real send and the preview). */
+  const resolveBadgeText = (): string | undefined => {
+    if (badgeOption === 'INVITATION') return '🎉 Official Invitation';
+    if (badgeOption === 'ANNOUNCEMENT') return '📢 Official Announcement';
+    if (badgeOption === 'ACTION_REQUIRED') return '📌 Action Required';
+    if (badgeOption === 'IMPORTANT') return '⚠️ Important Notice';
+    if (badgeOption === 'CUSTOM') return customBadgeText.trim() || undefined;
+    return undefined;
+  };
+
   const handleSendInvites = async () => {
     if (guests.length === 0 || !subject.trim() || !bodyText.trim()) return;
     setIsSending(true);
@@ -260,13 +271,7 @@ export default function GuestInvitesPage() {
     let failed = 0;
     const task = beginTask({ label: `Sending ${guests.length} guest invite${guests.length === 1 ? '' : 's'}`, total: guests.length });
 
-    let resolvedBadgeText: string | undefined = undefined;
-    if (badgeOption === 'INVITATION') resolvedBadgeText = '🎉 Official Invitation';
-    else if (badgeOption === 'ANNOUNCEMENT') resolvedBadgeText = '📢 Official Announcement';
-    else if (badgeOption === 'ACTION_REQUIRED') resolvedBadgeText = '📌 Action Required';
-    else if (badgeOption === 'IMPORTANT') resolvedBadgeText = '⚠️ Important Notice';
-    else if (badgeOption === 'CUSTOM') resolvedBadgeText = customBadgeText.trim() || undefined;
-    else resolvedBadgeText = undefined;
+    const resolvedBadgeText = resolveBadgeText();
 
     // Same attachment(s) sent to every guest — computed once, not per-recipient.
     const payloadAttachments = attachments.map(({ filename, contentBase64, contentType }) => ({ filename, contentBase64, contentType }));
@@ -605,10 +610,20 @@ export default function GuestInvitesPage() {
           ) : (
             <div className="space-y-2">
               <p className="text-[11px] text-theme-text-secondary">Previewing as sent to <strong>{previewGuest?.name}</strong> ({previewGuest?.email})</p>
-              <div className="p-3.5 bg-theme-background/30 border border-theme-border/20 rounded-xl space-y-2">
-                <p className="text-xs font-bold text-theme-text-primary">{applyMailMerge(subject, previewGuest?.name || '', previewGuest?.email || '') || '(no subject)'}</p>
-                <p className="text-xs text-theme-text-secondary whitespace-pre-wrap">{applyMailMerge(bodyText, previewGuest?.name || '', previewGuest?.email || '') || '(no message)'}</p>
+              <div className="px-3.5 py-2 bg-theme-background/30 border border-theme-border/20 rounded-xl text-xs">
+                <span className="text-[9px] text-theme-text-secondary uppercase font-bold mr-2">Subject</span>
+                <span className="font-bold text-theme-text-primary">{applyMailMerge(subject, previewGuest?.name || '', previewGuest?.email || '') || '(no subject)'}</span>
               </div>
+              <EmailHtmlPreview
+                title="Guest invite preview"
+                subject={applyMailMerge(subject, previewGuest?.name || '', previewGuest?.email || '')}
+                bodyText={applyMailMerge(bodyText, previewGuest?.name || '', previewGuest?.email || '')}
+                category="GUEST_INVITE"
+                badgeText={resolveBadgeText()}
+                background={backgroundChoiceFor(bgPick)}
+                className="w-full h-[460px] rounded-2xl border border-theme-border/30 bg-slate-200"
+              />
+              {attachments.length > 0 && <p className="text-[10px] text-theme-text-secondary">Attached: {attachments.map(a => a.filename).join(', ')}</p>}
             </div>
           )}
 
