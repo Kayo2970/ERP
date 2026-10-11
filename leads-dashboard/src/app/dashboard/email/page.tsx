@@ -70,6 +70,20 @@ interface CertScheduleItem {
   createdBy: string;
 }
 
+interface PassScheduleItem {
+  id: string;
+  count: number;
+  sendAt: string;
+  eventNames: string[];
+  createdBy: string;
+  status: 'Scheduled' | 'Running' | 'Done' | 'Failed' | 'Cancelled';
+  sent?: number;
+  failed?: number;
+  skipped?: number;
+  error?: string;
+  finishedAt?: string;
+}
+
 interface BufferedEmailItem {
   id: string;
   to: string;
@@ -87,6 +101,7 @@ export default function EmailManagementPage() {
   const [user, setUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'outbox' | 'queue' | 'certificates' | 'composer' | 'settings'>('outbox');
   const [certSchedules, setCertSchedules] = useState<CertScheduleItem[]>([]);
+  const [passSchedules, setPassSchedules] = useState<PassScheduleItem[]>([]);
   const [isCancellingSchedule, setIsCancellingSchedule] = useState<string | null>(null);
 
   // Email Settings Form State
@@ -216,8 +231,24 @@ export default function EmailManagementPage() {
     try {
       const res = await fetch('/api/email/certificates', { headers: authHeaders() });
       if (res.ok) setCertSchedules((await res.json()).schedules || []);
+      const pr = await fetch('/api/pass-email-schedules', { headers: authHeaders() });
+      if (pr.ok) setPassSchedules((await pr.json()).schedules || []);
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleCancelPassSchedule = async (id: string) => {
+    if (!window.confirm('Cancel this scheduled pass email send? Nothing will be emailed for it.')) return;
+    setIsCancellingSchedule(id);
+    try {
+      const res = await fetch(`/api/pass-email-schedules?id=${encodeURIComponent(id)}`, { method: 'DELETE', headers: authHeaders() });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) triggerToast('success', 'Scheduled pass email send cancelled.');
+      else triggerToast('error', data.error || 'Could not cancel that scheduled send.');
+      fetchCertSchedules();
+    } finally {
+      setIsCancellingSchedule(null);
     }
   };
 
@@ -597,7 +628,8 @@ export default function EmailManagementPage() {
   const otherBuffered = bufferedEmails.filter(b => b.category !== 'CERTIFICATE');
   const upcomingSchedules = certSchedules.filter(s => s.status === 'Scheduled' || s.status === 'Running');
   const totalQueueCount = pendingQueues.length + otherBuffered.length;
-  const certTabCount = upcomingSchedules.length + certBuffered.length;
+  const upcomingPassSchedules = passSchedules.filter(s => s.status === 'Scheduled' || s.status === 'Running');
+  const certTabCount = upcomingSchedules.length + certBuffered.length + upcomingPassSchedules.length;
 
   const isSuperUser = user && (user.tier === 1 || user.role === 'Super User' || user.id === 'm1' || user.email?.toLowerCase() === 'kayo2970@gmail.com');
 
@@ -697,7 +729,7 @@ export default function EmailManagementPage() {
           }`}
         >
           <Award className="h-4 w-4" />
-          Scheduled Certificates ({certTabCount})
+          Scheduled Sends ({certTabCount})
           {certTabCount > 0 && (
             <span className="h-2 w-2 rounded-full bg-amber-400 animate-ping absolute top-1 right-1" />
           )}
@@ -1170,6 +1202,47 @@ export default function EmailManagementPage() {
                       </div>
                       {s.status === 'Scheduled' && (
                         <button onClick={() => handleCancelSchedule(s.id)} disabled={isCancellingSchedule === s.id} className="px-3 py-2 bg-danger/15 hover:bg-danger/25 text-danger border border-danger/30 text-xs font-bold rounded-xl transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1 shrink-0">
+                          <X className="h-3.5 w-3.5" /> {isCancellingSchedule === s.id ? 'Cancelling...' : 'Cancel Send'}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* SECTION: SCHEDULED PASS EMAILS (from Event Passes → Preview & dispatch → Schedule) */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between border-b border-theme-border/20 pb-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-theme-text-secondary flex items-center gap-2">
+                <CalendarClock className="h-3.5 w-3.5 text-accent" /> Scheduled Pass Emails ({passSchedules.length})
+              </span>
+              <span className="text-[11px] text-theme-text-secondary">Sent by the server at the chosen time, then held 10 minutes like every email</span>
+            </div>
+            {passSchedules.length === 0 ? (
+              <EmptyState icon={CalendarClock} title="No scheduled pass emails" description="In Event Passes, select passes → Preview & dispatch → Schedule, and the batch appears here." />
+            ) : (
+              <div className="space-y-3">
+                {passSchedules.map(s => {
+                  const tone = s.status === 'Done' ? 'bg-success/15 text-success border-success/30' : s.status === 'Failed' ? 'bg-danger/15 text-danger border-danger/30' : s.status === 'Cancelled' ? 'bg-theme-border/20 text-theme-text-secondary border-theme-border/30' : 'bg-amber-500/15 text-amber-400 border-amber-500/30';
+                  return (
+                    <div key={s.id} className="p-4 bg-theme-background/30 border border-theme-card-border rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-sm text-theme-text-primary truncate">{s.eventNames.join(', ') || 'Event passes'}</span>
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${tone}`}>{s.status === 'Running' ? 'Sending…' : s.status}</span>
+                        </div>
+                        <div className="flex items-center gap-x-2 gap-y-0.5 text-[11px] text-theme-text-secondary flex-wrap">
+                          <span>{s.count} pass email{s.count === 1 ? '' : 's'}</span><span>&middot;</span>
+                          <span>Scheduled for {new Date(s.sendAt).toLocaleString()}</span><span>&middot;</span>
+                          <span>by {s.createdBy}</span>
+                        </div>
+                        {s.status === 'Done' && <div className="text-[11px] text-theme-text-secondary">{s.sent} queued{s.failed ? `, ${s.failed} failed` : ''}{s.skipped ? `, ${s.skipped} skipped (pass deleted, cancelled or awaiting approval)` : ''}{s.finishedAt ? ` · released ${new Date(s.finishedAt).toLocaleString()}` : ''}</div>}
+                        {s.status === 'Failed' && <div className="text-[11px] text-danger">{s.error || 'The scheduled send failed.'}</div>}
+                      </div>
+                      {s.status === 'Scheduled' && (
+                        <button onClick={() => handleCancelPassSchedule(s.id)} disabled={isCancellingSchedule === s.id} className="px-3 py-2 bg-danger/15 hover:bg-danger/25 text-danger border border-danger/30 text-xs font-bold rounded-xl transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1 shrink-0">
                           <X className="h-3.5 w-3.5" /> {isCancellingSchedule === s.id ? 'Cancelling...' : 'Cancel Send'}
                         </button>
                       )}

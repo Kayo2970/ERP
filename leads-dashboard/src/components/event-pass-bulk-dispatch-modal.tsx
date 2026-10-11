@@ -2,11 +2,12 @@
 
 import { beginTask } from '@/lib/background-tasks';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, X, Send, Mail, CheckCircle2, AlertTriangle, ExternalLink, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Send, Mail, CheckCircle2, AlertTriangle, ExternalLink, Loader2, Pencil, CalendarClock } from 'lucide-react';
 import { PassEmailComposer, usePassEmailTemplate } from '@/components/pass-email-composer';
-import { passEmailOptsFromTemplate } from '@/lib/pass-email-template';
+import { passEmailOptsFromTemplate, PassEmailTemplate } from '@/lib/pass-email-template';
 import {
   EventPassItem,
+  authHeaders,
   buildPassEmail,
   dispatchPassEmail,
   getPassValidDays,
@@ -35,7 +36,14 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
   const [status, setStatus] = useState<Record<string, { state: SendState; error?: string }>>({});
   const [isSending, setIsSending] = useState(false);
   const [template, setTemplate] = usePassEmailTemplate(isOpen);
-  const [showEditor, setShowEditor] = useState(false);
+  const [showEditor, setShowEditor] = useState(true);
+  // Wording edited for ONE person only (the shared message above applies to everyone else)
+  const [overrides, setOverrides] = useState<Record<string, { subject: string; body: string }>>({});
+  const [editScope, setEditScope] = useState<'all' | 'one'>('all');
+  // Send now, or hand the batch to the server to send at a chosen time
+  const [sendMode, setSendMode] = useState<'now' | 'later'>('now');
+  const [sendAt, setSendAt] = useState('');
+  const [scheduleNote, setScheduleNote] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const stopRef = useRef(false);
 
   // Reset whenever the modal is (re)opened with a new selection
@@ -49,6 +57,12 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
     setStatus({});
     setIsSending(false);
     stopRef.current = false;
+    setOverrides({});
+    setEditScope('all');
+    setSendMode('now');
+    setSendAt('');
+    setScheduleNote(null);
+    setShowEditor(true);
     setIncluded(Object.fromEntries(snap.map((p) => [p.id, true])));
     setEmails(Object.fromEntries(snap.map((p) => [p.id, p.attendeeEmail || ''])));
   }, [isOpen]);
@@ -76,7 +90,13 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
   }, [isOpen, go, isSending, onClose]);
 
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const preview = useMemo(() => (pass ? buildPassEmail(pass, origin, { forPreview: true, ...passEmailOptsFromTemplate(template) }) : null), [pass, origin, template]);
+  /** The wording for one pass: its own edited version if it has one, otherwise the shared message. */
+  const optsFor = useCallback((id: string) => {
+    const o = overrides[id];
+    return { ...passEmailOptsFromTemplate(template), ...(o ? { subjectTemplate: o.subject, bodyTemplate: o.body } : {}) };
+  }, [overrides, template]);
+  const preview = useMemo(() => (pass ? buildPassEmail(pass, origin, { forPreview: true, ...optsFor(pass.id) }) : null), [pass, origin, optsFor]);
+  const ownEdit = pass ? overrides[pass.id] : undefined;
 
   const validEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
   const toSend = passes.filter((p) => included[p.id] && validEmail(emails[p.id] || ''));
@@ -99,7 +119,7 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
       if (stopRef.current) break;
       setStatus((s) => ({ ...s, [p.id]: { state: 'sending' } }));
       try {
-        const res = await dispatchPassEmail(p, emails[p.id].trim(), passEmailOptsFromTemplate(template));
+        const res = await dispatchPassEmail(p, emails[p.id].trim(), optsFor(p.id));
         setStatus((s) => ({ ...s, [p.id]: res.success ? { state: 'ok' } : { state: 'failed', error: res.error } }));
         if (res.success) okCount++; else failCount++;
       } catch (err: any) {
@@ -113,6 +133,61 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
     setIsSending(false);
     task.finish(`${okCount} of ${list.length} pass email${list.length === 1 ? '' : 's'} sent${stopRef.current ? ' (stopped early)' : ''}${failCount ? `, ${failCount} failed` : ''}.`, { warn: failCount > 0 || stopRef.current });
     onDone();
+  };
+
+  /** Hands the ticked passes to the server to email at `sendAt` (works even if this browser is closed). */
+  const schedule = async () => {
+    if (toSend.length === 0) return;
+    if (!sendAt) return setScheduleNote({ kind: 'err', text: 'Pick the date and time to send.' });
+    const when = new Date(sendAt);
+    if (Number.isNaN(when.getTime()) || when.getTime() < Date.now() + 60_000) return setScheduleNote({ kind: 'err', text: 'Pick a time at least a minute from now.' });
+    if (!window.confirm(`Schedule ${toSend.length} pass email${toSend.length === 1 ? '' : 's'} for ${when.toLocaleString()}? They are built and sent by the server at that time, then enter the normal 10-minute email hold.`)) return;
+    setIsSending(true);
+    setScheduleNote(null);
+    const task = beginTask({ label: `Scheduling ${toSend.length} pass email${toSend.length === 1 ? '' : 's'}`, detail: when.toLocaleString() });
+    try {
+      const res = await fetch('/api/pass-email-schedules', {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          sendAt: when.toISOString(),
+          template: passEmailOptsFromTemplate(template),
+          items: toSend.map((p) => ({
+            passId: p.id,
+            email: emails[p.id].trim(),
+            ...(overrides[p.id] ? { subjectTemplate: overrides[p.id].subject, bodyTemplate: overrides[p.id].body } : {}),
+          })),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      const msg = `Scheduled ${data.schedule?.count ?? toSend.length} pass email${(data.schedule?.count ?? toSend.length) === 1 ? '' : 's'} for ${when.toLocaleString()}. Track or cancel it in Email Management → Scheduled tab.`;
+      task.finish(msg);
+      setScheduleNote({ kind: 'ok', text: msg });
+      onDone();
+    } catch (e: any) {
+      task.fail(e?.message || 'Could not schedule.');
+      setScheduleNote({ kind: 'err', text: e?.message || 'Could not schedule.' });
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  /** Edits made in the editor: shared message (everyone) or only the pass being viewed. */
+  const editorTemplate: PassEmailTemplate = editScope === 'one' && ownEdit ? { ...template, subject: ownEdit.subject, body: ownEdit.body } : template;
+  const onEditorChange = (t: PassEmailTemplate) => {
+    if (editScope === 'one' && pass) {
+      setOverrides((m) => ({ ...m, [pass.id]: { subject: t.subject, body: t.body } }));
+    } else {
+      // Extra-button settings (map / WhatsApp) are shared by everyone, even while editing one person's wording.
+      setTemplate({ ...template, includeMap: t.includeMap, mapUrl: t.mapUrl, includeWhatsapp: t.includeWhatsapp, whatsappUrl: t.whatsappUrl });
+    }
+  };
+  const startOwnEdit = () => {
+    if (!pass) return;
+    setOverrides((m) => (m[pass.id] ? m : { ...m, [pass.id]: { subject: template.subject, body: template.body } }));
+    setEditScope('one');
+    setShowEditor(true);
   };
 
   if (!isOpen || !pass) return null;
@@ -188,7 +263,16 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
           {/* Email */}
           <div className="space-y-3 min-w-0">
             <div className="flex items-center justify-between gap-2">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">The email</div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">The email</div>
+                <button type="button" onClick={() => { setEditScope('all'); setShowEditor(true); }} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-sky-500/20 border border-sky-400/40 text-sky-200 text-[10.5px] font-bold hover:bg-sky-500/30 cursor-pointer">
+                  <Pencil className="h-3 w-3" /> Edit message (everyone)
+                </button>
+                <button type="button" onClick={startOwnEdit} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-white/20 text-[10.5px] font-bold hover:bg-white/10 cursor-pointer">
+                  <Pencil className="h-3 w-3" /> Edit only {pass.attendeeName.split(' ')[0]}&apos;s
+                </button>
+                {ownEdit && <span className="text-[10px] font-bold text-amber-300">custom message for this person</span>}
+              </div>
               <label className="flex items-center gap-2 text-[11px] font-bold cursor-pointer">
                 <input type="checkbox" checked={!!included[pass.id]} onChange={(e) => setIncluded((m) => ({ ...m, [pass.id]: e.target.checked }))} className="h-4 w-4 accent-sky-500" />
                 Include in dispatch
@@ -227,8 +311,19 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
           {/* Message editor (same template as Mail-Merge Dispatch) */}
           {showEditor && (
             <div className="space-y-3 min-w-0 rounded-2xl border border-white/10 bg-black/20 p-4">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Edit the message (applies to all)</div>
-              <PassEmailComposer template={template} onChange={setTemplate} bodyRows={16} />
+              <div className="flex items-center gap-1 p-0.5 bg-black/30 border border-white/10 rounded-lg w-fit text-[10.5px] font-bold">
+                <button type="button" onClick={() => setEditScope('all')} className={`px-2.5 py-1 rounded-md cursor-pointer ${editScope === 'all' ? 'bg-sky-600 text-white' : 'text-slate-300'}`}>Everyone</button>
+                <button type="button" onClick={startOwnEdit} className={`px-2.5 py-1 rounded-md cursor-pointer ${editScope === 'one' ? 'bg-sky-600 text-white' : 'text-slate-300'}`}>Only {pass.attendeeName.split(' ')[0]}</button>
+              </div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                {editScope === 'one' ? `Editing ${pass.attendeeName}'s message only` : 'Edit the message (applies to everyone without their own version)'}
+              </div>
+              {editScope === 'one' && ownEdit && (
+                <button type="button" onClick={() => { setOverrides((m) => { const n = { ...m }; delete n[pass.id]; return n; }); setEditScope('all'); }} className="text-[10.5px] font-bold text-amber-300 hover:underline cursor-pointer">
+                  Discard this person&apos;s version and use the shared message
+                </button>
+              )}
+              <PassEmailComposer template={editorTemplate} onChange={onEditorChange} bodyRows={16} />
             </div>
           )}
         </div>
@@ -262,9 +357,20 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
                 Retry failed
               </button>
             )}
-            {isSending ? (
+            <div className="flex items-center gap-1 p-0.5 bg-black/30 border border-white/10 rounded-lg text-[11px] font-bold">
+              <button type="button" onClick={() => setSendMode('now')} className={`px-2.5 py-1.5 rounded-md cursor-pointer ${sendMode === 'now' ? 'bg-sky-600 text-white' : 'text-slate-300'}`}>Send now</button>
+              <button type="button" onClick={() => setSendMode('later')} className={`px-2.5 py-1.5 rounded-md cursor-pointer flex items-center gap-1 ${sendMode === 'later' ? 'bg-sky-600 text-white' : 'text-slate-300'}`}><CalendarClock className="h-3 w-3" /> Schedule</button>
+            </div>
+            {sendMode === 'later' && (
+              <input type="datetime-local" value={sendAt} onChange={(e) => setSendAt(e.target.value)} className="px-2.5 py-1.5 bg-black/30 border border-white/15 rounded-lg text-[11px] text-white focus:outline-none focus:border-sky-400 [color-scheme:dark]" />
+            )}
+            {isSending && sendMode === 'now' ? (
               <button type="button" onClick={() => (stopRef.current = true)} className="px-4 py-2.5 rounded-xl bg-white/10 text-xs font-bold cursor-pointer flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" /> Stop after this one
+              </button>
+            ) : sendMode === 'later' ? (
+              <button type="button" disabled={toSend.length === 0 || isSending} onClick={schedule} className="px-5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-black flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
+                {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarClock className="h-4 w-4" />} Schedule {toSend.length} email{toSend.length === 1 ? '' : 's'}{sendAt ? ` · ${new Date(sendAt).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}
               </button>
             ) : (
               <button type="button" disabled={toSend.length === 0} onClick={() => send()} className="px-5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-black flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
@@ -273,6 +379,9 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
             )}
           </div>
         </div>
+        {scheduleNote && (
+          <div className={`px-5 py-2.5 text-[11.5px] font-semibold border-t border-white/10 ${scheduleNote.kind === 'ok' ? 'bg-emerald-500/10 text-emerald-300' : 'bg-rose-500/10 text-rose-300'}`}>{scheduleNote.text}</div>
+        )}
       </div>
     </div>
   );
