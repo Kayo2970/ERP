@@ -39,6 +39,7 @@ import { EmailSettings, EmailLog } from '@/lib/email-service';
 import { canManageEmailSettings } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
+import { EmailHtmlPreview } from '@/components/email-html-preview';
 import { EmailBackgroundField, EmailBackgroundPicker, DEFAULT_BACKGROUND_PICK, EMAIL_BLUR_DEFAULT, backgroundChoiceFor, type EmailBackgroundPick } from '@/components/email-background-picker';
 import { ComposedAttachment, filesToAttachments, formatBytes, buildAttachmentNoticeLine, MAX_TOTAL_ATTACHMENT_BYTES } from '@/lib/email-attachments';
 
@@ -591,18 +592,22 @@ export default function EmailManagementPage() {
     setBodyText(prev => (prev.trim() ? `${prev}\n\n${line}` : line));
   };
 
+  /** The header tag chosen for the email (shared by the real send and the live preview). */
+  const resolveBadgeText = (): string | undefined => {
+    if (badgeOption === 'INVITATION') return '🎉 Official Invitation';
+    if (badgeOption === 'ANNOUNCEMENT') return '📢 Official Announcement';
+    if (badgeOption === 'ACTION_REQUIRED') return '📌 Action Required';
+    if (badgeOption === 'IMPORTANT') return '⚠️ Important Notice';
+    if (badgeOption === 'CUSTOM') return customBadgeText.trim() || undefined;
+    return undefined;
+  };
+
   const handleExecuteDispatch = async () => {
     setShowDispatchConfirm(false);
     setIsSendingDispatch(true);
     const task = beginTask({ label: dispatchScope === 'SINGLE' ? 'Sending email' : 'Dispatching broadcast email' });
     try {
-      let resolvedBadgeText: string | undefined = undefined;
-      if (badgeOption === 'INVITATION') resolvedBadgeText = '🎉 Official Invitation';
-      else if (badgeOption === 'ANNOUNCEMENT') resolvedBadgeText = '📢 Official Announcement';
-      else if (badgeOption === 'ACTION_REQUIRED') resolvedBadgeText = '📌 Action Required';
-      else if (badgeOption === 'IMPORTANT') resolvedBadgeText = '⚠️ Important Notice';
-      else if (badgeOption === 'CUSTOM') resolvedBadgeText = customBadgeText.trim() || undefined;
-      else resolvedBadgeText = undefined;
+      const resolvedBadgeText = resolveBadgeText();
 
       const payload = {
         scope: dispatchScope,
@@ -1517,18 +1522,16 @@ export default function EmailManagementPage() {
                   <p className="text-theme-text-secondary">Subject: <strong className="text-accent">{subject || 'No Subject Provided'}</strong></p>
                 </div>
                 
-                <div className="p-6 bg-slate-900 text-slate-100 rounded-xl border border-slate-800 space-y-4 text-xs font-sans">
-                  <div className="border-b border-slate-800 pb-3">
-                    <h3 className="text-lg font-bold text-sky-400">{subject || 'Subject Line Preview'}</h3>
-                    <p className="text-[11px] text-slate-400 mt-1">Sender: {settings.fromName}</p>
-                  </div>
-                  <div className="whitespace-pre-wrap leading-relaxed text-slate-200">
-                    {bodyText || 'Your message text will appear here...'}
-                  </div>
-                  <div className="border-t border-slate-800 pt-3 text-[10px] text-slate-500 text-center">
-                    © 2026 {settings.fromName} &middot; MSRUAS Internal Operations Portal
-                  </div>
-                </div>
+                <EmailHtmlPreview
+                  title="Email preview"
+                  subject={subject || 'Subject Line Preview'}
+                  bodyText={bodyText || 'Your message text will appear here...'}
+                  category={category}
+                  badgeText={resolveBadgeText()}
+                  background={backgroundChoiceFor(bgPick)}
+                  className="w-full h-[520px] rounded-xl border border-theme-border/30 bg-slate-200"
+                />
+                {attachments.length > 0 && <p className="text-[10px] text-theme-text-secondary">Attached: {attachments.map(a => a.filename).join(', ')}</p>}
               </div>
             </div>
           )}

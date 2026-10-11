@@ -20,6 +20,8 @@ import {
 import { EventItem, EventPassItem, buildPassEmail, dispatchPassEmail } from '@/lib/local-data';
 import { PassEmailComposer, usePassEmailTemplate } from '@/components/pass-email-composer';
 import { passEmailOptsFromTemplate } from '@/lib/pass-email-template';
+import { EmailBackgroundPicker, DEFAULT_BACKGROUND_PICK, backgroundChoiceFor, type EmailBackgroundPick } from '@/components/email-background-picker';
+import { EmailHtmlPreview } from '@/components/email-html-preview';
 
 interface EventPassEmailModalProps {
   isOpen: boolean;
@@ -50,6 +52,8 @@ export function EventPassEmailModal({
   // Preview follows a pass id (not an index) so list refreshes never jump to another person
   const [previewPassId, setPreviewPassId] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
+  // Blurred picture behind the e-mails (default = the one set in Email Settings, if any)
+  const [bgPick, setBgPick] = useState<EmailBackgroundPick>(DEFAULT_BACKGROUND_PICK);
   const [successToast, setSuccessToast] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -117,7 +121,7 @@ export function EventPassEmailModal({
         if (!pass.attendeeEmail) continue;
 
         try {
-          const res = await dispatchPassEmail(pass, pass.attendeeEmail, passEmailOptsFromTemplate(template));
+          const res = await dispatchPassEmail(pass, pass.attendeeEmail, passEmailOptsFromTemplate(template), backgroundChoiceFor(bgPick) as 'none' | { storageKey: string; blur: number } | undefined);
           if (!res.success) {
             failCount++;
             console.warn(`Failed to dispatch email to ${pass.attendeeEmail}:`, res.error);
@@ -216,6 +220,8 @@ export function EventPassEmailModal({
             </div>
 
             <PassEmailComposer template={template} onChange={setTemplate} bodyRows={14} />
+
+            <EmailBackgroundPicker value={bgPick} onChange={setBgPick} disabled={isSending} />
           </div>
 
           {/* RIGHT: RECIPIENTS SELECTION & LIVE PREVIEW */}
@@ -302,12 +308,17 @@ export function EventPassEmailModal({
                 <span className="font-bold text-slate-900 dark:text-white">{previewEmail?.subject || '—'}</span>
               </div>
               {previewEmail ? (
-                <iframe
+                <EmailHtmlPreview
                   key={previewPass?.id}
                   title="Email preview"
-                  sandbox=""
-                  srcDoc={`<html><body style="margin:0;padding:12px;background:#e2e8f0;">${previewEmail.bodyHtml}</body></html>`}
-                  className="w-full flex-1 min-h-[520px] rounded-2xl border border-slate-200 dark:border-white/15 bg-slate-200"
+                  bodyHtml={previewEmail.bodyHtml}
+                  subject={previewEmail.subject}
+                  bodyText={previewEmail.bodyText}
+                  category="EVENT_INVITATION"
+                  badgeText="Official Event Pass"
+                  badgeColor="#0284c7"
+                  background={backgroundChoiceFor(bgPick)}
+                  className="w-full h-[560px] rounded-2xl border border-slate-200 dark:border-white/15 bg-slate-200"
                 />
               ) : (
                 <div className="flex-1 min-h-[200px] rounded-2xl border border-dashed border-slate-300 dark:border-white/15 flex items-center justify-center text-slate-400 text-[11px]">Select a recipient to preview</div>

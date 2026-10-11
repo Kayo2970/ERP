@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, X, Send, Mail, CheckCircle2, AlertTriangle, ExternalLink, Loader2, Pencil, CalendarClock } from 'lucide-react';
 import { PassEmailComposer, usePassEmailTemplate } from '@/components/pass-email-composer';
 import { passEmailOptsFromTemplate, PassEmailTemplate } from '@/lib/pass-email-template';
+import { EmailHtmlPreview } from '@/components/email-html-preview';
 import { EmailBackgroundPicker, DEFAULT_BACKGROUND_PICK, backgroundChoiceFor, type EmailBackgroundPick } from '@/components/email-background-picker';
 import {
   EventPassItem,
@@ -313,11 +314,16 @@ export function EventPassBulkDispatchModal({ isOpen, passes: livePasses, onClose
               {st?.state === 'failed' && <div className="text-rose-400 font-semibold">✗ {st.error || 'Failed to send.'}</div>}
               {st?.state === 'ok' && <div className="text-emerald-400 font-semibold flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" /> Queued for delivery.</div>}
             </div>
-            <iframe
+            <EmailHtmlPreview
               key={pass.id}
               title={`Email preview for ${pass.attendeeName}`}
-              sandbox=""
-              srcDoc={`<html><body style="margin:0;padding:12px;background:#e2e8f0;">${preview?.bodyHtml || ''}</body></html>`}
+              bodyHtml={preview?.bodyHtml || ''}
+              subject={preview?.subject}
+              bodyText={preview?.bodyText}
+              category="EVENT_INVITATION"
+              badgeText="Official Event Pass"
+              badgeColor="#0284c7"
+              background={backgroundChoiceFor(bgPick)}
               className="w-full h-[calc(94vh-390px)] min-h-[420px] rounded-xl border border-white/10 bg-slate-200"
             />
           </div>

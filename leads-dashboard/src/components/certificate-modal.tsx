@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Users, Plus, UserPlus, Pencil, Award, X, Send, RefreshCw, CheckCircle2, AlertCircle, CheckSquare, Square, ImagePlus, Trash2, ChevronDown, ChevronRight, Download, CalendarClock, Check } from 'lucide-react';
 import { EventItem, Member, TaskItem, authHeaders, formatEventDateRange, getMembers, getTasks } from '@/lib/local-data';
 import { beginTask } from '@/lib/background-tasks';
+import { EmailHtmlPreview } from '@/components/email-html-preview';
 import { EmailBackgroundPicker, DEFAULT_BACKGROUND_PICK, backgroundChoiceFor, type EmailBackgroundPick } from '@/components/email-background-picker';
 import { defaultSelection, isSelectable, keepSelection, scheduledMap, toggleVisible, visibleSelectionState } from '@/lib/certificate-selection';
 import { CertificateStatusBadge, CERT_STATUS_FILTERS } from '@/components/certificate-status-badge';
@@ -1178,7 +1179,14 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                               <div className="mx-2 mb-2 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-white/10 p-2.5 space-y-1">
                                 <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">To {a.name} &lt;{a.email}&gt;</span>
                                 <p className="font-bold text-slate-900 dark:text-white">{mergeCertEmail(emailSubject, v) || '(no subject)'}</p>
-                                <p className="text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{mergeCertEmail(emailBody, v) || '(no message)'}</p>
+                                <EmailHtmlPreview
+                                  title={`Email preview for ${a.name}`}
+                                  subject={mergeCertEmail(emailSubject, v)}
+                                  bodyText={mergeCertEmail(emailBody, v)}
+                                  category="CERTIFICATE"
+                                  background={backgroundChoiceFor(bgPick)}
+                                  className="w-full h-[420px] rounded-lg border border-slate-200 dark:border-white/10 bg-slate-200"
+                                />
                                 <p className="text-[10px] text-slate-500">Attached: Certificate-{a.name.replace(/[^\w]+/g, '_')}.pdf</p>
                               </div>
                             )}
