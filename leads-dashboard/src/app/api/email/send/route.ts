@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server';
 import { dispatchEmail, SendEmailPayload } from '@/lib/email-service';
 import { readCollection } from '@/lib/server-db';
 import { Member, EventPassItem } from '@/lib/local-data';
-import { renderBoardingPassPng } from '@/lib/pass-image';
-import { getPassTheme } from '@/lib/pass-theme';
+import { buildPassImageAttachment } from '@/lib/pass-email-send';
 import { requireSession } from '@/lib/session';
 import { apiError } from '@/lib/api-error';
 import { gateEventPassAction } from '@/lib/approval-gate';
@@ -46,7 +45,7 @@ export async function POST(request: Request) {
       to,
       subject,
       bodyText,
-      bodyHtml,
+      bodyHtml: bodyHtmlIn,
       body: rawBody,
       content,
       category,
@@ -56,6 +55,7 @@ export async function POST(request: Request) {
       passSerial,
       background: rawBackground,
     } = body;
+    let bodyHtml = bodyHtmlIn;
     const background = cleanBackgroundChoice(rawBackground);
 
     const attachments = decodeAttachments(rawAttachments) || [];
@@ -87,8 +87,9 @@ export async function POST(request: Request) {
         const pass = passes.find((p) => p.serialNumber.toLowerCase() === passSerial.toLowerCase());
         if (pass && pass.status !== 'Cancelled') {
           const origin = new URL(request.url).origin;
-          const png = await renderBoardingPassPng(pass, `${origin}/pass/${pass.serialNumber}`, await getPassTheme(pass.eventId));
-          attachments.push({ filename: `${pass.serialNumber}.png`, content: png, contentType: 'image/png', cid: 'leads-pass-image' });
+          const built = await buildPassImageAttachment(pass, origin, bodyHtml);
+          if (built.attachments) attachments.push(...built.attachments);
+          bodyHtml = built.bodyHtml;
         }
       } catch (imgErr) {
         console.warn('[email-send] Boarding-pass image skipped:', imgErr);
