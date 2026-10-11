@@ -55,6 +55,7 @@ export interface DbSchema {
   ratings: any[];
   reimbursements: any[];
   announcements: any[];
+  proposals: any[];
   forms: any[];
   formTemplates: any[];
   submissions: any[];
@@ -105,6 +106,7 @@ const EMPTY_DB: DbSchema = {
   ratings: [],
   reimbursements: [],
   announcements: [],
+  proposals: [],
   forms: [],
   formTemplates: [],
   submissions: [],
@@ -146,6 +148,7 @@ const SEED_DB: DbSchema = {
   ratings: initialRatings,
   reimbursements: initialReimbursements,
   announcements: initialAnnouncements,
+  proposals: [],
   forms: initialForms,
   formTemplates: initialFormTemplates,
   submissions: initialSubmissions,

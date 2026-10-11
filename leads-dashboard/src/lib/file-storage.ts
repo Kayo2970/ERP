@@ -157,6 +157,14 @@ const MIME_BY_EXTENSION: Record<string, string> = {
   '.cdr': 'application/coreldraw',
   '.fig': 'application/octet-stream',
   '.xd': 'application/octet-stream',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xls': 'application/vnd.ms-excel',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.ppt': 'application/vnd.ms-powerpoint',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.csv': 'text/csv',
+  '.txt': 'text/plain',
 };
 
 export function guessMimeType(fileName: string): string {

@@ -777,3 +777,16 @@ export function canEditGuestRecord(guest: ServerGuest, user: ServerUser, setting
 }
 
 export const canViewGuestRecord = canEditGuestRecord;
+
+/**
+ * Proposals: who may approve/reject a submitted proposal. Super User, Centre
+ * Head, Advisors and any department/sector Head. The view-only Chief Advisor and
+ * Alumni never can; a Group Policy can grant APPROVE_PROPOSAL on top. Self-
+ * approval is blocked in the route (except for the Super User).
+ */
+export function canApproveProposal(user: ServerUser, settings: AccessLevelSettings): boolean {
+  if (!user || isAlumniRole(user)) return false;
+  if (user.tier === 1) return true;
+  if (isChiefAdvisor(user)) return false;
+  return isCentreHead(user, settings) || isAdvisor(user) || isHeadRole(user, settings) || hasCap(user, 'APPROVE_PROPOSAL');
+}

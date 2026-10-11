@@ -61,6 +61,7 @@ import {
 import { isEventsHeadGgCampus } from '@/lib/permissions';
 import { reconcilePassesFromServer } from '@/lib/local-data';
 import { EmptyState } from '@/components/ui/empty-state';
+import { decideProposal } from '@/lib/proposals-client';
 
 type Tab = 'inbox' | 'sent' | 'decided';
 
@@ -70,6 +71,7 @@ const entityIcon = (type: ApprovalRequest['entityType']) => {
   if (type === 'design') return Palette;
   if (type === 'event-report') return FileText;
   if (type === 'announcement') return Megaphone;
+  if (type === 'proposal') return FileText;
   if (type === 'form') return LayoutTemplate;
   if (type === 'event-pass') return Ticket;
   return Users;
@@ -82,6 +84,7 @@ const entityLink = (req: ApprovalRequest) => {
   if (req.entityType === 'design') return '/dashboard/designs';
   if (req.entityType === 'event-report') return '/dashboard/event-reports';
   if (req.entityType === 'announcement') return '/dashboard/announcements';
+  if (req.entityType === 'proposal') return `/dashboard/proposals?highlight=${req.entityId}`;
   if (req.entityType === 'form') return '/dashboard/forms';
   if (req.entityType === 'event-pass') return '/dashboard/event-passes';
   return req.eventId ? `/dashboard/events/${req.eventId}` : '/dashboard/events';
@@ -226,7 +229,7 @@ export default function ApprovalsPage() {
   const list = tab === 'inbox' ? pendingInbox : tab === 'decided' ? decidedInbox : sentRequests;
   const pendingInboxCount = pendingInbox.length;
 
-  const directlyResolvable = (type: ApprovalRequest['entityType']) => type === 'task' || type === 'event' || type === 'announcement' || type === 'form' || type === 'event-report' || type === 'event-pass';
+  const directlyResolvable = (type: ApprovalRequest['entityType']) => type === 'task' || type === 'event' || type === 'announcement' || type === 'form' || type === 'event-report' || type === 'event-pass' || type === 'proposal';
 
   const handleDecide = (id: string, decision: 'approved' | 'rejected', note?: string) => {
     const req = requests.find(r => r.id === id);
@@ -239,6 +242,9 @@ export default function ApprovalsPage() {
         decision === 'approved' ? approveEvent(req.entityId, actorName, note) : rejectEvent(req.entityId, actorName, note);
       } else if (req.entityType === 'announcement') {
         decision === 'approved' ? approveAnnouncement(req.entityId, actorName, note) : rejectAnnouncement(req.entityId, actorName);
+      } else if (req.entityType === 'proposal') {
+        // Proposals live behind a permission-checked API, not localStorage — decide it server-side.
+        decideProposal(req.entityId, decision === 'approved' ? 'Approved' : 'Rejected', note).catch(err => console.error('[approvals] proposal decision failed:', err));
       } else if (req.entityType === 'form') {
         decision === 'approved' ? approveForm(req.entityId, actorName, note) : rejectForm(req.entityId, actorName, note);
       } else if (req.entityType === 'event-report') {
