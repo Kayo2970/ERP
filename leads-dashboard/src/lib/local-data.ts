@@ -3519,7 +3519,9 @@ export function buildPassEmail(
 export async function dispatchPassEmail(
   pass: EventPassItem,
   targetEmail?: string,
-  template?: { subjectTemplate?: string; bodyTemplate?: string; includeMap?: boolean; mapUrl?: string; includeWhatsapp?: boolean; whatsappUrl?: string }
+  template?: { subjectTemplate?: string; bodyTemplate?: string; includeMap?: boolean; mapUrl?: string; includeWhatsapp?: boolean; whatsappUrl?: string },
+  /** Blurred e-mail background for this send: 'none' or a custom picture; omit for the Email Settings default. */
+  background?: 'none' | { storageKey: string; blur: number }
 ): Promise<{ success: boolean; error?: string; pending?: boolean }> {
   const recipient = (targetEmail || pass.attendeeEmail || '').trim();
   if (!recipient) {
@@ -3544,6 +3546,7 @@ export async function dispatchPassEmail(
         badgeText: 'Official Event Pass',
         badgeColor: '#0284c7',
         passSerial: pass.serialNumber, // server renders + attaches the boarding-pass image (cid:leads-pass-image)
+        ...(background ? { background } : {}),
         metadata: {
           passId: pass.id,
           serialNumber: pass.serialNumber,

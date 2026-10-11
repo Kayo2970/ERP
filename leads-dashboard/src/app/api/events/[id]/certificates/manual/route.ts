@@ -7,6 +7,7 @@ import { getAppBaseUrl } from '@/lib/app-url';
 import { EventItem } from '@/lib/local-data';
 import { cleanTypeId, createManualCertificate, getCertificateTypes, sendManualCertificate } from '@/lib/certificate';
 import { cleanCertEmail } from '@/lib/certificate-layout';
+import { cleanBackgroundChoice } from '@/lib/email-background';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -30,7 +31,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (body.send && !String(body.email || '').trim()) return NextResponse.json({ error: 'Enter an email address to send the certificate.' }, { status: 400 });
     let record = await createManualCertificate(event, { name: body.name, email: body.email, organisation: body.organisation, category: body.category }, typeId, typeName);
     if (body.send) {
-      const r = await sendManualCertificate(record, getAppBaseUrl(request), undefined, cleanCertEmail(body.message), user?.name || 'Staff');
+      const r = await sendManualCertificate(record, getAppBaseUrl(request), undefined, cleanCertEmail(body.message), user?.name || 'Staff', cleanBackgroundChoice(body.background));
       record = r.record;
       if (!r.ok) return NextResponse.json({ error: r.error || 'Created, but the email could not be sent.', record }, { status: 502 });
     }

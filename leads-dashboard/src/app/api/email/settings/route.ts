@@ -3,6 +3,7 @@ import { getEmailSettings, updateEmailSettings } from '@/lib/email-service';
 import { requireSession } from '@/lib/session';
 import { getAccessLevelSettingsServer, canManageEmailSettings } from '@/lib/permissions-server';
 import { apiError } from '@/lib/api-error';
+import { clampBlur, isEmailBackgroundKey } from '@/lib/email-background';
 
 export async function GET(request: Request) {
   try {
@@ -32,6 +33,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Settings payload is required' }, { status: 400 });
     }
 
+    // The mail background is only ever a picture uploaded through /api/email/background, with a bounded blur.
+    if ('background' in newSettings) {
+      const bg = newSettings.background;
+      newSettings.background = bg && isEmailBackgroundKey(bg.storageKey)
+        ? { enabled: bg.enabled !== false, storageKey: bg.storageKey, blur: clampBlur(bg.blur) }
+        : undefined;
+    }
     const updated = await updateEmailSettings(newSettings, actorName || 'Super User');
     return NextResponse.json(updated);
   } catch (err: any) {

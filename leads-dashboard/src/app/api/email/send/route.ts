@@ -8,6 +8,7 @@ import { requireSession } from '@/lib/session';
 import { apiError } from '@/lib/api-error';
 import { gateEventPassAction } from '@/lib/approval-gate';
 import { submitPassApproval } from '@/lib/event-pass-approvals';
+import { cleanBackgroundChoice } from '@/lib/email-background';
 
 /**
  * Client-supplied attachments arrive as base64 (JSON has no Buffer type) —
@@ -53,7 +54,9 @@ export async function POST(request: Request) {
       badgeColor,
       attachments: rawAttachments,
       passSerial,
+      background: rawBackground,
     } = body;
+    const background = cleanBackgroundChoice(rawBackground);
 
     const attachments = decodeAttachments(rawAttachments) || [];
 
@@ -71,7 +74,7 @@ export async function POST(request: Request) {
           action: 'dispatch', pass: target, actor: sessionUser, gate,
           uniqueSuffix: String(to0).toLowerCase(),
           message: `${sessionUser.name} wants to email ${target.attendeeName}'s pass to ${to0}. It is sent only after you approve${gate.policyName ? ` (policy: ${gate.policyName})` : ''}.`,
-          payload: { email: { to: to0, subject, bodyText: bodyText || rawBody || content, bodyHtml, passSerial, category, badgeText, badgeColor } },
+          payload: { email: { to: to0, subject, bodyText: bodyText || rawBody || content, bodyHtml, passSerial, category, badgeText, badgeColor, background } },
         });
         return NextResponse.json({ count: 0, dispatched: [], approvalPending: true }, { status: 202 });
       }
@@ -113,6 +116,7 @@ export async function POST(request: Request) {
         badgeColor,
         category: category || (category === 'EVENT_INVITATION' || category === 'EVENT_PASS' ? category : 'DIRECT_MESSAGE'),
         attachments: attachments.length > 0 ? attachments : undefined,
+        background,
       });
       return NextResponse.json({ count: 1, dispatched: [log] });
     }
@@ -141,6 +145,7 @@ export async function POST(request: Request) {
         badgeColor,
         category: category || 'ANNOUNCEMENT',
         attachments: attachments.length > 0 ? attachments : undefined,
+        background,
       });
       dispatchedLogs.push(log);
     }

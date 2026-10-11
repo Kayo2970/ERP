@@ -8,6 +8,8 @@ import { EventItem, EventPassItem } from '@/lib/local-data';
 import { CertificateRecord, cleanTypeId, getCertificateStatuses, getCertificateTypes, isCertificateEligible, isEventOver, sendCertificatesBatch } from '@/lib/certificate';
 import { cleanCertEmail } from '@/lib/certificate-layout';
 import { CertificateSchedule } from '@/lib/certificate-scheduler';
+import { scheduledMap } from '@/lib/certificate-selection';
+import { cleanBackgroundChoice } from '@/lib/email-background';
 import { mutateCollection } from '@/lib/server-db';
 
 export const dynamic = 'force-dynamic';
@@ -45,7 +47,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       const info = statuses[m.passId];
       attendees.push({ passId: m.passId, name: m.attendeeName, email: m.attendeeEmail, serial: '', organisation: m.organisation || '', category: m.category || '', manual: true, status: info?.status || 'Issued', code: info?.code, issuedAt: info?.issuedAt, sentAt: info?.sentAt, sentBy: info?.sentBy, error: info?.error } as any);
     }
-    const schedules = (await readCollection<CertificateSchedule>('certificateSchedules')).filter((x) => x.eventId === id && cleanTypeId(x.typeId) === typeId).sort((a, b) => b.sendAt.localeCompare(a.sendAt)).slice(0, 10);
+    const allSchedules = (await readCollection<CertificateSchedule>('certificateSchedules')).filter((x) => x.eventId === id && cleanTypeId(x.typeId) === typeId).sort((a, b) => b.sendAt.localeCompare(a.sendAt));
+    // Always include every pending schedule (they decide who is "already scheduled"), plus the 10 most recent.
+    const recentIds = new Set(allSchedules.slice(0, 10).map((x) => x.id));
+    const schedules = allSchedules.filter((x) => recentIds.has(x.id) || x.status === 'Scheduled' || x.status === 'Running');
     return NextResponse.json({ eventOver: isEventOver(event), eventName: event.title, attendees, schedules, types, typeId });
   } catch (err) {
     return apiError(err, 'certificates:list');
@@ -59,14 +64,27 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (auth.error) return auth.error;
     const { id } = await params;
     const body = (await request.json()) as { passIds?: string[]; emails?: Record<string, string>; sendAt?: string; message?: unknown; typeId?: string };
-    const { passIds, emails, sendAt } = body;
+    const { emails, sendAt } = body;
+    let passIds = body.passIds;
     const typeId = cleanTypeId(body.typeId);
     const message = cleanCertEmail(body.message);
+    const background = cleanBackgroundChoice((body as { background?: unknown }).background);
     if (!Array.isArray(passIds) || passIds.length === 0) return NextResponse.json({ error: 'Choose at least one attendee.' }, { status: 400 });
     if (passIds.length > 500) return NextResponse.json({ error: 'Send at most 500 certificates at a time.' }, { status: 400 });
     const event = (await readCollection<EventItem>('events')).find((e) => e.id === id);
     if (!event) return NextResponse.json({ error: 'Event not found' }, { status: 404 });
     const origin = getAppBaseUrl(request);
+
+    // Anyone already inside a pending scheduled send is skipped here, so a stale tab (or a second person) can't
+    // send or schedule them again on top of it.
+    const alreadyScheduled = scheduledMap(
+      (await readCollection<CertificateSchedule>('certificateSchedules')).filter((x) => x.eventId === id && cleanTypeId(x.typeId) === typeId)
+    );
+    const skippedScheduled = passIds.filter((pid) => alreadyScheduled.has(pid)).length;
+    passIds = passIds.filter((pid) => !alreadyScheduled.has(pid));
+    if (passIds.length === 0) {
+      return NextResponse.json({ error: 'Everyone you chose is already in a scheduled send. Cancel that schedule first if you want to change it.', skippedScheduled }, { status: 409 });
+    }
 
     if (sendAt) {
       const when = new Date(sendAt);
@@ -79,17 +97,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         sendAt: when.toISOString(),
         origin,
         message,
+        ...(background ? { background } : {}),
         createdBy: auth.user?.name || 'Staff',
         createdAt: new Date().toISOString(),
         status: 'Scheduled',
       };
       await mutateCollection<CertificateSchedule>('certificateSchedules', (cur = []) => [...cur, schedule]);
-      return NextResponse.json({ scheduled: true, schedule });
+      return NextResponse.json({ scheduled: true, schedule, skippedScheduled });
     }
 
     if (!isEventOver(event)) return NextResponse.json({ error: "Certificates can be sent from the event's last day." }, { status: 400 });
-    const results = await sendCertificatesBatch(event, passIds, origin, emails, message, auth.user?.name || 'Staff', typeId);
-    return NextResponse.json({ sent: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length, results });
+    const results = await sendCertificatesBatch(event, passIds, origin, emails, message, auth.user?.name || 'Staff', typeId, background);
+    return NextResponse.json({ sent: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length, results, skippedScheduled });
   } catch (err) {
     return apiError(err, 'certificates:send');
   }

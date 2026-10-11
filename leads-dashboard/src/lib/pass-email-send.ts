@@ -4,6 +4,7 @@ import { readCollection } from './server-db';
 import { renderBoardingPassPng } from './pass-image';
 import { getPassTheme } from './pass-theme';
 import type { EventPassItem } from './local-data';
+import { cleanBackgroundChoice } from './email-background';
 
 export interface PassEmailPayload {
   to: string;
@@ -14,6 +15,7 @@ export interface PassEmailPayload {
   category?: string;
   badgeText?: string;
   badgeColor?: string;
+  background?: unknown;
 }
 
 export async function sendPassEmailFromPayload(p: PassEmailPayload | undefined, origin: string) {
@@ -38,5 +40,6 @@ export async function sendPassEmailFromPayload(p: PassEmailPayload | undefined, 
     badgeColor: p.badgeColor,
     category: (p.category as any) || 'EVENT_INVITATION',
     attachments: attachments.length ? attachments : undefined,
+    background: cleanBackgroundChoice(p.background),
   });
 }

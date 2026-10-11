@@ -39,6 +39,7 @@ import { EmailSettings, EmailLog } from '@/lib/email-service';
 import { canManageEmailSettings } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
+import { EmailBackgroundField, EmailBackgroundPicker, DEFAULT_BACKGROUND_PICK, EMAIL_BLUR_DEFAULT, backgroundChoiceFor, type EmailBackgroundPick } from '@/components/email-background-picker';
 import { ComposedAttachment, filesToAttachments, formatBytes, buildAttachmentNoticeLine, MAX_TOTAL_ATTACHMENT_BYTES } from '@/lib/email-attachments';
 
 interface PendingQueueItem {
@@ -496,6 +497,31 @@ export default function EmailManagementPage() {
     }
   };
 
+  /** Saves only the default mail background, so the SMTP credentials above are left exactly as they are. */
+  const handleSaveBackground = async () => {
+    setIsSavingBackground(true);
+    try {
+      const bg = settings.background;
+      const res = await fetch('/api/email/settings', {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ settings: { background: bg?.storageKey ? { enabled: bg.enabled !== false, storageKey: bg.storageKey, blur: bg.blur ?? EMAIL_BLUR_DEFAULT } : undefined }, actorName: user?.name || 'Super User' }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setSettings(prev => ({ ...prev, background: updated.background, updatedAt: updated.updatedAt }));
+        triggerToast('success', updated.background?.enabled ? 'Default email background saved. It is used on every email unless a send turns it off.' : 'Default email background removed.');
+      } else {
+        const data = await res.json().catch(() => null);
+        triggerToast('error', data?.error || 'Failed to save the email background.');
+      }
+    } catch (err: any) {
+      triggerToast('error', err?.message || 'Error saving the email background.');
+    } finally {
+      setIsSavingBackground(false);
+    }
+  };
+
   const handleTestConnection = async () => {
     if (!testRecipient) {
       triggerToast('error', 'Please enter a test recipient email address.');
@@ -531,6 +557,8 @@ export default function EmailManagementPage() {
 
   const [badgeOption, setBadgeOption] = useState<string>('NONE');
   const [customBadgeText, setCustomBadgeText] = useState<string>('');
+  const [bgPick, setBgPick] = useState<EmailBackgroundPick>(DEFAULT_BACKGROUND_PICK);
+  const [isSavingBackground, setIsSavingBackground] = useState(false);
 
   const handleAttachFiles = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
@@ -583,6 +611,7 @@ export default function EmailManagementPage() {
         bodyText,
         category,
         badgeText: resolvedBadgeText,
+        background: backgroundChoiceFor(bgPick),
         attachments: attachments.map(({ filename, contentBase64, contentType }) => ({ filename, contentBase64, contentType })),
       };
       const res = await fetch('/api/email/send', {
@@ -1418,6 +1447,8 @@ export default function EmailManagementPage() {
                 />
               </div>
 
+              <EmailBackgroundPicker value={bgPick} onChange={setBgPick} disabled={isSendingDispatch} />
+
               <div className="space-y-1.5">
                 <label className="block font-medium text-theme-text-secondary flex items-center gap-1.5">
                   <Paperclip className="h-3.5 w-3.5" />
@@ -1873,6 +1904,42 @@ export default function EmailManagementPage() {
                   <p className="text-[11px] leading-relaxed opacity-90">{testResult.message}</p>
                 </div>
               )}
+            </div>
+          </div>
+
+          <div className="glass-panel p-6 rounded-3xl xl:col-span-3 space-y-4 border border-theme-card-border">
+            <div>
+              <h3 className="text-base font-bold text-theme-text-primary flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-accent" />
+                Email Background (blurred picture)
+              </h3>
+              <p className="text-xs text-theme-text-secondary mt-0.5">
+                A picture shown, blurred, behind every email the system sends: certificates, event passes, guest invites, announcements and the Email composer. Any send can turn it off or use a different picture.
+              </p>
+            </div>
+            <label className="flex items-center gap-2 text-xs font-semibold text-theme-text-primary cursor-pointer w-fit">
+              <input
+                type="checkbox"
+                checked={!!settings.background?.storageKey && settings.background?.enabled !== false}
+                disabled={!settings.background?.storageKey}
+                onChange={e => setSettings(prev => ({ ...prev, background: { ...prev.background, enabled: e.target.checked, blur: prev.background?.blur ?? EMAIL_BLUR_DEFAULT } }))}
+              />
+              Use this background on all emails
+            </label>
+            <EmailBackgroundField
+              storageKey={settings.background?.storageKey}
+              blur={settings.background?.blur ?? EMAIL_BLUR_DEFAULT}
+              onChange={n => setSettings(prev => ({ ...prev, background: { enabled: n.storageKey ? (prev.background?.enabled ?? true) : false, storageKey: n.storageKey, blur: n.blur } }))}
+            />
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={handleSaveBackground}
+                disabled={isSavingBackground}
+                className="px-5 py-2.5 bg-accent hover:bg-primary-light text-white font-bold rounded-xl transition-all shadow-md shadow-accent/20 cursor-pointer disabled:opacity-50 text-xs"
+              >
+                {isSavingBackground ? 'Saving…' : 'Save email background'}
+              </button>
             </div>
           </div>
         </div>
