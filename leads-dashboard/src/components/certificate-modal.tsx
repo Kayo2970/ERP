@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Plus, UserPlus, Pencil, Award, X, Send, RefreshCw, CheckCircle2, AlertCircle, CheckSquare, Square, ImagePlus, Trash2, ChevronDown, ChevronRight, Download, CalendarClock, Check } from 'lucide-react';
-import { EventItem, authHeaders, formatEventDateRange } from '@/lib/local-data';
+import { Users, Plus, UserPlus, Pencil, Award, X, Send, RefreshCw, CheckCircle2, AlertCircle, CheckSquare, Square, ImagePlus, Trash2, ChevronDown, ChevronRight, Download, CalendarClock, Check } from 'lucide-react';
+import { EventItem, Member, authHeaders, formatEventDateRange, getMembers } from '@/lib/local-data';
 import { CertificateStatusBadge, CERT_STATUS_FILTERS } from '@/components/certificate-status-badge';
 import { CertBox, CertBoxKey, CertLayout, CERT_BOX_LABELS, CERT_FONT_OPTIONS, DEFAULT_CERT_EMAIL, CERT_EMAIL_FIELDS, CERT_EMAIL_MAX_SUBJECT, CERT_EMAIL_MAX_BODY, mergeCertEmail } from '@/lib/certificate-layout';
 
@@ -101,17 +101,32 @@ interface Props {
   canEditDesign: boolean;
   /** Holds the Send Certificates power; false = design/preview only. Defaults to true. */
   canSend?: boolean;
+  /** Lets the person pick recipients from the Members Directory (needs full-directory access). */
+  canPickMembers?: boolean;
   /** Render as a page section (the Certificates tab) instead of a pop-up overlay. */
   inline?: boolean;
 }
 
-export function CertificateModal({ isOpen, onClose, events, initialEventId, canEditDesign, canSend = true, inline = false }: Props) {
+export function CertificateModal({ isOpen, onClose, events, initialEventId, canEditDesign, canSend = true, canPickMembers = false, inline = false }: Props) {
   const [eventId, setEventId] = useState('');
   const [typeId, setTypeId] = useState('default');
   const [types, setTypes] = useState<CertType[]>([{ id: 'default', name: 'Participation' }]);
   const [loading, setLoading] = useState(true);
   const [manual, setManual] = useState({ name: '', email: '', organisation: '', category: '' });
   const [manualOpen, setManualOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState('');
+  const [pickerDivision, setPickerDivision] = useState('ALL');
+  const [pickerSelected, setPickerSelected] = useState<Set<string>>(new Set());
+  const [pickerProgress, setPickerProgress] = useState('');
+  const [members, setMembers] = useState<Member[]>([]);
+  useEffect(() => {
+    if (!canPickMembers) return;
+    const read = () => setMembers(getMembers());
+    read();
+    window.addEventListener('leads-data-sync', read);
+    return () => window.removeEventListener('leads-data-sync', read);
+  }, [canPickMembers]);
   const [openStep, setOpenStep] = useState(1);
   const [attendees, setAttendees] = useState<Attendee[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
@@ -462,6 +477,61 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     } catch (e: any) {
       setMsg({ kind: 'err', text: e.message });
     } finally {
+      setBusy(false);
+    }
+  };
+
+  // ── Members Directory picker ──
+  const existingEmails = new Set(attendees.map((a) => (a.email || '').trim().toLowerCase()).filter(Boolean));
+  const pickable = members.filter((m) => m.status !== 'Terminated' && (m.email || '').trim());
+  const pickerDivisions = Array.from(new Set(pickable.map((m) => m.division).filter(Boolean)));
+  const pickerRows = pickable.filter((m) => {
+    if (pickerDivision !== 'ALL' && m.division !== pickerDivision) return false;
+    const q = pickerSearch.trim().toLowerCase();
+    return !q || `${m.name} ${m.email} ${m.role} ${m.department || ''} ${m.division}`.toLowerCase().includes(q);
+  });
+  const hasCert = (m: Member) => existingEmails.has(m.email.trim().toLowerCase());
+  const memberDetails = (m: Member) => ({ name: m.name, email: m.email.trim(), organisation: m.department || 'LEADS Next Gen Centre', category: m.division === 'Alumni' ? 'Alumni' : m.role || m.division || '' });
+  const togglePick = (id: string) => setPickerSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  /** One member: copy their name / email into the form below (still editable). */
+  const fillFromMember = () => {
+    const m = pickable.find((x) => pickerSelected.has(x.id));
+    if (!m) return;
+    setManual(memberDetails(m));
+    setPickerOpen(false);
+    setPickerSelected(new Set());
+    setMsg({ kind: 'ok', text: `Filled in ${m.name}'s details — check them, then create the certificate.` });
+  };
+
+  /** Many members: create a certificate record for each, so they join the recipient list ready to send or schedule. */
+  const addPickedMembers = async () => {
+    const chosen = pickable.filter((m) => pickerSelected.has(m.id) && !hasCert(m));
+    if (chosen.length === 0) return setMsg({ kind: 'err', text: 'Everyone selected already has a certificate of this type.' });
+    setBusy(true);
+    setMsg(null);
+    let done = 0;
+    const failed: string[] = [];
+    try {
+      if (saveState === 'dirty') await saveDesign();
+      for (let i = 0; i < chosen.length; i += 5) {
+        await Promise.all(chosen.slice(i, i + 5).map(async (m) => {
+          try {
+            const res = await fetch(`/api/events/${eventId}/certificates/manual`, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ typeId, ...memberDetails(m) }) });
+            if (!res.ok) throw new Error();
+          } catch {
+            failed.push(m.name);
+          }
+          done += 1;
+          setPickerProgress(`Adding ${done}/${chosen.length}…`);
+        }));
+      }
+      setMsg({ kind: failed.length ? 'err' : 'ok', text: `Added ${chosen.length - failed.length} member${chosen.length - failed.length === 1 ? '' : 's'} to the recipient list${failed.length ? `. Could not add: ${failed.join(', ')}` : ' — tick them and send or schedule below.'}` });
+      setPickerSelected(new Set());
+      setPickerOpen(false);
+      await load(true);
+    } finally {
+      setPickerProgress('');
       setBusy(false);
     }
   };
@@ -850,6 +920,46 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                     {manualOpen && (
                       <div className="px-3 pb-3 space-y-2">
                         <p className="text-[10px] text-slate-500">For someone without an event pass. Uses the &ldquo;{types.find((t) => t.id === typeId)?.name}&rdquo; design, and the person is added to the list above.</p>
+                        {canPickMembers && (
+                          <div className="rounded-xl border border-slate-200 dark:border-white/10">
+                            <button type="button" onClick={() => setPickerOpen((o) => !o)} className="w-full flex items-center gap-2 px-3 py-2 text-left cursor-pointer">
+                              <Users className="h-4 w-4 text-accent" />
+                              <span className="flex-1 font-bold text-slate-800 dark:text-white">Pick from Members Directory</span>
+                              {pickerOpen ? <ChevronDown className="h-4 w-4 text-slate-400" /> : <ChevronRight className="h-4 w-4 text-slate-400" />}
+                            </button>
+                            {pickerOpen && (
+                              <div className="px-3 pb-3 space-y-2">
+                                <input className={field} placeholder="Search name, email, role or department" value={pickerSearch} onChange={(e) => setPickerSearch(e.target.value)} />
+                                <div className="flex flex-wrap gap-1.5 text-[10px] font-bold">
+                                  {['ALL', ...pickerDivisions].map((d) => (
+                                    <button key={d} type="button" onClick={() => setPickerDivision(d)} className={`px-2 py-0.5 rounded-full border cursor-pointer ${pickerDivision === d ? 'bg-accent/20 text-accent border-accent/40' : 'border-slate-300 dark:border-white/15 text-slate-500'}`}>{d === 'ALL' ? 'All' : d}</button>
+                                  ))}
+                                </div>
+                                <div className="border border-slate-200 dark:border-white/10 rounded-xl divide-y divide-slate-100 dark:divide-white/5 max-h-48 overflow-y-auto">
+                                  {pickerRows.length === 0 && <div className="py-4 text-center text-slate-400">{members.length === 0 ? 'No members loaded yet.' : 'No members match.'}</div>}
+                                  {pickerRows.map((m) => {
+                                    const has = hasCert(m);
+                                    return (
+                                      <label key={m.id} className={`flex items-center gap-2 p-2 ${has ? 'opacity-50' : 'hover:bg-white/10 cursor-pointer'}`}>
+                                        <input type="checkbox" disabled={has} checked={pickerSelected.has(m.id)} onChange={() => togglePick(m.id)} />
+                                        <span className="min-w-0 flex-1">
+                                          <span className="font-bold text-slate-900 dark:text-white block truncate">{m.name}</span>
+                                          <span className="text-[10px] text-slate-400 block truncate">{m.email} · {m.role}{m.division === 'Alumni' && m.batch ? ` · ${m.batch}` : ` · ${m.division}`}</span>
+                                        </span>
+                                        {has && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 shrink-0">Already has one</span>}
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <button type="button" disabled={busy || pickerSelected.size !== 1} onClick={fillFromMember} className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-white font-bold cursor-pointer disabled:opacity-50">Fill the form with this member</button>
+                                  <button type="button" disabled={busy || !canSend || pickerSelected.size === 0} onClick={addPickedMembers} className="px-3 py-2 rounded-xl bg-accent text-white font-extrabold cursor-pointer disabled:opacity-50">Add {pickerSelected.size || ''} selected as recipients</button>
+                                  {pickerProgress && <span className="text-[10px] text-slate-500">{pickerProgress}</span>}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <div><label className={label}>Name on certificate *</label><input className={field} value={manual.name} maxLength={120} onChange={(e) => setManual({ ...manual, name: e.target.value })} /></div>
                           <div><label className={label}>Email (to send it)</label><input type="email" className={field} value={manual.email} onChange={(e) => setManual({ ...manual, email: e.target.value })} /></div>
