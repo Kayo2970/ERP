@@ -1,5 +1,6 @@
 'use client';
 
+import { beginTask } from '@/lib/background-tasks';
 import React, { useState } from 'react';
 import {
   Mail,
@@ -106,6 +107,7 @@ export function EventPassEmailModal({
 
     setIsSending(true);
     setErrorMessage('');
+    const task = beginTask({ label: `Sending ${targets.length} pass email${targets.length === 1 ? '' : 's'}`, total: targets.length });
 
     try {
       let sentCount = 0;
@@ -126,7 +128,9 @@ export function EventPassEmailModal({
           failCount++;
           console.warn(`Network error dispatching email to ${pass.attendeeEmail}:`, subErr);
         }
+        task.progress(sentCount + failCount, `${sentCount} sent${failCount ? `, ${failCount} failed` : ''}`);
       }
+      task.finish(`${sentCount} of ${targets.length} pass email${targets.length === 1 ? '' : 's'} sent${failCount ? `, ${failCount} failed` : ''}.`, { warn: failCount > 0 });
 
       if (sentCount > 0) {
         setSuccessToast(`Dispatched ${sentCount} personalized pass emails successfully!${failCount > 0 ? ` (${failCount} failed)` : ''}`);
@@ -140,6 +144,7 @@ export function EventPassEmailModal({
       }
     } catch (err: any) {
       console.error(err);
+      task.fail('Failed to dispatch pass emails.');
       setErrorMessage('Failed to dispatch pass emails.');
     } finally {
       setIsSending(false);
