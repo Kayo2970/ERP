@@ -12,7 +12,7 @@ import { dispatchEmail } from '@/lib/email-service';
 import { drawStyledQr } from '@/lib/qr-style';
 import { registerCustomFonts } from '@/lib/certificate-fonts';
 import { customFamily } from '@/lib/certificate-fonts';
-import { CERT_W, CERT_H, CERT_FONT_OPTIONS, CertBox, CertLayout, DEFAULT_CERT_LAYOUT, normalizeLayout, isCustomFont } from '@/lib/certificate-layout';
+import { CERT_W, CERT_H, CERT_FONT_OPTIONS, CertBox, CertLayout, DEFAULT_CERT_LAYOUT, normalizeLayout, isCustomFont, CertEmailMessage, DEFAULT_CERT_EMAIL, mergeCertEmail } from '@/lib/certificate-layout';
 import { EventItem, EventPassItem, getPassAttendanceSummary, getEffectiveEventStatus, formatEventDateRange } from '@/lib/local-data';
 
 const CATEGORY = 'certificate-templates';
@@ -391,7 +391,8 @@ export async function sendCertificate(
   pass: EventPassItem,
   event: EventItem,
   origin: string,
-  to?: string
+  to?: string,
+  message?: CertEmailMessage
 ): Promise<{ ok: boolean; error?: string; record: CertificateRecord }> {
   const rec = await ensureCertificateRecord(pass, event);
   const recipient = (to || pass.attendeeEmail || '').trim();
@@ -399,10 +400,12 @@ export async function sendCertificate(
     if (!recipient) throw new Error('No email address.');
     const pdf = await renderCertificatePdf(rec, origin, pass);
     const verify = verifyUrlFor(origin, rec.code);
+    const msg = message || DEFAULT_CERT_EMAIL;
+    const vars = { name: rec.attendeeName, email: recipient, event: rec.eventName, date: rec.eventDate, code: rec.code, verifyUrl: verify };
     await dispatchEmail({
       to: recipient,
-      subject: `Your certificate — ${rec.eventName}`,
-      bodyText: `Dear ${rec.attendeeName},\n\nThank you for attending ${rec.eventName}. Your certificate of participation is attached to this email.\n\nYou can verify it any time at ${verify} (certificate ID ${rec.code}).\n\nWarm regards,\nLEADS Next Gen Centre • RUAS`,
+      subject: mergeCertEmail(msg.subject, vars),
+      bodyText: mergeCertEmail(msg.bodyText, vars),
       category: 'CERTIFICATE',
       attachments: [{ filename: `Certificate-${rec.attendeeName.replace(/[^\w]+/g, '_')}.pdf`, content: pdf, contentType: 'application/pdf' }],
     });
@@ -436,7 +439,8 @@ export async function sendCertificatesBatch(
   event: EventItem,
   passIds: string[],
   origin: string,
-  emails?: Record<string, string>
+  emails?: Record<string, string>,
+  message?: CertEmailMessage
 ): Promise<Array<{ passId: string; ok: boolean; error?: string }>> {
   const passes = await readCollection<EventPassItem>('event_passes');
   const results: Array<{ passId: string; ok: boolean; error?: string }> = [];
@@ -447,7 +451,7 @@ export async function sendCertificatesBatch(
       continue;
     }
     const to = emails?.[passId];
-    const r = await sendCertificate(pass, event, origin, typeof to === 'string' && /^\S+@\S+\.\S+$/.test(to.trim()) ? to : undefined);
+    const r = await sendCertificate(pass, event, origin, typeof to === 'string' && /^\S+@\S+\.\S+$/.test(to.trim()) ? to : undefined, message);
     results.push({ passId, ok: r.ok, error: r.error });
   }
   return results;

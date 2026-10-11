@@ -2,8 +2,8 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Award, X, Send, RefreshCw, CheckCircle2, AlertCircle, CheckSquare, Square, ImagePlus, Trash2, ChevronDown, ChevronRight, Download, CalendarClock, Check } from 'lucide-react';
-import { EventItem, authHeaders } from '@/lib/local-data';
-import { CertBox, CertBoxKey, CertLayout, CERT_BOX_LABELS, CERT_FONT_OPTIONS } from '@/lib/certificate-layout';
+import { EventItem, authHeaders, formatEventDateRange } from '@/lib/local-data';
+import { CertBox, CertBoxKey, CertLayout, CERT_BOX_LABELS, CERT_FONT_OPTIONS, DEFAULT_CERT_EMAIL, CERT_EMAIL_FIELDS, CERT_EMAIL_MAX_SUBJECT, CERT_EMAIL_MAX_BODY, mergeCertEmail } from '@/lib/certificate-layout';
 
 interface Attendee { passId: string; name: string; email: string; serial: string; organisation?: string; category?: string; status: string; sentAt?: string; error?: string }
 interface Template { title: string; introText: string; bodyText: string; signatoryName: string; signatoryTitle: string; nameSource: 'name' | 'organisation' | 'category' | 'serial'; textColor: string; layout: CertLayout }
@@ -90,6 +90,9 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
   const [saveState, setSaveState] = useState<'idle' | 'dirty' | 'saving' | 'saved'>('idle');
   const [previewPassId, setPreviewPassId] = useState('');
   const [finalPreview, setFinalPreview] = useState('');
+  const [emailSubject, setEmailSubject] = useState(DEFAULT_CERT_EMAIL.subject);
+  const [emailBody, setEmailBody] = useState(DEFAULT_CERT_EMAIL.bodyText);
+  const emailBodyRef = useRef<HTMLTextAreaElement>(null);
   const [sendMode, setSendMode] = useState<'now' | 'later'>('now');
   const [sendAt, setSendAt] = useState('');
   const [busy, setBusy] = useState(false);
@@ -337,7 +340,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     setMsg(null);
     try {
       if (saveState === 'dirty') await saveDesign();
-      const res = await fetch(`/api/events/${eventId}/certificates`, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ passIds: ids, sendAt: when }) });
+      const res = await fetch(`/api/events/${eventId}/certificates`, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ passIds: ids, sendAt: when, message: { subject: emailSubject, bodyText: emailBody } }) });
       const data = await readJson(res, 'sending the certificates');
       if (!res.ok) throw new Error(data.error || 'Failed to send.');
       setMsg(data.scheduled
@@ -358,6 +361,26 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     setMsg(res.ok ? { kind: 'ok', text: 'Scheduled send cancelled.' } : { kind: 'err', text: data.error || 'Could not cancel.' });
     load();
   };
+
+  const insertField = (token: string) => {
+    const el = emailBodyRef.current;
+    if (!el) return setEmailBody((b) => b + token);
+    const start = el.selectionStart ?? emailBody.length;
+    const end = el.selectionEnd ?? emailBody.length;
+    setEmailBody(emailBody.slice(0, start) + token + emailBody.slice(end));
+    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(start + token.length, start + token.length); });
+  };
+  const eventForEmail = events.find((e) => e.id === eventId);
+  const sampleAttendee = attendees.find((a) => selected.has(a.passId)) || attendees[0];
+  const emailVars = {
+    name: sampleAttendee?.name || 'Attendee Name',
+    email: sampleAttendee?.email || 'attendee@example.com',
+    event: eventForEmail?.title || 'Your Event',
+    date: eventForEmail ? formatEventDateRange(eventForEmail) : '',
+    code: 'PREVIEW000',
+    verifyUrl: `${typeof window !== 'undefined' ? window.location.origin : ''}/certificate/PREVIEW000`,
+  };
+  const emailReady = emailSubject.trim().length > 0 && emailBody.trim().length > 0;
 
   const pending = attendees.filter((a) => a.status !== 'Sent').length;
   const enabledKeys = template ? (Object.keys(template.layout) as CertBoxKey[]).filter((k) => template.layout[k].enabled) : [];
@@ -637,9 +660,28 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                     <label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={sendMode === 'now'} onChange={() => setSendMode('now')} /> Send now</label>
                     <label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={sendMode === 'later'} onChange={() => setSendMode('later')} /> Schedule</label>
                   </div>
+                  <div className="space-y-2 p-3 rounded-xl border border-slate-200 dark:border-white/10">
+                    <div className="flex items-center justify-between gap-2">
+                      <label className={`${label} mb-0`}>Email message</label>
+                      <button type="button" onClick={() => { setEmailSubject(DEFAULT_CERT_EMAIL.subject); setEmailBody(DEFAULT_CERT_EMAIL.bodyText); }} className="text-[10px] font-bold text-accent cursor-pointer">Reset to default</button>
+                    </div>
+                    <input className={field} maxLength={CERT_EMAIL_MAX_SUBJECT} value={emailSubject} onChange={(e) => setEmailSubject(e.target.value)} placeholder="Subject" />
+                    <textarea ref={emailBodyRef} rows={8} maxLength={CERT_EMAIL_MAX_BODY} className={`${field} font-sans`} value={emailBody} onChange={(e) => setEmailBody(e.target.value)} placeholder="Write the message that goes with the certificate" />
+                    <div className="flex flex-wrap gap-1.5">
+                      {CERT_EMAIL_FIELDS.map((f) => (
+                        <button key={f.token} type="button" title={f.label} onClick={() => insertField(f.token)} className="px-2 py-1 rounded-lg bg-accent/10 text-accent border border-accent/30 font-bold cursor-pointer">{f.token}</button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-slate-500">Each placeholder is filled in for every attendee. The certificate PDF is always attached.</p>
+                    <div className="rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-white/10 p-2.5 space-y-1">
+                      <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Preview — {emailVars.name}</span>
+                      <p className="font-bold text-slate-900 dark:text-white">{mergeCertEmail(emailSubject, emailVars) || '(no subject)'}</p>
+                      <p className="text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{mergeCertEmail(emailBody, emailVars) || '(no message)'}</p>
+                    </div>
+                  </div>
                   {sendMode === 'later' && <input type="datetime-local" className={`${field} max-w-xs`} value={sendAt} onChange={(e) => setSendAt(e.target.value)} />}
                   {!canSend && <p className="text-amber-500 font-semibold">You can design and preview certificates but not send them.</p>}
-                  <button type="button" disabled={!canSend || busy || selected.size === 0 || (sendMode === 'now' && !eventOver)} onClick={send} className="px-6 py-2.5 bg-accent text-white font-extrabold rounded-xl text-xs shadow-lg shadow-accent/25 flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                  <button type="button" disabled={!canSend || !emailReady || busy || selected.size === 0 || (sendMode === 'now' && !eventOver)} onClick={send} className="px-6 py-2.5 bg-accent text-white font-extrabold rounded-xl text-xs shadow-lg shadow-accent/25 flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                     {busy ? <RefreshCw className="h-4 w-4 animate-spin" /> : sendMode === 'later' ? <CalendarClock className="h-4 w-4" /> : <Send className="h-4 w-4" />}
                     {sendMode === 'later' ? 'Schedule' : 'Send'} {selected.size} certificate{selected.size === 1 ? '' : 's'}
                   </button>

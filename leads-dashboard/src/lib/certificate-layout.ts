@@ -106,3 +106,46 @@ export function normalizeLayout(input: unknown): CertLayout {
   });
   return out;
 }
+
+// ── Certificate email (the message that travels with the PDF) ───────────────────
+
+export interface CertEmailMessage { subject: string; bodyText: string }
+
+export const CERT_EMAIL_MAX_SUBJECT = 200;
+export const CERT_EMAIL_MAX_BODY = 5000;
+
+export const DEFAULT_CERT_EMAIL: CertEmailMessage = {
+  subject: 'Your certificate — {{event}}',
+  bodyText:
+    'Dear {{name}},\n\nThank you for attending {{event}}. Your certificate of participation is attached to this email.\n\nYou can verify it any time at {{verify_url}} (certificate ID {{code}}).\n\nWarm regards,\nLEADS Next Gen Centre • RUAS',
+};
+
+export const CERT_EMAIL_FIELDS: Array<{ token: string; label: string }> = [
+  { token: '{{name}}', label: 'Attendee name' },
+  { token: '{{email}}', label: 'Attendee email' },
+  { token: '{{event}}', label: 'Event name' },
+  { token: '{{date}}', label: 'Event date' },
+  { token: '{{code}}', label: 'Certificate ID' },
+  { token: '{{verify_url}}', label: 'Verification link' },
+];
+
+/** Fills {{name}} / @name style placeholders (same convention as Mail Merge) with one attendee's details. */
+export function mergeCertEmail(template: string, v: { name: string; email: string; event: string; date: string; code: string; verifyUrl: string }): string {
+  return template
+    .replace(/\{\{\s*name\s*\}\}|@name\b/gi, () => v.name)
+    .replace(/\{\{\s*email\s*\}\}|@email\b/gi, () => v.email)
+    .replace(/\{\{\s*event\s*\}\}/gi, () => v.event)
+    .replace(/\{\{\s*date\s*\}\}/gi, () => v.date)
+    .replace(/\{\{\s*code\s*\}\}/gi, () => v.code)
+    .replace(/\{\{\s*verify_url\s*\}\}/gi, () => v.verifyUrl);
+}
+
+/** Validates a client-supplied message; returns undefined when blank/invalid so the default wording is used. */
+export function cleanCertEmail(raw: unknown): CertEmailMessage | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  const subject = typeof r.subject === 'string' ? r.subject.trim().slice(0, CERT_EMAIL_MAX_SUBJECT) : '';
+  const bodyText = typeof r.bodyText === 'string' ? r.bodyText.trim().slice(0, CERT_EMAIL_MAX_BODY) : '';
+  if (!subject || !bodyText) return undefined;
+  return { subject, bodyText };
+}
