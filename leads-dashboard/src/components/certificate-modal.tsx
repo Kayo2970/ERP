@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Users, Plus, UserPlus, Pencil, Award, X, Send, RefreshCw, CheckCircle2, AlertCircle, CheckSquare, Square, ImagePlus, Trash2, ChevronDown, ChevronRight, Download, CalendarClock, Check } from 'lucide-react';
 import { EventItem, Member, TaskItem, authHeaders, formatEventDateRange, getMembers, getTasks } from '@/lib/local-data';
 import { beginTask } from '@/lib/background-tasks';
+import { defaultSelection, isSelectable, keepSelection, scheduledMap, toggleVisible, visibleSelectionState } from '@/lib/certificate-selection';
 import { CertificateStatusBadge, CERT_STATUS_FILTERS } from '@/components/certificate-status-badge';
 import { CertBox, CertBoxKey, CertLayout, CERT_BOX_LABELS, CERT_FONT_OPTIONS, DEFAULT_CERT_EMAIL, CERT_EMAIL_FIELDS, CERT_EMAIL_MAX_SUBJECT, CERT_EMAIL_MAX_BODY, mergeCertEmail } from '@/lib/certificate-layout';
 
@@ -196,7 +197,11 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
       if (Array.isArray(aj.types) && aj.types.length) setTypes(aj.types);
       setSchedules(aj.schedules || []);
       setEventOver(!!aj.eventOver);
-      setSelected(new Set(aj.attendees.filter((x: Attendee) => x.status !== 'Sent' && x.status !== 'Queued').map((x: Attendee) => x.passId)));
+      // A fresh load (event / certificate type changed) starts from "everyone who still needs one"; a reload after a
+      // send or schedule keeps what was ticked, minus anyone now sent, queued or already scheduled.
+      const scheduledNow = scheduledMap(aj.schedules);
+      setSelected((prev) => (silent ? keepSelection(prev, aj.attendees, scheduledNow) : defaultSelection(aj.attendees, scheduledNow)));
+      setOpenPreviews(new Set());
       setPreviewPassId(aj.attendees[0]?.passId || '');
       setFinalPreview('');
       if (t.ok) {
@@ -576,7 +581,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     }
   };
 
-  const toggle = (id: string) => setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggle = (id: string) => setSelected((prev) => { if (scheduledIds.has(id)) return prev; const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   const downloadPdf = async () => {
     if (!previewPassId) return;
@@ -595,7 +600,8 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     if (ids.length === 0) return;
     if (sendMode === 'later' && !sendAt) return setMsg({ kind: 'err', text: 'Pick the date and time to send.' });
     const when = sendMode === 'later' ? new Date(sendAt).toISOString() : undefined;
-    if (!window.confirm(sendMode === 'later' ? `Schedule ${ids.length} certificate${ids.length === 1 ? '' : 's'} for ${new Date(sendAt).toLocaleString()}?` : `Email ${ids.length} certificate${ids.length === 1 ? '' : 's'} now?`)) return;
+    const resend = alreadySentSelected > 0 ? `\n\n${alreadySentSelected} of them already received this certificate and will get it again.` : '';
+    if (!window.confirm((sendMode === 'later' ? `Schedule ${ids.length} certificate${ids.length === 1 ? '' : 's'} for ${new Date(sendAt).toLocaleString()}?` : `Email ${ids.length} certificate${ids.length === 1 ? '' : 's'} now?`) + resend)) return;
     setBusy(true);
     setMsg(null);
     const evName = events.find((e) => e.id === eventId)?.title || 'event';
@@ -605,9 +611,10 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
       const res = await fetch(`/api/events/${eventId}/certificates`, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ typeId, passIds: ids, sendAt: when, message: { subject: emailSubject, bodyText: emailBody } }) });
       const data = await readJson(res, 'sending the certificates');
       if (!res.ok) throw new Error(data.error || 'Failed to send.');
+      const skipNote = data.skippedScheduled ? ` ${data.skippedScheduled} ${data.skippedScheduled === 1 ? 'person was' : 'people were'} skipped because they are already in a scheduled send.` : '';
       setMsg(data.scheduled
-        ? { kind: 'ok', text: `Scheduled ${ids.length} certificate${ids.length === 1 ? '' : 's'} for ${new Date(data.schedule.sendAt).toLocaleString()}.` }
-        : { kind: data.failed ? 'err' : 'ok', text: `Sent ${data.sent} certificate${data.sent === 1 ? '' : 's'}${data.failed ? `, ${data.failed} failed (see the list)` : ''}.` });
+        ? { kind: 'ok', text: `Scheduled ${ids.length - (data.skippedScheduled || 0)} certificate${ids.length - (data.skippedScheduled || 0) === 1 ? '' : 's'} for ${new Date(data.schedule.sendAt).toLocaleString()}.${skipNote}` }
+        : { kind: data.failed ? 'err' : 'ok', text: `Sent ${data.sent} certificate${data.sent === 1 ? '' : 's'}${data.failed ? `, ${data.failed} failed (see the list)` : ''}.${skipNote}` });
       task.finish(data.scheduled ? `Scheduled ${ids.length} certificate${ids.length === 1 ? '' : 's'} for ${new Date(data.schedule.sendAt).toLocaleString()}.` : `${data.sent} certificate${data.sent === 1 ? '' : 's'} queued${data.failed ? `, ${data.failed} failed` : ''} (10-minute hold applies).`, { warn: !data.scheduled && data.failed > 0 });
       await load(true);
     } catch (e: any) {
@@ -657,6 +664,14 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     const q = recipientSearch.trim().toLowerCase();
     return !q || `${a.name} ${a.email} ${a.organisation || ''} ${a.serial} ${a.code || ''}`.toLowerCase().includes(q);
   });
+  const scheduledIds = scheduledMap(schedules);
+  const visibleSel = visibleSelectionState(selected, visibleAttendees, scheduledIds);
+  const sendableCount = attendees.filter((a) => isSelectable(a, scheduledIds)).length;
+  const alreadySentSelected = selectedPeople.filter((a) => a.status === 'Sent' || a.status === 'Queued').length;
+  const scheduledTag = (id: string) => {
+    const at = scheduledIds.get(id);
+    return at ? `Scheduled ${new Date(at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : '';
+  };
   const selectFailed = () => { setStatusFilter('Failed'); setSelected(new Set(attendees.filter((a) => a.status === 'Failed').map((a) => a.passId))); };
   const exportLedgerCsv = () => {
     const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -931,9 +946,9 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                   <p className="text-[10px] text-slate-500">This applies to certificates for event passes. People added manually, including from the Members Directory, always print their own name here.</p>
                   <p className="text-[10px] text-slate-500">Merge fields for the wording: <code>@name</code> <code>@organisation</code> <code>@category</code> <code>@serial</code> <code>@event_name</code> <code>@event_date</code>. Each is filled from the attendee&apos;s pass when the PDF is made.</p>
                   <div className="flex items-center justify-between">
-                    <span className="font-extrabold text-slate-800 dark:text-white">Recipients ({selected.size}/{attendees.length} selected · {pending} not yet sent)</span>
-                    <button type="button" className="font-bold text-accent hover:underline cursor-pointer" onClick={() => setSelected(selected.size === visibleAttendees.length && visibleAttendees.length > 0 ? new Set() : new Set(visibleAttendees.map((a) => a.passId)))}>
-                      {selected.size === visibleAttendees.length && visibleAttendees.length > 0 ? 'Deselect all' : 'Select all'}
+                    <span className="font-extrabold text-slate-800 dark:text-white">Recipients ({selected.size}/{attendees.length} selected · {pending} not yet sent{visibleSel.hiddenSelected > 0 ? ` · ${visibleSel.hiddenSelected} ticked outside this filter` : ''})</span>
+                    <button type="button" disabled={visibleSel.selectable.length === 0} className="font-bold text-accent hover:underline cursor-pointer disabled:opacity-40 disabled:no-underline disabled:cursor-not-allowed" title="Applies to the people shown below; anyone already sent, queued or scheduled is skipped" onClick={() => setSelected(toggleVisible(selected, visibleAttendees, scheduledIds))}>
+                      {visibleSel.allOn ? 'Deselect all shown' : 'Select all shown'}
                     </button>
                   </div>
                   <div className="flex flex-wrap gap-1.5 text-[10px] font-bold">
@@ -951,11 +966,11 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                     {attendees.length === 0 && <div className="py-6 text-center text-slate-400">{busy ? 'Loading…' : 'No checked-in attendees with an email address for this event.'}</div>}
                     {attendees.length > 0 && visibleAttendees.length === 0 && <div className="py-6 text-center text-slate-400">No one matches this filter.</div>}
                     {visibleAttendees.map((a) => (
-                      <div key={a.passId} onClick={() => toggle(a.passId)} className="flex items-center justify-between gap-2 p-2 hover:bg-white/10 cursor-pointer">
+                      <div key={a.passId} onClick={() => toggle(a.passId)} className={`flex items-center justify-between gap-2 p-2 ${scheduledIds.has(a.passId) ? 'opacity-60 cursor-not-allowed' : 'hover:bg-white/10 cursor-pointer'}`}>
                         <div className="flex items-start gap-2 min-w-0">
                           {selected.has(a.passId) ? <CheckSquare className="h-4 w-4 text-accent shrink-0 mt-0.5" /> : <Square className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />}
                           <div className="min-w-0">
-                            <span className="font-bold text-slate-900 dark:text-white block break-words">{a.name}{a.manual && <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-400 align-middle">Manual</span>}</span>
+                            <span className="font-bold text-slate-900 dark:text-white block break-words">{a.name}{a.manual && <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-400 align-middle">Manual</span>}{scheduledIds.has(a.passId) && <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-400 align-middle">{scheduledTag(a.passId)}</span>}</span>
                             <span className="text-[10px] text-slate-400 block break-all">{a.email}{a.organisation ? ` · ${a.organisation}` : ''}{a.category ? ` · ${a.category}` : ''}</span>
                             {a.status === 'Failed' && a.error && <span className="text-[10px] text-rose-400 block break-words">{a.error}</span>}
                           </div>
@@ -1128,13 +1143,12 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <label className={`${label} mb-0`}>Who gets this ({selected.size} of {attendees.length} selected)</label>
                       <div className="flex flex-wrap items-center gap-3 text-[11px] font-bold">
-                        <button type="button" className="text-accent hover:underline cursor-pointer" onClick={() => setSelected(new Set(attendees.map((a) => a.passId)))}>Select all</button>
-                        <button type="button" className="text-accent hover:underline cursor-pointer" onClick={() => setSelected(new Set(attendees.filter((a) => a.status !== 'Sent' && a.status !== 'Queued').map((a) => a.passId)))}>Only not yet sent</button>
+                        <button type="button" className="text-accent hover:underline cursor-pointer" title="Everyone who still needs a certificate — people already sent, queued or scheduled are skipped" onClick={() => setSelected(defaultSelection(attendees, scheduledIds))}>Select everyone not yet sent ({sendableCount})</button>
                         <button type="button" className="text-slate-500 hover:underline cursor-pointer" onClick={() => setSelected(new Set())}>Clear</button>
                         <button type="button" className="text-slate-500 hover:underline cursor-pointer" onClick={() => setOpenPreviews(openPreviews.size ? new Set() : new Set(selectedPeople.map((a) => a.passId)))}>{openPreviews.size ? 'Hide all messages' : 'Show all messages'}</button>
                       </div>
                     </div>
-                    <p className="text-[10px] text-slate-500">Tick exactly who this send (or schedule) is for. Send now to one group, then tick the others and schedule them. Open any row to read that person&apos;s own message.</p>
+                    <p className="text-[10px] text-slate-500">Tick exactly who this send (or schedule) is for. Send now to one group, then tick the others and schedule them. People who are already scheduled can&apos;t be ticked again — cancel that schedule first. You can still tick someone who was already sent to send it again. Open any row to read that person&apos;s own message.</p>
                     <div className="border border-slate-200 dark:border-white/10 rounded-xl divide-y divide-slate-100 dark:divide-white/5 max-h-[45vh] overflow-y-auto">
                       {attendees.length === 0 && <div className="py-4 text-center text-slate-400">No recipients yet.</div>}
                       {attendees.map((a) => {
@@ -1144,10 +1158,10 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                         return (
                           <div key={a.passId} className={on ? 'bg-accent/5' : ''}>
                             <div className="flex items-start justify-between gap-2 p-2">
-                              <button type="button" onClick={() => toggle(a.passId)} className="flex items-start gap-2 min-w-0 text-left cursor-pointer">
+                              <button type="button" disabled={scheduledIds.has(a.passId)} onClick={() => toggle(a.passId)} className={`flex items-start gap-2 min-w-0 flex-1 text-left ${scheduledIds.has(a.passId) ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
                                 {on ? <CheckSquare className="h-4 w-4 text-accent shrink-0 mt-0.5" /> : <Square className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />}
                                 <span className="min-w-0">
-                                  <span className="font-bold text-slate-900 dark:text-white block break-words">{a.name}{a.manual && <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-400 align-middle">Manual</span>}</span>
+                                  <span className="font-bold text-slate-900 dark:text-white block break-words">{a.name}{a.manual && <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-400 align-middle">Manual</span>}{scheduledIds.has(a.passId) && <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-400 align-middle">{scheduledTag(a.passId)}</span>}</span>
                                   <span className="text-[10px] text-slate-400 block break-all">{a.email}</span>
                                 </span>
                               </button>
@@ -1169,7 +1183,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                       })}
                     </div>
                     {selectedPeople.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
+                      <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto min-w-0">
                         <span className="text-[10px] font-bold text-slate-500 self-center">{sendMode === 'later' ? 'Scheduling for:' : 'Sending to:'}</span>
                         {selectedPeople.map((a) => <span key={a.passId} className="px-2 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/30 text-[10px] font-bold break-words">{a.name}</span>)}
                       </div>
