@@ -24,6 +24,45 @@ const BOX_HINTS: Record<CertBoxKey, string> = {
 
 const STEPS = ['Background', 'Choose content', 'Adjust position & font', 'Link to data', 'Preview final files', 'Schedule & send'];
 
+/** Parses a JSON response; turns an HTML error page from the server / proxy into a readable message naming the action. */
+async function readJson(res: Response, what: string): Promise<any> {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    if (res.status === 413) throw new Error(`The server rejected ${what} because it is too large. Use a smaller file, or raise the upload limit (nginx client_max_body_size).`);
+    if (res.status === 502 || res.status === 503 || res.status === 504) throw new Error(`The server did not answer in time while ${what}. Try again in a moment.`);
+    if (res.status === 404) throw new Error(`The server does not have this feature yet while ${what} — deploy the latest build (git pull, npm run build, pm2 restart).`);
+    throw new Error(`Unexpected server response (HTTP ${res.status}) while ${what}.`);
+  }
+}
+
+/** Downsizes a picked background to at most 2480 px (JPEG) before upload, so the request stays small. */
+function shrinkImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read that image.'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Could not read that image.'));
+      img.onload = () => {
+        const scale = Math.min(1, 2480 / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(img.width * scale));
+        c.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = c.getContext('2d');
+        if (!ctx) return reject(new Error('Could not process that image.'));
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, c.width, c.height);
+        ctx.drawImage(img, 0, 0, c.width, c.height);
+        resolve(c.toDataURL('image/jpeg', 0.85));
+      };
+      img.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 interface Props {
   isOpen: boolean;
   onClose: () => void;
@@ -79,7 +118,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
         fetch(`/api/events/${eventId}/certificates`, { headers: authHeaders() }),
         fetch(`/api/events/${eventId}/certificate-template`, { headers: authHeaders() }),
       ]);
-      const aj = await a.json();
+      const aj = await readJson(a, 'loading attendees');
       if (!a.ok) throw new Error(aj.error || 'Could not load attendees.');
       setAttendees(aj.attendees);
       setSchedules(aj.schedules || []);
@@ -88,7 +127,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
       setPreviewPassId(aj.attendees[0]?.passId || '');
       setFinalPreview('');
       if (t.ok) {
-        const tj = await t.json();
+        const tj = await readJson(t, 'loading the certificate design');
         setTemplate(tj.template);
         setPreview(tj.preview);
         setHasBackground(tj.hasBackground);
@@ -106,7 +145,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
   const loadFonts = useCallback(async () => {
     try {
       const r = await fetch('/api/certificate-fonts', { headers: authHeaders() });
-      if (r.ok) setCustomFonts((await r.json()).fonts || []);
+      if (r.ok) setCustomFonts((await readJson(r, 'loading fonts')).fonts || []);
     } catch { /* built-in fonts still work */ }
   }, []);
 
@@ -128,10 +167,11 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     setSaveState('saving');
     try {
       const res = await fetch(`/api/events/${eventId}/certificate-template`, { method: 'PUT', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ ...t, background: backgroundRef.current }) });
-      const data = await res.json();
+      const data = await readJson(res, 'saving the design');
       if (!res.ok) throw new Error(data.error || 'Failed to save.');
       setPreview(data.preview);
       setHasBackground(data.hasBackground);
+      setMsg((m) => (m && m.kind === 'err' ? null : m));
       if (versionRef.current === version) {
         setBackground(undefined);
         setSaveState('saved');
@@ -155,7 +195,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     try {
       if (saveState === 'dirty') await saveDesign();
       const res = await fetch(`/api/events/${eventId}/certificates/preview?passId=${encodeURIComponent(previewPassId)}`, { headers: authHeaders() });
-      const data = await res.json();
+      const data = await readJson(res, 'building the preview');
       if (!res.ok) throw new Error(data.error || 'Could not build the preview.');
       setFinalPreview(data.preview);
     } catch (e: any) {
@@ -211,7 +251,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     setBusy(true);
     try {
       const res = await fetch(`/api/events/${otherId}/certificate-template`, { headers: authHeaders() });
-      const data = await res.json();
+      const data = await readJson(res, 'copying the layout');
       if (!res.ok) throw new Error(data.error || 'Could not load that design.');
       edit((t) => ({ ...t, layout: data.template.layout, textColor: data.template.textColor }));
       setMsg({ kind: 'ok', text: 'Layout copied from the other event.' });
@@ -222,19 +262,25 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     }
   };
 
-  const pickArtwork = (file?: File) => {
+  const pickArtwork = async (file?: File) => {
     if (!file) return;
-    if (file.size > 8 * 1024 * 1024) return setMsg({ kind: 'err', text: 'Artwork must be under 8 MB.' });
-    const reader = new FileReader();
-    reader.onload = () => { setBackground(String(reader.result)); setHasBackground(true); versionRef.current += 1; setSaveState('dirty'); };
-    reader.readAsDataURL(file);
+    if (file.size > 25 * 1024 * 1024) return setMsg({ kind: 'err', text: 'Artwork must be under 25 MB.' });
+    try {
+      const dataUrl = await shrinkImage(file);
+      setBackground(dataUrl);
+      setHasBackground(true);
+      versionRef.current += 1;
+      setSaveState('dirty');
+    } catch (e: any) {
+      setMsg({ kind: 'err', text: e.message });
+    }
   };
 
   const addFont = async (payload: { googleUrl?: string; name?: string; dataUrl?: string }, applyTo: CertBoxKey) => {
     setBusy(true);
     try {
       const res = await fetch('/api/certificate-fonts', { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(payload) });
-      const data = await res.json();
+      const data = await readJson(res, 'adding the font');
       if (!res.ok) throw new Error(data.error || 'Could not add the font.');
       setCustomFonts(data.fonts || []);
       patchBox(applyTo, { fontFamily: `custom:${data.id}` });
@@ -258,7 +304,11 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
   const removeFont = async (id: string) => {
     if (!window.confirm('Delete this font? Boxes using it fall back to the default serif.')) return;
     const res = await fetch(`/api/certificate-fonts?id=${encodeURIComponent(id)}`, { method: 'DELETE', headers: authHeaders() });
-    if (res.ok) setCustomFonts((await res.json()).fonts || []);
+    try {
+      if (res.ok) setCustomFonts((await readJson(res, 'deleting the font')).fonts || []);
+    } catch (e: any) {
+      setMsg({ kind: 'err', text: e.message });
+    }
   };
 
   const toggle = (id: string) => setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -286,7 +336,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     try {
       if (saveState === 'dirty') await saveDesign();
       const res = await fetch(`/api/events/${eventId}/certificates`, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ passIds: ids, sendAt: when }) });
-      const data = await res.json();
+      const data = await readJson(res, 'sending the certificates');
       if (!res.ok) throw new Error(data.error || 'Failed to send.');
       setMsg(data.scheduled
         ? { kind: 'ok', text: `Scheduled ${ids.length} certificate${ids.length === 1 ? '' : 's'} for ${new Date(data.schedule.sendAt).toLocaleString()}.` }
@@ -301,7 +351,8 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
 
   const cancelSchedule = async (id: string) => {
     const res = await fetch(`/api/events/${eventId}/certificates?scheduleId=${encodeURIComponent(id)}`, { method: 'DELETE', headers: authHeaders() });
-    const data = await res.json();
+    let data: any = {};
+    try { data = await readJson(res, 'cancelling the scheduled send'); } catch (e: any) { data = { error: e.message }; }
     setMsg(res.ok ? { kind: 'ok', text: 'Scheduled send cancelled.' } : { kind: 'err', text: data.error || 'Could not cancel.' });
     load();
   };
