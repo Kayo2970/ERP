@@ -670,29 +670,73 @@ const STATUS_RANK: Record<CertDisplayStatus, number> = { 'Not issued': 0, Issued
  * With `typeId` it is that certificate type only; without, it is the most advanced status across all of
  * the pass's certificates, with `count` saying how many certificates exist for it.
  */
+/** Real delivery status of one certificate record, folding in the email log (queued / sent / failed). */
+function describeRecord(r: CertificateRecord, logs: Map<string, EmailLog>): CertStatusInfo {
+  const info: CertStatusInfo = { status: 'Issued', code: r.code, issuedAt: r.issuedAt, sentBy: r.sentBy, typeId: cleanTypeId(r.typeId), typeName: r.typeName, count: 1 };
+  if (r.status === 'Failed') {
+    info.status = 'Failed';
+    info.error = r.error;
+  } else if (r.status === 'Sent') {
+    const log = r.emailLogId ? logs.get(r.emailLogId) : undefined;
+    info.sentAt = r.sentAt;
+    if (!log) info.status = 'Sent'; // sent before delivery tracking existed
+    else if (log.status === 'BUFFERED') info.status = 'Queued';
+    else if (log.status === 'SENT') {
+      info.status = 'Sent';
+      info.sentAt = log.sentAt || r.sentAt;
+    } else {
+      info.status = 'Failed';
+      info.error = log.errorMessage || (log.status === 'CANCELLED' ? 'Email was cancelled before it was sent.' : 'Email failed to send.');
+    }
+  }
+  return info;
+}
+
+async function loadCertificateLogs(): Promise<Map<string, EmailLog>> {
+  return new Map((await readCollection<EmailLog>('emails')).filter((l) => l.category === 'CERTIFICATE').map((l) => [l.id, l]));
+}
+
+export interface IssuedCertificateRow extends CertStatusInfo {
+  id: string;
+  passId: string;
+  eventId: string;
+  eventName: string;
+  eventDate: string;
+  attendeeName: string;
+  attendeeEmail: string;
+  organisation?: string;
+  category?: string;
+  manual?: boolean;
+}
+
+/** Every certificate ever issued (one row each, newest first) with its live delivery status — feeds the Issued Certificates box. */
+export async function listIssuedCertificates(eventId?: string): Promise<IssuedCertificateRow[]> {
+  const records = (await readCollection<CertificateRecord>('certificates')).filter((c) => !eventId || c.eventId === eventId);
+  const logs = await loadCertificateLogs();
+  return records
+    .map((r) => ({
+      ...describeRecord(r, logs),
+      id: r.id,
+      passId: r.passId,
+      eventId: r.eventId,
+      eventName: r.eventName,
+      eventDate: r.eventDate,
+      attendeeName: r.attendeeName,
+      attendeeEmail: r.attendeeEmail,
+      organisation: r.organisation,
+      category: r.category,
+      manual: r.manual,
+    }))
+    .sort((a, b) => String(b.issuedAt || '').localeCompare(String(a.issuedAt || '')));
+}
+
 export async function getCertificateStatuses(eventId?: string, typeId?: string | null): Promise<Record<string, CertStatusInfo>> {
   const type = typeId ? cleanTypeId(typeId) : undefined;
   const records = (await readCollection<CertificateRecord>('certificates')).filter((c) => (!eventId || c.eventId === eventId) && (!type || cleanTypeId(c.typeId) === type));
-  const logs = new Map((await readCollection<EmailLog>('emails')).filter((l) => l.category === 'CERTIFICATE').map((l) => [l.id, l]));
+  const logs = await loadCertificateLogs();
   const out: Record<string, CertStatusInfo> = {};
   for (const r of records) {
-    const info: CertStatusInfo = { status: 'Issued', code: r.code, issuedAt: r.issuedAt, sentBy: r.sentBy, typeId: cleanTypeId(r.typeId), typeName: r.typeName, count: 1 };
-    if (r.status === 'Failed') {
-      info.status = 'Failed';
-      info.error = r.error;
-    } else if (r.status === 'Sent') {
-      const log = r.emailLogId ? logs.get(r.emailLogId) : undefined;
-      info.sentAt = r.sentAt;
-      if (!log) info.status = 'Sent'; // sent before delivery tracking existed
-      else if (log.status === 'BUFFERED') info.status = 'Queued';
-      else if (log.status === 'SENT') {
-        info.status = 'Sent';
-        info.sentAt = log.sentAt || r.sentAt;
-      } else {
-        info.status = 'Failed';
-        info.error = log.errorMessage || (log.status === 'CANCELLED' ? 'Email was cancelled before it was sent.' : 'Email failed to send.');
-      }
-    }
+    const info = describeRecord(r, logs);
     const prev = out[r.passId];
     if (!prev) out[r.passId] = info;
     else out[r.passId] = { ...(STATUS_RANK[info.status] > STATUS_RANK[prev.status] ? info : prev), count: (prev.count || 1) + 1 };
