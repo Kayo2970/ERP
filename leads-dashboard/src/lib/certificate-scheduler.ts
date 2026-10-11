@@ -37,7 +37,7 @@ export async function runDueCertificateSchedules(now: Date = new Date()): Promis
     try {
       const event = (await readCollection<EventItem>('events')).find((e) => e.id === s.eventId);
       if (!event) throw new Error('Event no longer exists.');
-      if (!isEventOver(event)) throw new Error('The event had not ended at the scheduled time.');
+      if (!isEventOver(event)) throw new Error('The event had not reached its last day at the scheduled time.');
       const results = await sendCertificatesBatch(event, s.passIds, s.origin);
       const sent = results.filter((r) => r.ok).length;
       patch = { status: 'Done', sent, failed: results.length - sent };

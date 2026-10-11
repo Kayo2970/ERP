@@ -632,7 +632,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
 
               {section(6, (
                 <div className="space-y-3">
-                  {!eventOver && sendMode === 'now' && <p className="text-amber-500 font-semibold">This event has not ended yet — send now becomes available once it has. You can schedule it for after the event.</p>}
+                  {!eventOver && sendMode === 'now' && <p className="text-amber-500 font-semibold">Sending opens on the event's last day — send now becomes available then. You can schedule it for that day or later.</p>}
                   <div className="flex flex-wrap gap-4 font-bold text-slate-700 dark:text-slate-200">
                     <label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={sendMode === 'now'} onChange={() => setSendMode('now')} /> Send now</label>
                     <label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={sendMode === 'later'} onChange={() => setSendMode('later')} /> Schedule</label>
