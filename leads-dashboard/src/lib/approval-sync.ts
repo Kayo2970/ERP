@@ -14,7 +14,7 @@ import { readCollection, mutateCollection } from './server-db';
 import { dispatchEmail, wrapInMasterEmailTemplate, findApprovalRecipients } from './email-service';
 import type { ApprovalRequest } from './local-data';
 
-type AutoApprovalEntityType = 'event' | 'task' | 'design' | 'event-report' | 'announcement' | 'procurement' | 'form' | 'committee' | 'event-pass';
+type AutoApprovalEntityType = 'event' | 'task' | 'design' | 'event-report' | 'announcement' | 'procurement' | 'form' | 'committee' | 'event-pass' | 'festival';
 
 const ENTITY_LABELS: Record<AutoApprovalEntityType, string> = {
   event: 'Event',
@@ -26,6 +26,7 @@ const ENTITY_LABELS: Record<AutoApprovalEntityType, string> = {
   form: 'Form',
   committee: 'Event Committee',
   'event-pass': 'Event Pass Action',
+  festival: 'Festival Post',
 };
 
 export interface ApprovalPanelMember {

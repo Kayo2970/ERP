@@ -1,5 +1,5 @@
 import { readCollection, mutateCollection } from './server-db';
-import { enqueueTaskEmailNotification } from './task-email-queue';
+import { resolveFestivalApprovers, buildFestivalAssignRows } from './local-data';
 
 /**
  * Google's own publicly-maintained "Holidays in India" calendar, exposed as a
@@ -206,9 +206,9 @@ export async function runHolidaySync(): Promise<{ fetched: number; upserted: num
 
 /**
  * For every synced holiday landing within the coming 7 days (i.e. today, the
- * Sunday sync run, IS "one weekend before" that holiday), creates a
- * `holiday_social_approval` task — assigned as a group to every Centre Head /
- * Events Head on the roster — asking whether a social media post is needed.
+ * Sunday sync run, IS "one weekend before" that holiday), raises an
+ * Approvals row (for every Centre Head / Events Head) to assign the `holiday_social_approval`
+ * task asking whether a social media post is needed. No task is created or emailed until a person assigns it.
  * Strictly deduplicates so multiple tasks are never created for the same holiday.
  */
 export async function runHolidayApprovalTasks(): Promise<{ created: number }> {
@@ -264,59 +264,23 @@ export async function runHolidayApprovalTasks(): Promise<{ created: number }> {
   }
   if (toCreate.length === 0) return { created: 0 };
 
+  // Nobody is assigned and nobody is emailed here. Each festival becomes an Approvals row for the approvers;
+  // the task itself is only created (and its assignees emailed) when a person presses Assign there.
   const members = await readCollection<any>('members');
-  const activeMembers = members.filter((m: any) => m.status !== 'Terminated' && m.email);
-  let approvers = activeMembers.filter((m: any) => {
-    const role = (m.role || '').toLowerCase();
-    return role.includes('centre head') || role.includes('center head') || role.includes('events head') || role.includes('head of events');
-  });
-  // Never leave the task with no one able to see/answer it.
-  if (approvers.length === 0) approvers = activeMembers.filter((m: any) => m.tier === 1);
+  const approvers = resolveFestivalApprovers(members);
+  if (approvers.length === 0) return { created: 0 };
 
   let created = 0;
-  await mutateCollection<any>('tasks', (current) => {
+  await mutateCollection<any>('approvalRequests', (current = []) => {
     const next = [...current];
     for (const h of toCreate) {
-      const id = `task_holiday_approval_${h.id}`;
-      if (next.some((t: any) => t.id === id)) continue;
-      next.unshift({
-        id,
-        title: `Social media post needed for "${h.title}"?`,
-        event: h.title,
-        eventId: h.id,
-        assignee: approvers.map((a: any) => a.name).join(', ') || 'Centre Head',
-        assigneeType: 'group',
-        assigneeIds: approvers.map((a: any) => a.id),
-        dueDate: h.startDate,
-        status: 'Assigned',
-        creatorName: 'Holiday Scheduler',
-        workflowType: 'holiday_social_approval',
-      });
+      // Any existing row for this festival (pending, assigned or skipped) means it was already raised
+      if (next.some((r: any) => r.entityType === 'festival' && r.entityId === h.id)) continue;
+      next.unshift(...buildFestivalAssignRows('decide', { id: h.id, title: h.title, startDate: h.startDate }, approvers));
       created++;
     }
     return next;
   });
-
-  // This scheduler writes straight to the tasks collection via
-  // mutateCollection — unlike a task created through POST /api/tasks (the
-  // normal Tasks page flow), which enqueues the debounced assignment email
-  // itself, so that never happens here on its own. Enqueue it explicitly
-  // for every approver on every newly-created holiday task, same as a
-  // manually-assigned task would get.
-  for (const h of toCreate) {
-    for (const approver of approvers) {
-      if (!approver.email) continue;
-      await enqueueTaskEmailNotification({
-        id: `task_holiday_approval_${h.id}`,
-        title: `Social media post needed for "${h.title}"?`,
-        event: h.title,
-        dueDate: h.startDate,
-        creatorName: 'Holiday Scheduler',
-        assigneeEmail: approver.email,
-        assigneeName: approver.name,
-      });
-    }
-  }
 
   return { created };
 }
