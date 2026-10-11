@@ -56,7 +56,8 @@ import {
   canAccessEventPassesModule,
 } from '@/lib/permissions';
 import { EventPassStudio } from '@/components/event-pass-studio';
-import { EventPassScanner } from '@/components/event-pass-scanner';
+import dynamic from 'next/dynamic';
+const EventPassScanner = dynamic(() => import('@/components/event-pass-scanner').then((m) => m.EventPassScanner), { ssr: false });
 import { EventPassPushModal } from '@/components/event-pass-push-modal';
 import { EventPassBulkDispatchModal } from '@/components/event-pass-bulk-dispatch-modal';
 import { EventPassBulkEditModal } from '@/components/event-pass-bulk-edit-modal';

@@ -1674,10 +1674,10 @@ const STALE_HYDRATE_SUPPRESSION_MS = 4000;
  * below) — that's the true first-run/offline experience. Once a sync
  * resolves, even to an empty collection, that's what's shown from then on.
  */
-function hydrateIfStale(key: string, serverArray: unknown, requestStartedAt: number): void {
-  if (!Array.isArray(serverArray)) return;
+function hydrateIfStale(key: string, serverArray: unknown, requestStartedAt: number): boolean {
+  if (!Array.isArray(serverArray)) return false;
   const writtenAt = lastLocalWriteAt[key];
-  if (writtenAt !== undefined && requestStartedAt - writtenAt < STALE_HYDRATE_SUPPRESSION_MS) return;
+  if (writtenAt !== undefined && requestStartedAt - writtenAt < STALE_HYDRATE_SUPPRESSION_MS) return false;
 
   let arrayToPersist: any = serverArray;
   // If hydrating tasks, merge any active in-flight optimistic updates so a background poll
@@ -1694,9 +1694,14 @@ function hydrateIfStale(key: string, serverArray: unknown, requestStartedAt: num
   }
 
   try {
-    localStorage.setItem(key, JSON.stringify(arrayToPersist));
+    const json = JSON.stringify(arrayToPersist);
+    // Identical to what is already stored: skip the write (and the re-render it triggers) — most 7s polls change nothing.
+    if (localStorage.getItem(key) === json) return false;
+    localStorage.setItem(key, json);
+    return true;
   } catch (e) {
     console.warn(`[hydrateIfStale] Failed to write ${key} to localStorage:`, e);
+    return false;
   }
 }
 
@@ -1710,6 +1715,7 @@ function hydrateIfStale(key: string, serverArray: unknown, requestStartedAt: num
  * resolves, even to an empty collection, that's what's shown from then on.
  */
 let syncInFlight: Promise<boolean> | null = null;
+let hasSyncedOnce = false;
 
 export function syncWithServer(): Promise<boolean> {
   if (typeof window === 'undefined') return Promise.resolve(false);
@@ -1739,31 +1745,36 @@ async function doSyncWithServer(): Promise<boolean> {
     if (!res.ok) return false;
     const data = await res.json();
     if (data && typeof data === 'object') {
-      hydrateIfStale('leads_members', data.members, requestStartedAt);
-      hydrateIfStale('leads_events', data.events, requestStartedAt);
-      hydrateIfStale('leads_tasks', data.tasks, requestStartedAt);
-      hydrateIfStale('leads_ratings', data.ratings, requestStartedAt);
-      hydrateIfStale('leads_reimbursements', data.reimbursements, requestStartedAt);
-      hydrateIfStale('leads_announcements', data.announcements, requestStartedAt);
-      hydrateIfStale('leads_custom_forms', data.forms, requestStartedAt);
-      hydrateIfStale('leads_form_templates', data.formTemplates, requestStartedAt);
-      hydrateIfStale('leads_form_submissions', data.submissions, requestStartedAt);
-      hydrateIfStale('leads_designs', data.designs, requestStartedAt);
-      hydrateIfStale('leads_group_policies', data.groupPolicies, requestStartedAt);
-      hydrateIfStale('leads_access_level_settings', data.accessLevelSettings, requestStartedAt);
-      hydrateIfStale('leads_system_settings', data.systemSettings, requestStartedAt);
-      hydrateIfStale('leads_guests', data.guests, requestStartedAt);
-      hydrateIfStale('leads_budgets', data.budgets, requestStartedAt);
-      hydrateIfStale('leads_income_sources', data.incomeSources, requestStartedAt);
-      hydrateIfStale('leads_audit_logs', data.auditLogs, requestStartedAt);
-      hydrateIfStale('leads_approval_requests', data.approvalRequests, requestStartedAt);
-      hydrateIfStale('leads_event_passes', data.event_passes || data.eventPasses, requestStartedAt);
-      hydrateIfStale('leads_event_reports', data.eventReports, requestStartedAt);
+      const hydrated = [
+        hydrateIfStale('leads_members', data.members, requestStartedAt),
+        hydrateIfStale('leads_events', data.events, requestStartedAt),
+        hydrateIfStale('leads_tasks', data.tasks, requestStartedAt),
+        hydrateIfStale('leads_ratings', data.ratings, requestStartedAt),
+        hydrateIfStale('leads_reimbursements', data.reimbursements, requestStartedAt),
+        hydrateIfStale('leads_announcements', data.announcements, requestStartedAt),
+        hydrateIfStale('leads_custom_forms', data.forms, requestStartedAt),
+        hydrateIfStale('leads_form_templates', data.formTemplates, requestStartedAt),
+        hydrateIfStale('leads_form_submissions', data.submissions, requestStartedAt),
+        hydrateIfStale('leads_designs', data.designs, requestStartedAt),
+        hydrateIfStale('leads_group_policies', data.groupPolicies, requestStartedAt),
+        hydrateIfStale('leads_access_level_settings', data.accessLevelSettings, requestStartedAt),
+        hydrateIfStale('leads_system_settings', data.systemSettings, requestStartedAt),
+        hydrateIfStale('leads_guests', data.guests, requestStartedAt),
+        hydrateIfStale('leads_budgets', data.budgets, requestStartedAt),
+        hydrateIfStale('leads_income_sources', data.incomeSources, requestStartedAt),
+        hydrateIfStale('leads_audit_logs', data.auditLogs, requestStartedAt),
+        hydrateIfStale('leads_approval_requests', data.approvalRequests, requestStartedAt),
+        hydrateIfStale('leads_event_passes', data.event_passes || data.eventPasses, requestStartedAt),
+        hydrateIfStale('leads_event_reports', data.eventReports, requestStartedAt),
+      ];
+      const changed = hydrated.some(Boolean);
       // Notify every open page in this tab to re-read localStorage and re-render.
       // The native 'storage' event only fires in OTHER tabs/windows — it never
       // fires in the tab that made the write, so this custom event is the only
       // signal same-tab pages get that a poll just pulled in fresh server data.
-      window.dispatchEvent(new Event('leads-data-sync'));
+      // Skipped on polls where nothing changed (first sync always notifies).
+      if (changed || !hasSyncedOnce) window.dispatchEvent(new Event('leads-data-sync'));
+      hasSyncedOnce = true;
       return true;
     }
   } catch (err) {

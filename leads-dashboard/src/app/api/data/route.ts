@@ -2,7 +2,15 @@ import { NextResponse } from 'next/server';
 import { readDb } from '@/lib/server-db';
 import { requireSession } from '@/lib/session';
 import { apiError } from '@/lib/api-error';
-import { sweepExpiredBufferedEmails } from '@/lib/email-service';
+
+// Only the collections the client actually hydrates from this poll. Everything
+// else (emails, reset/activation tokens, email settings, certificates...) stays
+// on the server: smaller payload, fewer decrypts per poll, nothing sensitive sent.
+const CLIENT_SYNC_KEYS = [
+  'members', 'events', 'tasks', 'ratings', 'reimbursements', 'announcements', 'forms', 'formTemplates',
+  'submissions', 'designs', 'groupPolicies', 'accessLevelSettings', 'systemSettings', 'guests', 'budgets',
+  'incomeSources', 'auditLogs', 'approvalRequests', 'event_passes', 'eventReports',
+] as const;
 
 // This route is the one every signed-in client polls every ~7s for live
 // cross-session sync — it's the prime suspect for a "single dependency
@@ -17,10 +25,8 @@ export async function GET(request: Request) {
   const t0 = performance.now();
   try {
     await requireSession(request);
-    // Background sweep: ensure no buffered email stays held past 10 minutes
-    sweepExpiredBufferedEmails().catch(() => {});
     const tAuth = performance.now();
-    const db: any = await readDb();
+    const db: any = await readDb(CLIENT_SYNC_KEYS as any);
     const tRead = performance.now();
     // Strip fields that must never leave the server, regardless of caller:
     // password hashes on every member record, and the sessions collection

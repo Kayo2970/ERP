@@ -51,11 +51,12 @@ import { PrivacyPolicyModal } from '@/components/privacy-policy-modal';
 import { IosInstallPrompt } from '@/components/ios-install-prompt';
 import { NotFoundScreen } from '@/components/not-found-screen';
 import { LoadingScreen } from '@/components/loading-screen';
-import { OnboardingTour } from '@/components/onboarding-tour';
+import dynamic from 'next/dynamic';
+const OnboardingTour = dynamic(() => import('@/components/onboarding-tour').then((m) => m.OnboardingTour), { ssr: false });
 import { PromotionModal, PromotionData } from '@/components/promotion-modal';
 import { SyncStatusPill } from '@/components/ui/sync-status-pill';
 import { Avatar } from '@/components/ui/avatar';
-import { GhostFibers } from '@/components/ui/ghost-fibers';
+const GhostFibers = dynamic(() => import('@/components/ui/ghost-fibers').then((m) => m.GhostFibers), { ssr: false });
 
 interface SidebarItem {
   name: string;
@@ -515,6 +516,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
       // Poll every 7 seconds so changes from other devices appear automatically
       const pollInterval = setInterval(() => {
+        if (document.visibilityState === 'hidden') return; // resume handlers below resync on return
         syncWithServer().catch(() => {}); // silent — offline is OK
       }, 7000);
 
@@ -878,35 +880,42 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
   // MagicBento Global Dynamic Cursor Tracker for all module cards and boxes
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
+    let frame = 0;
+    let lastX = 0;
+    let lastY = 0;
+    let lit = new Set<HTMLElement>();
+    const update = () => {
+      frame = 0;
       const cards = document.querySelectorAll<HTMLElement>(
         '.glass-panel:not(header):not(aside):not(.no-magic), .magic-bento-card, .dashboard-card'
       );
-      const mouseX = e.clientX;
-      const mouseY = e.clientY;
-
+      const next = new Set<HTMLElement>();
       cards.forEach((card) => {
         const rect = card.getBoundingClientRect();
-        const isInside =
-          mouseX >= rect.left &&
-          mouseX <= rect.right &&
-          mouseY >= rect.top &&
-          mouseY <= rect.bottom;
-
-        if (isInside) {
-          const relativeX = ((mouseX - rect.left) / rect.width) * 100;
-          const relativeY = ((mouseY - rect.top) / rect.height) * 100;
-          card.style.setProperty('--glow-x', `${relativeX}%`);
-          card.style.setProperty('--glow-y', `${relativeY}%`);
-          card.style.setProperty('--glow-intensity', '1');
-        } else {
-          card.style.setProperty('--glow-intensity', '0');
+        if (lastX >= rect.left && lastX <= rect.right && lastY >= rect.top && lastY <= rect.bottom) {
+          next.add(card);
+          card.style.setProperty('--glow-x', `${((lastX - rect.left) / rect.width) * 100}%`);
+          card.style.setProperty('--glow-y', `${((lastY - rect.top) / rect.height) * 100}%`);
+          if (!lit.has(card)) card.style.setProperty('--glow-intensity', '1');
         }
       });
+      lit.forEach((card) => {
+        if (!next.has(card)) card.style.setProperty('--glow-intensity', '0');
+      });
+      lit = next;
+    };
+    // At most one layout pass per frame instead of one per mouse event.
+    const handleMouseMove = (e: MouseEvent) => {
+      lastX = e.clientX;
+      lastY = e.clientY;
+      if (!frame) frame = requestAnimationFrame(update);
     };
 
     window.addEventListener('mousemove', handleMouseMove, { passive: true });
-    return () => window.removeEventListener('mousemove', handleMouseMove);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      if (frame) cancelAnimationFrame(frame);
+    };
   }, [pathname]);
 
   const toggleTheme = () => {
