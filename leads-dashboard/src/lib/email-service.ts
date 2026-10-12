@@ -840,8 +840,14 @@ function scopedBufferedIds(scope?: BufferedScope): string[] {
 export async function flushAllBufferedEmails(scope?: BufferedScope): Promise<number> {
   await restoreBufferedQueue();
   const ids = scopedBufferedIds(scope);
-  for (const id of ids) {
-    await sendBufferedEmailNow(id);
+  // Send in small parallel batches so a large queue doesn't outlast the HTTP
+  // request, and one failing email can't abort the rest of the flush.
+  const BATCH = 5;
+  for (let i = 0; i < ids.length; i += BATCH) {
+    const results = await Promise.allSettled(ids.slice(i, i + BATCH).map(id => sendBufferedEmailNow(id)));
+    results.forEach((r, idx) => {
+      if (r.status === 'rejected') console.error(`[email-service] Flush failed for buffered email ${ids[i + idx]}:`, r.reason);
+    });
   }
   return ids.length;
 }

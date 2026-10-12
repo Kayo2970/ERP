@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { authHeaders } from '@/lib/local-data';
 import { beginTask } from '@/lib/background-tasks';
 import {
@@ -147,6 +147,16 @@ export default function EmailManagementPage() {
   const [logStatusFilter, setLogStatusFilter] = useState<'ALL' | 'SENT' | 'FAILED' | 'BUFFERED' | 'CANCELLED'>('ALL');
   const [logCategoryFilter, setLogCategoryFilter] = useState<string>('ALL');
   const [selectedLog, setSelectedLog] = useState<EmailLog | null>(null);
+  const LOG_PAGE_SIZE = 50;
+  const [logsHasMore, setLogsHasMore] = useState(false);
+  const [logsMatchedTotal, setLogsMatchedTotal] = useState(0);
+  const [isLoadingMoreLogs, setIsLoadingMoreLogs] = useState(false);
+  const [logCounts, setLogCounts] = useState({ total: 0, sent: 0, buffered: 0, failed: 0 });
+  const logFiltersRef = useRef({ q: '', status: 'ALL' as string, category: 'ALL' as string });
+  logFiltersRef.current = { q: logSearchQuery.trim(), status: logStatusFilter, category: logCategoryFilter };
+  const logOffsetRef = useRef(0);
+  const logReqRef = useRef(0);
+  const logFiltersInitRef = useRef(true);
 
   // Pending Buffer Queues State
   const [pendingQueues, setPendingQueues] = useState<PendingQueueItem[]>([]);
@@ -186,6 +196,14 @@ export default function EmailManagementPage() {
     };
   }, []);
 
+  // Re-query the server (first page) whenever the search/filters change.
+  useEffect(() => {
+    if (logFiltersInitRef.current) { logFiltersInitRef.current = false; return; }
+    const t = setTimeout(() => fetchLogs(), 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logSearchQuery, logStatusFilter, logCategoryFilter]);
+
   const triggerToast = (type: 'success' | 'error', text: string) => {
     setToastMsg({ type, text });
     setTimeout(() => setToastMsg(null), 4500);
@@ -204,15 +222,29 @@ export default function EmailManagementPage() {
     }
   };
 
-  const fetchLogs = async () => {
+  // Loads one page (LOG_PAGE_SIZE) of logs; filters are applied server-side.
+  // append=true fetches the next page and adds it to the list.
+  const fetchLogs = async (append = false) => {
+    const { q, status, category } = logFiltersRef.current;
+    const offset = append ? logOffsetRef.current : 0;
+    const reqId = ++logReqRef.current;
+    if (append) setIsLoadingMoreLogs(true);
     try {
-      const res = await fetch('/api/email/logs', { headers: authHeaders() });
-      if (res.ok) {
+      const params = new URLSearchParams({ limit: String(LOG_PAGE_SIZE), offset: String(offset), status, category, q });
+      const res = await fetch(`/api/email/logs?${params}`, { headers: authHeaders(), cache: 'no-store' });
+      if (res.ok && reqId === logReqRef.current) {
         const data = await res.json();
-        setOutboxLogs(data || []);
+        const page: EmailLog[] = data.logs || [];
+        setOutboxLogs(prev => append ? [...prev, ...page.filter(l => !prev.some(p => p.id === l.id))] : page);
+        logOffsetRef.current = offset + page.length;
+        setLogsHasMore(!!data.hasMore);
+        setLogsMatchedTotal(data.total ?? page.length);
+        if (data.counts) setLogCounts(data.counts);
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      if (append) setIsLoadingMoreLogs(false);
     }
   };
 
@@ -379,7 +411,7 @@ export default function EmailManagementPage() {
         fetchQueues();
         fetchLogs();
       } else {
-        triggerToast('error', 'Failed to flush queue.');
+        triggerToast('error', (await res.json().catch(() => ({}))).error || `Failed to flush queue (HTTP ${res.status}).`);
       }
     } catch (err: any) {
       triggerToast('error', err?.message || 'Error flushing queue');
@@ -404,7 +436,7 @@ export default function EmailManagementPage() {
           setSelectedLog(prev => prev ? { ...prev, status: 'SENT' } : null);
         }
       } else {
-        triggerToast('error', 'Failed to dispatch buffered email.');
+        triggerToast('error', (await res.json().catch(() => ({}))).error || `Failed to dispatch buffered email (HTTP ${res.status}).`);
       }
     } catch (err: any) {
       triggerToast('error', err?.message || 'Error dispatching email');
@@ -426,7 +458,7 @@ export default function EmailManagementPage() {
         fetchQueues();
         fetchLogs();
       } else {
-        triggerToast('error', 'Failed to flush all queues.');
+        triggerToast('error', (await res.json().catch(() => ({}))).error || `Failed to flush all queues (HTTP ${res.status}).`);
       }
     } catch (err: any) {
       triggerToast('error', err?.message || 'Error flushing all queues');
@@ -645,18 +677,13 @@ export default function EmailManagementPage() {
     }
   };
 
-  // Filter Outbox Logs
-  const filteredLogs = outboxLogs.filter(log => {
-    if (logStatusFilter !== 'ALL' && log.status !== logStatusFilter) return false;
-    if (logCategoryFilter !== 'ALL' && log.category !== logCategoryFilter) return false;
-    const q = logSearchQuery.toLowerCase();
-    return !q || log.to.toLowerCase().includes(q) || log.subject.toLowerCase().includes(q) || log.category.toLowerCase().includes(q);
-  });
+  // Logs arrive already filtered and paginated from the server.
+  const filteredLogs = outboxLogs;
 
-  const totalLogs = outboxLogs.length;
-  const sentCount = outboxLogs.filter(l => l.status === 'SENT').length;
-  const bufferedCount = outboxLogs.filter(l => l.status === 'BUFFERED').length;
-  const failedCount = outboxLogs.filter(l => l.status === 'FAILED').length;
+  const totalLogs = logCounts.total;
+  const sentCount = logCounts.sent;
+  const bufferedCount = logCounts.buffered;
+  const failedCount = logCounts.failed;
   // Certificate emails get their own tab; the general queue shows everything else.
   const certBuffered = bufferedEmails.filter(b => b.category === 'CERTIFICATE');
   const otherBuffered = bufferedEmails.filter(b => b.category !== 'CERTIFICATE');
@@ -812,7 +839,7 @@ export default function EmailManagementPage() {
             </div>
 
             <button
-              onClick={fetchLogs}
+              onClick={() => fetchLogs()}
               className="px-3 py-1.5 bg-theme-border/20 hover:bg-theme-border/40 text-theme-text-primary text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
             >
               <RefreshCw className="h-3.5 w-3.5" />
@@ -950,6 +977,21 @@ export default function EmailManagementPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {filteredLogs.length > 0 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-theme-text-secondary">
+              <span>Showing {filteredLogs.length} of {logsMatchedTotal} logs (latest first)</span>
+              {logsHasMore && (
+                <button
+                  onClick={() => fetchLogs(true)}
+                  disabled={isLoadingMoreLogs}
+                  className="px-4 py-1.5 bg-accent/15 hover:bg-accent/25 text-accent font-bold rounded-xl border border-accent/20 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isLoadingMoreLogs ? 'Loading...' : `Load next ${LOG_PAGE_SIZE}`}
+                </button>
+              )}
             </div>
           )}
         </div>
