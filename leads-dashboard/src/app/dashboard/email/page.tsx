@@ -463,7 +463,7 @@ export default function EmailManagementPage() {
         body: JSON.stringify({ all: true, except: 'CERTIFICATE' }),
       });
       if (res.ok) {
-        triggerToast('success', 'All buffered emails dispatched immediately.');
+        triggerToast('success', 'Sending all buffered emails now — one every 2 seconds. Refresh the logs to follow progress.');
         fetchQueues();
         fetchLogs();
       } else {

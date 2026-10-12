@@ -52,7 +52,7 @@ export async function POST(request: Request) {
       const [bufferedCount] = await Promise.all([
         flushAllBufferedEmails(scope),
       ]);
-      return NextResponse.json({ success: true, message: `Successfully flushed all ${bufferedCount} buffered emails` });
+      return NextResponse.json({ success: true, message: `Sending ${bufferedCount} buffered emails now, one every 2 seconds` });
     }
 
     if (id) {
