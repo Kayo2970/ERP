@@ -949,7 +949,30 @@ async function readCollectionFile<T = any>(key: keyof DbSchema): Promise<T[]> {
   await ensureHolidaysAndRatingsCleaned();
   try {
     const raw = await fs.readFile(collectionPath(key), 'utf-8');
-    const parsed = JSON.parse(raw);
+    let parsed: any;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (parseErr: any) {
+      // "Unexpected non-whitespace character after JSON at position N" = a complete,
+      // valid payload followed by leftover bytes (two overlapping writes). Keep the
+      // valid prefix, back up the damaged file, and rewrite it cleanly.
+      const m = /after JSON at position (\d+)/.exec(String(parseErr?.message ?? ''));
+      if (!m) throw parseErr;
+      parsed = JSON.parse(raw.slice(0, Number(m[1])));
+      if (!isEncryptedPayload(parsed)) throw parseErr;
+      try {
+        decryptData(parsed); // only repair when the surviving prefix is itself intact
+        const backup = `${collectionPath(key)}.corrupt-${Date.now()}`;
+        await fs.writeFile(backup, raw, 'utf-8');
+        const fixed = `${collectionPath(key)}.${process.pid}.repair.tmp`;
+        await fs.writeFile(fixed, JSON.stringify(parsed), 'utf-8');
+        await fs.rename(fixed, collectionPath(key));
+        console.warn(`[server-db] Repaired "${String(key)}" (trailing data removed). Original saved to ${backup}`);
+      } catch (repairErr) {
+        console.error(`[server-db] Could not repair "${String(key)}":`, repairErr);
+        throw parseErr;
+      }
+    }
     let jsonContent: any = parsed;
 
     if (isEncryptedPayload(parsed)) {
@@ -999,7 +1022,17 @@ async function writeCollectionFile<T = any>(key: keyof DbSchema, data: T[]): Pro
   await fs.mkdir(DATA_DIR, { recursive: true });
   const jsonString = JSON.stringify(data);
   const encryptedPayload = encryptData(jsonString);
-  await fs.writeFile(collectionPath(key), JSON.stringify(encryptedPayload), 'utf-8');
+  // Write to a temp file then rename: rename is atomic, so a reader (or a crash mid-write)
+  // can never see a half-written or doubled-up file.
+  const target = collectionPath(key);
+  const tmp = `${target}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`;
+  try {
+    await fs.writeFile(tmp, JSON.stringify(encryptedPayload), 'utf-8');
+    await fs.rename(tmp, target);
+  } catch (err) {
+    await fs.unlink(tmp).catch(() => {});
+    throw err;
+  }
 }
 
 /** Best-effort shared freshness marker — nothing depends on this for correctness. */
@@ -1037,7 +1070,11 @@ export async function readCollection<T = any>(key: keyof DbSchema): Promise<T[]>
 
 // Per-collection write locks — a write to "tasks" never waits on a concurrent
 // write to "members" or any other unrelated collection.
-const writeLocks = new Map<keyof DbSchema, Promise<void>>();
+// Stored on globalThis: Next.js bundles this module separately per route/instrumentation
+// chunk, and a module-level Map would give each copy its own lock — letting two writers hit
+// the same file at once and corrupt it.
+const globalForDb = globalThis as unknown as { __leadsWriteLocks?: Map<keyof DbSchema, Promise<void>> };
+const writeLocks: Map<keyof DbSchema, Promise<void>> = (globalForDb.__leadsWriteLocks ??= new Map());
 
 /**
  * Apply a mutation to a single collection and write only that collection's file.
