@@ -149,6 +149,7 @@ export default function EmailManagementPage() {
   const [selectedLog, setSelectedLog] = useState<EmailLog | null>(null);
   const LOG_PAGE_SIZE = 50;
   const [logsHasMore, setLogsHasMore] = useState(false);
+  const [logsError, setLogsError] = useState<string | null>(null);
   const [logsMatchedTotal, setLogsMatchedTotal] = useState(0);
   const [isLoadingMoreLogs, setIsLoadingMoreLogs] = useState(false);
   const [logCounts, setLogCounts] = useState({ total: 0, sent: 0, buffered: 0, failed: 0 });
@@ -231,8 +232,15 @@ export default function EmailManagementPage() {
     if (append) setIsLoadingMoreLogs(true);
     try {
       const params = new URLSearchParams({ limit: String(LOG_PAGE_SIZE), offset: String(offset), status, category, q });
+      if (!append) params.set('fresh', '1');
       const res = await fetch(`/api/email/logs?${params}`, { headers: authHeaders(), cache: 'no-store' });
-      if (res.ok && reqId === logReqRef.current) {
+      if (!res.ok) {
+        if (reqId === logReqRef.current) {
+          const err = await res.json().catch(() => ({}));
+          setLogsError(err.error || `Could not load email logs (HTTP ${res.status}).`);
+        }
+      } else if (reqId === logReqRef.current) {
+        setLogsError(null);
         const data = await res.json();
         const page: EmailLog[] = data.logs || [];
         setOutboxLogs(prev => append ? [...prev, ...page.filter(l => !prev.some(p => p.id === l.id))] : page);
@@ -243,6 +251,7 @@ export default function EmailManagementPage() {
       }
     } catch (e) {
       console.error(e);
+      if (reqId === logReqRef.current) setLogsError('Could not reach the server to load email logs.');
     } finally {
       if (append) setIsLoadingMoreLogs(false);
     }
@@ -917,6 +926,13 @@ export default function EmailManagementPage() {
               </select>
             </div>
           </div>
+
+          {logsError && (
+            <div className="flex items-center justify-between gap-3 p-3 rounded-xl border border-danger/30 bg-danger/10 text-xs text-danger">
+              <span>{logsError}</span>
+              <button onClick={() => fetchLogs(filteredLogs.length > 0 && logsHasMore ? true : false)} className="px-3 py-1 rounded-lg bg-danger/20 hover:bg-danger/30 font-bold cursor-pointer shrink-0">Retry</button>
+            </div>
+          )}
 
           {/* Logs Table */}
           {filteredLogs.length === 0 ? (
