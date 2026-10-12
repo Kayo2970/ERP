@@ -8,6 +8,7 @@ import { apiError } from '@/lib/api-error';
 import { gateEventPassAction } from '@/lib/approval-gate';
 import { submitPassApproval } from '@/lib/event-pass-approvals';
 import { cleanBackgroundChoice } from '@/lib/email-background';
+import { getAppBaseUrl } from '@/lib/app-url';
 
 /**
  * Client-supplied attachments arrive as base64 (JSON has no Buffer type) —
@@ -86,7 +87,7 @@ export async function POST(request: Request) {
         const passes = await readCollection<EventPassItem>('event_passes');
         const pass = passes.find((p) => p.serialNumber.toLowerCase() === passSerial.toLowerCase());
         if (pass && pass.status !== 'Cancelled') {
-          const origin = new URL(request.url).origin;
+          const origin = getAppBaseUrl(request);
           const built = await buildPassImageAttachment(pass, origin, bodyHtml);
           if (built.attachments) attachments.push(...built.attachments);
           bodyHtml = built.bodyHtml;

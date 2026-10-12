@@ -5,6 +5,7 @@ import { renderBoardingPassPng } from './pass-image';
 import { getPassTheme } from './pass-theme';
 import type { EventPassItem } from './local-data';
 import { cleanBackgroundChoice } from './email-background';
+import { getAppBaseUrl } from './app-url';
 
 export interface PassEmailPayload {
   to: string;
@@ -23,6 +24,10 @@ export interface PassEmailPayload {
  * for the hosted image URL so the recipient never sees a broken picture.
  */
 export async function buildPassImageAttachment(pass: EventPassItem, origin: string, bodyHtml?: string) {
+  // Never let a localhost/loopback origin (dev browser, proxy-internal URL) reach a recipient: swap it for the live site URL.
+  const liveOrigin = getAppBaseUrl(null, origin);
+  if (bodyHtml) bodyHtml = bodyHtml.replace(/https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?/gi, liveOrigin);
+  origin = liveOrigin;
   let lastErr: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {

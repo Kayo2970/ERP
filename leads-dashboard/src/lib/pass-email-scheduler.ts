@@ -9,6 +9,7 @@ import { buildPassEmail, EventPassItem } from '@/lib/local-data';
 import { dispatchEmail } from '@/lib/email-service';
 import type { EmailBackgroundChoice } from '@/lib/email-background';
 import { buildPassImageAttachment } from '@/lib/pass-email-send';
+import { getAppBaseUrl } from '@/lib/app-url';
 
 export interface PassEmailScheduleItem {
   passId: string;
@@ -45,12 +46,14 @@ async function sendOne(item: PassEmailScheduleItem, schedule: PassEmailSchedule)
   // Deleted, cancelled or awaiting an approval decision since it was scheduled: leave it out.
   if (!pass || pass.status === 'Cancelled' || pass.approvalStatus) return 'skipped';
   try {
-    const { subject, bodyText, bodyHtml } = buildPassEmail(pass, schedule.origin, {
+    // Schedules saved before the fix may carry a localhost origin; always link to the live site.
+    const origin = getAppBaseUrl(null, schedule.origin);
+    const { subject, bodyText, bodyHtml } = buildPassEmail(pass, origin, {
       ...schedule.template,
       ...(item.subjectTemplate !== undefined ? { subjectTemplate: item.subjectTemplate } : {}),
       ...(item.bodyTemplate !== undefined ? { bodyTemplate: item.bodyTemplate } : {}),
     });
-    const built = await buildPassImageAttachment(pass, schedule.origin, bodyHtml);
+    const built = await buildPassImageAttachment(pass, origin, bodyHtml);
     await dispatchEmail({
       to: item.email,
       subject,

@@ -7,6 +7,7 @@ import { getAccessLevelSettingsServer, canManageEmailSettings } from '@/lib/perm
 import { EventPassItem } from '@/lib/local-data';
 import { PassEmailSchedule, PassEmailScheduleItem } from '@/lib/pass-email-scheduler';
 import { cleanBackgroundChoice } from '@/lib/email-background';
+import { getAppBaseUrl } from '@/lib/app-url';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -82,7 +83,7 @@ export async function POST(request: Request) {
       },
       background: cleanBackgroundChoice(body.background),
       sendAt: when.toISOString(),
-      origin: new URL(request.url).origin,
+      origin: getAppBaseUrl(request),
       eventNames: Array.from(eventNames),
       createdBy: user?.name || 'Staff',
       createdByEmail: user?.email,
