@@ -60,7 +60,7 @@ export async function POST(request: Request) {
       if (dispatched) {
         return NextResponse.json({ success: true, message: `Successfully flushed and dispatched buffered email ${id}` });
       }
-      return NextResponse.json({ error: `Buffered email ${id} not found or already sent` }, { status: 404 });
+      return NextResponse.json({ error: `Buffered email ${id} was not found, is already being sent, or has already been sent/cancelled. Refresh the queue.` }, { status: 404 });
     }
 
     if (email) {
