@@ -458,13 +458,19 @@ interface BufferedEmailEntry {
   persistedAttachments?: number;
 }
 
-const bufferedEmails = new Map<string, BufferedEmailEntry>();
-const sendingInProgress = new Set<string>();
-let sweeperIntervalStarted = false;
+// Shared via globalThis: Next.js loads this module once per route chunk, and separate copies
+// each had their own "already sending" set — so one email could be dispatched twice.
+const globalForEmail = globalThis as unknown as {
+  __leadsBufferedEmails?: Map<string, BufferedEmailEntry>;
+  __leadsSendingInProgress?: Set<string>;
+  __leadsSweeperStarted?: boolean;
+};
+const bufferedEmails: Map<string, BufferedEmailEntry> = (globalForEmail.__leadsBufferedEmails ??= new Map());
+const sendingInProgress: Set<string> = (globalForEmail.__leadsSendingInProgress ??= new Set());
 
 function ensureSweeperInterval(): void {
-  if (sweeperIntervalStarted || typeof setInterval === 'undefined') return;
-  sweeperIntervalStarted = true;
+  if (globalForEmail.__leadsSweeperStarted || typeof setInterval === 'undefined') return;
+  globalForEmail.__leadsSweeperStarted = true;
   const interval = setInterval(() => {
     sweepExpiredBufferedEmails().catch(err => {
       console.error('[email-service] Background sweeper tick error:', err);
