@@ -2,11 +2,13 @@
 
 import React, { useEffect, useState } from 'react';
 import { X, Save, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
-import { EventPassItem, updateEventPass } from '@/lib/local-data';
+import { EventItem, EventPassItem, updateEventPass, expandDateRange, formatValidDaysLabel, getPassValidDays } from '@/lib/local-data';
+import { PassValidityPicker } from '@/components/pass-design-controls';
 
 interface Props {
   isOpen: boolean;
   passes: EventPassItem[];
+  events: EventItem[];
   currentUserName: string;
   onClose: () => void;
   onDone: () => void;
@@ -15,16 +17,18 @@ interface Props {
 const PASS_TYPES = ['VIP Pass', 'Keynote Speaker', 'Executive Delegate', 'Student Delegate', 'Guest Pass', 'Press / Media', 'Organizer', 'Other'];
 const GUEST_CATEGORIES = ['VIP Dignitary', 'Keynote Speaker', 'Faculty', 'Student', 'Industry Partner', 'Alumni', 'Press / Media', 'Organizer / Crew', 'Special Guest', 'Other'];
 
-type FieldKey = 'roomOrVenue' | 'eventVenue' | 'passType' | 'guestCategory' | 'validityDate' | 'accessTier' | 'seatOrZone' | 'notes' | 'attendeeOrg' | 'status' | 'fontScale';
+type FieldKey = 'roomOrVenue' | 'eventVenue' | 'passType' | 'guestCategory' | 'validityDate' | 'validDays' | 'accessTier' | 'seatOrZone' | 'notes' | 'attendeeOrg' | 'status' | 'fontScale';
 
 const input = 'w-full px-3 py-2 bg-slate-50 dark:bg-slate-900/60 border border-slate-300 dark:border-white/15 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:border-accent text-xs disabled:opacity-40';
 
 /** Change the same field(s) on every selected pass. Only ticked fields are applied; each pass goes through the normal edit path (approval rules, QR + wallet sync). */
-export function EventPassBulkEditModal({ isOpen, passes, currentUserName, onClose, onDone }: Props) {
+export function EventPassBulkEditModal({ isOpen, passes, events, currentUserName, onClose, onDone }: Props) {
   const [apply, setApply] = useState<Partial<Record<FieldKey, boolean>>>({});
   const [values, setValues] = useState<Record<FieldKey, string>>({
-    roomOrVenue: '', eventVenue: '', passType: PASS_TYPES[0], guestCategory: GUEST_CATEGORIES[0], validityDate: '', accessTier: '', seatOrZone: '', notes: '', attendeeOrg: '', status: 'Active', fontScale: '1',
+    roomOrVenue: '', eventVenue: '', passType: PASS_TYPES[0], guestCategory: GUEST_CATEGORIES[0], validityDate: '', validDays: '', accessTier: '', seatOrZone: '', notes: '', attendeeOrg: '', status: 'Active', fontScale: '1',
   });
+  // Valid days picked for the whole selection (null = every day of each pass's event)
+  const [pickedDays, setPickedDays] = useState<string[] | null>(null);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<{ ok: number; pending: number; failed: Array<{ name: string; error: string }> } | null>(null);
@@ -32,12 +36,27 @@ export function EventPassBulkEditModal({ isOpen, passes, currentUserName, onClos
   useEffect(() => {
     if (!isOpen) return;
     setApply({});
+    setPickedDays(null);
     setProgress(0);
     setResult(null);
     setRunning(false);
   }, [isOpen]);
 
   if (!isOpen) return null;
+
+  // Days of each selected pass's own event (falls back to the days the pass already has)
+  const eventDaysOf = (p: EventPassItem): string[] => {
+    const ev = events.find((e) => e.id === p.eventId);
+    const fromEvent = ev && !ev.datesTBD ? expandDateRange(ev.startDate, ev.endDate) : [];
+    return fromEvent.length > 0 ? fromEvent : getPassValidDays(p);
+  };
+  const dayChoices = Array.from(new Set(passes.flatMap(eventDaysOf))).sort();
+  const effectiveDays = pickedDays ? pickedDays.filter((d) => dayChoices.includes(d)) : dayChoices;
+  const toggleDay = (d: string) => {
+    const base = pickedDays ?? dayChoices;
+    const next = base.includes(d) ? base.filter((x) => x !== d) : [...base, d].sort();
+    if (next.length > 0) setPickedDays(next);
+  };
 
   const chosen = (Object.keys(apply) as FieldKey[]).filter((k) => apply[k]);
   const set = (k: FieldKey, v: string) => setValues((prev) => ({ ...prev, [k]: v }));
@@ -58,6 +77,7 @@ export function EventPassBulkEditModal({ isOpen, passes, currentUserName, onClos
     const updates: Partial<EventPassItem> = {};
     for (const k of chosen) {
       const v = values[k];
+      if (k === 'validDays') continue; // resolved per pass below (clamped to that pass's own event days)
       if (k === 'fontScale') updates.fontScale = Math.min(1.6, Math.max(0.7, Number(v) || 1));
       else if (k === 'status') updates.status = v as EventPassItem['status'];
       else (updates as any)[k] = v.trim();
@@ -72,7 +92,18 @@ export function EventPassBulkEditModal({ isOpen, passes, currentUserName, onClos
     for (let i = 0; i < passes.length; i++) {
       const p = passes[i];
       try {
-        const r = await updateEventPass(p.id, updates, currentUserName);
+        let perPass = updates;
+        if (apply.validDays) {
+          const allowed = eventDaysOf(p);
+          const days = effectiveDays.filter((d) => allowed.includes(d));
+          if (days.length === 0) {
+            failed.push({ name: p.attendeeName, error: 'None of the chosen days fall within this pass\'s event.' });
+            setProgress(i + 1);
+            continue;
+          }
+          perPass = { ...updates, validDays: days, ...(apply.validityDate ? {} : { validityDate: formatValidDaysLabel(days) }) };
+        }
+        const r = await updateEventPass(p.id, perPass, currentUserName);
         if (!r) failed.push({ name: p.attendeeName, error: 'Pass not found.' });
         else if (r.refused) failed.push({ name: p.attendeeName, error: r.refused });
         else if (r.approvalPending) pending++;
@@ -103,6 +134,24 @@ export function EventPassBulkEditModal({ isOpen, passes, currentUserName, onClos
           {row('eventVenue', 'Event venue', <input className={input} disabled={!apply.eventVenue} value={values.eventVenue} onChange={(e) => set('eventVenue', e.target.value)} />)}
           {row('passType', 'Pass type', <select className={input} disabled={!apply.passType} value={values.passType} onChange={(e) => set('passType', e.target.value)}>{PASS_TYPES.map((t) => <option key={t} value={t} className="bg-slate-900 text-white">{t}</option>)}</select>)}
           {row('guestCategory', 'Guest category', <select className={input} disabled={!apply.guestCategory} value={values.guestCategory} onChange={(e) => set('guestCategory', e.target.value)}>{GUEST_CATEGORIES.map((t) => <option key={t} value={t} className="bg-slate-900 text-white">{t}</option>)}</select>)}
+          {row('validDays', 'Valid on (days)', (
+            <div className={apply.validDays ? '' : 'opacity-40 pointer-events-none'}>
+              {dayChoices.length > 0 ? (
+                <PassValidityPicker
+                  eventDays={dayChoices}
+                  effectiveValidDays={effectiveDays}
+                  selectedValidDays={pickedDays}
+                  setSelectedValidDays={setPickedDays}
+                  toggleValidDay={toggleDay}
+                  validityDate=""
+                  setValidityDate={() => {}}
+                  displayValidity={formatValidDaysLabel(effectiveDays)}
+                />
+              ) : (
+                <p className="text-[11px] text-slate-500 pt-2">The selected passes have no dated event days to choose from.</p>
+              )}
+            </div>
+          ))}
           {row('validityDate', 'Validity label', <input className={input} disabled={!apply.validityDate} value={values.validityDate} onChange={(e) => set('validityDate', e.target.value)} placeholder="e.g. 13 – 14 Oct 2026" />)}
           {row('accessTier', 'Access tier', <input className={input} disabled={!apply.accessTier} value={values.accessTier} onChange={(e) => set('accessTier', e.target.value)} />)}
           {row('seatOrZone', 'Seat / Zone', <input className={input} disabled={!apply.seatOrZone} value={values.seatOrZone} onChange={(e) => set('seatOrZone', e.target.value)} />)}

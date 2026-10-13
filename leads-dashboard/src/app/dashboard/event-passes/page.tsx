@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { beginTask } from '@/lib/background-tasks';
 import { CertificateStatusBadge, CERT_STATUS_FILTERS } from '@/components/certificate-status-badge';
 import { SortableTh } from '@/components/ui/sortable-th';
+import { getPassAttendanceState, getAbsentDays, isEventDone, type PassAttendanceState } from '@/lib/pass-attendance';
 import { useSort, type SortGetters } from '@/lib/use-sort';
 import {
   Award,
@@ -123,6 +124,8 @@ export default function EventPassesPage() {
   const [deepFilterTier, setDeepFilterTier] = useState<string>('ALL');
   const [deepFilterCategory, setDeepFilterCategory] = useState<string>('ALL');
   const [deepSearchQuery, setDeepSearchQuery] = useState('');
+  // Events whose container is toggled away from its default (completed = collapsed, live/upcoming = open)
+  const [toggledGroups, setToggledGroups] = useState<Set<string>>(new Set());
 
   // Email dispatching state
   const [dispatchingPassId, setDispatchingPassId] = useState<string | null>(null);
@@ -490,6 +493,31 @@ export default function EventPassesPage() {
     issuedAt: (p) => p.issuedAt,
   };
 
+  const eventById = useMemo(() => new Map(events.map((e) => [e.id, e])), [events]);
+  const attendanceOf = (p: EventPassItem): PassAttendanceState => getPassAttendanceState(p, eventById.get(p.eventId));
+
+  // Gate badge: "Absent" once the event is over with no scan, "Partial" if some valid days were missed
+  const gateBadge = (pass: EventPassItem) => {
+    const st = attendanceOf(pass);
+    const label = st === 'Pending' ? pass.status : st === 'Attended' ? 'Attended' : st === 'Partial' ? `Partial · missed ${getAbsentDays(pass).length}d` : st;
+    const cls =
+      st === 'Checked In' || st === 'Attended'
+        ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+        : st === 'Cancelled'
+        ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
+        : st === 'Absent'
+        ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
+        : st === 'Partial'
+        ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+        : 'bg-sky-500/15 text-sky-600 dark:text-sky-300 border border-sky-500/30';
+    return (
+      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold inline-flex items-center gap-1 ${cls}`}>
+        {(st === 'Checked In' || st === 'Attended') && <Check className="h-2.5 w-2.5" />}
+        <span>{label}</span>
+      </span>
+    );
+  };
+
   // Deep dive filtered passes
   const deepFilteredPasses = useMemo(() => {
     return eventPasses.filter((p) => {
@@ -506,8 +534,10 @@ export default function EventPassesPage() {
       if (certAllowed && deepFilterCert !== 'ALL' && (certStatuses[p.id]?.status || 'Not issued') !== deepFilterCert) return false;
 
       if (deepFilterAttendance !== 'ALL') {
+        const st = attendanceOf(p);
         if (deepFilterAttendance === 'Checked In' && p.status !== 'Checked In') return false;
-        if (deepFilterAttendance === 'Pending' && p.status === 'Checked In') return false;
+        if (deepFilterAttendance === 'Pending' && st !== 'Pending') return false;
+        if (deepFilterAttendance === 'Absent' && st !== 'Absent' && st !== 'Partial') return false;
       }
 
       if (deepFilterTier !== 'ALL' && p.passType !== deepFilterTier) return false;
@@ -541,7 +571,35 @@ export default function EventPassesPage() {
     deepFilterTier,
     deepFilterCategory,
     deepSearchQuery,
+    events,
   ]);
+
+  // One container per event (only when several events are in view). Completed events sit after live ones, collapsed by default.
+  const deepGroups = useMemo(() => {
+    const sorted = deepSort.apply(deepFilteredPasses, passSortGetters);
+    if (deepFilterEventId !== 'ALL') {
+      return [{ eventId: deepFilterEventId, eventName: '', passes: sorted, done: false, open: true, showHeader: false, attended: 0, absent: 0 }];
+    }
+    const map = new Map<string, EventPassItem[]>();
+    sorted.forEach((p) => map.set(p.eventId, [...(map.get(p.eventId) || []), p]));
+    const groups = Array.from(map.entries()).map(([eventId, passes]) => {
+      const ev = eventById.get(eventId);
+      const done = ev ? isEventDone(ev) : passes.every((p) => attendanceOf(p) === 'Absent' || attendanceOf(p) === 'Attended' || attendanceOf(p) === 'Partial' || attendanceOf(p) === 'Cancelled');
+      const toggled = toggledGroups.has(eventId);
+      return {
+        eventId,
+        eventName: ev?.title || passes[0]?.eventName || 'Event',
+        passes,
+        done,
+        open: done ? toggled : !toggled,
+        showHeader: true,
+        attended: passes.filter((p) => ['Checked In', 'Attended', 'Partial'].includes(attendanceOf(p))).length,
+        absent: passes.filter((p) => attendanceOf(p) === 'Absent').length,
+      };
+    });
+    return [...groups.filter((g) => !g.done), ...groups.filter((g) => g.done)];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepFilteredPasses, deepSort, deepFilterEventId, eventById, toggledGroups]);
 
   // KPI Metrics computed on the selected event scope
   const scopedPasses = useMemo(() => {
@@ -561,6 +619,7 @@ export default function EventPassesPage() {
       (p) => p.emailStatus === 'Pass Viewed' || p.passViewed
     ).length;
     const admitted = scopedPasses.filter((p) => p.status === 'Checked In').length;
+    const absent = scopedPasses.filter((p) => attendanceOf(p) === 'Absent').length;
 
     return {
       total,
@@ -572,8 +631,9 @@ export default function EventPassesPage() {
       viewedPct: total > 0 ? Math.round((viewed / total) * 100) : 0,
       admitted,
       admittedPct: total > 0 ? Math.round((admitted / total) * 100) : 0,
+      absent,
     };
-  }, [scopedPasses]);
+  }, [scopedPasses, events]);
 
   // Distinct categories and tiers for filters
   const uniqueTiers = useMemo(() => {
@@ -875,17 +935,7 @@ export default function EventPassesPage() {
                             {renderEmailViewBadge(pass)}
                           </td>
                           <td className="py-3 px-4">
-                            <span
-                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                                pass.status === 'Checked In'
-                                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                                  : pass.status === 'Cancelled'
-                                  ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
-                                  : 'bg-sky-500/15 text-sky-600 dark:text-sky-300 border border-sky-500/30'
-                              }`}
-                            >
-                              {pass.status}
-                            </span>
+                            {gateBadge(pass)}
                           </td>
                           <td className="py-3 px-4 text-right">
                             <div className="flex items-center justify-end gap-1.5">
@@ -1101,7 +1151,7 @@ export default function EventPassesPage() {
                   {kpis.admitted}
                   <span className="text-xs font-normal text-slate-400 ml-1.5">({kpis.admittedPct}%)</span>
                 </div>
-                <div className="text-[10px] text-slate-400">Scanned at turnstile</div>
+                <div className="text-[10px] text-slate-400">Scanned at turnstile{kpis.absent > 0 ? <span className="text-rose-400 font-bold"> · {kpis.absent} absent</span> : null}</div>
               </div>
             </div>
           </div>
@@ -1209,6 +1259,7 @@ export default function EventPassesPage() {
                 <option value="ALL">All Turnstile States</option>
                 <option value="Checked In">Checked In / Admitted</option>
                 <option value="Pending">Pending Check-In</option>
+                <option value="Absent">Absent (event over, not scanned)</option>
               </select>
 
               {/* Tier Filter */}
@@ -1375,7 +1426,48 @@ export default function EventPassesPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200/50 dark:divide-white/5">
-                    {deepSort.apply(deepFilteredPasses, passSortGetters).map((pass) => (
+                    {deepGroups.flatMap((g) => [
+                      g.showHeader ? (
+                        <tr key={`grp-${g.eventId}`} className="bg-slate-100/70 dark:bg-white/5">
+                          <td colSpan={canSelectPasses ? 12 : 11} className="py-2.5 px-4">
+                            <div className="flex flex-wrap items-center gap-3">
+                              {canSelectPasses && (
+                                <input
+                                  type="checkbox"
+                                  aria-label={`Select all passes of ${g.eventName}`}
+                                  checked={g.passes.every((p) => selectedPassIds.has(p.id))}
+                                  onChange={(e) =>
+                                    setSelectedPassIds((prev) => {
+                                      const next = new Set(prev);
+                                      g.passes.forEach((p) => (e.target.checked ? next.add(p.id) : next.delete(p.id)));
+                                      return next;
+                                    })
+                                  }
+                                  className="h-4 w-4 accent-sky-500 cursor-pointer"
+                                />
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setToggledGroups((prev) => { const n = new Set(prev); if (n.has(g.eventId)) n.delete(g.eventId); else n.add(g.eventId); return n; })}
+                                className="flex items-center gap-2 font-black text-theme-text-primary text-xs cursor-pointer"
+                                aria-expanded={g.open}
+                              >
+                                <span className="text-[10px]">{g.open ? '▼' : '▶'}</span>
+                                {g.eventName}
+                              </button>
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${g.done ? 'bg-slate-500/15 text-slate-500 border-slate-500/30' : 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30'}`}>
+                                {g.done ? 'Completed' : 'Live / upcoming'}
+                              </span>
+                              <span className="text-[11px] text-theme-text-secondary">
+                                {g.passes.length} pass{g.passes.length === 1 ? '' : 'es'}
+                                {g.done ? ` · ${g.attended} attended · ` : ' · '}
+                                {g.done ? <span className={g.absent > 0 ? 'text-rose-500 font-bold' : ''}>{g.absent} absent</span> : `${g.attended} checked in`}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null,
+                      ...(g.open ? g.passes : []).map((pass) => (
                       <tr key={pass.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
                         {canSelectPasses && (<td className="py-3 px-3 w-8">
                           <input
@@ -1483,18 +1575,7 @@ export default function EventPassesPage() {
 
                         {/* Turnstile Gate Status */}
                         <td className="py-3 px-4">
-                          <span
-                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold inline-flex items-center gap-1 ${
-                              pass.status === 'Checked In'
-                                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                                : pass.status === 'Cancelled'
-                                ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
-                                : 'bg-sky-500/15 text-sky-600 dark:text-sky-300 border border-sky-500/30'
-                            }`}
-                          >
-                            {pass.status === 'Checked In' && <Check className="h-2.5 w-2.5" />}
-                            <span>{pass.status}</span>
-                          </span>
+                          {gateBadge(pass)}
                           {pass.checkedInAt && (
                             <div className="text-[9px] text-theme-text-secondary mt-0.5 font-mono">
                               {new Date(pass.checkedInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} by {pass.checkedInBy || 'Staff'}
@@ -1630,7 +1711,8 @@ export default function EventPassesPage() {
                           </div>
                         </td>
                       </tr>
-                    ))}
+                    )),
+                    ])}
                   </tbody>
                 </table>
               </div>
@@ -1699,6 +1781,7 @@ export default function EventPassesPage() {
       <EventPassBulkEditModal
         isOpen={isBulkEditOpen}
         passes={eventPasses.filter((p) => selectedPassIds.has(p.id))}
+        events={events}
         currentUserName={user?.name || 'Admin'}
         onClose={() => setIsBulkEditOpen(false)}
         onDone={() => setEventPasses(getEventPasses())}
