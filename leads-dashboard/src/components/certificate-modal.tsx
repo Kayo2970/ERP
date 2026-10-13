@@ -984,6 +984,24 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                       <button key={s} type="button" onClick={() => setStatusFilter(statusFilter === s ? 'ALL' : s)} className={`px-2 py-0.5 rounded-full border cursor-pointer ${statusFilter === s ? 'bg-accent/20 text-accent border-accent/40' : 'border-slate-300 dark:border-white/15 text-slate-500'}`}>{s} {counts[s] || 0}</button>
                     ))}
                   </div>
+                  {typeOptions.length > 1 && (
+                    <div className="rounded-xl border border-accent/30 bg-accent/5 p-2.5 space-y-1.5">
+                      <div className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[10px]">Quick pick by pass type — ticks everyone of that type who still needs a certificate</div>
+                      <div className="flex flex-wrap gap-1.5 text-[10px] font-bold">
+                        {typeOptions.map((t) => {
+                          const ofType = attendees.filter((a) => (a.passType || '(none)') === t);
+                          const todo = ofType.filter((a) => isSelectable(a, scheduledIds)).map((a) => a.passId);
+                          const on = typeFilter === t;
+                          return (
+                            <button key={t} type="button" disabled={todo.length === 0} onClick={() => { setTypeFilter(t); setSelected(new Set(todo)); }} className={`px-2.5 py-1 rounded-full border cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${on ? 'bg-accent/20 text-accent border-accent/40' : 'border-slate-300 dark:border-white/15 text-slate-600 dark:text-slate-300'}`} title={todo.length === 0 ? 'Everyone of this type already has a certificate sent, queued or scheduled' : `Select the ${todo.length} ${t} recipient${todo.length === 1 ? '' : 's'} still to be sent`}>
+                              {t} · {todo.length} to send
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="text-[10px] text-slate-500">Then continue to the wording and use <strong>Send now</strong> or <strong>Schedule</strong> — only the ticked people receive it.</p>
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                     {typeOptions.length > 1 && <select aria-label="Filter by pass type" className={field} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}><option value="ALL" className="bg-slate-900">All pass types</option>{typeOptions.map((o) => <option key={o} value={o} className="bg-slate-900">{o}</option>)}</select>}
                     {categoryOptions.length > 1 && <select aria-label="Filter by guest category" className={field} value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}><option value="ALL" className="bg-slate-900">All guest categories</option>{categoryOptions.map((o) => <option key={o} value={o} className="bg-slate-900">{o}</option>)}</select>}
