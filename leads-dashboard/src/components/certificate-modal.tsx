@@ -6,7 +6,7 @@ import { EventItem, Member, TaskItem, authHeaders, formatEventDateRange, getMemb
 import { beginTask } from '@/lib/background-tasks';
 import { EmailHtmlPreview } from '@/components/email-html-preview';
 import { EmailBackgroundPicker, DEFAULT_BACKGROUND_PICK, backgroundChoiceFor, type EmailBackgroundPick } from '@/components/email-background-picker';
-import { defaultSelection, isSelectable, keepSelection, scheduledMap, toggleVisible, visibleSelectionState } from '@/lib/certificate-selection';
+import { defaultSelection, isSelectable, keepSelection, scheduledMap, selectOnlyVisible, toggleVisible, visibleSelectionState } from '@/lib/certificate-selection';
 import { CertificateStatusBadge, CERT_STATUS_FILTERS } from '@/components/certificate-status-badge';
 import { CertBox, CertBoxKey, CertLayout, CERT_BOX_LABELS, CERT_FONT_OPTIONS, DEFAULT_CERT_EMAIL, CERT_EMAIL_FIELDS, CERT_EMAIL_MAX_SUBJECT, CERT_EMAIL_MAX_BODY, mergeCertEmail } from '@/lib/certificate-layout';
 
@@ -981,8 +981,8 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                   <p className="text-[10px] text-slate-500">Merge fields for the wording: <code>@name</code> <code>@organisation</code> <code>@category</code> <code>@serial</code> <code>@event_name</code> <code>@event_date</code>. Each is filled from the attendee&apos;s pass when the PDF is made.</p>
                   <div className="flex items-center justify-between">
                     <span className="font-extrabold text-slate-800 dark:text-white">Recipients ({selected.size}/{attendees.length} selected · {pending} not yet sent{visibleSel.hiddenSelected > 0 ? ` · ${visibleSel.hiddenSelected} ticked outside this filter` : ''})</span>
-                    <button type="button" disabled={visibleSel.selectable.length === 0} className="font-bold text-accent hover:underline cursor-pointer disabled:opacity-40 disabled:no-underline disabled:cursor-not-allowed" title="Applies to the people shown below; anyone already sent, queued or scheduled is skipped" onClick={() => setSelected(toggleVisible(selected, visibleAttendees, scheduledIds))}>
-                      {visibleSel.allOn ? 'Deselect all shown' : 'Select all shown'}
+                    <button type="button" disabled={visibleSel.selectable.length === 0} className="font-bold text-accent hover:underline cursor-pointer disabled:opacity-40 disabled:no-underline disabled:cursor-not-allowed" title="Ticks only the people shown below and unticks everyone else; anyone already sent, queued or scheduled is skipped" onClick={() => setSelected(visibleSel.allOn && visibleSel.hiddenSelected === 0 ? toggleVisible(selected, visibleAttendees, scheduledIds) : selectOnlyVisible(visibleAttendees, scheduledIds))}>
+                      {visibleSel.allOn && visibleSel.hiddenSelected === 0 ? 'Deselect all shown' : 'Select only shown'}
                     </button>
                   </div>
                   <div className="flex flex-wrap gap-1.5 text-[10px] font-bold">

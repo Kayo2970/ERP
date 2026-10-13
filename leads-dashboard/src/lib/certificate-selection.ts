@@ -74,3 +74,8 @@ export function toggleVisible(selected: Set<string>, visible: SelectionAttendee[
   selectable.forEach((id) => (allOn ? next.delete(id) : next.add(id)));
   return next;
 }
+
+/** "Select only shown": the ticked set becomes exactly the selectable rows in view; anything ticked outside the view is dropped. */
+export function selectOnlyVisible(visible: SelectionAttendee[], scheduled: Map<string, string>): Set<string> {
+  return new Set(visible.filter((a) => isSelectable(a, scheduled)).map((a) => a.passId));
+}
