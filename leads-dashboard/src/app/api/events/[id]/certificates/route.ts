@@ -41,7 +41,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const manual = (await readCollection<CertificateRecord>('certificates')).filter((c) => c.eventId === id && c.manual && cleanTypeId(c.typeId) === typeId);
     const attendees = passes.filter(isCertificateEligible).map((p) => {
       const info = statuses[p.id];
-      return { passId: p.id, name: p.attendeeName, email: p.attendeeEmail, serial: p.serialNumber, organisation: p.attendeeOrg || '', category: String(p.guestCategory || ''), status: info?.status || 'Not issued', code: info?.code, issuedAt: info?.issuedAt, sentAt: info?.sentAt, sentBy: info?.sentBy, error: info?.error };
+      return { passId: p.id, name: p.attendeeName, email: p.attendeeEmail, serial: p.serialNumber, organisation: p.attendeeOrg || '', category: String(p.guestCategory || ''), passType: String(p.passType || ''), daysAttended: (p.attendance || []).length, totalDays: (p.validDays || []).length, status: info?.status || 'Not issued', code: info?.code, issuedAt: info?.issuedAt, sentAt: info?.sentAt, sentBy: info?.sentBy, error: info?.error };
     });
     for (const m of manual) {
       const info = statuses[m.passId];

@@ -11,7 +11,7 @@ import { CertificateStatusBadge, CERT_STATUS_FILTERS } from '@/components/certif
 import { CertBox, CertBoxKey, CertLayout, CERT_BOX_LABELS, CERT_FONT_OPTIONS, DEFAULT_CERT_EMAIL, CERT_EMAIL_FIELDS, CERT_EMAIL_MAX_SUBJECT, CERT_EMAIL_MAX_BODY, mergeCertEmail } from '@/lib/certificate-layout';
 
 interface CertType { id: string; name: string }
-interface Attendee { manual?: boolean; passId: string; name: string; email: string; serial: string; organisation?: string; category?: string; status: string; code?: string; issuedAt?: string; sentAt?: string; sentBy?: string; error?: string }
+interface Attendee { manual?: boolean; passId: string; name: string; email: string; serial: string; organisation?: string; category?: string; passType?: string; daysAttended?: number; totalDays?: number; status: string; code?: string; issuedAt?: string; sentAt?: string; sentBy?: string; error?: string }
 interface Template { title: string; introText: string; bodyText: string; signatoryName: string; signatoryTitle: string; nameSource: 'name' | 'organisation' | 'category' | 'serial'; textColor: string; layout: CertLayout }
 interface Schedule { id: string; sendAt: string; passIds: string[]; status: string; sent?: number; failed?: number; error?: string; finishedAt?: string; createdBy?: string }
 
@@ -140,6 +140,12 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
   const [eventOver, setEventOver] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  // Extra recipient filters (pass type, guest category, organisation, days attended, pass vs manual)
+  const [typeFilter, setTypeFilter] = useState('ALL');
+  const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [orgFilter, setOrgFilter] = useState('ALL');
+  const [daysFilter, setDaysFilter] = useState('ALL');
+  const [sourceFilter, setSourceFilter] = useState('ALL');
   const [recipientSearch, setRecipientSearch] = useState('');
   const [template, setTemplate] = useState<Template | null>(null);
   const [preview, setPreview] = useState('');
@@ -398,6 +404,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     if (saveState === 'dirty') await saveDesign();
     setFinalPreview('');
     setStatusFilter('ALL');
+    setTypeFilter('ALL'); setCategoryFilter('ALL'); setOrgFilter('ALL'); setDaysFilter('ALL'); setSourceFilter('ALL');
     setRecipientSearch('');
     setEventId(nextEvent);
     setTypeId(nextType);
@@ -664,9 +671,26 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
   const counts = CERT_STATUS_FILTERS.reduce((acc, s) => ({ ...acc, [s]: attendees.filter((a) => a.status === s).length }), {} as Record<string, number>);
   const visibleAttendees = attendees.filter((a) => {
     if (statusFilter !== 'ALL' && a.status !== statusFilter) return false;
+    if (typeFilter !== 'ALL' && (a.passType || '(none)') !== typeFilter) return false;
+    if (categoryFilter !== 'ALL' && (a.category || '(none)') !== categoryFilter) return false;
+    if (orgFilter !== 'ALL' && (a.organisation || '(none)') !== orgFilter) return false;
+    if (sourceFilter === 'pass' && a.manual) return false;
+    if (sourceFilter === 'manual' && !a.manual) return false;
+    if (daysFilter !== 'ALL') {
+      const total = a.totalDays || 0;
+      const all = total > 0 ? (a.daysAttended || 0) >= total : true;
+      if (daysFilter === 'all' && !all) return false;
+      if (daysFilter === 'some' && all) return false;
+    }
     const q = recipientSearch.trim().toLowerCase();
     return !q || `${a.name} ${a.email} ${a.organisation || ''} ${a.serial} ${a.code || ''}`.toLowerCase().includes(q);
   });
+  const distinct = (pick: (a: Attendee) => string | undefined) => Array.from(new Set(attendees.map((a) => pick(a) || '(none)'))).sort();
+  const typeOptions = distinct((a) => a.passType);
+  const categoryOptions = distinct((a) => a.category);
+  const orgOptions = distinct((a) => a.organisation);
+  const anyExtraFilter = [typeFilter, categoryFilter, orgFilter, daysFilter, sourceFilter].some((v) => v !== 'ALL');
+  const clearExtraFilters = () => { setTypeFilter('ALL'); setCategoryFilter('ALL'); setOrgFilter('ALL'); setDaysFilter('ALL'); setSourceFilter('ALL'); };
   const scheduledIds = scheduledMap(schedules);
   const visibleSel = visibleSelectionState(selected, visibleAttendees, scheduledIds);
   const sendableCount = attendees.filter((a) => isSelectable(a, scheduledIds)).length;
@@ -959,6 +983,14 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                     {CERT_STATUS_FILTERS.map((s) => (
                       <button key={s} type="button" onClick={() => setStatusFilter(statusFilter === s ? 'ALL' : s)} className={`px-2 py-0.5 rounded-full border cursor-pointer ${statusFilter === s ? 'bg-accent/20 text-accent border-accent/40' : 'border-slate-300 dark:border-white/15 text-slate-500'}`}>{s} {counts[s] || 0}</button>
                     ))}
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {typeOptions.length > 1 && <select aria-label="Filter by pass type" className={field} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}><option value="ALL" className="bg-slate-900">All pass types</option>{typeOptions.map((o) => <option key={o} value={o} className="bg-slate-900">{o}</option>)}</select>}
+                    {categoryOptions.length > 1 && <select aria-label="Filter by guest category" className={field} value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}><option value="ALL" className="bg-slate-900">All guest categories</option>{categoryOptions.map((o) => <option key={o} value={o} className="bg-slate-900">{o}</option>)}</select>}
+                    {orgOptions.length > 1 && <select aria-label="Filter by organisation" className={field} value={orgFilter} onChange={(e) => setOrgFilter(e.target.value)}><option value="ALL" className="bg-slate-900">All organisations</option>{orgOptions.map((o) => <option key={o} value={o} className="bg-slate-900">{o}</option>)}</select>}
+                    <select aria-label="Filter by days attended" className={field} value={daysFilter} onChange={(e) => setDaysFilter(e.target.value)}><option value="ALL" className="bg-slate-900">Any attendance</option><option value="all" className="bg-slate-900">Attended every valid day</option><option value="some" className="bg-slate-900">Missed some days</option></select>
+                    <select aria-label="Filter by source" className={field} value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)}><option value="ALL" className="bg-slate-900">Passes + manual</option><option value="pass" className="bg-slate-900">Event passes only</option><option value="manual" className="bg-slate-900">Added manually only</option></select>
+                    {anyExtraFilter && <button type="button" onClick={clearExtraFilters} className="px-3 py-2 rounded-xl border border-slate-300 dark:border-white/15 text-slate-500 font-bold cursor-pointer">Clear filters</button>}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <input className={`${field} flex-1 min-w-[140px]`} placeholder="Search name, email, organisation, serial or certificate ID" value={recipientSearch} onChange={(e) => setRecipientSearch(e.target.value)} />
