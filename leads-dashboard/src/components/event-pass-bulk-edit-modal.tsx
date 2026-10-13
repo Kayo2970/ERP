@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { X, Save, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
-import { EventItem, EventPassItem, updateEventPass, expandDateRange, formatValidDaysLabel, getPassValidDays } from '@/lib/local-data';
+import { getEventPasses, EventItem, EventPassItem, updateEventPass, updateEventPassStatus, todayIso, PassAttendanceRecord, expandDateRange, formatValidDaysLabel, getPassValidDays } from '@/lib/local-data';
 import { PassValidityPicker } from '@/components/pass-design-controls';
 
 interface Props {
@@ -17,7 +17,7 @@ interface Props {
 const PASS_TYPES = ['VIP Pass', 'Keynote Speaker', 'Executive Delegate', 'Student Delegate', 'Guest Pass', 'Press / Media', 'Organizer', 'Other'];
 const GUEST_CATEGORIES = ['VIP Dignitary', 'Keynote Speaker', 'Faculty', 'Student', 'Industry Partner', 'Alumni', 'Press / Media', 'Organizer / Crew', 'Special Guest', 'Other'];
 
-type FieldKey = 'roomOrVenue' | 'eventVenue' | 'passType' | 'guestCategory' | 'validityDate' | 'validDays' | 'accessTier' | 'seatOrZone' | 'notes' | 'attendeeOrg' | 'status' | 'fontScale';
+type FieldKey = 'roomOrVenue' | 'eventVenue' | 'passType' | 'guestCategory' | 'validityDate' | 'validDays' | 'accessTier' | 'seatOrZone' | 'notes' | 'attendeeOrg' | 'status' | 'fontScale' | 'admit';
 
 const input = 'w-full px-3 py-2 bg-slate-50 dark:bg-slate-900/60 border border-slate-300 dark:border-white/15 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:border-accent text-xs disabled:opacity-40';
 
@@ -25,13 +25,13 @@ const input = 'w-full px-3 py-2 bg-slate-50 dark:bg-slate-900/60 border border-s
 export function EventPassBulkEditModal({ isOpen, passes, events, currentUserName, onClose, onDone }: Props) {
   const [apply, setApply] = useState<Partial<Record<FieldKey, boolean>>>({});
   const [values, setValues] = useState<Record<FieldKey, string>>({
-    roomOrVenue: '', eventVenue: '', passType: PASS_TYPES[0], guestCategory: GUEST_CATEGORIES[0], validityDate: '', validDays: '', accessTier: '', seatOrZone: '', notes: '', attendeeOrg: '', status: 'Active', fontScale: '1',
+    roomOrVenue: '', eventVenue: '', passType: PASS_TYPES[0], guestCategory: GUEST_CATEGORIES[0], validityDate: '', validDays: '', accessTier: '', seatOrZone: '', notes: '', attendeeOrg: '', status: 'Active', fontScale: '1', admit: '',
   });
   // Valid days picked for the whole selection (null = every day of each pass's event)
   const [pickedDays, setPickedDays] = useState<string[] | null>(null);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [result, setResult] = useState<{ ok: number; pending: number; failed: Array<{ name: string; error: string }> } | null>(null);
+  const [result, setResult] = useState<{ ok: number; pending: number; admitted: number; alreadyAdmitted: number; skippedAdmit: number; failed: Array<{ name: string; error: string }> } | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -77,7 +77,7 @@ export function EventPassBulkEditModal({ isOpen, passes, events, currentUserName
     const updates: Partial<EventPassItem> = {};
     for (const k of chosen) {
       const v = values[k];
-      if (k === 'validDays') continue; // resolved per pass below (clamped to that pass's own event days)
+      if (k === 'validDays' || k === 'admit') continue; // resolved per pass below (clamped to that pass's own event days)
       if (k === 'fontScale') updates.fontScale = Math.min(1.6, Math.max(0.7, Number(v) || 1));
       else if (k === 'status') updates.status = v as EventPassItem['status'];
       else (updates as any)[k] = v.trim();
@@ -88,6 +88,9 @@ export function EventPassBulkEditModal({ isOpen, passes, events, currentUserName
     const failed: Array<{ name: string; error: string }> = [];
     let ok = 0;
     let pending = 0;
+    let admitted = 0;
+    let alreadyAdmitted = 0;
+    let skippedAdmit = 0;
     // Sequential: updateEventPass edits the shared local cache, so parallel runs would overwrite each other
     for (let i = 0; i < passes.length; i++) {
       const p = passes[i];
@@ -103,17 +106,38 @@ export function EventPassBulkEditModal({ isOpen, passes, events, currentUserName
           }
           perPass = { ...updates, validDays: days, ...(apply.validityDate ? {} : { validityDate: formatValidDaysLabel(days) }) };
         }
-        const r = await updateEventPass(p.id, perPass, currentUserName);
+        const hasEdits = chosen.some((k) => k !== 'admit');
+        const r = hasEdits ? await updateEventPass(p.id, perPass, currentUserName) : { pass: p, refused: undefined, approvalPending: false };
         if (!r) failed.push({ name: p.attendeeName, error: 'Pass not found.' });
         else if (r.refused) failed.push({ name: p.attendeeName, error: r.refused });
-        else if (r.approvalPending) pending++;
-        else ok++;
+        else {
+          if (hasEdits) { if (r.approvalPending) pending++; else ok++; }
+          if (apply.admit) {
+            // Check in on every valid day up to today (or today alone when the pass has no dated days)
+            const fresh = getEventPasses().find((x) => x.id === p.id) || p;
+            if (fresh.status === 'Cancelled' || fresh.approvalStatus) { skippedAdmit++; }
+            else {
+              const today = todayIso();
+              const past = getPassValidDays(fresh).filter((d) => d <= today);
+              const days = past.length > 0 ? past : [today];
+              const have = new Set((fresh.attendance || []).map((a) => a.day.toLowerCase()));
+              const missing = days.filter((d) => !have.has(d.toLowerCase()));
+              if (missing.length === 0 && fresh.status === 'Checked In') alreadyAdmitted++;
+              else {
+                const now = new Date().toISOString();
+                const records: PassAttendanceRecord[] = missing.map((d) => ({ day: d, date: d, timestamp: now, scannedBy: currentUserName, checkedInBy: currentUserName }));
+                updateEventPassStatus(p.id, 'Checked In', currentUserName, records);
+                admitted++;
+              }
+            }
+          }
+        }
       } catch (e: any) {
         failed.push({ name: p.attendeeName, error: e?.message || 'Failed.' });
       }
       setProgress(i + 1);
     }
-    setResult({ ok, pending, failed });
+    setResult({ ok, pending, admitted, alreadyAdmitted, skippedAdmit, failed });
     setRunning(false);
     onDone();
   };
@@ -160,6 +184,8 @@ export function EventPassBulkEditModal({ isOpen, passes, events, currentUserName
           {row('fontScale', 'Text size', <input type="number" step="0.1" min="0.7" max="1.6" className={input} disabled={!apply.fontScale} value={values.fontScale} onChange={(e) => set('fontScale', e.target.value)} />)}
           {row('status', 'Status', <select className={input} disabled={!apply.status} value={values.status} onChange={(e) => set('status', e.target.value)}><option value="Active" className="bg-slate-900 text-white">Active</option><option value="Cancelled" className="bg-slate-900 text-white">Cancelled</option></select>)}
 
+          {row('admit', 'Bulk admit', <p className={`text-[11px] pt-2 ${apply.admit ? 'text-emerald-400 font-bold' : 'text-slate-500'}`}>Check in all {passes.length} selected pass{passes.length === 1 ? '' : 'es'} at once — every valid day up to today is marked attended. Cancelled passes are skipped.</p>)}
+
           {running && (
             <div className="flex items-center gap-2 text-sky-400 font-bold"><Loader2 className="h-4 w-4 animate-spin" /> Updating {progress} / {passes.length}…</div>
           )}
@@ -167,7 +193,7 @@ export function EventPassBulkEditModal({ isOpen, passes, events, currentUserName
             <div className={`p-3 rounded-2xl border space-y-1 ${result.failed.length ? 'bg-amber-500/10 border-amber-500/30 text-amber-300' : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'}`}>
               <div className="flex items-center gap-2 font-bold">
                 {result.failed.length ? <AlertCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
-                {result.ok} updated{result.pending ? `, ${result.pending} waiting for approval` : ''}{result.failed.length ? `, ${result.failed.length} failed` : ''}.
+                {apply.admit ? `${result.admitted} checked in${result.alreadyAdmitted ? `, ${result.alreadyAdmitted} already checked in` : ''}${result.skippedAdmit ? `, ${result.skippedAdmit} skipped (cancelled or awaiting approval)` : ''}; ` : ''}{result.ok} updated{result.pending ? `, ${result.pending} waiting for approval` : ''}{result.failed.length ? `, ${result.failed.length} failed` : ''}.
               </div>
               {result.failed.slice(0, 8).map((f, i) => <div key={i} className="text-[11px]">• {f.name}: {f.error}</div>)}
             </div>
