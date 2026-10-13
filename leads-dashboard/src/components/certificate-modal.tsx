@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Users, Plus, UserPlus, Pencil, Award, X, Send, RefreshCw, CheckCircle2, AlertCircle, CheckSquare, Square, ImagePlus, Trash2, ChevronDown, ChevronRight, Download, CalendarClock, Check } from 'lucide-react';
+import { Users, Plus, UserPlus, Pencil, Award, X, Send, RefreshCw, CheckCircle2, AlertCircle, CheckSquare, Square, ImagePlus, Trash2, ChevronDown, ChevronRight, Download, CalendarClock, Check, Mail } from 'lucide-react';
 import { EventItem, Member, TaskItem, authHeaders, formatEventDateRange, getMembers, getTasks } from '@/lib/local-data';
 import { beginTask } from '@/lib/background-tasks';
 import { EmailHtmlPreview } from '@/components/email-html-preview';
@@ -158,6 +158,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
   const [previewPassId, setPreviewPassId] = useState('');
   const [finalPreview, setFinalPreview] = useState('');
   const [openPreviews, setOpenPreviews] = useState<Set<string>>(new Set());
+  const [emailEditorOpen, setEmailEditorOpen] = useState(false);
   const [emailSubject, setEmailSubject] = useState(DEFAULT_CERT_EMAIL.subject);
   const [emailBody, setEmailBody] = useState(DEFAULT_CERT_EMAIL.bodyText);
   const [bgPick, setBgPick] = useState<EmailBackgroundPick>(DEFAULT_BACKGROUND_PICK);
@@ -1184,6 +1185,15 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                     <label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={sendMode === 'now'} onChange={() => setSendMode('now')} /> Send now</label>
                     <label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={sendMode === 'later'} onChange={() => setSendMode('later')} /> Schedule</label>
                   </div>
+                  <button type="button" onClick={() => setEmailEditorOpen((o) => !o)} aria-expanded={emailEditorOpen} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border border-accent/40 bg-accent/10 text-left cursor-pointer">
+                    <Mail className="h-4 w-4 text-accent shrink-0" />
+                    <span className="flex-1 min-w-0">
+                      <span className="font-extrabold text-slate-900 dark:text-white block">Customize certificate email</span>
+                      <span className="text-[10px] text-slate-500 block truncate">Subject: {emailSubject || '(none)'}</span>
+                    </span>
+                    {emailEditorOpen ? <ChevronDown className="h-4 w-4 text-slate-400" /> : <ChevronRight className="h-4 w-4 text-slate-400" />}
+                  </button>
+                  {emailEditorOpen && (<>
                   <div className="space-y-2 p-3 rounded-xl border border-slate-200 dark:border-white/10">
                     <div className="flex items-center justify-between gap-2">
                       <label className={`${label} mb-0`}>Email message</label>
@@ -1200,20 +1210,20 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                   </div>
 
                   <EmailBackgroundPicker value={bgPick} onChange={setBgPick} disabled={busy} />
+                  </>)}
 
                   <div className="space-y-2 p-3 rounded-xl border border-slate-200 dark:border-white/10">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <label className={`${label} mb-0`}>Who gets this ({selected.size} of {attendees.length} selected)</label>
+                      <label className={`${label} mb-0`}>Who gets this ({selected.size} selected in Link to data)</label>
                       <div className="flex flex-wrap items-center gap-3 text-[11px] font-bold">
-                        <button type="button" className="text-accent hover:underline cursor-pointer" title="Everyone who still needs a certificate — people already sent, queued or scheduled are skipped" onClick={() => setSelected(defaultSelection(attendees, scheduledIds))}>Select everyone not yet sent ({sendableCount})</button>
-                        <button type="button" className="text-slate-500 hover:underline cursor-pointer" onClick={() => setSelected(new Set())}>Clear</button>
+                        <button type="button" className="text-accent hover:underline cursor-pointer" onClick={() => setOpenStep(4)}>Change selection (Link to data)</button>
                         <button type="button" className="text-slate-500 hover:underline cursor-pointer" onClick={() => setOpenPreviews(openPreviews.size ? new Set() : new Set(selectedPeople.map((a) => a.passId)))}>{openPreviews.size ? 'Hide all messages' : 'Show all messages'}</button>
                       </div>
                     </div>
-                    <p className="text-[10px] text-slate-500">Tick exactly who this send (or schedule) is for. Send now to one group, then tick the others and schedule them. People who are already scheduled can&apos;t be ticked again — cancel that schedule first. You can still tick someone who was already sent to send it again. Open any row to read that person&apos;s own message.</p>
+                    <p className="text-[10px] text-slate-500">Only the people you selected in <strong>Link to data</strong> are listed. Remove anyone here, or go back to Link to data to pick a different group. Open any row to read that person&apos;s own message.</p>
                     <div className="border border-slate-200 dark:border-white/10 rounded-xl divide-y divide-slate-100 dark:divide-white/5 max-h-[45vh] overflow-y-auto">
-                      {attendees.length === 0 && <div className="py-4 text-center text-slate-400">No recipients yet.</div>}
-                      {attendees.map((a) => {
+                      {selectedPeople.length === 0 && <div className="py-4 text-center text-slate-400">Nobody is selected. Go to Link to data and tick the people this send is for.</div>}
+                      {selectedPeople.map((a) => {
                         const on = selected.has(a.passId);
                         const open = openPreviews.has(a.passId);
                         const v = varsFor(a);
@@ -1229,6 +1239,7 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
                               </button>
                               <div className="shrink-0 flex items-center gap-2">
                                 <CertificateStatusBadge status={a.status} sentAt={a.sentAt} issuedAt={a.issuedAt} error={a.error} sentBy={a.sentBy} />
+ <button type="button" title="Remove from this send" onClick={() => toggle(a.passId)} className="h-7 px-2 rounded-lg border border-rose-500/30 text-rose-400 text-[10px] font-bold cursor-pointer">Remove</button>
                                 <button type="button" title="Read this person's message" onClick={() => togglePreview(a.passId)} className="h-7 px-2 rounded-lg border border-slate-300 dark:border-white/15 text-slate-500 text-[10px] font-bold flex items-center gap-1 cursor-pointer">{open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />} Message</button>
                               </div>
                             </div>
