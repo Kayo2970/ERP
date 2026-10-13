@@ -1419,6 +1419,7 @@ export default function EventPassesPage() {
                       <SortableTh label="Event" columnKey="event" sort={deepSort.sort} onToggle={deepSort.toggle} />
                       <SortableTh label="Pass Tier" columnKey="tier" sort={deepSort.sort} onToggle={deepSort.toggle} />
                       <SortableTh label="Email & Pass View Status" columnKey="email" sort={deepSort.sort} onToggle={deepSort.toggle} />
+                      {certAllowed && <SortableTh label="Certificate" columnKey="cert" sort={deepSort.sort} onToggle={deepSort.toggle} />}
                       <SortableTh label="Gate Turnstile" columnKey="gate" sort={deepSort.sort} onToggle={deepSort.toggle} />
                       <SortableTh label="Issued By" columnKey="issuedBy" sort={deepSort.sort} onToggle={deepSort.toggle} />
                       <SortableTh label="Issued On" columnKey="issuedAt" sort={deepSort.sort} onToggle={deepSort.toggle} />
@@ -1429,7 +1430,7 @@ export default function EventPassesPage() {
                     {deepGroups.flatMap((g) => [
                       g.showHeader ? (
                         <tr key={`grp-${g.eventId}`} className="bg-slate-100/70 dark:bg-white/5">
-                          <td colSpan={canSelectPasses ? 12 : 11} className="py-2.5 px-4">
+                          <td colSpan={(canSelectPasses ? 12 : 11) + (certAllowed ? 1 : 0)} className="py-2.5 px-4">
                             <div className="flex flex-wrap items-center gap-3">
                               {canSelectPasses && (
                                 <input

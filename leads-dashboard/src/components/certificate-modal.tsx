@@ -293,6 +293,13 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
     }
   }, [previewPassId, eventId, typeId, saveState, saveDesign]);
 
+  // The final-preview picker only offers the people ticked in the recipient list (everyone when nothing is ticked)
+  useEffect(() => {
+    const pool = attendees.filter((a) => selected.has(a.passId));
+    const ids = (pool.length > 0 ? pool : attendees).map((a) => a.passId);
+    if (!ids.includes(previewPassId)) setPreviewPassId(ids[0] || '');
+  }, [attendees, selected, previewPassId]);
+
   useEffect(() => {
     if (isOpen && openStep === 5) loadFinalPreview();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1159,9 +1166,9 @@ export function CertificateModal({ isOpen, onClose, events, initialEventId, canE
 
               {section(5, (
                 <div className="space-y-2">
-                  <p className="text-slate-600 dark:text-slate-300">See the real certificate for any attendee, exactly as the PDF will be emailed.</p>
+                  <p className="text-slate-600 dark:text-slate-300">See the real certificate for {selectedPeople.length > 0 ? `the ${selectedPeople.length} selected recipient${selectedPeople.length === 1 ? '' : 's'}` : 'any attendee'}, exactly as the PDF will be emailed.</p>
                   <select className={field} value={previewPassId} onChange={(e) => setPreviewPassId(e.target.value)}>
-                    {attendees.map((a) => <option key={a.passId} value={a.passId} className="bg-slate-900 text-white">{a.name}</option>)}
+                    {(selectedPeople.length > 0 ? selectedPeople : attendees).map((a) => <option key={a.passId} value={a.passId} className="bg-slate-900 text-white">{a.name}</option>)}
                   </select>
                   <div className="flex gap-2">
                     <button type="button" disabled={busy || !previewPassId} onClick={loadFinalPreview} className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-white font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${busy ? 'animate-spin' : ''}`} /> Refresh</button>
