@@ -76,8 +76,9 @@ import {
   EventItem,
   TaskItem,
   isFormClosed,
+  deleteSubmission,
 } from '@/lib/local-data';
-import { canCreateForms, seesOnlyOwnForms, isOwnForm, getFormApprovalRequirement, canApprovePendingForm, hasCapability } from '@/lib/permissions';
+import { canCreateForms, canDeleteForms, seesOnlyOwnForms, isOwnForm, getFormApprovalRequirement, canApprovePendingForm, hasCapability } from '@/lib/permissions';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SearchableSelect } from '@/components/searchable-select';
@@ -204,6 +205,8 @@ export default function FormsBuilderPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingForm, setEditingForm] = useState<PublicFormItem | null>(null);
   const [deletingFormId, setDeletingFormId] = useState<string | null>(null);
+  // A response id, 'ALL' (every response of the selected form) or null.
+  const [deletingResponse, setDeletingResponse] = useState<string | null>(null);
   const [rejectingFormId, setRejectingFormId] = useState<string | null>(null);
   const [rejectionReasonInput, setRejectionReasonInput] = useState('');
   const [isSaveTemplateOpen, setIsSaveTemplateOpen] = useState(false);
@@ -608,6 +611,18 @@ export default function FormsBuilderPage() {
     triggerNotification('Public form deleted.');
   };
 
+  const handleConfirmDeleteResponse = () => {
+    if (!deletingResponse || !selectedForm) return;
+    const ids = deletingResponse === 'ALL'
+      ? selectedSubmissions.map(s => s.id)
+      : [deletingResponse];
+    ids.forEach(id => deleteSubmission(id, user?.name || 'User'));
+    setDeletingResponse(null);
+    setSubmissions(getSubmissions());
+    setSubPage(1);
+    triggerNotification(ids.length === 1 ? 'Response deleted.' : `${ids.length} responses deleted.`);
+  };
+
   const handleApproveForm = (id: string) => {
     const wasDelete = forms.find(f => f.id === id)?.approvalStatus === 'pending_delete';
     approveForm(id, user?.name || 'User');
@@ -664,6 +679,9 @@ export default function FormsBuilderPage() {
   // can reach this page — form-builders always see it, others only with an
   // explicit FORMS_VIEW_RESPONSES grant. Previously ungated entirely.
   const canViewResponses = canBuild || hasCapability(user, 'FORMS_VIEW_RESPONSES');
+  // Deleting a response is permanent: form deleters, or a Training Associate on a form they created (the server enforces the same).
+  const canDeleteResponses = (form: PublicFormItem | undefined) =>
+    !!form && canViewResponses && (canDeleteForms(user) || (onlyOwnForms && isOwnForm(form, user)));
 
   // Visibility: a pending/rejected submission is only shown to its submitter, its
   // resolved approver, and the Super User — mirrors the same rule on Events/Tasks.
@@ -1012,6 +1030,16 @@ export default function FormsBuilderPage() {
                       Received Submissions ({selectedSubmissions.length})
                     </h4>
                     <div className="flex items-center gap-2">
+                      {selectedSubmissions.length > 0 && canDeleteResponses(selectedForm) && (
+                        <button
+                          onClick={() => setDeletingResponse('ALL')}
+                          className="px-2.5 py-1 bg-danger/10 hover:bg-danger/20 text-danger rounded-lg transition-all text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                          title="Delete every response to this form"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Delete all
+                        </button>
+                      )}
                       {selectedSubmissions.length > 0 && (
                         <button
                           onClick={handleDownloadSubmissionsCsv}
@@ -1055,6 +1083,7 @@ export default function FormsBuilderPage() {
                             {selectedForm.sourceTemplateId === FEEDBACK_FORM_TEMPLATE_ID && (
                               <th className="pb-3 font-semibold">Filled Copy</th>
                             )}
+                            {canDeleteResponses(selectedForm) && <th className="pb-3 font-semibold">Delete</th>}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-theme-border/20">
@@ -1083,6 +1112,17 @@ export default function FormsBuilderPage() {
                                     title="Download filled feedback form (.docx)"
                                   >
                                     <FileText className="h-3.5 w-3.5" />
+                                  </button>
+                                </td>
+                              )}
+                              {canDeleteResponses(selectedForm) && (
+                                <td className="py-3 pr-3">
+                                  <button
+                                    onClick={() => setDeletingResponse(sub.id)}
+                                    className="p-1.5 bg-danger/10 hover:bg-danger/20 rounded-lg text-danger transition-all cursor-pointer"
+                                    title="Delete this response"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
                                   </button>
                                 </td>
                               )}
@@ -1724,6 +1764,18 @@ export default function FormsBuilderPage() {
         variant="danger"
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeletingFormId(null)}
+      />
+
+      <ConfirmModal
+        isOpen={Boolean(deletingResponse)}
+        title={deletingResponse === 'ALL' ? 'Delete All Responses' : 'Delete Response'}
+        message={deletingResponse === 'ALL'
+          ? `Permanently delete all ${selectedSubmissions.length} responses to this form? This cannot be undone — download the CSV first if you need a copy.`
+          : 'Permanently delete this response? This cannot be undone.'}
+        confirmLabel={deletingResponse === 'ALL' ? 'Delete All' : 'Delete Response'}
+        variant="danger"
+        onConfirm={handleConfirmDeleteResponse}
+        onCancel={() => setDeletingResponse(null)}
       />
 
       {rejectingFormId && (

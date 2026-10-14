@@ -6648,6 +6648,17 @@ export function saveSubmissions(submissions: FormSubmissionItem[]): void {
   markLocalWrite('leads_form_submissions');
 }
 
+/** Deletes one collected response from this client's cache and the server. */
+export function deleteSubmission(id: string, actorName: string): boolean {
+  const current = getSubmissions();
+  const target = current.find(s => s.id === id);
+  if (!target) return false;
+  saveSubmissions(current.filter(s => s.id !== id));
+  serverDelete('/api/submissions', id);
+  logAuditEvent('FORM_RESPONSE_DELETED', actorName, `Deleted a response to form slug "${target.slug}"`);
+  return true;
+}
+
 /** True once a public form's optional `closeAt` (ISO UTC) has passed. Pure, so it runs on both server and client. */
 export function isFormClosed(form: { closeAt?: string } | null | undefined, now: number = Date.now()): boolean {
   if (!form?.closeAt) return false;
