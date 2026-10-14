@@ -6,6 +6,7 @@ import {
 } from 'recharts';
 import { FileText, Lightbulb, AlertTriangle, CheckCircle2, Info, ShieldAlert } from 'lucide-react';
 import { buildFeedbackReportDocx } from '@/lib/feedback-report';
+import { buildReportCharts } from '@/lib/feedback-report-charts';
 import type { PublicFormItem, FormSubmissionItem } from '@/lib/local-data';
 import {
   analyseFeedback, RATING_PARAMS, DEFAULT_TARGET,
@@ -167,12 +168,13 @@ export function FeedbackAnalysisPanel({ form, submissions }: { form: PublicFormI
   const downloadReport = async () => {
     setBuilding(true);
     try {
+      const charts = await buildReportCharts(a, target);
       const blob = await buildFeedbackReportDocx(a, {
         formTitle: form.title,
         eventName: form.eventName,
         attendees: attendeeCount > 0 ? attendeeCount : undefined,
         target,
-      });
+      }, charts);
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -214,7 +216,7 @@ export function FeedbackAnalysisPanel({ form, submissions }: { form: PublicFormI
             onClick={downloadReport}
             disabled={building}
             className="px-2.5 py-1 bg-accent hover:bg-accent/90 disabled:opacity-60 text-white rounded-lg text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
-            title="Download a written report (observations, tables, conclusions and recommendations) as a Word document"
+            title="Download a written report (charts, observations, tables, conclusions and recommendations) as a Word document"
           >
             <FileText className="h-3.5 w-3.5" /> {building ? 'Preparing…' : 'Word report'}
           </button>

@@ -1,6 +1,7 @@
 import JSZip from 'jszip';
 import type { FeedbackAnalysis, ParamStats, SegmentStats } from '@/lib/feedback-analysis';
 import { RATING_PARAMS, DIMENSIONS } from '@/lib/feedback-analysis';
+import type { ChartImage, ReportCharts } from '@/lib/feedback-report-charts';
 
 /**
  * Builds the Feedback Analysis Report as a real .docx (written straight to WordprocessingML with JSZip, so no extra
@@ -20,6 +21,7 @@ export interface ReportMeta {
 // ───────────────────────── block model ─────────────────────────
 
 type Run = { t: string; b?: boolean; i?: boolean; color?: string };
+type EmbeddedImage = ChartImage & { rid: number };
 type Block =
   | { k: 'title'; text: string }
   | { k: 'subtitle'; text: string }
@@ -29,6 +31,7 @@ type Block =
   | { k: 'bullet'; runs: Run[] }
   | { k: 'quote'; text: string }
   | { k: 'table'; header: string[]; rows: string[][]; widths: number[]; align?: ('l' | 'r' | 'c')[] }
+  | { k: 'image'; img: EmbeddedImage }
   | { k: 'pagebreak' };
 
 const t = (text: string, o: Omit<Run, 't'> = {}): Run => ({ t: text, ...o });
@@ -40,8 +43,10 @@ const pc = (v: number | null) => (v === null ? '—' : `${Math.round(v)}%`);
 const bar = (pctVal: number) => '█'.repeat(Math.max(0, Math.round(pctVal / 10))) + '░'.repeat(10 - Math.max(0, Math.round(pctVal / 10)));
 const list = (xs: string[]) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 
-function buildBlocks(a: FeedbackAnalysis, meta: ReportMeta): Block[] {
+function buildBlocks(a: FeedbackAnalysis, meta: ReportMeta, ch: ReportCharts): Block[] {
   const out: Block[] = [];
+  const fig = (img?: ChartImage) => { if (img) out.push({ k: 'image', img: { ...img, rid: ++imgCount } }); };
+  let imgCount = 0;
   const n = a.n;
   const reliable = n >= 30;
   const caveat = n < 10
@@ -108,6 +113,7 @@ function buildBlocks(a: FeedbackAnalysis, meta: ReportMeta): Block[] {
       ['Met all five learning outcomes', pc(a.fullAchievement), `n = ${n}`],
     ],
   });
+  fig(ch.overall);
   const verdict: string[] = [];
   if (ov.mean !== null && ov.n >= 2) {
     const lo = ov.ci !== null ? ov.mean - ov.ci : ov.mean;
@@ -140,6 +146,8 @@ function buildBlocks(a: FeedbackAnalysis, meta: ReportMeta): Block[] {
   });
   out.push(P(t(`Gap = mean minus the ${meta.target.toFixed(1)} target. Top-2 / Bottom-2 = share of scores of 4–5 / 1–2. SD = spread of answers (above about 1.1 means opinions are split).`, { i: true, color: '64748B' })));
 
+  fig(ch.means);
+  fig(ch.distribution);
   out.push({ k: 'h2', text: 'What the parameters show' });
   if (sorted.length === 0) {
     out.push(P('No ratings have been submitted yet.'));
@@ -156,6 +164,7 @@ function buildBlocks(a: FeedbackAnalysis, meta: ReportMeta): Block[] {
   }
 
   out.push({ k: 'h2', text: 'Dimension scores' });
+  fig(ch.dimensions);
   out.push({
     k: 'table', header: ['Dimension', 'Made up of', 'Mean'], widths: [1800, 5400, 1800], align: ['l', 'l', 'r'],
     rows: a.dimensions.map(d => [
@@ -196,6 +205,8 @@ function buildBlocks(a: FeedbackAnalysis, meta: ReportMeta): Block[] {
   };
   segSection('By designation / programme / semester', a.designations);
   segSection('By department', a.departments);
+  fig(ch.segments);
+  fig(ch.respondentIndex);
   if (a.designations.length === 0 && a.departments.length === 0) out.push(P('No designation or department answers are available to segment on.'));
 
   // ── 5. Learning outcomes and impact ──
@@ -204,6 +215,7 @@ function buildBlocks(a: FeedbackAnalysis, meta: ReportMeta): Block[] {
     k: 'table', header: ['Learning outcome', 'Respondents ticking Yes', '', 'n'], widths: [4400, 1500, 2200, 900], align: ['l', 'r', 'l', 'r'],
     rows: a.outcomes.map(o => [o.label, pc(o.pct), bar(o.pct), String(o.n)]),
   });
+  fig(ch.outcomes);
   const ocs = a.outcomes.filter(o => o.n > 0).sort((x, y) => y.pct - x.pct);
   if (ocs.length >= 2) {
     out.push(P(`The outcome achievement index is ${pc(a.outcomeIndex)}, and ${pc(a.fullAchievement)} of respondents met all five outcomes. “${ocs[0].short}” was met most often (${pc(ocs[0].pct)}) and “${ocs[ocs.length - 1].short}” least often (${pc(ocs[ocs.length - 1].pct)})${ocs[0].pct - ocs[ocs.length - 1].pct >= 20 ? ' — that learning objective was not delivered as well as the others and needs reworking' : ''}.`));
@@ -215,12 +227,14 @@ function buildBlocks(a: FeedbackAnalysis, meta: ReportMeta): Block[] {
       a.knowledge.ci.p < 0.7 ? ' The knowledge-gain rate is under 70%, which suggests the level was too basic or too advanced for part of the audience — check by designation before re-pitching.' : '',
     ));
   }
+  fig(ch.impact);
   out.push(P(t('Note: these are self-reported measures of satisfaction and learning, not a test of learning itself. To show actual learning, add a short pre-test and post-test.', { i: true, color: '64748B' })));
 
   // ── 6. Drivers and reliability ──
   if (a.regression || a.alpha) {
     out.push({ k: 'h1', text: '6. Drivers and reliability' });
     if (a.regression) {
+      fig(ch.drivers);
       const bs = [...a.regression.betas].sort((x, y) => y.beta - x.beta);
       const name = (k: string) => RATING_PARAMS.find(p => p.key === k)?.short ?? k;
       out.push(P(`A regression of the overall rating on the other eight ratings (n = ${a.regression.n}) explains ${Math.round(a.regression.r2 * 100)}% of the variation. The largest standardised coefficients are ${list(bs.slice(0, 3).map(b => `${name(b.key)} (β ${b.beta.toFixed(2)})`))}, so those ratings move the overall rating most. This shows association, not cause: a link between an item and overall satisfaction does not prove that improving it will raise satisfaction.`));
@@ -236,6 +250,7 @@ function buildBlocks(a: FeedbackAnalysis, meta: ReportMeta): Block[] {
   a.comments.forEach(c => {
     out.push({ k: 'h2', text: `${c.title} (${c.answered} of ${n} answered)` });
     if (c.themes.length === 0) { out.push(P('No recurring themes were detected.')); return; }
+    fig(ch.comments[c.key]);
     out.push({
       k: 'table', header: ['Theme', 'Respondents', 'Share'], widths: [4600, 1800, 1800], align: ['l', 'r', 'r'],
       rows: c.themes.slice(0, 6).map(th => [th.theme, String(th.respondents), pc(th.pct)]),
@@ -349,11 +364,17 @@ function blockXml(b: Block): string {
     case 'bullet': return `<w:p><w:pPr><w:ind w:left="400" w:hanging="260"/><w:spacing w:after="60"/></w:pPr>${runXml({ t: '•  ' })}${b.runs.map(r => runXml(r)).join('')}</w:p>`;
     case 'quote': return `<w:p><w:pPr><w:pBdr><w:left w:val="single" w:sz="18" w:space="8" w:color="2E75B6"/></w:pBdr><w:ind w:left="300"/></w:pPr>${runXml({ t: b.text, i: true, color: '475569' })}</w:p>`;
     case 'table': return tableXml(b);
+    case 'image': {
+      const cx = 5900000;
+      const cy = Math.round((cx * b.img.height) / b.img.width);
+      const n = b.img.rid;
+      return `<w:p><w:pPr><w:keepNext/><w:spacing w:before="80" w:after="120"/><w:jc w:val="center"/></w:pPr><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="${n}" name="Chart ${n}" descr="${esc(b.img.alt)}"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="${n}" name="chart${n}.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdImg${n}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`;
+    }
     case 'pagebreak': return '<w:p><w:r><w:br w:type="page"/></w:r></w:p>';
   }
 }
 
-const NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+const NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"';
 
 const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles ${NS}>
@@ -365,16 +386,19 @@ const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="200" w:after="80"/><w:outlineLvl w:val="1"/></w:pPr><w:rPr><w:b/><w:color w:val="2E75B6"/><w:sz w:val="24"/></w:rPr></w:style>
 </w:styles>`;
 
-export async function buildFeedbackReportDocx(a: FeedbackAnalysis, meta: ReportMeta): Promise<Blob> {
-  const body = buildBlocks(a, meta).map(blockXml).join('');
+export async function buildFeedbackReportDocx(a: FeedbackAnalysis, meta: ReportMeta, charts: ReportCharts = { comments: {} }): Promise<Blob> {
+  const blocks = buildBlocks(a, meta, charts);
+  const body = blocks.map(blockXml).join('');
+  const images = blocks.filter((b): b is Extract<Block, { k: 'image' }> => b.k === 'image').map(b => b.img);
   const sect = '<w:sectPr><w:footerReference w:type="default" r:id="rId2"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="567" w:footer="567"/></w:sectPr>';
   const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${NS}><w:body>${body}${sect}</w:body></w:document>`;
   const footerXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ${NS}><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:color w:val="64748B"/><w:sz w:val="16"/></w:rPr><w:t xml:space="preserve">Feedback Analysis Report · Page </w:t></w:r><w:r><w:rPr><w:color w:val="64748B"/><w:sz w:val="16"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:rPr><w:color w:val="64748B"/><w:sz w:val="16"/></w:rPr><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r><w:r><w:rPr><w:color w:val="64748B"/><w:sz w:val="16"/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:color w:val="64748B"/><w:sz w:val="16"/></w:rPr><w:t>1</w:t></w:r><w:r><w:rPr><w:color w:val="64748B"/><w:sz w:val="16"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r></w:p></w:ftr>`;
 
   const zip = new JSZip();
-  zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>`);
+  zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>`);
   zip.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`);
-  zip.file('word/_rels/document.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>`);
+  zip.file('word/_rels/document.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>${images.map(i => `<Relationship Id="rIdImg${i.rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/chart${i.rid}.png"/>`).join('')}</Relationships>`);
+  images.forEach(i => zip.file(`word/media/chart${i.rid}.png`, i.png));
   zip.file('word/document.xml', documentXml);
   zip.file('word/styles.xml', STYLES);
   zip.file('word/footer1.xml', footerXml);
