@@ -33,6 +33,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { FormQrModal } from '@/components/form-qr-modal';
+import { FeedbackAnalysisPanel } from '@/components/feedback-analysis-panel';
 import {
   BarChart,
   Bar,
@@ -1183,6 +1184,11 @@ export default function FormsBuilderPage() {
                                 </ResponsiveContainer>
                               </div>
                             </div>
+                          )}
+
+                          {/* Full analysis (summary stats, outcomes, segments, drivers, comment themes) for forms built from the Feedback Form Template */}
+                          {selectedForm.sourceTemplateId === FEEDBACK_FORM_TEMPLATE_ID && (
+                            <FeedbackAnalysisPanel form={selectedForm} submissions={selectedSubmissions} />
                           )}
 
                           {chartableFields.length === 0 ? (
