@@ -133,7 +133,7 @@ async function hBars(make: CanvasFactory, o: {
     ctx.beginPath(); ctx.moveTo(x(o.target), y0 - 6); ctx.lineTo(x(o.target), y0 + o.items.length * rowH); ctx.stroke();
     ctx.setLineDash([]);
     ctx.fillStyle = WARN; ctx.font = `bold 22px ${FONT}`; ctx.textAlign = 'left';
-    ctx.fillText(o.targetLabel ?? `Target ${o.fmt(o.target)}`, x(o.target) + 8, y0 - 12 + (o.subtitle ? 0 : 0));
+    ctx.fillText(o.targetLabel ?? o.fmt(o.target), x(o.target) + 8, y0 - 12 + (o.subtitle ? 0 : 0));
   }
   return { png: await c.toPng(), width: W, height, alt: o.alt };
 }
@@ -236,16 +236,18 @@ export interface ReportCharts {
   comments: Record<string, ChartImage | undefined>;
 }
 
-export async function buildReportCharts(a: FeedbackAnalysis, target: number, make: CanvasFactory = browserCanvas): Promise<ReportCharts> {
+export async function buildReportCharts(a: FeedbackAnalysis, make: CanvasFactory = browserCanvas): Promise<ReportCharts> {
   const out: ReportCharts = { comments: {} };
   if (a.n === 0) return out;
+  // Reference line = the event's own average (mean of the nine parameter means), not an externally set target.
+  const avg = a.overallMean ?? undefined;
   const sortedParams = a.params.filter(p => p.mean !== null).sort((x, y) => (y.mean as number) - (x.mean as number));
 
   if (sortedParams.length) {
     out.means = await hBars(make, {
-      title: 'Mean rating by parameter', subtitle: `Strongest to weakest · scale 1–5 · n = ${a.n} forms`,
-      items: sortedParams.map(p => ({ label: p.label, value: p.mean as number, color: (p.mean as number) >= target ? ACCENT : GREY, lo: p.ci !== null ? (p.mean as number) - p.ci : undefined, hi: p.ci !== null ? (p.mean as number) + p.ci : undefined })),
-      min: 0, max: 5, target, targetLabel: `Target ${target.toFixed(1)}`, fmt: v => v.toFixed(v % 1 === 0 && v === Math.round(v) ? 0 : 2),
+      title: 'Mean rating by parameter', subtitle: `Strongest to weakest · scale 1–5 · whiskers = 95% interval · n = ${a.n} forms`,
+      items: sortedParams.map(p => ({ label: p.label, value: p.mean as number, color: avg === undefined || (p.mean as number) >= avg ? ACCENT : GREY, lo: p.ci !== null ? (p.mean as number) - p.ci : undefined, hi: p.ci !== null ? (p.mean as number) + p.ci : undefined })),
+      min: 0, max: 5, target: avg, targetLabel: avg === undefined ? undefined : `Event average ${avg.toFixed(2)}`, fmt: v => v.toFixed(v % 1 === 0 && v === Math.round(v) ? 0 : 2),
       alt: 'Bar chart of mean rating per parameter with 95% confidence whiskers',
     });
     out.distribution = await stacked(make, {
@@ -259,8 +261,8 @@ export async function buildReportCharts(a: FeedbackAnalysis, target: number, mak
   if (dims.length) {
     out.dimensions = await hBars(make, {
       title: 'Dimension scores', subtitle: 'Design · Content · Delivery · Support (mean of related items)',
-      items: dims.map(d => ({ label: d.label, value: d.mean as number, color: (d.mean as number) >= target ? ACCENT : GREY })),
-      min: 0, max: 5, target, targetLabel: `Target ${target.toFixed(1)}`, fmt: v => v.toFixed(v === Math.round(v) ? 0 : 2),
+      items: dims.map(d => ({ label: d.label, value: d.mean as number, color: avg === undefined || (d.mean as number) >= avg ? ACCENT : GREY })),
+      min: 0, max: 5, target: avg, targetLabel: avg === undefined ? undefined : `Event average ${avg.toFixed(2)}`, fmt: v => v.toFixed(v === Math.round(v) ? 0 : 2),
       alt: 'Bar chart of dimension scores',
     });
   }
@@ -312,11 +314,11 @@ export async function buildReportCharts(a: FeedbackAnalysis, target: number, mak
 
   const segs = [...a.designations, ...a.departments].filter(s => s.n >= 10);
   if (segs.length >= 2) {
-    const mk = (list: typeof a.designations) => list.filter(s => s.n >= 10).map(s => ({ label: `${s.name} (n=${s.n})`, value: s.indexMean, color: s.indexMean >= target ? ACCENT : GREY }));
+    const mk = (list: typeof a.designations) => list.filter(s => s.n >= 10).map(s => ({ label: `${s.name} (n=${s.n})`, value: s.indexMean, color: !a.respondentIndex || s.indexMean >= a.respondentIndex.mean ? ACCENT : GREY }));
     const items = [...mk(a.designations), ...mk(a.departments)];
     out.segments = await hBars(make, {
       title: 'Respondent index by group', subtitle: 'Groups with 10 or more responses',
-      items, min: 0, max: 5, target, targetLabel: `Target ${target.toFixed(1)}`, fmt: v => v.toFixed(v === Math.round(v) ? 0 : 2),
+      items, min: 0, max: 5, target: a.respondentIndex?.mean, targetLabel: a.respondentIndex ? `All respondents ${a.respondentIndex.mean.toFixed(2)}` : undefined, fmt: v => v.toFixed(v === Math.round(v) ? 0 : 2),
       alt: 'Bar chart of respondent index by group',
     });
   }

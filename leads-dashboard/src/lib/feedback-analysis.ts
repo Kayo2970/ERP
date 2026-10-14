@@ -421,9 +421,7 @@ export interface FeedbackAnalysis {
   insights: Insight[];
 }
 
-export const DEFAULT_TARGET = 4.0;
-
-export function analyseFeedback(form: PublicFormItem, subs: FormSubmissionItem[], target: number = DEFAULT_TARGET): FeedbackAnalysis {
+export function analyseFeedback(form: PublicFormItem, subs: FormSubmissionItem[]): FeedbackAnalysis {
   const rows = buildRows(form, subs);
   const n = rows.length;
 
@@ -512,12 +510,12 @@ export function analyseFeedback(form: PublicFormItem, subs: FormSubmissionItem[]
     fullAchievement, knowledge, apply, quality, alpha, regression, designations, departments, comments,
     insights: [],
   };
-  analysis.insights = buildInsights(analysis, target);
+  analysis.insights = buildInsights(analysis);
   return analysis;
 }
 
 /** Section 4 of the guide — patterns on this form and what each lets you infer. */
-function buildInsights(a: FeedbackAnalysis, target: number): Insight[] {
+function buildInsights(a: FeedbackAnalysis): Insight[] {
   const out: Insight[] = [];
   if (a.n === 0) return out;
 
@@ -530,11 +528,12 @@ function buildInsights(a: FeedbackAnalysis, target: number): Insight[] {
   }
 
   const ov = a.overall;
-  if (ov.mean !== null && ov.n >= 10 && ov.ci !== null) {
-    const lo = ov.mean - ov.ci;
-    if (lo >= target) out.push({ tone: 'good', title: `Target of ${target.toFixed(1)} met`, detail: `Overall rating ${ov.mean.toFixed(2)} ± ${ov.ci.toFixed(2)} — the whole 95% interval sits above ${target.toFixed(1)}, so the event met the target for the attendee group, not only for the forms received.` });
-    else if (ov.mean >= target) out.push({ tone: 'warn', title: `Target of ${target.toFixed(1)} met on average, not conclusively`, detail: `Overall rating ${ov.mean.toFixed(2)} ± ${ov.ci.toFixed(2)} — the interval dips below ${target.toFixed(1)}, so more forms are needed before reporting it as met.` });
-    else out.push({ tone: 'bad', title: `Below the ${target.toFixed(1)} target`, detail: `Overall rating ${ov.mean.toFixed(2)} ± ${ov.ci.toFixed(2)}.` });
+  if (ov.mean !== null && ov.n >= 10 && ov.top2 !== null && ov.bottom2 !== null && ov.net !== null) {
+    out.push({
+      tone: ov.net >= 50 ? 'good' : ov.net >= 0 ? 'info' : 'bad',
+      title: `Overall rating ${ov.mean.toFixed(2)}${ov.ci !== null ? ` ± ${ov.ci.toFixed(2)}` : ''}`,
+      detail: `${Math.round(ov.top2)}% rated the event 4–5 and ${Math.round(ov.bottom2)}% rated it 1–2 (net ${ov.net > 0 ? '+' : ''}${Math.round(ov.net)}). The interval is the range the true mean of all attendees probably lies in.`,
+    });
   }
 
   const splitParams = a.params.filter(p => p.n >= 10 && (p.sd ?? 0) > 1.1);
@@ -557,7 +556,7 @@ function buildInsights(a: FeedbackAnalysis, target: number): Insight[] {
     if (delivery.length && content !== null && mean(delivery) - content >= 0.4) out.push({ tone: 'warn', title: 'Good delivery, content may be thin', detail: 'Resource person and interaction score above content depth — consider raising the level of the content and keeping the speaker.' });
   }
 
-  if (a.apply.n >= 10 && ov.mean !== null && ov.mean >= target && a.apply.ci && a.apply.ci.p < 0.7) out.push({ tone: 'warn', title: 'Enjoyed it, but not usable', detail: `Overall rating is high but only ${Math.round(a.apply.ci.p * 100)}% say they will apply the learning — add applied tasks and follow-up.` });
+  if (a.apply.n >= 10 && ov.top2 !== null && ov.top2 >= 60 && a.apply.ci && a.apply.ci.p < 0.7) out.push({ tone: 'warn', title: 'Enjoyed it, but not usable', detail: `Overall rating is high but only ${Math.round(a.apply.ci.p * 100)}% say they will apply the learning — add applied tasks and follow-up.` });
   if (a.knowledge.n >= 10 && a.knowledge.ci && a.knowledge.ci.p < 0.7) out.push({ tone: 'warn', title: 'Knowledge gain is low', detail: `Only ${Math.round(a.knowledge.ci.p * 100)}% say the event enhanced their knowledge/skills — the level may be too basic or too advanced. Check by designation, then re-pitch.` });
 
   const weakestOutcome = [...a.outcomes].filter(o => o.n >= 10).sort((x, y) => x.pct - y.pct)[0];

@@ -1,5 +1,5 @@
 import type { PublicFormItem, FormSubmissionItem } from '@/lib/local-data';
-import { analyseFeedback, DEFAULT_TARGET } from '@/lib/feedback-analysis';
+import { analyseFeedback } from '@/lib/feedback-analysis';
 import { buildReportCharts } from '@/lib/feedback-report-charts';
 import { buildFeedbackReportDocx } from '@/lib/feedback-report';
 
@@ -7,16 +7,13 @@ import { buildFeedbackReportDocx } from '@/lib/feedback-report';
 export async function downloadFeedbackReport(
   form: PublicFormItem,
   submissions: FormSubmissionItem[],
-  opts: { target?: number; attendees?: number; eventName?: string; preparedBy?: string } = {},
+  opts: { eventName?: string; preparedBy?: string } = {},
 ): Promise<void> {
-  const target = opts.target ?? DEFAULT_TARGET;
-  const analysis = analyseFeedback(form, submissions, target);
-  const charts = await buildReportCharts(analysis, target);
+  const analysis = analyseFeedback(form, submissions);
+  const charts = await buildReportCharts(analysis);
   const blob = await buildFeedbackReportDocx(analysis, {
     formTitle: form.title,
     eventName: opts.eventName ?? form.eventName,
-    attendees: opts.attendees && opts.attendees > 0 ? opts.attendees : undefined,
-    target,
     preparedBy: opts.preparedBy,
   }, charts);
   const url = URL.createObjectURL(blob);

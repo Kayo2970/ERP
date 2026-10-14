@@ -8,7 +8,7 @@ import { FileText, Lightbulb, AlertTriangle, CheckCircle2, Info, ShieldAlert } f
 import { downloadFeedbackReport } from '@/lib/feedback-report-download';
 import type { PublicFormItem, FormSubmissionItem } from '@/lib/local-data';
 import {
-  analyseFeedback, RATING_PARAMS, DEFAULT_TARGET,
+  analyseFeedback, RATING_PARAMS,
   type ParamStats, type Insight, type SegmentStats,
 } from '@/lib/feedback-analysis';
 
@@ -124,7 +124,7 @@ const SegmentTable = ({ title, segs }: { title: string; segs: SegmentStats[] }) 
   );
 };
 
-const ParamRow = ({ p, target }: { p: ParamStats; target: number }) => (
+const ParamRow = ({ p, avg }: { p: ParamStats; avg: number | null }) => (
   <tr className="text-theme-text-primary">
     <td className="py-1.5 pr-3 font-semibold whitespace-nowrap">{p.label}</td>
     <td className="py-1.5 pr-2 text-right">{p.n}</td>
@@ -136,8 +136,8 @@ const ParamRow = ({ p, target }: { p: ParamStats; target: number }) => (
     <td className="py-1.5 pr-2 text-right">{pct(p.top2)}</td>
     <td className="py-1.5 pr-2 text-right">{pct(p.bottom2)}</td>
     <td className="py-1.5 pr-2 text-right">{p.net === null ? '—' : `${p.net > 0 ? '+' : ''}${Math.round(p.net)}`}</td>
-    <td className={`py-1.5 pr-2 text-right ${p.mean !== null && p.mean < target ? 'text-warning font-semibold' : ''}`}>
-      {p.mean === null ? '—' : `${p.mean - target >= 0 ? '+' : ''}${(p.mean - target).toFixed(2)}`}
+    <td className={`py-1.5 pr-2 text-right ${p.mean !== null && avg !== null && p.mean < avg - 0.25 ? 'text-warning font-semibold' : ''}`}>
+      {p.mean === null || avg === null ? '—' : `${p.mean - avg >= 0 ? '+' : ''}${(p.mean - avg).toFixed(2)}`}
     </td>
     <td className="py-1.5 text-right">{p.rank ?? '—'}</td>
   </tr>
@@ -145,14 +145,11 @@ const ParamRow = ({ p, target }: { p: ParamStats; target: number }) => (
 
 
 export function FeedbackAnalysisPanel({ form, submissions }: { form: PublicFormItem; submissions: FormSubmissionItem[] }) {
-  const [target, setTarget] = useState(DEFAULT_TARGET);
-  const [attendees, setAttendees] = useState('');
   const [building, setBuilding] = useState(false);
 
-  const a = useMemo(() => analyseFeedback(form, submissions, target), [form, submissions, target]);
+  const a = useMemo(() => analyseFeedback(form, submissions), [form, submissions]);
 
-  const attendeeCount = Number(attendees);
-  const responseRate = attendeeCount > 0 ? (a.n / attendeeCount) * 100 : null;
+  const avg = a.overallMean;
 
   if (a.n === 0) return null;
 
@@ -167,7 +164,7 @@ export function FeedbackAnalysisPanel({ form, submissions }: { form: PublicFormI
   const downloadReport = async () => {
     setBuilding(true);
     try {
-      await downloadFeedbackReport(form, submissions, { target, attendees: attendeeCount });
+      await downloadFeedbackReport(form, submissions);
     } finally {
       setBuilding(false);
     }
@@ -182,21 +179,6 @@ export function FeedbackAnalysisPanel({ form, submissions }: { form: PublicFormI
           <span className="font-normal text-theme-text-secondary">· {a.n} form{a.n === 1 ? '' : 's'}</span>
         </div>
         <div className="flex flex-wrap items-center gap-3 text-[11px] text-theme-text-secondary">
-          <label className="flex items-center gap-1.5">
-            Attendees
-            <input
-              type="number" min={1} value={attendees} onChange={e => setAttendees(e.target.value)} placeholder="e.g. 100"
-              className="w-20 px-2 py-1 bg-theme-background/40 border border-theme-border/40 rounded-lg text-xs text-theme-text-primary focus:outline-none"
-            />
-          </label>
-          <label className="flex items-center gap-1.5">
-            Target
-            <input
-              type="number" min={1} max={5} step={0.1} value={target}
-              onChange={e => { const v = Number(e.target.value); if (v >= 1 && v <= 5) setTarget(v); }}
-              className="w-16 px-2 py-1 bg-theme-background/40 border border-theme-border/40 rounded-lg text-xs text-theme-text-primary focus:outline-none"
-            />
-          </label>
           <button
             onClick={downloadReport}
             disabled={building}
@@ -210,20 +192,13 @@ export function FeedbackAnalysisPanel({ form, submissions }: { form: PublicFormI
 
       {/* Headline tiles */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <Tile value={String(a.n)} label="Forms received" sub={responseRate !== null ? `${Math.round(responseRate)}% response rate` : 'Enter attendees for response rate'} />
+        <Tile value={String(a.n)} label="Forms received" />
         <Tile accent value={a.overall.mean === null ? '—' : `${a.overall.mean.toFixed(2)} / 5`} label="Overall rating" sub={a.overall.ci === null ? `n=${a.overall.n}` : `±${a.overall.ci.toFixed(2)} · n=${a.overall.n}`} />
         <Tile value={pct(a.overall.top2)} label="Top-2-box (overall)" sub={`n=${a.overall.n}`} />
         <Tile value={a.knowledge.ci ? pct(a.knowledge.ci.p * 100) : '—'} label="Knowledge gained" sub={a.knowledge.ci ? `${pct(a.knowledge.ci.lo * 100)}–${pct(a.knowledge.ci.hi * 100)} · n=${a.knowledge.n}` : undefined} />
         <Tile value={a.apply.ci ? pct(a.apply.ci.p * 100) : '—'} label="Will apply learning" sub={a.apply.ci ? `${pct(a.apply.ci.lo * 100)}–${pct(a.apply.ci.hi * 100)} · n=${a.apply.n}` : undefined} />
         <Tile value={a.outcomeIndex === null ? '—' : pct(a.outcomeIndex)} label="Outcome achievement" sub={a.fullAchievement === null ? undefined : `${pct(a.fullAchievement)} met all five`} />
       </div>
-      {responseRate !== null && responseRate < 50 && (
-        <p className="text-[11px] text-warning flex items-center gap-1.5">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-          Response rate is under 50% — results may not represent everyone, since very happy and unhappy people reply more. State this next to every headline figure.
-        </p>
-      )}
-
       {/* Findings */}
       {a.insights.length > 0 && (
         <div className="space-y-2">
@@ -243,7 +218,7 @@ export function FeedbackAnalysisPanel({ form, submissions }: { form: PublicFormI
       )}
 
       <SectionTitle>Parameter results</SectionTitle>
-      <Card title="Summary statistics" note="95% interval = the range the true mean of all attendees probably lies in. SD above 1.1 (amber) means split opinions. Gap is mean minus target.">
+      <Card title="Summary statistics" note="95% interval = the range the true mean of all attendees probably lies in. SD above 1.1 (amber) means split opinions. vs avg is the mean minus this event’s own average across the nine parameters (amber = at least 0.25 below).">
         <div className="overflow-x-auto">
           <table className="min-w-full text-[11px] text-left">
             <thead>
@@ -258,20 +233,20 @@ export function FeedbackAnalysisPanel({ form, submissions }: { form: PublicFormI
                 <th className="py-1.5 pr-2 font-semibold text-right">Top-2</th>
                 <th className="py-1.5 pr-2 font-semibold text-right">Bottom-2</th>
                 <th className="py-1.5 pr-2 font-semibold text-right">Net</th>
-                <th className="py-1.5 pr-2 font-semibold text-right">Gap</th>
+                <th className="py-1.5 pr-2 font-semibold text-right">vs avg</th>
                 <th className="py-1.5 font-semibold text-right">Rank</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-theme-border/20">
-              {a.params.map(p => <ParamRow key={p.key} p={p} target={target} />)}
-              <ParamRow p={a.overall} target={target} />
+              {a.params.map(p => <ParamRow key={p.key} p={p} avg={avg} />)}
+              <ParamRow p={a.overall} avg={avg} />
             </tbody>
           </table>
         </div>
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card title="Mean of each rating, strongest to weakest" note={`Axis fixed at 0–5; dashed line = ${target.toFixed(1)} target.`}>
+        <Card title="Mean of each rating, strongest to weakest" note={`Axis fixed at 0–5; dashed line = this event's own average${avg === null ? '' : ` (${avg.toFixed(2)})`}.`}>
           <div style={{ height: Math.max(180, meansData.length * 30) }} className="w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={meansData} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 0 }}>
@@ -279,9 +254,9 @@ export function FeedbackAnalysisPanel({ form, submissions }: { form: PublicFormI
                 <XAxis type="number" domain={[0, 5]} tick={{ fill: 'currentColor', fontSize: 10 }} />
                 <YAxis type="category" dataKey="name" width={100} tick={{ fill: 'currentColor', fontSize: 10 }} />
                 <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => [v, 'Mean']} />
-                <ReferenceLine x={target} stroke="#f59e0b" strokeDasharray="4 3" />
+                {avg !== null && <ReferenceLine x={avg} stroke="#f59e0b" strokeDasharray="4 3" />}
                 <Bar dataKey="mean" radius={[0, 6, 6, 0]}>
-                  {meansData.map((d, i) => <Cell key={i} fill={d.mean >= target ? ACCENT : MUTED} />)}
+                  {meansData.map((d, i) => <Cell key={i} fill={avg === null || d.mean >= avg ? ACCENT : MUTED} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -313,9 +288,9 @@ export function FeedbackAnalysisPanel({ form, submissions }: { form: PublicFormI
                 <XAxis dataKey="name" tick={{ fill: 'currentColor', fontSize: 10 }} />
                 <YAxis domain={[0, 5]} tick={{ fill: 'currentColor', fontSize: 10 }} />
                 <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => [v, 'Mean']} />
-                <ReferenceLine y={target} stroke="#f59e0b" strokeDasharray="4 3" />
+                {avg !== null && <ReferenceLine y={avg} stroke="#f59e0b" strokeDasharray="4 3" />}
                 <Bar dataKey="mean" radius={[6, 6, 0, 0]}>
-                  {a.dimensions.map((d, i) => <Cell key={i} fill={(d.mean ?? 0) >= target ? ACCENT : MUTED} />)}
+                  {a.dimensions.map((d, i) => <Cell key={i} fill={avg === null || (d.mean ?? 0) >= avg ? ACCENT : MUTED} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>

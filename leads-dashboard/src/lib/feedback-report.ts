@@ -13,8 +13,6 @@ import type { ChartImage, ReportCharts } from '@/lib/feedback-report-charts';
 export interface ReportMeta {
   formTitle: string;
   eventName?: string;
-  attendees?: number; // for the response rate
-  target: number;
   preparedBy?: string;
 }
 
@@ -54,12 +52,13 @@ function buildBlocks(a: FeedbackAnalysis, meta: ReportMeta, ch: ReportCharts): B
     : n < 30
       ? `With ${n} forms the figures are indicative only.`
       : '';
-  const responseRate = meta.attendees && meta.attendees > 0 ? (n / meta.attendees) * 100 : null;
   const withMean = a.params.filter((p): p is ParamStats & { mean: number } => p.mean !== null);
   const sorted = [...withMean].sort((x, y) => y.mean - x.mean);
   const best = sorted.slice(0, 2);
   const worst = sorted.slice(-2).reverse();
-  const below = sorted.filter(p => p.mean < meta.target);
+  // Strengths/weaknesses are judged against the event's own average, not an externally set target.
+  const evAvg = a.overallMean;
+  const below = evAvg === null ? [] : sorted.filter(p => p.mean < evAvg - 0.25);
   const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
   // ── Cover ──
@@ -71,13 +70,7 @@ function buildBlocks(a: FeedbackAnalysis, meta: ReportMeta, ch: ReportCharts): B
 
   // ── 1. Event and response profile ──
   out.push({ k: 'h1', text: '1. Event and response profile' });
-  out.push(P(
-    `${n} feedback form${n === 1 ? ' was' : 's were'} received`,
-    responseRate !== null ? ` from ${meta.attendees} attendees, a response rate of ${Math.round(responseRate)}%.` : '. The number of attendees was not entered, so a response rate is not reported.',
-  ));
-  if (responseRate !== null && responseRate < 50) {
-    out.push(P(t('Limitation: ', { b: true }), 'the response rate is under 50%, so the results may not represent everyone — very happy and very unhappy people are more likely to reply. Read every headline figure with this in mind.'));
-  }
+  out.push(P(`${n} feedback form${n === 1 ? ' was' : 's were'} received. Results describe the people who responded.`));
   const mix = (segs: SegmentStats[], label: string) => segs.length
     ? P(t(`${label}: `, { b: true }), segs.slice(0, 8).map(s => `${s.name} (${s.n})`).join(', ') + (segs.length > 8 ? `, and ${segs.length - 8} more` : '') + '.')
     : null;
@@ -115,13 +108,8 @@ function buildBlocks(a: FeedbackAnalysis, meta: ReportMeta, ch: ReportCharts): B
   });
   fig(ch.overall);
   const verdict: string[] = [];
-  if (ov.mean !== null && ov.n >= 2) {
-    const lo = ov.ci !== null ? ov.mean - ov.ci : ov.mean;
-    verdict.push(
-      lo >= meta.target ? `The event met the ${meta.target.toFixed(1)} target: the overall rating is ${f2(ov.mean)} and the whole 95% interval sits above it.`
-        : ov.mean >= meta.target ? `The overall rating of ${f2(ov.mean)} is above the ${meta.target.toFixed(1)} target on average, but the 95% interval dips below it, so more forms are needed before reporting the target as met.`
-          : `The overall rating of ${f2(ov.mean)} is below the ${meta.target.toFixed(1)} target.`,
-    );
+  if (ov.mean !== null && ov.n >= 2 && ov.top2 !== null && ov.bottom2 !== null) {
+    verdict.push(`The overall rating is ${f2(ov.mean)} out of 5${ov.ci !== null ? ` (95% interval ${f2(ov.mean - ov.ci)}–${f2(ov.mean + ov.ci)})` : ''}: ${pc(ov.top2)} of respondents rated the event 4 or 5 and ${pc(ov.bottom2)} rated it 1 or 2.`);
   }
   if (best.length) verdict.push(`Strongest parameters: ${list(best.map(p => `${p.label} (${f2(p.mean)})`))}.`);
   if (worst.length && sorted.length > 2) verdict.push(`Weakest parameters: ${list(worst.map(p => `${p.label} (${f2(p.mean)})`))}.`);
@@ -135,16 +123,16 @@ function buildBlocks(a: FeedbackAnalysis, meta: ReportMeta, ch: ReportCharts): B
   out.push({ k: 'h1', text: '3. Parameter results' });
   out.push({
     k: 'table',
-    header: ['Parameter', 'n', 'Mean', '95% CI', 'Median', 'SD', 'Top-2', 'Bottom-2', 'Gap', 'Rank'],
+    header: ['Parameter', 'n', 'Mean', '95% CI', 'Median', 'SD', 'Top-2', 'Bottom-2', 'vs avg', 'Rank'],
     widths: [2200, 500, 700, 800, 750, 650, 800, 900, 750, 600],
     align: ['l', 'r', 'r', 'r', 'r', 'r', 'r', 'r', 'r', 'r'],
     rows: [...a.params, a.overall].map(p => [
       p.label, String(p.n), f2(p.mean), p.ci === null ? '—' : `±${f2(p.ci)}`, p.median === null ? '—' : p.median.toFixed(1),
-      f2(p.sd), pc(p.top2), pc(p.bottom2), p.mean === null ? '—' : `${p.mean - meta.target >= 0 ? '+' : ''}${(p.mean - meta.target).toFixed(2)}`,
+      f2(p.sd), pc(p.top2), pc(p.bottom2), p.mean === null || evAvg === null ? '—' : `${p.mean - evAvg >= 0 ? '+' : ''}${(p.mean - evAvg).toFixed(2)}`,
       p.rank === null ? '—' : String(p.rank),
     ]),
   });
-  out.push(P(t(`Gap = mean minus the ${meta.target.toFixed(1)} target. Top-2 / Bottom-2 = share of scores of 4–5 / 1–2. SD = spread of answers (above about 1.1 means opinions are split).`, { i: true, color: '64748B' })));
+  out.push(P(t(`vs avg = mean minus the event's own average across the nine parameters${evAvg === null ? '' : ` (${f2(evAvg)})`}. Top-2 / Bottom-2 = share of scores of 4–5 / 1–2. SD = spread of answers (above about 1.1 means opinions are split).`, { i: true, color: '64748B' })));
 
   fig(ch.means);
   fig(ch.distribution);
@@ -155,7 +143,7 @@ function buildBlocks(a: FeedbackAnalysis, meta: ReportMeta, ch: ReportCharts): B
     out.push(B(t('Highest: ', { b: true }), `${sorted[0].label} at ${f2(sorted[0].mean)}, with ${pc(sorted[0].top2)} of respondents scoring 4 or 5.`));
     const low = sorted[sorted.length - 1];
     out.push(B(t('Lowest: ', { b: true }), `${low.label} at ${f2(low.mean)}, with ${pc(low.top2)} scoring 4 or 5 and ${pc(low.bottom2)} scoring 1 or 2.`));
-    out.push(B(t('Against the target: ', { b: true }), below.length === 0 ? `every parameter is at or above ${meta.target.toFixed(1)}.` : `${list(below.map(p => p.label))} ${below.length === 1 ? 'falls' : 'fall'} below ${meta.target.toFixed(1)}.`));
+    out.push(B(t('Against the event average: ', { b: true }), evAvg === null ? 'not available.' : below.length === 0 ? `no parameter sits clearly below the event's own average of ${f2(evAvg)}; ratings are fairly even.` : `${list(below.map(p => p.label))} ${below.length === 1 ? 'sits' : 'sit'} at least 0.25 below the event's own average of ${f2(evAvg)}.`));
     const split = a.params.filter(p => p.n >= 10 && (p.sd ?? 0) > 1.1);
     if (split.length) out.push(B(t('Split opinions: ', { b: true }), `${list(split.map(p => p.label))} ${split.length === 1 ? 'shows' : 'show'} a wide spread of answers — the audience is divided and the average hides two groups.`));
     const allScores = a.params.reduce((s, p) => s + p.n, 0);
@@ -223,7 +211,7 @@ function buildBlocks(a: FeedbackAnalysis, meta: ReportMeta, ch: ReportCharts): B
   if (a.knowledge.ci && a.apply.ci) {
     out.push(P(
       `${pc(a.knowledge.ci.p * 100)} of respondents said the event enhanced their knowledge or skills (95% interval ${pc(a.knowledge.ci.lo * 100)}–${pc(a.knowledge.ci.hi * 100)}), and ${pc(a.apply.ci.p * 100)} said they will apply the learning (${pc(a.apply.ci.lo * 100)}–${pc(a.apply.ci.hi * 100)}).`,
-      ov.mean !== null && ov.mean >= meta.target && a.apply.ci.p < 0.7 ? ' Satisfaction is high but the share intending to apply the learning is under 70%: participants enjoyed the event but may not find it usable — add applied tasks and follow-up.' : '',
+      ov.top2 !== null && ov.top2 >= 60 && a.apply.ci.p < 0.7 ? ' Satisfaction is high but the share intending to apply the learning is under 70%: participants enjoyed the event but may not find it usable — add applied tasks and follow-up.' : '',
       a.knowledge.ci.p < 0.7 ? ' The knowledge-gain rate is under 70%, which suggests the level was too basic or too advanced for part of the audience — check by designation before re-pitching.' : '',
     ));
   }
@@ -274,12 +262,12 @@ function buildBlocks(a: FeedbackAnalysis, meta: ReportMeta, ch: ReportCharts): B
   (worked.length ? worked : ['No clear strengths can be reported yet.']).forEach(w => out.push(B(w)));
   out.push(P(t('What did not work as well', { b: true })));
   const weak: string[] = [];
-  below.slice(0, 4).forEach(p => weak.push(`${p.label} scored ${f2(p.mean)}, ${(meta.target - p.mean).toFixed(2)} below the target.`));
+  below.slice(0, 4).forEach(p => weak.push(`${p.label} scored ${f2(p.mean)}, ${((evAvg ?? p.mean) - p.mean).toFixed(2)} below the event's own average.`));
   if (ocs.length && ocs[ocs.length - 1].pct < 70) weak.push(`“${ocs[ocs.length - 1].short}” was met by only ${pc(ocs[ocs.length - 1].pct)} of respondents.`);
   if (a.apply.ci && a.apply.ci.p < 0.7) weak.push(`Only ${pc(a.apply.ci.p * 100)} intend to apply the learning.`);
   const topSuggestion = a.comments.find(c => c.key === 'suggestions')?.themes[0];
   if (topSuggestion) weak.push(`The most frequent improvement theme was “${topSuggestion.theme}” (${topSuggestion.respondents} respondents).`);
-  (weak.length ? weak : ['No parameter fell below the target on the forms received.']).forEach(w => out.push(B(w)));
+  (weak.length ? weak : ['No parameter stands out as weaker than the rest on the forms received.']).forEach(w => out.push(B(w)));
   if (!reliable) out.push(P(t(`These conclusions rest on ${n} form${n === 1 ? '' : 's'} and describe respondents only; confirm them as more forms arrive.`, { i: true, color: 'B45309' })));
 
   // ── 9. Recommendations ──
@@ -297,7 +285,7 @@ function buildBlocks(a: FeedbackAnalysis, meta: ReportMeta, ch: ReportCharts): B
       clarity: 'State objectives more clearly at the start of the programme.',
       satisfaction: 'Read the improvement comments for the cause of lower satisfaction.',
     };
-    recs.push([adv[p.key as string] ?? `Review ${p.label}.`, `${p.label} mean ${f2(p.mean)} against a ${meta.target.toFixed(1)} target`]);
+    recs.push([adv[p.key as string] ?? `Review ${p.label}.`, `${p.label} mean ${f2(p.mean)} vs event average ${f2(evAvg)}`]);
   });
   if (ocs.length && ocs[ocs.length - 1].pct < 70) recs.push([`Rework the part of the programme that delivers “${ocs[ocs.length - 1].short}”.`, `Met by ${pc(ocs[ocs.length - 1].pct)} of respondents`]);
   if (a.apply.ci && a.apply.ci.p < 0.7) recs.push(['Add applied tasks and a follow-up after the event.', `${pc(a.apply.ci.p * 100)} intend to apply the learning`]);
@@ -319,7 +307,7 @@ function buildBlocks(a: FeedbackAnalysis, meta: ReportMeta, ch: ReportCharts): B
   [
     'Ratings use a 1–5 scale. Mean, median, SD and top-2/bottom-2 shares are computed over the answers given; n is reported for each because it can differ by question.',
     '95% confidence interval of a mean = t(n−1) × SD ÷ √n. For a Yes/No percentage the interval is p ± 1.96 × √(p(1−p)/n). Intervals are only shown for 2 or more answers and are most reliable from about 30 forms.',
-    'Net score = top-2-box % minus bottom-2-box %. Gap = mean minus the target. Rank 1 is the highest mean.',
+    'Net score = top-2-box % minus bottom-2-box %. vs avg = mean minus the event’s own average across the nine parameters. Rank 1 is the highest mean.',
     'Respondent index = each person’s average of their nine ratings. Dimension scores average related items (design, content, delivery, support).',
     'Outcome achievement index = total outcome ticks ÷ (5 × forms with all five answered). “Met all five” counts forms with every outcome ticked.',
     'Segment comparisons are descriptive and shown only for groups of 10 or more; no significance test has been applied.',

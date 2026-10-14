@@ -51,7 +51,6 @@ export default function EventReportsPage() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [forms, setForms] = useState<PublicFormItem[]>([]);
   const [submissions, setSubmissions] = useState<FormSubmissionItem[]>([]);
-  const [attendeesByForm, setAttendeesByForm] = useState<Record<string, string>>({});
   const [buildingFormId, setBuildingFormId] = useState<string | null>(null);
 
   const [eventId, setEventId] = useState('');
@@ -330,7 +329,7 @@ export default function EventReportsPage() {
   const handleDownloadFeedbackReport = async (form: PublicFormItem, subs: FormSubmissionItem[]) => {
     setBuildingFormId(form.id);
     try {
-      await downloadFeedbackReport(form, subs, { attendees: Number(attendeesByForm[form.id]), preparedBy: user?.name });
+      await downloadFeedbackReport(form, subs, { preparedBy: user?.name });
     } catch (e) {
       console.error(e);
       triggerError('Could not build the feedback report. Please try again.');
@@ -403,13 +402,6 @@ export default function EventReportsPage() {
                   <p className="text-[10px] text-theme-text-secondary">{form.title} &middot; {subs.length} response{subs.length === 1 ? '' : 's'}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <input
-                    type="number" min={1} value={attendeesByForm[form.id] || ''}
-                    onChange={e => setAttendeesByForm(prev => ({ ...prev, [form.id]: e.target.value }))}
-                    placeholder="Attendees"
-                    title="Optional — number of attendees, to report a response rate"
-                    className="w-24 px-2 py-1.5 bg-theme-background/40 border border-theme-border/40 rounded-lg text-xs text-theme-text-primary focus:outline-none"
-                  />
                   <button
                     onClick={() => handleDownloadFeedbackReport(form, subs)}
                     disabled={buildingFormId === form.id}
