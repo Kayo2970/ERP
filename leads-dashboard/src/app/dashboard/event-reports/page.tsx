@@ -9,6 +9,7 @@ import {
   Ban,
   Lock,
   Download,
+  FileText,
   Mail,
   AlertTriangle,
   Trash2,
@@ -30,7 +31,13 @@ import {
   TaskItem,
   authHeaders,
   saveEventReports,
+  getForms,
+  getSubmissions,
+  FEEDBACK_FORM_TEMPLATE_ID,
+  PublicFormItem,
+  FormSubmissionItem,
 } from '@/lib/local-data';
+import { downloadFeedbackReport } from '@/lib/feedback-report-download';
 import { canSubmitEventReport, canReviewEventReports, canScoreEventReports, canViewEventReports, isCentreHead, isEventsHeadGgCampus, isChiefCoordinator, isGeneralSecretary, hasCapability, hasModuleViewAllGrant } from '@/lib/permissions';
 import { ReportScorePanel } from '@/components/report-score-panel';
 import { FileDropzone, FilePreviewRow, createProgressTracker } from '@/components/ui/file-dropzone';
@@ -42,6 +49,10 @@ export default function EventReportsPage() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [reports, setReports] = useState<EventReportItem[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [forms, setForms] = useState<PublicFormItem[]>([]);
+  const [submissions, setSubmissions] = useState<FormSubmissionItem[]>([]);
+  const [attendeesByForm, setAttendeesByForm] = useState<Record<string, string>>({});
+  const [buildingFormId, setBuildingFormId] = useState<string | null>(null);
 
   const [eventId, setEventId] = useState('');
   const [file, setFile] = useState<File | null>(null);
@@ -93,6 +104,8 @@ export default function EventReportsPage() {
       setEvents(getEvents());
       setReports(getEventReports());
       setTasks(getTasks());
+      setForms(getForms());
+      setSubmissions(getSubmissions());
     };
     refresh();
 
@@ -308,6 +321,24 @@ export default function EventReportsPage() {
     setDeletingId(null);
   };
 
+  // Feedback Forms (built from the Feedback Form Template) that have at least one response — each can produce an analysis report.
+  const feedbackForms = forms
+    .filter(f => f.sourceTemplateId === FEEDBACK_FORM_TEMPLATE_ID && f.approvalStatus !== 'pending_create' && f.approvalStatus !== 'rejected')
+    .map(f => ({ form: f, subs: submissions.filter(s => s.formId === f.id || (!!s.slug && s.slug === f.slug)) }))
+    .filter(x => x.subs.length > 0);
+
+  const handleDownloadFeedbackReport = async (form: PublicFormItem, subs: FormSubmissionItem[]) => {
+    setBuildingFormId(form.id);
+    try {
+      await downloadFeedbackReport(form, subs, { attendees: Number(attendeesByForm[form.id]), preparedBy: user?.name });
+    } catch (e) {
+      console.error(e);
+      triggerError('Could not build the feedback report. Please try again.');
+    } finally {
+      setBuildingFormId(null);
+    }
+  };
+
   const eligibleEvents = hasStandingAccess
     ? events.filter(ev => !ev.isHoliday && isApprovedEvent(ev, tasks))
     : events.filter(ev => myOpenReportTasks.some(t => t.eventId === ev.id));
@@ -357,6 +388,42 @@ export default function EventReportsPage() {
           <p className="text-xs text-theme-text-secondary">Submit, review, and approve post-event reports — once approved, the report file is automatically emailed to the Centre Head, Advisor, Super User, and leadership.</p>
         </div>
       </div>
+
+      {hasStandingAccess && feedbackForms.length > 0 && (
+        <div className="glass-panel p-6 rounded-3xl border border-theme-card-border space-y-4">
+          <div>
+            <h3 className="text-sm font-bold text-theme-text-primary uppercase tracking-wider">Feedback Analysis Reports</h3>
+            <p className="text-[11px] text-theme-text-secondary mt-1">A written Word report with charts, observations, conclusions and an action plan, built from each event&apos;s feedback form responses.</p>
+          </div>
+          <div className="space-y-2">
+            {feedbackForms.map(({ form, subs }) => (
+              <div key={form.id} className="p-3 bg-theme-border/10 border border-theme-border/20 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div className="min-w-0">
+                  <p className="font-bold text-theme-text-primary truncate">{form.eventName || form.title}</p>
+                  <p className="text-[10px] text-theme-text-secondary">{form.title} &middot; {subs.length} response{subs.length === 1 ? '' : 's'}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number" min={1} value={attendeesByForm[form.id] || ''}
+                    onChange={e => setAttendeesByForm(prev => ({ ...prev, [form.id]: e.target.value }))}
+                    placeholder="Attendees"
+                    title="Optional — number of attendees, to report a response rate"
+                    className="w-24 px-2 py-1.5 bg-theme-background/40 border border-theme-border/40 rounded-lg text-xs text-theme-text-primary focus:outline-none"
+                  />
+                  <button
+                    onClick={() => handleDownloadFeedbackReport(form, subs)}
+                    disabled={buildingFormId === form.id}
+                    className="px-3 py-1.5 bg-accent hover:bg-accent/90 disabled:opacity-60 text-white text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    {buildingFormId === form.id ? 'Preparing…' : 'Word report'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {canSubmit && (
         <div className="glass-panel p-6 rounded-3xl border border-theme-card-border space-y-4">

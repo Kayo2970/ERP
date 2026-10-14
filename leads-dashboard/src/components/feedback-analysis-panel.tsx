@@ -5,8 +5,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine, Legend,
 } from 'recharts';
 import { FileText, Lightbulb, AlertTriangle, CheckCircle2, Info, ShieldAlert } from 'lucide-react';
-import { buildFeedbackReportDocx } from '@/lib/feedback-report';
-import { buildReportCharts } from '@/lib/feedback-report-charts';
+import { downloadFeedbackReport } from '@/lib/feedback-report-download';
 import type { PublicFormItem, FormSubmissionItem } from '@/lib/local-data';
 import {
   analyseFeedback, RATING_PARAMS, DEFAULT_TARGET,
@@ -168,21 +167,7 @@ export function FeedbackAnalysisPanel({ form, submissions }: { form: PublicFormI
   const downloadReport = async () => {
     setBuilding(true);
     try {
-      const charts = await buildReportCharts(a, target);
-      const blob = await buildFeedbackReportDocx(a, {
-        formTitle: form.title,
-        eventName: form.eventName,
-        attendees: attendeeCount > 0 ? attendeeCount : undefined,
-        target,
-      }, charts);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${form.slug || 'feedback'}-analysis-report.docx`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      await downloadFeedbackReport(form, submissions, { target, attendees: attendeeCount });
     } finally {
       setBuilding(false);
     }
