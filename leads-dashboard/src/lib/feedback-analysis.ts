@@ -582,20 +582,3 @@ function buildInsights(a: FeedbackAnalysis, target: number): Insight[] {
   }
   return out;
 }
-
-// ───────────────────────── exports ─────────────────────────
-
-/** Tidy one-row-per-form dataset in the layout the guide prescribes (section 1). */
-export function buildAnalysisCsv(rows: ResponseRow[]): string {
-  const header = ['ID', 'Designation', 'Dept', ...RATING_PARAMS.map(p => p.short.replace(/[ /]+/g, '_')), 'LO1', 'LO2', 'LO3', 'LO4', 'LO5', 'Knowledge', 'Apply', 'Overall', 'RespondentIndex', 'StraightLined', 'Contradiction'];
-  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const lines = rows.map((r, i) => [
-    i + 1, r.designation, r.department,
-    ...RATING_PARAMS.map(p => r.ratings[p.key] ?? ''),
-    ...r.outcomes.map(v => v ?? ''),
-    r.knowledge ?? '', r.apply ?? '', r.overall ?? '',
-    r.index === null ? '' : r.index.toFixed(2),
-    r.straightLined ? 1 : 0, r.contradiction ? 1 : 0,
-  ].map(esc).join(','));
-  return [header.map(esc).join(','), ...lines].join('\n');
-}

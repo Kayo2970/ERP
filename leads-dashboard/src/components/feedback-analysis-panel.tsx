@@ -4,10 +4,11 @@ import React, { useMemo, useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine, Legend,
 } from 'recharts';
-import { FileDown, Lightbulb, AlertTriangle, CheckCircle2, Info, ShieldAlert } from 'lucide-react';
+import { FileText, Lightbulb, AlertTriangle, CheckCircle2, Info, ShieldAlert } from 'lucide-react';
+import { buildFeedbackReportDocx } from '@/lib/feedback-report';
 import type { PublicFormItem, FormSubmissionItem } from '@/lib/local-data';
 import {
-  analyseFeedback, buildAnalysisCsv, RATING_PARAMS, DEFAULT_TARGET,
+  analyseFeedback, RATING_PARAMS, DEFAULT_TARGET,
   type ParamStats, type Insight, type SegmentStats,
 } from '@/lib/feedback-analysis';
 
@@ -146,6 +147,7 @@ const ParamRow = ({ p, target }: { p: ParamStats; target: number }) => (
 export function FeedbackAnalysisPanel({ form, submissions }: { form: PublicFormItem; submissions: FormSubmissionItem[] }) {
   const [target, setTarget] = useState(DEFAULT_TARGET);
   const [attendees, setAttendees] = useState('');
+  const [building, setBuilding] = useState(false);
 
   const a = useMemo(() => analyseFeedback(form, submissions, target), [form, submissions, target]);
 
@@ -162,14 +164,26 @@ export function FeedbackAnalysisPanel({ form, submissions }: { form: PublicFormI
   }));
   const overallHist = a.overall.counts.map((count, i) => ({ name: String(i + 1), count }));
 
-  const downloadCsv = () => {
-    const blob = new Blob([buildAnalysisCsv(a.rows)], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${form.slug || 'feedback'}-analysis-dataset.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+  const downloadReport = async () => {
+    setBuilding(true);
+    try {
+      const blob = await buildFeedbackReportDocx(a, {
+        formTitle: form.title,
+        eventName: form.eventName,
+        attendees: attendeeCount > 0 ? attendeeCount : undefined,
+        target,
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${form.slug || 'feedback'}-analysis-report.docx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } finally {
+      setBuilding(false);
+    }
   };
 
   return (
@@ -197,11 +211,12 @@ export function FeedbackAnalysisPanel({ form, submissions }: { form: PublicFormI
             />
           </label>
           <button
-            onClick={downloadCsv}
-            className="px-2.5 py-1 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary rounded-lg text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
-            title="One numeric row per form (ratings 1–5, outcomes and Yes/No as 1/0) for use in a spreadsheet or SPSS/R"
+            onClick={downloadReport}
+            disabled={building}
+            className="px-2.5 py-1 bg-accent hover:bg-accent/90 disabled:opacity-60 text-white rounded-lg text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+            title="Download a written report (observations, tables, conclusions and recommendations) as a Word document"
           >
-            <FileDown className="h-3.5 w-3.5" /> Analysis dataset (CSV)
+            <FileText className="h-3.5 w-3.5" /> {building ? 'Preparing…' : 'Word report'}
           </button>
         </div>
       </div>
