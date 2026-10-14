@@ -612,23 +612,20 @@ export default function EventPassesPage() {
     const sent = scopedPasses.filter(
       (p) => p.emailStatus === 'Email Sent' || p.emailStatus === 'Email Received' || p.emailStatus === 'Pass Viewed'
     ).length;
-    const received = scopedPasses.filter(
-      (p) => p.emailStatus === 'Email Received' || p.emailStatus === 'Pass Viewed'
-    ).length;
-    const viewed = scopedPasses.filter(
-      (p) => p.emailStatus === 'Pass Viewed' || p.passViewed
-    ).length;
+    const pendingDispatch = total - sent;
     const admitted = scopedPasses.filter((p) => p.status === 'Checked In').length;
     const absent = scopedPasses.filter((p) => attendanceOf(p) === 'Absent').length;
+    const attended = scopedPasses.filter((p) => ['Checked In', 'Attended', 'Partial'].includes(attendanceOf(p))).length;
+    const yetToArrive = Math.max(0, total - attended - absent);
 
     return {
       total,
       sent,
       sentPct: total > 0 ? Math.round((sent / total) * 100) : 0,
-      received,
-      receivedPct: sent > 0 ? Math.round((received / sent) * 100) : 0,
-      viewed,
-      viewedPct: total > 0 ? Math.round((viewed / total) * 100) : 0,
+      pendingDispatch,
+      pendingDispatchPct: total > 0 ? Math.round((pendingDispatch / total) * 100) : 0,
+      yetToArrive,
+      yetToArrivePct: total > 0 ? Math.round((yetToArrive / total) * 100) : 0,
       admitted,
       admittedPct: total > 0 ? Math.round((admitted / total) * 100) : 0,
       absent,
@@ -1085,7 +1082,7 @@ export default function EventPassesPage() {
               </div>
             </div>
 
-            {/* 5 Real-Time KPI Cards (Total Passes, Sent, Received, Viewed on Portal, Admitted) */}
+            {/* 5 Real-Time KPI Cards (Total Passes, Sent, Pending Dispatch, Yet to Arrive, Admitted) */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 mt-6 pt-6 border-t border-white/10">
               {/* 1. Total Passes */}
               <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-1">
@@ -1110,35 +1107,30 @@ export default function EventPassesPage() {
                 <div className="text-[10px] text-slate-400">Dispatched credentials</div>
               </div>
 
-              {/* 3. Email Received */}
+              {/* 3. Pending Dispatch */}
               <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-1">
                 <div className="flex items-center justify-between text-slate-400 text-[11px] font-bold">
-                  <span>Email Received</span>
-                  <MailCheck className="h-3.5 w-3.5 text-cyan-400" />
+                  <span>Pending Dispatch</span>
+                  <Mail className="h-3.5 w-3.5 text-cyan-400" />
                 </div>
                 <div className="text-2xl font-black text-cyan-400">
-                  {kpis.received}
-                  <span className="text-xs font-normal text-slate-400 ml-1.5">({kpis.receivedPct}%)</span>
+                  {kpis.pendingDispatch}
+                  <span className="text-xs font-normal text-slate-400 ml-1.5">({kpis.pendingDispatchPct}%)</span>
                 </div>
-                <div className="text-[10px] text-slate-400">Confirmed open/receipt</div>
+                <div className="text-[10px] text-slate-400">Passes not yet emailed</div>
               </div>
 
-              {/* 4. Pass Viewed by Attendee (Celebratory Emerald!) */}
-              <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 space-y-1 shadow-lg shadow-emerald-500/10">
-                <div className="flex items-center justify-between text-emerald-400 text-[11px] font-extrabold">
-                  <span className="flex items-center gap-1">
-                    <Eye className="h-3.5 w-3.5 text-emerald-400 animate-pulse" />
-                    Pass Viewed
-                  </span>
-                  <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-emerald-500/20 text-emerald-300 font-mono">
-                    Online
-                  </span>
+              {/* 4. Yet to Arrive */}
+              <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-1">
+                <div className="flex items-center justify-between text-slate-400 text-[11px] font-bold">
+                  <span>Yet to Arrive</span>
+                  <Clock className="h-3.5 w-3.5 text-emerald-400" />
                 </div>
                 <div className="text-2xl font-black text-emerald-400">
-                  {kpis.viewed}
-                  <span className="text-xs font-bold text-emerald-300/80 ml-1.5">({kpis.viewedPct}%)</span>
+                  {kpis.yetToArrive}
+                  <span className="text-xs font-normal text-slate-400 ml-1.5">({kpis.yetToArrivePct}%)</span>
                 </div>
-                <div className="text-[10px] text-emerald-300/80">Seen pass on web portal</div>
+                <div className="text-[10px] text-slate-400">Not yet scanned at gate</div>
               </div>
 
               {/* 5. Gate Turnstile Checked In */}
