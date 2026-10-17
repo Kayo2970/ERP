@@ -667,12 +667,36 @@ export async function buildEmailHtml(payload: SendEmailPayload): Promise<string>
   return withBackground(payload.bodyHtml || defaultFormattedHtml, payload);
 }
 
+// ── SMTP pacing ────────────────────────────────────────────────────────────────
+// Every send goes through one lane (shared via globalThis across Next.js bundle copies) and consecutive sends are
+// kept at least SMTP_GAP_MS apart. A burst — e.g. 30+ emails maturing from the buffer at once — therefore goes out
+// one every couple of seconds instead of all at the same instant, which overloaded the server and the SMTP relay.
+// A lone email after a quiet period is not delayed.
+const SMTP_GAP_MS = 2000;
+const globalForGate = globalThis as unknown as { __leadsSmtpGate?: { tail: Promise<void>; lastEnd: number } };
+const smtpGate = (globalForGate.__leadsSmtpGate ??= { tail: Promise.resolve(), lastEnd: 0 });
+
+async function withSmtpGate<T>(fn: () => Promise<T>): Promise<T> {
+  const prev = smtpGate.tail;
+  let release!: () => void;
+  smtpGate.tail = new Promise<void>((resolve) => { release = resolve; });
+  await prev;
+  try {
+    const wait = smtpGate.lastEnd + SMTP_GAP_MS - Date.now();
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    return await fn();
+  } finally {
+    smtpGate.lastEnd = Date.now();
+    release();
+  }
+}
+
 async function sendImmediateEmail(payload: SendEmailPayload): Promise<EmailLog> {
   const bodyHtml = await buildEmailHtml(payload);
-  const result = await executeSmtpSend({
+  const result = await withSmtpGate(() => executeSmtpSend({
     ...payload,
     bodyHtml,
-  });
+  }));
 
   const newEmail: EmailLog = {
     id: `email-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -756,6 +780,8 @@ export async function sendBufferedEmailNow(id: string): Promise<EmailLog | null>
     }
     bufferedEmails.delete(id);
 
+    // Wait for our turn in the paced SMTP lane, then re-check state (it may have been cancelled while waiting).
+    return await withSmtpGate(async () => {
     const currentLogs = await readCollection<EmailLog>('emails');
     const target = currentLogs.find(l => l.id === id);
     if (!target || target.status === 'CANCELLED' || target.status === 'SENT') {
@@ -799,6 +825,7 @@ export async function sendBufferedEmailNow(id: string): Promise<EmailLog | null>
 
     console.log(`[email-service] Buffered email ${id} dispatch complete. Result: ${sendResult.status} (SMTP: ${sendResult.smtpResponse || sendResult.errorMessage || 'OK'})`);
     return updatedLog;
+    });
   } finally {
     sendingInProgress.delete(id);
   }
@@ -846,15 +873,17 @@ function scopedBufferedIds(scope?: BufferedScope): string[] {
 export async function flushAllBufferedEmails(scope?: BufferedScope): Promise<number> {
   await restoreBufferedQueue();
   const ids = scopedBufferedIds(scope);
-  // Send in small parallel batches so a large queue doesn't outlast the HTTP
-  // request, and one failing email can't abort the rest of the flush.
-  const BATCH = 5;
-  for (let i = 0; i < ids.length; i += BATCH) {
-    const results = await Promise.allSettled(ids.slice(i, i + BATCH).map(id => sendBufferedEmailNow(id)));
-    results.forEach((r, idx) => {
-      if (r.status === 'rejected') console.error(`[email-service] Flush failed for buffered email ${ids[i + idx]}:`, r.reason);
-    });
-  }
+  // Hand the whole backlog to the paced lane and return straight away — sending N emails 2s apart takes
+  // longer than an HTTP request should stay open. One failure never stops the rest.
+  void (async () => {
+    for (const id of ids) {
+      try {
+        await sendBufferedEmailNow(id);
+      } catch (err) {
+        console.error(`[email-service] Flush failed for buffered email ${id}:`, err);
+      }
+    }
+  })();
   return ids.length;
 }
 

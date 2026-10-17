@@ -1,8 +1,50 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { Loader2, CheckCircle2, AlertTriangle, XCircle, X, Square } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, XCircle, X, Square } from 'lucide-react';
 import { dismissTask, useBackgroundTasks } from '@/lib/background-tasks';
+
+/**
+ * Round progress indicator. With a known total it is a ring that fills up with the percentage in the middle; without one
+ * it is a spinning arc. Finished jobs swap to a check / warning / cross that pops in.
+ */
+function TaskRing({ state, warn, pct, determinate }: { state: 'running' | 'done' | 'failed'; warn?: boolean; pct: number; determinate: boolean }) {
+  const size = 44;
+  const stroke = 4;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+
+  if (state !== 'running') {
+    const Icon = state === 'failed' ? XCircle : warn ? AlertTriangle : CheckCircle2;
+    const tone = state === 'failed' ? 'text-rose-500' : warn ? 'text-amber-500' : 'text-emerald-500';
+    return (
+      <span className={`relative flex items-center justify-center shrink-0 animate-in zoom-in-50 duration-300 ${tone}`} style={{ width: size, height: size }}>
+        <Icon className="h-7 w-7" />
+      </span>
+    );
+  }
+
+  return (
+    <span className="relative flex items-center justify-center shrink-0 text-accent" style={{ width: size, height: size }} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={determinate ? pct : undefined}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className={determinate ? '-rotate-90' : 'animate-spin motion-reduce:animate-none'} style={determinate ? undefined : { animationDuration: '0.9s' }}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" strokeOpacity={0.15} strokeWidth={stroke} />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={determinate ? c * (1 - Math.max(pct, 4) / 100) : c * 0.72}
+          className="transition-[stroke-dashoffset] duration-500 ease-out"
+        />
+      </svg>
+      {determinate && <span className="absolute text-[10px] font-black text-theme-text-primary tabular-nums">{pct}%</span>}
+    </span>
+  );
+}
 
 /**
  * Bottom-left status tray: every long job that is running (or just finished) with live progress, wherever the person
@@ -36,10 +78,8 @@ export function BackgroundTaskTray({ offsetClass = 'md:left-4' }: { offsetClass?
         const tone = t.state === 'failed' ? 'border-rose-500/40' : t.state === 'done' ? (t.warn ? 'border-amber-500/40' : 'border-emerald-500/40') : 'border-accent/40';
         return (
           <div key={t.id} className={`pointer-events-auto glass-panel rounded-2xl p-3 border ${tone} bg-white/95 dark:bg-[#0B1B2E]/95 backdrop-blur-xl shadow-2xl shadow-black/30 text-theme-text-primary animate-in slide-in-from-bottom-3 fade-in duration-200`}>
-            <div className="flex items-start gap-2.5">
-              <span className="mt-0.5 shrink-0">
-                {t.state === 'running' ? <Loader2 className="h-4 w-4 text-accent animate-spin" /> : t.state === 'failed' ? <XCircle className="h-4 w-4 text-rose-500" /> : t.warn ? <AlertTriangle className="h-4 w-4 text-amber-500" /> : <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
-              </span>
+            <div className="flex items-center gap-3">
+              <TaskRing state={t.state} warn={t.warn} pct={pct} determinate={t.total > 0} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-bold truncate">{t.label}</span>
@@ -48,11 +88,6 @@ export function BackgroundTaskTray({ offsetClass = 'md:left-4' }: { offsetClass?
                 <p className="text-[11px] text-theme-text-secondary break-words">
                   {t.state === 'running' ? t.detail || (t.total > 0 ? 'Working…' : 'In progress — you can keep using other modules.') : t.message || (t.state === 'failed' ? 'Failed.' : 'Done.')}
                 </p>
-                {t.state === 'running' && (
-                  <div className="mt-1.5 h-1.5 rounded-full bg-theme-border/30 overflow-hidden">
-                    <div className={`h-full rounded-full bg-accent transition-[width] duration-300 ${t.total > 0 ? '' : 'w-1/3 animate-pulse'}`} style={t.total > 0 ? { width: `${pct}%` } : undefined} />
-                  </div>
-                )}
                 {t.state === 'running' && t.cancel && !t.stopping && (
                   <button type="button" onClick={t.cancel} className="mt-1.5 text-[10px] font-bold text-rose-500 hover:underline cursor-pointer flex items-center gap-1"><Square className="h-2.5 w-2.5" /> Stop after this one</button>
                 )}
