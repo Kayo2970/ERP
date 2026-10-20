@@ -9,30 +9,13 @@
  */
 import crypto from 'crypto';
 
-// This fallback key is committed in git history and readable by anyone with
-// the source — encryption "at rest" that silently uses it is cosmetic, not
-// real. It's kept ONLY so an existing deploy that already has data encrypted
-// under it (because DATA_ENCRYPTION_KEY was never set) can still decrypt
-// that data — removing it outright would make that data unrecoverable, not
-// secure. /api/setup's isKeyConfigured check already detects this exact
-// state and prompts an admin to rotate to a real key (see setup/route.ts);
-// this just makes the same condition impossible to miss in server logs too.
-const FALLBACK_KEY = 'LEADS_ERP_MASTER_SECRET_KEY_2026';
-let warnedFallback = false;
-
 export function getMasterKey(): string {
   const key = process.env.DATA_ENCRYPTION_KEY;
   if (key && key.trim()) return key;
-  if (!warnedFallback) {
-    warnedFallback = true;
-    console.error(
-      '[encryption] SECURITY WARNING: DATA_ENCRYPTION_KEY is not set — falling back to the ' +
-      'hardcoded key committed in this repo\'s source. Data "encrypted" this way is not actually ' +
-      'protected. Set DATA_ENCRYPTION_KEY in the environment and run the key-rotation step in ' +
-      'Admin → Settings (or /setup) as soon as possible.'
-    );
-  }
-  return FALLBACK_KEY;
+  throw new Error(
+    '[encryption] SECURITY ERROR: DATA_ENCRYPTION_KEY is not set. ' +
+    'Set DATA_ENCRYPTION_KEY in the environment as soon as possible.'
+  );
 }
 
 const FIXED_SALT = Buffer.from('LEADS_NEXT_GEN_CENTRE_MSRUAS_SALT_2026', 'utf-8');
