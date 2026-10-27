@@ -6870,8 +6870,10 @@ export function resolveSocialPostingAssignees(members?: Member[]): Member[] {
   const all = (members || getMembers()).filter(m => m.status !== 'Terminated' && !isFacultyMember(m));
   const heads = all.filter(m => isSocialMediaHeadOrSrHead(m));
   if (heads.length > 0) return heads;
-  const team = all.filter(m => isSocialMediaTeamMember(m));
-  return team.length > 0 ? team : all.slice(0, 1);
+  // No Social Media / Design head on record: hand it to the Centre Head (else the Super User) to pass on — never to the
+  // whole team, which would email everyone about a task only the head should allot.
+  const centreHeads = all.filter(m => /cent(re|er) head/i.test(m.role || ''));
+  return centreHeads.length > 0 ? centreHeads : all.filter(m => m.tier === 1);
 }
 
 export function resolveSocialMediaHeads(members?: Member[]): Member[] {

@@ -1,6 +1,6 @@
 import { readCollection, mutateCollection } from './server-db';
 import { enqueueTaskEmailNotification } from './task-email-queue';
-import { isSocialMediaTeamMember, isSocialMediaHeadOrSrHead, isFaculty } from './permissions-server';
+import { isSocialMediaHeadOrSrHead, isFaculty } from './permissions-server';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -15,10 +15,10 @@ function todayDateString(): string {
 /**
  * For every real (non-holiday, dated) event whose last day has already
  * passed, creates an `event_social_post` task — assigned as a group to the
- * senior Head of Design and every Core Committee member — asking for social
- * media coverage of the just-concluded event. Delegating it to a specific
- * person (see delegateAutoTask in local-data.ts) requires Centre Head / GG
- * Campus Events Head sign-off, same as any other task edit. Completing it
+ * Head and Senior Head of Social Media / Design only (never the wider team) —
+ * asking for social media coverage of the just-concluded event. They allot it
+ * to a team member, or take it up themselves, from the task (allotSocialMediaTask
+ * in local-data.ts). Completing it
  * chains into a follow-on event-report-request task for the General
  * Secretary (see updateTask's spawnEventReportRequestTask).
  *
@@ -64,9 +64,12 @@ export async function runEventLapseSocialTasks(): Promise<{ created: number }> {
   const members = await readCollection<any>('members');
   const activeMembers = members.filter((m: any) => m.status !== 'Terminated' && m.email && !isFaculty(m));
   // Auto-created social media tasks go strictly to the Head and Senior Head of Social Media,
-  // never to a committee or general group of students.
+  // never to a committee or general group of students — they allot it to a team member (or
+  // take it up themselves) from the task. With no such head on record it goes to the Centre
+  // Head (else the Super User) to hand on, not to the whole team.
   const heads = activeMembers.filter((m: any) => isSocialMediaHeadOrSrHead(m));
-  const pool = heads.length > 0 ? heads : activeMembers.filter((m: any) => isSocialMediaTeamMember(m));
+  const centreHeads = activeMembers.filter((m: any) => /cent(re|er) head/i.test(m.role || ''));
+  const pool = heads.length > 0 ? heads : centreHeads.length > 0 ? centreHeads : activeMembers.filter((m: any) => m.tier === 1);
 
   let created = 0;
   await mutateCollection<any>('tasks', (current) => {

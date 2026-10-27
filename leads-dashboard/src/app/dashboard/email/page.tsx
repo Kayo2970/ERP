@@ -362,6 +362,9 @@ export default function EmailManagementPage() {
   };
 
   const [isCancellingQueue, setIsCancellingQueue] = useState<string | null>(null);
+  // Retry of FAILED emails: how long to wait before sending again (0 = now), and which retry call is in flight.
+  const [retryDelayMinutes, setRetryDelayMinutes] = useState(15);
+  const [isRetrying, setIsRetrying] = useState<string | null>(null);
 
   const handleCancelQueue = async (email?: string) => {
     setIsCancellingQueue(email || 'ALL');
@@ -454,6 +457,52 @@ export default function EmailManagementPage() {
     }
   };
 
+  // Retries FAILED emails after the chosen delay (0 = now). They are sent one at a time, so Outlook's limit isn't hit again.
+  const handleRetryFailed = async (target: string | 'ALL') => {
+    setIsRetrying(target);
+    try {
+      const res = await fetch('/api/email/queue', {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(target === 'ALL'
+          ? { retryAllFailed: true, delayMinutes: retryDelayMinutes }
+          : { retryIds: [target], delayMinutes: retryDelayMinutes }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        triggerToast('success', data.message || 'Retry scheduled.');
+        fetchLogs();
+        if (selectedLog && selectedLog.id === target) setSelectedLog(null);
+      } else {
+        triggerToast('error', data.error || `Could not schedule the retry (HTTP ${res.status}).`);
+      }
+    } catch (err: any) {
+      triggerToast('error', err?.message || 'Error scheduling retry');
+    } finally {
+      setIsRetrying(null);
+    }
+  };
+
+  const handleCancelRetry = async (id: string) => {
+    setIsRetrying(id);
+    try {
+      const res = await fetch('/api/email/queue', {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ cancelRetryIds: [id] }),
+      });
+      if (res.ok) {
+        triggerToast('success', 'Scheduled retry cancelled.');
+        fetchLogs();
+        if (selectedLog && selectedLog.id === id) setSelectedLog(null);
+      } else {
+        triggerToast('error', (await res.json().catch(() => ({}))).error || 'Could not cancel the retry.');
+      }
+    } finally {
+      setIsRetrying(null);
+    }
+  };
+
   const handleFlushAll = async () => {
     setIsFlushingQueue('ALL');
     try {
@@ -463,7 +512,7 @@ export default function EmailManagementPage() {
         body: JSON.stringify({ all: true, except: 'CERTIFICATE' }),
       });
       if (res.ok) {
-        triggerToast('success', 'All buffered emails dispatched immediately.');
+        triggerToast('success', 'Dispatching all buffered emails now — they go out one at a time, so the log updates over the next few minutes.');
         fetchQueues();
         fetchLogs();
       } else {
@@ -927,6 +976,38 @@ export default function EmailManagementPage() {
             </div>
           </div>
 
+          {failedCount > 0 && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl border border-danger/25 bg-danger/5 text-xs">
+              <div className="text-theme-text-secondary">
+                <span className="font-bold text-danger">{failedCount} email{failedCount === 1 ? '' : 's'} failed to send.</span>{' '}
+                Temporary failures (such as Outlook's connection limit) are retried automatically after 5, 15 and 45 minutes. You can also retry them yourself.
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <select
+                  value={retryDelayMinutes}
+                  onChange={e => setRetryDelayMinutes(Number(e.target.value))}
+                  className="px-2.5 py-1.5 bg-theme-background/40 border border-theme-card-border rounded-xl text-xs text-theme-text-primary focus:outline-none"
+                  aria-label="Retry delay"
+                >
+                  <option value={0}>Retry now</option>
+                  <option value={5}>Retry in 5 min</option>
+                  <option value={15}>Retry in 15 min</option>
+                  <option value={60}>Retry in 1 hour</option>
+                  <option value={180}>Retry in 3 hours</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => handleRetryFailed('ALL')}
+                  disabled={isRetrying !== null}
+                  className="px-3 py-1.5 bg-accent hover:bg-primary-light text-white font-bold rounded-xl transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${isRetrying === 'ALL' ? 'animate-spin' : ''}`} />
+                  Retry all failed
+                </button>
+              </div>
+            </div>
+          )}
+
           {logsError && (
             <div className="flex items-center justify-between gap-3 p-3 rounded-xl border border-danger/30 bg-danger/10 text-xs text-danger">
               <span>{logsError}</span>
@@ -968,7 +1049,7 @@ export default function EmailManagementPage() {
                             : 'bg-danger/15 text-danger border border-danger/20'
                         }`}>
                           {log.status === 'BUFFERED' && <Clock className="h-2.5 w-2.5 animate-spin" />}
-                          {log.status === 'SENT' ? 'DELIVERED / SENT' : log.status === 'BUFFERED' ? 'BUFFERED (10-MIN HOLD)' : log.status === 'CANCELLED' ? 'CANCELLED' : 'FAILED'}
+                          {log.status === 'SENT' ? 'DELIVERED / SENT' : log.status === 'BUFFERED' ? 'BUFFERED (10-MIN HOLD)' : log.status === 'CANCELLED' ? 'CANCELLED' : log.nextRetryAt ? `FAILED · RETRY ${new Date(log.nextRetryAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'FAILED'}
                         </span>
                       </td>
                       <td className="p-3.5 font-semibold text-theme-text-primary">{log.to}</td>
@@ -981,7 +1062,27 @@ export default function EmailManagementPage() {
                       <td className="p-3.5 text-theme-text-secondary text-[11px] whitespace-nowrap">
                         {new Date(log.sentAt).toLocaleString()}
                       </td>
-                      <td className="p-3.5 text-right">
+                      <td className="p-3.5 text-right whitespace-nowrap">
+                        {log.status === 'FAILED' && (
+                          log.nextRetryAt ? (
+                            <button
+                              onClick={() => handleCancelRetry(log.id)}
+                              disabled={isRetrying !== null}
+                              className="mr-2 px-2.5 py-1 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-[11px] font-bold rounded-lg border border-theme-border/40 transition-all cursor-pointer disabled:opacity-50"
+                            >
+                              Cancel retry
+                            </button>
+                          ) : null
+                        )}
+                        {log.status === 'FAILED' && (
+                          <button
+                            onClick={() => handleRetryFailed(log.id)}
+                            disabled={isRetrying !== null}
+                            className="mr-2 px-2.5 py-1 bg-danger/15 hover:bg-danger/25 text-danger text-[11px] font-bold rounded-lg border border-danger/25 transition-all cursor-pointer disabled:opacity-50"
+                          >
+                            {isRetrying === log.id ? 'Scheduling...' : retryDelayMinutes === 0 ? 'Retry now' : `Retry in ${retryDelayMinutes >= 60 ? `${retryDelayMinutes / 60} h` : `${retryDelayMinutes} min`}`}
+                          </button>
+                        )}
                         <button
                           onClick={() => setSelectedLog(log)}
                           className="px-2.5 py-1 bg-accent/15 hover:bg-accent/25 text-accent text-[11px] font-bold rounded-lg border border-accent/20 transition-all cursor-pointer"
@@ -2114,6 +2215,40 @@ export default function EmailManagementPage() {
                   {selectedLog.subject}
                 </div>
               </div>
+
+              {selectedLog.status === 'FAILED' && (
+                <div className="p-3 bg-danger/5 border border-danger/25 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <span className="text-xs font-bold text-danger block">Failed to send{selectedLog.failedAttempts ? ` (${selectedLog.failedAttempts} attempt${selectedLog.failedAttempts === 1 ? '' : 's'})` : ''}</span>
+                    <span className="text-[10px] text-theme-text-secondary">
+                      {selectedLog.nextRetryAt
+                        ? `Automatic retry scheduled for ${new Date(selectedLog.nextRetryAt).toLocaleString()}`
+                        : 'No retry is scheduled. Use the delay chosen above the list, or retry now.'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {selectedLog.nextRetryAt && (
+                      <button
+                        type="button"
+                        onClick={() => handleCancelRetry(selectedLog.id)}
+                        disabled={isRetrying !== null}
+                        className="px-3 py-1.5 bg-theme-border/30 hover:bg-theme-border/50 text-theme-text-primary text-xs font-bold rounded-xl transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        Cancel retry
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleRetryFailed(selectedLog.id)}
+                      disabled={isRetrying !== null}
+                      className="px-3 py-1.5 bg-accent hover:bg-primary-light text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-accent/20 cursor-pointer disabled:opacity-50 flex items-center gap-1"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      {isRetrying === selectedLog.id ? 'Scheduling...' : retryDelayMinutes === 0 ? 'Retry now' : `Retry in ${retryDelayMinutes >= 60 ? `${retryDelayMinutes / 60} h` : `${retryDelayMinutes} min`}`}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {selectedLog.errorMessage && (
                 <div>
