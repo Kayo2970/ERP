@@ -427,7 +427,7 @@ export default function DashboardHome() {
         <div className="glass-panel rounded-2xl p-6 flex flex-col space-y-4">
           <div>
             <h3 className="text-base font-bold text-theme-text-primary">Student Performance Leaderboard</h3>
-            <p className="text-xs text-theme-text-secondary">Individual student contributor rankings from the Reports module's Final Score (task evaluations + event participation)</p>
+            <p className="text-xs text-theme-text-secondary">Individual student contributor rankings from the Reports module's Final Score (average of task evaluations)</p>
           </div>
 
           <div className="flex-1 space-y-2.5">
@@ -477,7 +477,7 @@ export default function DashboardHome() {
                       className={`flex items-center gap-1 px-2.5 py-1 rounded-xl font-bold text-xs border ${colorTokens.bg} ${colorTokens.text} ${colorTokens.border}`}
                       title={
                         perf.ratingsCount > 0
-                          ? `Same as the Reports module's Final Score: 70% average evaluation score (${perf.rawScore.toFixed(1)} across ${perf.ratingsCount} evaluated task${perf.ratingsCount === 1 ? '' : 's'}, multi-reviewer tasks count once) + 30% event participation (${perf.eventsParticipated} of ${perf.totalEvents} event${perf.totalEvents === 1 ? '' : 's'} held)`
+                          ? `Same as the Reports module's Final Score: average evaluation score (${perf.rawScore.toFixed(1)} across ${perf.ratingsCount} evaluated task${perf.ratingsCount === 1 ? '' : 's'}, multi-reviewer tasks count once)`
                           : 'No ratings yet — 0.0 until their first evaluation'
                       }
                     >
