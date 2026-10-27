@@ -789,7 +789,7 @@ export default function RatingsPage() {
         <div className="bg-theme-card border border-theme-card-border rounded-2xl p-5">
           <h2 className="text-sm font-bold text-theme-text-primary mb-1">Report Writing — Final Score</h2>
           <p className="text-[11px] text-theme-text-secondary mb-3">
-            Decay-weighted average of each submitter&apos;s scored event reports — older reports and submitters with more reports since count for less.
+            Average of each submitter&apos;s scored event reports (100% of the score).
           </p>
           <div className="overflow-x-auto">
             <table className="min-w-full text-xs text-left">

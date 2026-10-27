@@ -400,7 +400,7 @@ const scoreCells = (r: RatingItem) => [r.quality.toFixed(1), r.timeliness.toFixe
 /** "Report Writing — Final Score" table (scored event reports). Skipped when nothing in scope has been scored. */
 function reportWritingSection(doc: jsPDF, y: number, rows: SubmitterReportScore[] | undefined, sectionLabel: string): number {
   if (!rows || rows.length === 0) return y;
-  y = sectionTitle(doc, y, sectionLabel, 'Decay-weighted average of scored event reports on the Report Writing rubric — older reports and submitters with more reports since count for less.');
+  y = sectionTitle(doc, y, sectionLabel, 'Average of scored event reports on the Report Writing rubric (100% of the score).');
   autoTable(doc, {
     startY: y,
     margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },

@@ -391,7 +391,7 @@ export function EventPassBulkModal({
                 handleCsvFile(e.target.files?.[0]);
                 e.target.value = '';
               }}
-              accept=".csv"
+              accept=".csv,text/csv,text/comma-separated-values,application/csv,application/vnd.ms-excel,text/plain"
               className="hidden"
             />
             <Upload className="h-8 w-8 text-accent mb-2 animate-bounce" />

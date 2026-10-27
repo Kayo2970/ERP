@@ -580,7 +580,7 @@ export default function EventsPage() {
               type="file"
               ref={fileInputRef}
               onChange={handleFileUpload}
-              accept=".csv"
+              accept=".csv,text/csv,text/comma-separated-values,application/csv,application/vnd.ms-excel,text/plain"
               className="hidden"
             />
 

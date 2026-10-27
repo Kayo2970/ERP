@@ -1305,7 +1305,7 @@ export default function DesignPortalPage() {
               <input
                 ref={canvaCsvInputRef}
                 type="file"
-                accept=".csv"
+                accept=".csv,text/csv,text/comma-separated-values,application/csv,application/vnd.ms-excel,text/plain"
                 className="hidden"
                 onChange={handleCanvaCsvFileChange}
               />
