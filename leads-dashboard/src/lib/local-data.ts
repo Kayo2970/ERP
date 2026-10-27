@@ -5504,8 +5504,6 @@ export function getStudentLeaderboard(): {
   completedTasks: number;
   totalTasks: number;
   ratingsCount: number;
-  eventsParticipated: number;
-  totalEvents: number;
 }[] {
   const members = getMembers();
   // Student contributors (Core Committee, Training Associates, Alumni) plus Super Users, who are evaluated on their
@@ -5537,11 +5535,8 @@ export function getStudentLeaderboard(): {
     overallScore: group.reduce((sum, r) => sum + r.overallScore, 0) / group.length,
   }));
 
-  // Events held so far count toward participation, not only the ones a student was rated on
-  const todayIso = new Date().toISOString().slice(0, 10);
-  const totalEvents = getEvents().filter(e => !e.datesTBD && !!e.startDate && e.startDate <= todayIso).length;
   const finalByName = new Map(
-    buildStudentFinalScores(evaluations, totalEvents || undefined).map(f => [f.name.toLowerCase(), f])
+    buildStudentFinalScores(evaluations).map(f => [f.name.toLowerCase(), f])
   );
 
   const results = studentMembers.map(m => {
@@ -5559,8 +5554,6 @@ export function getStudentLeaderboard(): {
       completedTasks: profile?.stats.completedTasks || 0,
       totalTasks: profile?.stats.totalTasks || 0,
       ratingsCount: f ? f.taskCount : 0,
-      eventsParticipated: f ? f.eventsParticipated : 0,
-      totalEvents,
     };
   });
 

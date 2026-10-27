@@ -194,11 +194,7 @@ export default function ReportsPage() {
   ];
 
   // Final score per student (see final-score.ts). Must be defined before barData, which reads it.
-  // Every event held in the selected period counts toward participation, not just the ones a student was rated on.
-  // Events with dates still to be decided, or that have not started yet, can't have been taken part in, so they don't count.
-  const todayIso = new Date().toISOString().slice(0, 10);
-  const totalEventsInPeriod = events.filter(e => !e.datesTBD && !!e.startDate && e.startDate <= todayIso && isWithinPeriod(e.startDate, periodFilter)).length;
-  const studentFinalScores = buildStudentFinalScores(filteredRatings, totalEventsInPeriod || undefined);
+  const studentFinalScores = buildStudentFinalScores(filteredRatings);
 
   // Unique Targets List for selector — professors and ineligible members strictly excluded
   const targets = Array.from(new Set(
@@ -278,7 +274,7 @@ export default function ReportsPage() {
         return {
           name: key,
           detail: finalRow
-            ? `Final score — avg ${finalRow.avgScore.toFixed(1)} over ${finalRow.eventCount} event${finalRow.eventCount === 1 ? '' : 's'} (${group.length} task${group.length === 1 ? '' : 's'}), weighted by participation across all events`
+            ? `Final score — avg ${finalRow.avgScore.toFixed(1)} over ${finalRow.eventCount} event${finalRow.eventCount === 1 ? '' : 's'} (${group.length} task${group.length === 1 ? '' : 's'})`
             : `Average of ${group.length} evaluated task${group.length === 1 ? '' : 's'}`,
           score: avg,
           fill: getQuartile(avg).hex,
@@ -335,7 +331,6 @@ export default function ReportsPage() {
         reportType,
         events,
         tasks,
-        totalEventsInPeriod,
         reportWriting: reportWritingScores,
         subject: personalSubject,
         members: members.filter(m => !isFaculty(m)),
@@ -554,7 +549,7 @@ export default function ReportsPage() {
               <div>
                 <h3 className="font-bold text-sm text-theme-text-primary">Deliverable Performance Distribution</h3>
                 <p className="text-[11px] text-theme-text-secondary">
-                  {effectiveBreakdown === 'student' && 'One bar per student — final score (average rating weighted with participation across all events)'}
+                  {effectiveBreakdown === 'student' && 'One bar per student — final score (average of all their ratings)'}
                   {effectiveBreakdown === 'event' && (personalSubject ? 'One bar per event — your average score in it' : 'One bar per event — the average score of everyone evaluated on it')}
                   {effectiveBreakdown === 'task' && 'One bar per individual evaluated deliverable (detailed view)'}
                 </p>
@@ -642,10 +637,9 @@ export default function ReportsPage() {
                 <tr className="text-theme-text-secondary border-b border-theme-border/30">
                   <th className="pb-2 font-semibold">#</th>
                   <th className="pb-2 font-semibold">Student</th>
-                  <th className="pb-2 font-semibold">Events{totalEventsInPeriod > 0 ? ` (of ${totalEventsInPeriod})` : ''}</th>
+                  <th className="pb-2 font-semibold">Events</th>
                   <th className="pb-2 font-semibold">Tasks Evaluated</th>
                   <th className="pb-2 font-semibold">Avg Score</th>
-                  <th className="pb-2 font-semibold">Participation Score</th>
                   <th className="pb-2 font-semibold">Final Score</th>
                 </tr>
               </thead>
@@ -656,10 +650,9 @@ export default function ReportsPage() {
                     <tr key={row.name}>
                       <td className="py-2 pr-2 text-theme-text-secondary">{i + 1}</td>
                       <td className="py-2 pr-2 font-bold text-theme-text-primary">{row.name}</td>
-                      <td className="py-2 pr-2 text-theme-text-secondary">{totalEventsInPeriod > 0 ? row.eventsParticipated : row.eventCount}</td>
+                      <td className="py-2 pr-2 text-theme-text-secondary">{row.eventCount}</td>
                       <td className="py-2 pr-2 text-theme-text-secondary">{row.taskCount}</td>
                       <td className="py-2 pr-2 text-theme-text-secondary">{row.avgScore.toFixed(2)} / 5.0</td>
-                      <td className="py-2 pr-2 text-theme-text-secondary">{row.countScore.toFixed(2)} / 5.0</td>
                       <td className="py-2 pr-2">
                         <span className={`px-2 py-0.5 rounded-lg font-bold ${colorTokens.bg} ${colorTokens.text} ${colorTokens.border} border`}>{row.finalScore.toFixed(2)} / 5.0</span>
                       </td>

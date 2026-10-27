@@ -46,8 +46,6 @@ export interface PerformanceReportParams {
   events: EventItem[];
   members: Member[];
   tasks?: TaskItem[];
-  /** Events held in the period — the participation part of the final score. */
-  totalEventsInPeriod?: number;
   /** Report Writing Final Score per submitter (decay-weighted over scored event reports), already narrowed to the report's scope. */
   reportWriting?: SubmitterReportScore[];
   /** Set when the report is about a single person: switches to the personal layout. */
@@ -502,13 +500,13 @@ function buildPersonal(doc: jsPDF, p: PerformanceReportParams) {
   // ---- 1. Summary ----
   const eventGroups = groupBy(ratings, (r) => r.eventId || r.eventName || '__standalone__');
   const realEvents = Array.from(eventGroups.keys()).filter((k) => k !== '__standalone__');
-  const final = buildStudentFinalScores(ratings, p.totalEventsInPeriod || undefined)[0];
+  const final = buildStudentFinalScores(ratings)[0];
   y = sectionTitle(doc, y, '1. Performance Summary', 'How your work was evaluated across the selected period.');
   y = kpiRow(doc, y, [
     { label: 'Overall average', value: `${averages.overall.toFixed(1)} / 5`, sub: scoreBand(averages.overall), color: scoreColor(averages.overall) },
-    { label: 'Final score', value: final ? `${final.finalScore.toFixed(2)} / 5` : '—', sub: '70% quality + 30% participation', color: final ? scoreColor(final.finalScore) : BRAND_ACCENT },
+    { label: 'Final score', value: final ? `${final.finalScore.toFixed(2)} / 5` : '—', sub: 'average of all ratings', color: final ? scoreColor(final.finalScore) : BRAND_ACCENT },
     { label: 'Tasks evaluated', value: String(ratings.length), sub: `${raw.length} evaluator score${raw.length === 1 ? '' : 's'}` },
-    { label: 'Events', value: String(realEvents.length), sub: p.totalEventsInPeriod ? `of ${p.totalEventsInPeriod} held` : 'taken part in' },
+    { label: 'Events', value: String(realEvents.length), sub: 'taken part in' },
   ]);
 
   // competency radar + table side by side
@@ -561,7 +559,6 @@ function buildPersonal(doc: jsPDF, p: PerformanceReportParams) {
   if (sortedTasks.length) lines.push(`Highest-scoring task: "${sortedTasks[0].taskTitle}" (${sortedTasks[0].overallScore.toFixed(1)}). ${sortedTasks.length > 1 ? `Lowest: "${sortedTasks[sortedTasks.length - 1].taskTitle}" (${sortedTasks[sortedTasks.length - 1].overallScore.toFixed(1)}).` : ''}`);
   const late = ratings.filter((r) => r.lateNote).length;
   if (late) lines.push(`${late} task${late === 1 ? ' was' : 's were'} completed late — see the task-wise section for details.`);
-  if (final && p.totalEventsInPeriod) lines.push(`Participation: took part in ${final.eventsParticipated} of ${p.totalEventsInPeriod} events held in this period.`);
   if (lines.length) {
     y = subTitle(doc, y, 'Highlights');
     y = bullets(doc, y + 6, lines);
