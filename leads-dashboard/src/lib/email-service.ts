@@ -59,6 +59,10 @@ export interface EmailLog {
   errorMessage?: string;       // set when the send itself threw (auth failure, connection refused, timeout, ...)
   smtpResponse?: string;       // the raw final SMTP response line, e.g. "250 2.0.0 OK ..."
   rejectedRecipients?: string[]; // addresses the SMTP server explicitly rejected, if any
+  /** How many sends of this email have failed so far — drives the automatic retry back-off. */
+  failedAttempts?: number;
+  /** On a FAILED email: the background sweeper sends it again at/after this time (see scheduleEmailRetries). */
+  nextRetryAt?: string;
 }
 
 export interface SendEmailPayload {
@@ -394,10 +398,12 @@ function diagnoseSmtpFailure(err: any, provider: string): string {
  * whatever is already persisted.
  */
 export async function testEmailConnection(testRecipient: string, draftSettings?: Partial<EmailSettings>): Promise<{ success: boolean; message: string }> {
+  let transporterToClose: Transporter | undefined;
   try {
     const persisted = await getEmailSettings();
     const effectiveSettings: EmailSettings = draftSettings ? { ...persisted, ...draftSettings } : persisted;
     const { transporter: t, settings, effectiveHost, effectivePort } = await buildTransporter(effectiveSettings);
+    transporterToClose = t;
     await t.verify();
 
     const from = `${settings.fromName || 'LEADS Next Gen Centre'} <${settings.fromEmail || 'leads@msruas.ac.in'}>`;
@@ -443,6 +449,8 @@ export async function testEmailConnection(testRecipient: string, draftSettings?:
     console.error('[email-service] SMTP Connection Test Failed:', err);
     const provider = draftSettings?.provider || (await getEmailSettings()).provider;
     return { success: false, message: err ? diagnoseSmtpFailure(err, provider) : 'Failed to establish connection to SMTP server.' };
+  } finally {
+    try { transporterToClose?.close(); } catch { /* already closed */ }
   }
 }
 
@@ -464,9 +472,52 @@ const globalForEmail = globalThis as unknown as {
   __leadsBufferedEmails?: Map<string, BufferedEmailEntry>;
   __leadsSendingInProgress?: Set<string>;
   __leadsSweeperStarted?: boolean;
+  __leadsSendGate?: { tail: Promise<void>; lastSendAt: number };
 };
 const bufferedEmails: Map<string, BufferedEmailEntry> = (globalForEmail.__leadsBufferedEmails ??= new Map());
 const sendingInProgress: Set<string> = (globalForEmail.__leadsSendingInProgress ??= new Set());
+
+// ── Send pacing ────────────────────────────────────────────────────────────────
+// Outlook/Microsoft 365 allows only a few simultaneous SMTP connections and ~30 messages a minute per mailbox; a burst
+// (event passes, a batch of task assignments, a flushed queue) used to open them all at once and get "432 4.3.2
+// Concurrent connections limit exceeded". Every SMTP send now takes a turn here: one at a time, with a pause between
+// each, so a burst trickles out instead of tripping the limit. Override the pause with EMAIL_SEND_SPACING_MS.
+const SEND_SPACING_MS = Number(process.env.EMAIL_SEND_SPACING_MS) || 2500;
+const sendGate = (globalForEmail.__leadsSendGate ??= { tail: Promise.resolve(), lastSendAt: 0 });
+
+function withSendSlot<T>(task: () => Promise<T>): Promise<T> {
+  const run = sendGate.tail.then(async () => {
+    const wait = sendGate.lastSendAt + SEND_SPACING_MS - Date.now();
+    if (wait > 0) await new Promise<void>((resolve) => setTimeout(resolve, wait));
+    try {
+      return await task();
+    } finally {
+      sendGate.lastSendAt = Date.now();
+    }
+  });
+  sendGate.tail = run.then(() => undefined, () => undefined);
+  return run;
+}
+
+// A failed send that is worth trying again later (the server said "busy / try later", or the network blipped) is
+// retried automatically after these delays; anything else (bad password, mailbox doesn't exist) is not.
+const AUTO_RETRY_DELAYS_MS = [5, 15, 45].map((m) => m * 60 * 1000);
+
+function isTransientSmtpFailure(err: any): boolean {
+  const raw = String(err?.message || err || '');
+  const responseCode = Number(err?.responseCode) || 0;
+  if (responseCode >= 500) return false;
+  if (responseCode >= 400) return true; // 421 / 432 / 450 / 451 / 452 ... = "temporary, try again"
+  if (/\b4\d\d[ -]4\.\d+\.\d+/.test(raw)) return true;
+  if (/concurrent connections|try again|temporar|rate limit|throttl|too many/i.test(raw)) return true;
+  return /ETIMEDOUT|ECONNRESET|ECONNREFUSED|ESOCKET|ECONNECTION|EAI_AGAIN|EHOSTUNREACH|ETIMEOUT/i.test(String(err?.code || '') + raw);
+}
+
+function nextAutoRetryAt(failedAttempts: number, transient: boolean, category: EmailCategory): string | undefined {
+  if (!transient || category === 'AUTH_OTP') return undefined; // a security code is useless by the time it is retried
+  const delay = AUTO_RETRY_DELAYS_MS[failedAttempts - 1];
+  return delay ? new Date(Date.now() + delay).toISOString() : undefined;
+}
 
 function ensureSweeperInterval(): void {
   if (globalForEmail.__leadsSweeperStarted || typeof setInterval === 'undefined') return;
@@ -493,10 +544,21 @@ export async function sweepExpiredBufferedEmails(): Promise<number> {
   let dispatchedCount = 0;
   try {
     const list = await readCollection<EmailLog>('emails');
-    const bufferedList = (list || []).filter(item => item.status === 'BUFFERED');
-    if (bufferedList.length === 0) return 0;
-
     const now = Date.now();
+
+    // FAILED emails whose retry time has come (automatic back-off or a "retry later" chosen in Mail Management).
+    for (const item of list || []) {
+      if (item.status !== 'FAILED' || !item.nextRetryAt || sendingInProgress.has(item.id)) continue;
+      if (new Date(item.nextRetryAt).getTime() > now) continue;
+      dispatchedCount++;
+      sendBufferedEmailNow(item.id).catch(err => {
+        console.error(`[email-service] Retry of failed email ${item.id} errored:`, err);
+      });
+    }
+
+    const bufferedList = (list || []).filter(item => item.status === 'BUFFERED');
+    if (bufferedList.length === 0) return dispatchedCount;
+
     for (const item of bufferedList) {
       if (sendingInProgress.has(item.id)) continue;
       const untilMs = item.bufferedUntil ? new Date(item.bufferedUntil).getTime() : 0;
@@ -547,21 +609,33 @@ export async function restoreBufferedQueue(): Promise<void> {
   await sweepExpiredBufferedEmails();
 }
 
-async function executeSmtpSend(payload: SendEmailPayload): Promise<{
+interface SmtpSendResult {
   status: 'SENT' | 'FAILED';
   errorMessage?: string;
   smtpResponse?: string;
   rejectedRecipients?: string[];
-}> {
+  /** True when a later retry could plausibly succeed (server busy / network blip), false for e.g. a bad password. */
+  transient?: boolean;
+}
+
+/** Every SMTP send takes its turn through the pacing gate (security codes skip the line). */
+function executeSmtpSend(payload: SendEmailPayload): Promise<SmtpSendResult> {
+  return payload.category === 'AUTH_OTP' ? sendOverSmtp(payload) : withSendSlot(() => sendOverSmtp(payload));
+}
+
+async function sendOverSmtp(payload: SendEmailPayload): Promise<SmtpSendResult> {
+  let transporterToClose: Transporter | undefined;
   let finalBodyHtml = payload.bodyHtml || payload.bodyText;
   let finalBodyText = payload.bodyText;
   let status: 'SENT' | 'FAILED' = 'FAILED';
   let errorMessage: string | undefined;
   let smtpResponse: string | undefined;
   let rejectedRecipients: string[] | undefined;
+  let transient = false;
 
   try {
     const { transporter: t, settings } = await buildTransporter();
+    transporterToClose = t;
     const from = `${settings.fromName || 'LEADS Next Gen Centre'} <${settings.fromEmail || 'leads@msruas.ac.in'}>`;
     const domain = (settings.fromEmail || 'leadsnextgencentre.online').split('@')[1] || 'leadsnextgencentre.online';
     const messageId = `<${Date.now()}.${Math.random().toString(36).substring(2, 9)}@${domain}>`;
@@ -618,10 +692,15 @@ async function executeSmtpSend(payload: SendEmailPayload): Promise<{
   } catch (err) {
     const provider = (await getEmailSettings()).provider;
     errorMessage = diagnoseSmtpFailure(err, provider);
+    transient = isTransientSmtpFailure(err);
     console.error(`[email-service] Failed to send to ${payload.to}:`, errorMessage);
+  } finally {
+    // A pooled transporter keeps its SMTP connections open until closed; one is built per send, so without this they
+    // pile up and are what Outlook counts against its concurrent-connection limit.
+    try { transporterToClose?.close(); } catch { /* already closed */ }
   }
 
-  return { status, errorMessage, smtpResponse, rejectedRecipients };
+  return { status, errorMessage, smtpResponse, rejectedRecipients, transient };
 }
 
 /** Adds the blurred background (this send's choice, else the Email Settings default) to a finished e-mail. */
@@ -688,6 +767,19 @@ async function sendImmediateEmail(payload: SendEmailPayload): Promise<EmailLog> 
     rejectedRecipients: result.rejectedRecipients,
     attachmentsMeta: payload.attachments?.map(a => ({ filename: a.filename, contentType: a.contentType, ...(a.cid ? { cid: a.cid } : {}) })),
   };
+
+  if (result.status === 'FAILED') {
+    newEmail.failedAttempts = 1;
+    newEmail.nextRetryAt = nextAutoRetryAt(1, Boolean(result.transient), payload.category);
+    if (newEmail.nextRetryAt) {
+      // Keep the files so the retry (which may run much later, or after a restart) can attach them again.
+      const persisted = await persistAttachments(payload);
+      if (persisted) {
+        newEmail.attachmentKeys = persisted.keys;
+        newEmail.attachmentFolder = persisted.folder;
+      }
+    }
+  }
 
   try {
     await mutateCollection<EmailLog>('emails', (current) => [newEmail, ...(current || [])]);
@@ -775,7 +867,7 @@ export async function sendBufferedEmailNow(id: string): Promise<EmailLog | null>
     if (!payloadToSend.attachments?.length && target.attachmentKeys?.length) {
       payloadToSend.attachments = await loadPersistedAttachments(target);
       if (target.attachmentsMeta?.length && payloadToSend.attachments?.length !== target.attachmentKeys.length) {
-        const failed: EmailLog = { ...target, status: 'FAILED', sentAt: new Date().toISOString(), errorMessage: 'The attachment could not be read, so the email was not sent without it.' };
+        const failed: EmailLog = { ...target, status: 'FAILED', sentAt: new Date().toISOString(), errorMessage: 'The attachment could not be read, so the email was not sent without it.', nextRetryAt: undefined };
         await mutateCollection<EmailLog>('emails', (current) => (current || []).map((item) => (item.id === id ? failed : item)));
         return failed;
       }
@@ -783,6 +875,7 @@ export async function sendBufferedEmailNow(id: string): Promise<EmailLog | null>
 
     const sendResult = await executeSmtpSend(payloadToSend);
 
+    const failedAttempts = sendResult.status === 'FAILED' ? (target.failedAttempts || 0) + 1 : target.failedAttempts;
     const updatedLog: EmailLog = {
       ...target,
       status: sendResult.status,
@@ -790,6 +883,8 @@ export async function sendBufferedEmailNow(id: string): Promise<EmailLog | null>
       smtpResponse: sendResult.smtpResponse,
       errorMessage: sendResult.errorMessage,
       rejectedRecipients: sendResult.rejectedRecipients,
+      failedAttempts,
+      nextRetryAt: sendResult.status === 'FAILED' ? nextAutoRetryAt(failedAttempts || 1, Boolean(sendResult.transient), target.category) : undefined,
     };
 
     await mutateCollection<EmailLog>('emails', (current) => {
@@ -846,16 +941,62 @@ function scopedBufferedIds(scope?: BufferedScope): string[] {
 export async function flushAllBufferedEmails(scope?: BufferedScope): Promise<number> {
   await restoreBufferedQueue();
   const ids = scopedBufferedIds(scope);
-  // Send in small parallel batches so a large queue doesn't outlast the HTTP
-  // request, and one failing email can't abort the rest of the flush.
-  const BATCH = 5;
-  for (let i = 0; i < ids.length; i += BATCH) {
-    const results = await Promise.allSettled(ids.slice(i, i + BATCH).map(id => sendBufferedEmailNow(id)));
-    results.forEach((r, idx) => {
-      if (r.status === 'rejected') console.error(`[email-service] Flush failed for buffered email ${ids[i + idx]}:`, r.reason);
-    });
-  }
+  // Sent in the background, one after another (each also waits its turn at the send gate), so a big queue neither
+  // outlasts the HTTP request nor trips the mail provider's concurrent-connection limit, and one failing email can't
+  // abort the rest of the flush.
+  void (async () => {
+    for (const id of ids) {
+      try {
+        await sendBufferedEmailNow(id);
+      } catch (err) {
+        console.error(`[email-service] Flush failed for buffered email ${id}:`, err);
+      }
+    }
+  })();
   return ids.length;
+}
+
+/** Only failures this recent are swept up by "retry all failed" — older ones are likely stale and shouldn't be re-sent. */
+const RETRY_ALL_MAX_AGE_MS = 48 * 60 * 60 * 1000;
+
+/**
+ * Schedules FAILED emails to be sent again `delayMinutes` from now (0 = as soon as the send queue gets to them). `ids`
+ * limits it to specific emails; omitted, every FAILED email from the last 48 hours is retried (security codes excluded —
+ * they have expired by then). The background sweeper does the sending, one email at a time.
+ */
+export async function scheduleEmailRetries(opts: { ids?: string[]; delayMinutes?: number }): Promise<number> {
+  const delayMs = Math.max(0, Math.round((opts.delayMinutes || 0) * 60 * 1000));
+  const retryAt = new Date(Date.now() + delayMs).toISOString();
+  const wanted = opts.ids ? new Set(opts.ids) : null;
+  const cutoff = Date.now() - RETRY_ALL_MAX_AGE_MS;
+  let scheduled = 0;
+
+  await mutateCollection<EmailLog>('emails', (current) => (current || []).map((item) => {
+    if (item.status !== 'FAILED' || sendingInProgress.has(item.id)) return item;
+    if (wanted) {
+      if (!wanted.has(item.id)) return item;
+    } else if (item.category === 'AUTH_OTP' || new Date(item.sentAt).getTime() < cutoff) {
+      return item;
+    }
+    scheduled++;
+    // A manual retry restarts the automatic back-off from the beginning.
+    return { ...item, nextRetryAt: retryAt, failedAttempts: 0 };
+  }));
+
+  if (scheduled > 0 && delayMs === 0) sweepExpiredBufferedEmails().catch(() => {});
+  return scheduled;
+}
+
+/** Withdraws a pending (automatic or chosen) retry; the email stays FAILED. */
+export async function cancelEmailRetries(ids?: string[]): Promise<number> {
+  const wanted = ids ? new Set(ids) : null;
+  let cleared = 0;
+  await mutateCollection<EmailLog>('emails', (current) => (current || []).map((item) => {
+    if (item.status !== 'FAILED' || !item.nextRetryAt || (wanted && !wanted.has(item.id))) return item;
+    cleared++;
+    return { ...item, nextRetryAt: undefined };
+  }));
+  return cleared;
 }
 
 export async function cancelAllBufferedEmails(scope?: BufferedScope): Promise<number> {

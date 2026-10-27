@@ -10,7 +10,9 @@ import {
   flushBufferedEmail,
   cancelBufferedEmail,
   flushAllBufferedEmails,
-  cancelAllBufferedEmails
+  cancelAllBufferedEmails,
+  scheduleEmailRetries,
+  cancelEmailRetries
 } from '@/lib/email-service';
 import { requireSession } from '@/lib/session';
 import { getAccessLevelSettingsServer, canManageEmailSettings } from '@/lib/permissions-server';
@@ -45,14 +47,34 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'You do not have permission to manage the email queue.' }, { status: 403 });
     }
     const body = await request.json();
-    const { id, email, all, only, except } = body;
+    const { id, email, all, only, except, retryIds, retryAllFailed, cancelRetryIds, delayMinutes } = body;
     const scope = { only: only === 'CERTIFICATE' ? ('CERTIFICATE' as const) : undefined, except: except === 'CERTIFICATE' ? ('CERTIFICATE' as const) : undefined };
+
+    // Retry FAILED emails: now (delayMinutes 0/omitted) or after a chosen delay. Sent one at a time by the background
+    // sweeper, so a big batch trickles out within the mail provider's limits.
+    if (Array.isArray(retryIds) || retryAllFailed === true) {
+      const delay = Number(delayMinutes) || 0;
+      if (delay < 0 || delay > 24 * 60) {
+        return NextResponse.json({ error: 'Choose a retry delay between 0 minutes and 24 hours.' }, { status: 400 });
+      }
+      const count = await scheduleEmailRetries({ ids: Array.isArray(retryIds) ? retryIds.map(String) : undefined, delayMinutes: delay });
+      if (count === 0) {
+        return NextResponse.json({ error: 'No failed emails to retry — they may already be sending or have been sent. Refresh the list.' }, { status: 404 });
+      }
+      const when = delay === 0 ? 'now, one at a time' : `in ${delay} minute${delay === 1 ? '' : 's'}`;
+      return NextResponse.json({ success: true, count, message: `${count} failed email${count === 1 ? '' : 's'} will be retried ${when}.` });
+    }
+
+    if (Array.isArray(cancelRetryIds)) {
+      const count = await cancelEmailRetries(cancelRetryIds.map(String));
+      return NextResponse.json({ success: true, count, message: `Cancelled ${count} scheduled retr${count === 1 ? 'y' : 'ies'}.` });
+    }
 
     if (all) {
       const [bufferedCount] = await Promise.all([
         flushAllBufferedEmails(scope),
       ]);
-      return NextResponse.json({ success: true, message: `Successfully flushed all ${bufferedCount} buffered emails` });
+      return NextResponse.json({ success: true, message: `Dispatching all ${bufferedCount} buffered emails now — they go out one at a time, so the log updates over the next few minutes.` });
     }
 
     if (id) {

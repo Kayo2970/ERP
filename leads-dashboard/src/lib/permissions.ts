@@ -1165,6 +1165,7 @@ export function canDelegateAutoTask(task: TaskItem, user: SessionUser): boolean 
   if (
     task.workflowType !== 'event_social_post' &&
     task.workflowType !== 'holiday_design_social' &&
+    task.workflowType !== 'design_social_posting' &&
     task.workflowType !== 'event_report_assignment' &&
     task.workflowType !== 'event_report_request'
   ) return false;

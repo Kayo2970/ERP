@@ -82,7 +82,17 @@ interface RecipientQueue {
 }
 
 const DEBOUNCE_MS = 10 * 60 * 1000; // 10 minutes quiet period
+// When many people are assigned at once (an event's committee, a bulk allotment) every digest would come due in the
+// same instant. Each waiting recipient's send is pushed back a few more seconds than the one queued before it, so the
+// digests leave in a trickle — Outlook rejects bursts with "concurrent connections limit exceeded".
+const STAGGER_STEP_MS = 3000;
+const STAGGER_MAX_MS = 5 * 60 * 1000;
 const pendingQueues: Map<string, RecipientQueue> = new Map();
+
+function staggerOffsetMs(email: string): number {
+  const position = Array.from(pendingQueues.keys()).indexOf(email);
+  return Math.min(Math.max(position, 0) * STAGGER_STEP_MS, STAGGER_MAX_MS);
+}
 
 /**
  * Enqueue a task assignment for debounced email dispatch (10-minute quiet buffer).
@@ -131,12 +141,12 @@ export async function enqueueTaskEmailNotification(task: {
     queue.items.push(item);
   }
 
-  // Set 10-minute debounce timer to flush digest
+  // Set 10-minute debounce timer to flush digest (plus this recipient's place in line, see STAGGER_STEP_MS)
   queue.timer = setTimeout(() => {
     flushTaskEmailDigest(email).catch(err => {
       console.error(`[task-email-queue] Error flushing digest for ${email}:`, err);
     });
-  }, DEBOUNCE_MS);
+  }, DEBOUNCE_MS + staggerOffsetMs(email));
 }
 
 /**
