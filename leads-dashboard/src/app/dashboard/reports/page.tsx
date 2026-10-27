@@ -19,7 +19,7 @@ import {
 import { getRatings, getMembers, getEvents, getTasks, getEventReports, RatingItem, Member, EventItem, TaskItem, EventReportItem } from '@/lib/local-data';
 import { groupScoredReportsBySubmitter } from '@/lib/report-scoring';
 import { getRatingColor } from '@/lib/design-tokens';
-import { buildStudentFinalScores, QUALITY_WEIGHT, TASK_COUNT_WEIGHT, TASK_COUNT_TARGET } from '@/lib/final-score';
+import { buildStudentFinalScores } from '@/lib/final-score';
 import { canViewRating, isFaculty, isSocialMediaTeamMember } from '@/lib/permissions';
 import type { ReportType } from '@/lib/report-generator';
 import { BarChart3, Download, FileText, Star, Loader2 } from 'lucide-react';
@@ -627,17 +627,13 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* Student Final Score — average quality + share of all events taken part in */}
+      {/* Student Final Score — average of evaluation scores */}
       {studentFinalScores.length > 0 && (
         <div className="glass-panel rounded-2xl p-6 space-y-4">
           <div>
             <h3 className="font-bold text-sm text-theme-text-primary">Student Final Score</h3>
             <p className="text-[11px] text-theme-text-secondary">
-              Final = {Math.round(QUALITY_WEIGHT * 100)}% average evaluation score + {Math.round(TASK_COUNT_WEIGHT * 100)}% event participation
-              {totalEventsInPeriod > 0
-                ? ` (share of all ${totalEventsInPeriod} event${totalEventsInPeriod === 1 ? '' : 's'} in this period the student took part in — events they were not part of count against them)`
-                : ` (full marks at ${TASK_COUNT_TARGET}+ evaluated tasks — no events found in this period)`}.
-              Scores are averaged per event first, then across the events the student was evaluated on with equal weight.
+              Final = the average of the student&apos;s evaluation scores (100% of the rating).
             </p>
           </div>
           <div className="overflow-x-auto">
@@ -682,7 +678,7 @@ export default function ReportsPage() {
           <div>
             <h3 className="font-bold text-sm text-theme-text-primary">Report Writing — Final Score</h3>
             <p className="text-[11px] text-theme-text-secondary">
-              Decay-weighted average of each submitter&apos;s scored event reports on the Report Writing rubric — older reports and submitters with more reports since count for less. Updates as soon as a report is scored.
+              Average of each submitter&apos;s scored event reports on the Report Writing rubric (100% of the score). Updates as soon as a report is scored.
             </p>
           </div>
           <div className="overflow-x-auto">
