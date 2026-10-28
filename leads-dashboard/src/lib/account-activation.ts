@@ -44,10 +44,12 @@ export async function createActivationTokenAndSendEmail(
   req?: Request | null
 ) {
   const token = `act-${Date.now()}-${randomBytes(8).toString('hex')}`;
-  const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
+  const expiresAt = Date.now() + ACTIVATION_WINDOW_MS;
 
   const activationToken: ActivationToken = {
-    id: `token-${Date.now()}`,
+    // Random, not Date.now(): bulk adds create tokens in parallel within the same millisecond, and a shared id made
+    // consuming one member's link delete the other members' tokens too.
+    id: `token-${randomBytes(8).toString('hex')}`,
     memberId: member.id,
     email: member.email.toLowerCase(),
     token,
@@ -55,9 +57,11 @@ export async function createActivationTokenAndSendEmail(
     createdAt: new Date().toISOString(),
   };
 
+  // Earlier unexpired links for this member stay valid: a resend used to delete them, so the first (still-in-flight)
+  // email's link was dead on arrival. Consuming any one link clears them all (see activate-account).
   await mutateCollection('accountActivations', (current) => {
-    const filtered = (current || []).filter((t: any) => t.memberId !== member.id);
-    return [activationToken, ...filtered];
+    const live = (current || []).filter((t: any) => t.expiresAt > Date.now());
+    return [activationToken, ...live];
   });
 
   const baseUrl = getAppBaseUrl(req, originUrl);
@@ -76,6 +80,8 @@ export async function createActivationTokenAndSendEmail(
     bodyText: template.bodyText,
     bodyHtml: template.bodyHtml,
     category: 'ACCOUNT_ACTIVATION',
+    // Never sit in the 10-minute quiet buffer: people waited, hit "resend", and the delayed first email then arrived.
+    immediate: true,
   });
 
   return { token, activationLink, emailSent: emailLog.status === 'SENT' || emailLog.status === 'BUFFERED', emailError: emailLog.errorMessage };

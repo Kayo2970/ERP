@@ -248,8 +248,6 @@ async function buildTransporter(overrideSettings?: EmailSettings): Promise<{ tra
     secure,
     auth,
     dkim,
-    pool: true,
-    maxConnections: 3,
     connectionTimeout: 8000,
     greetingTimeout: 8000,
     socketTimeout: 10000,
@@ -560,8 +558,10 @@ async function executeSmtpSend(payload: SendEmailPayload): Promise<{
   let smtpResponse: string | undefined;
   let rejectedRecipients: string[] | undefined;
 
+  let transporter: Transporter | undefined;
   try {
     const { transporter: t, settings } = await buildTransporter();
+    transporter = t;
     const from = `${settings.fromName || 'LEADS Next Gen Centre'} <${settings.fromEmail || 'leads@msruas.ac.in'}>`;
     const domain = (settings.fromEmail || 'leadsnextgencentre.online').split('@')[1] || 'leadsnextgencentre.online';
     const messageId = `<${Date.now()}.${Math.random().toString(36).substring(2, 9)}@${domain}>`;
@@ -619,6 +619,9 @@ async function executeSmtpSend(payload: SendEmailPayload): Promise<{
     const provider = (await getEmailSettings()).provider;
     errorMessage = diagnoseSmtpFailure(err, provider);
     console.error(`[email-service] Failed to send to ${payload.to}:`, errorMessage);
+  } finally {
+    // A fresh transporter is built per send, so it must be released or its sockets leak until the mail host starts refusing us.
+    try { transporter?.close(); } catch { /* already closed */ }
   }
 
   return { status, errorMessage, smtpResponse, rejectedRecipients };
