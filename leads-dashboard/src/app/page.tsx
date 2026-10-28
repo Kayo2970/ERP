@@ -1,5 +1,6 @@
 'use client';
 
+import CodeSlots from '@/components/code-slots';
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -142,6 +143,7 @@ export default function LoginPage() {
   const [forgotStep, setForgotStep] = useState<'REQUEST' | 'VERIFY'>('REQUEST');
   const [forgotEmail, setForgotEmail] = useState('');
   const [otpCode, setOtpCode] = useState('');
+  const [otpStatus, setOtpStatus] = useState<'idle' | 'error' | 'success'>('idle');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [forgotError, setForgotError] = useState('');
@@ -360,6 +362,8 @@ export default function LoginPage() {
     } else {
       setExpiresAt(Date.now() + 5 * 60 * 1000);
     }
+    setOtpCode('');
+    setOtpStatus('idle');
     setForgotStep('VERIFY');
   };
 
@@ -392,15 +396,19 @@ export default function LoginPage() {
 
     if (!res.success) {
       setForgotError(res.error || 'Password reset failed.');
+      if (/code/i.test(res.error || '')) setOtpStatus('error');
       return;
     }
 
+    setOtpStatus('success');
     setForgotSuccess('Password reset successfully! Redirecting to login...');
     setTimeout(() => {
       setEmail(forgotEmail.trim());
       setPassword(newPassword);
       setShowForgotModal(false);
       setForgotStep('REQUEST');
+      setOtpCode('');
+      setOtpStatus('idle');
       setForgotError('');
       setForgotSuccess('');
     }, 1500);
@@ -776,15 +784,24 @@ export default function LoginPage() {
                   <label className="block font-semibold text-theme-text-secondary uppercase tracking-wider">
                     6-Digit Verification OTP Code
                   </label>
-                  <input
-                    type="text"
-                    required
-                    maxLength={6}
-                    value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                    placeholder="123456"
-                    className="w-full text-center tracking-[8px] font-mono text-base font-bold py-2 bg-theme-background/40 border border-theme-card-border rounded-xl text-accent focus:outline-none focus:border-accent"
-                  />
+                  <div className="flex justify-center">
+                    <CodeSlots
+                      length={6}
+                      value={otpCode}
+                      status={otpStatus}
+                      autoFocus
+                      onChange={(code: string) => {
+                        setOtpCode(code);
+                        if (code) setOtpStatus('idle');
+                      }}
+                      accentColor="var(--color-accent)"
+                      inkColor="var(--color-accent)"
+                      slotColor="color-mix(in srgb, var(--color-theme-background) 60%, transparent)"
+                      digitColor="#ffffff"
+                      slotSize={42}
+                      gap={8}
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-1.5">
