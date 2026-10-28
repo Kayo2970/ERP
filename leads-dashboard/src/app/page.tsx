@@ -349,6 +349,11 @@ export default function LoginPage() {
       return;
     }
 
+    if (res.activationLinkSent) {
+      setForgotSuccess(res.message || 'A fresh account setup link has been emailed to you.');
+      return;
+    }
+
     setForgotSuccess(res.message || 'OTP code sent! Valid for 5 minutes.');
     if (res.expiresAt) {
       setExpiresAt(res.expiresAt);

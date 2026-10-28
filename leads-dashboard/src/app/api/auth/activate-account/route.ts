@@ -91,7 +91,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'The account this link belongs to no longer exists.' }, { status: 404 });
     }
 
-    await mutateCollection('accountActivations', (current) => (current || []).filter((a: any) => a.id !== matched.id));
+    await mutateCollection('accountActivations', (current) => (current || []).filter((a: any) => a.memberId !== matched.memberId));
 
     await mutateCollection('auditLogs', (current) => [
       {

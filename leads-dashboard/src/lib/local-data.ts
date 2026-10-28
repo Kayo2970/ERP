@@ -7735,7 +7735,7 @@ export function updateSystemSettings(updates: Partial<SystemSettings>, actorName
 /**
  * Client Helper: Request a 5-minute password reset OTP
  */
-export async function requestPasswordReset(email: string): Promise<{ success: boolean; message?: string; error?: string; expiresAt?: number; adminOverride?: boolean; name?: string }> {
+export async function requestPasswordReset(email: string): Promise<{ success: boolean; message?: string; error?: string; expiresAt?: number; adminOverride?: boolean; activationLinkSent?: boolean; name?: string }> {
   try {
     const res = await fetch('/api/auth/forgot-password', {
       method: 'POST',
@@ -7745,6 +7745,9 @@ export async function requestPasswordReset(email: string): Promise<{ success: bo
     const data = await res.json();
     if (data.adminOverride) {
       return { success: true, adminOverride: true, message: data.message, name: data.name };
+    }
+    if (data.activationLinkSent) {
+      return { success: true, activationLinkSent: true, message: data.message };
     }
     if (!res.ok) {
       return { success: false, error: data.error || 'Failed to send reset code.' };
