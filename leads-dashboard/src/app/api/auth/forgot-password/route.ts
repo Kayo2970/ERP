@@ -5,7 +5,6 @@ import { readCollection, mutateCollection } from '@/lib/server-db';
 import { dispatchEmail, generateOtpEmailTemplate } from '@/lib/email-service';
 import { parseJsonBody } from '@/lib/validation';
 import { apiError } from '@/lib/api-error';
-import { createActivationTokenAndSendEmail } from '@/lib/account-activation';
 
 const ForgotPasswordSchema = z.object({
   email: z.string().trim().min(1).max(254).email(),
@@ -30,35 +29,8 @@ export async function POST(request: Request) {
       });
     }
 
-    // Never activated (no password yet): an OTP can't help, the password is set through the activation link.
-    // Email a fresh link instead of leaving them with nothing.
-    if (!member.passwordHash) {
-      const host = request.headers.get('host');
-      const proto = request.headers.get('x-forwarded-proto') || (host?.includes('localhost') ? 'http' : 'https');
-      const origin = request.headers.get('origin') || (host ? `${proto}://${host}` : undefined);
-      const result = await createActivationTokenAndSendEmail({ id: member.id, name: member.name, email: member.email }, 'Self-service', origin, request);
-      if (!result.emailSent) {
-        console.error(`[forgot-password-api] Activation email to ${member.email} was not delivered: ${result.emailError || 'unknown error'}`);
-        return NextResponse.json(
-          { error: "We couldn't email your account setup link right now. Please try again in a few minutes, or ask a Super User to resend it from the Members Directory." },
-          { status: 503 }
-        );
-      }
-      return NextResponse.json({
-        activationLinkSent: true,
-        email: member.email,
-        message: `Your account isn't activated yet, so there's no password to reset. We've emailed a fresh account setup link to ${member.email}.`,
-      });
-    }
-
-    if (member.mustSetupPassword) {
-      return NextResponse.json({
-        adminOverride: true,
-        email: member.email,
-        name: member.name,
-        message: 'Super User has requested a password reset for your account. You can set a new password directly without an OTP code.',
-      });
-    }
+    // Every registered email gets a code, including members who haven't activated yet or have an admin-requested
+    // password setup pending; completing the reset (reset-password) sets their password and clears those flags.
 
     // Generate 6-digit OTP code (cryptographically strong, not Math.random())
     const otp = randomInt(100000, 1000000).toString();
