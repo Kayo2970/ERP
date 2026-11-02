@@ -82,16 +82,7 @@ export function encryptData(text: string, customPassphrase?: string): EncryptedP
   };
 }
 
-/**
- * Decrypt an EncryptedPayload object back to original plain text.
- * Throws an Error if the passphrase is invalid or the data has been tampered with.
- */
-export function decryptData(payload: EncryptedPayload, customPassphrase?: string): string {
-  if (!payload || !payload._encrypted || !payload.iv || !payload.ciphertext || !payload.authTag) {
-    throw new Error('Invalid encrypted payload format.');
-  }
-
-  const passphrase = customPassphrase || getMasterKey();
+function decryptWithPassphrase(payload: EncryptedPayload, passphrase: string): string {
   const key = deriveKey(passphrase);
   const iv = Buffer.from(payload.iv, 'hex');
   const authTag = Buffer.from(payload.authTag, 'hex');
@@ -103,6 +94,32 @@ export function decryptData(payload: EncryptedPayload, customPassphrase?: string
   plaintext += decipher.final('utf-8');
 
   return plaintext;
+}
+
+/**
+ * Decrypt an EncryptedPayload object back to original plain text.
+ * Throws an Error if the passphrase is invalid or the data has been tampered with.
+ */
+export function decryptData(payload: EncryptedPayload, customPassphrase?: string): string {
+  if (!payload || !payload._encrypted || !payload.iv || !payload.ciphertext || !payload.authTag) {
+    throw new Error('Invalid encrypted payload format.');
+  }
+
+  const passphrase = customPassphrase || getMasterKey();
+  try {
+    return decryptWithPassphrase(payload, passphrase);
+  } catch (err) {
+    if (customPassphrase || passphrase === FALLBACK_KEY) {
+      throw err;
+    }
+    // Backward compatibility: If the payload was encrypted before DATA_ENCRYPTION_KEY
+    // was configured (i.e. using FALLBACK_KEY), decrypt it with FALLBACK_KEY.
+    try {
+      return decryptWithPassphrase(payload, FALLBACK_KEY);
+    } catch {
+      throw err;
+    }
+  }
 }
 
 /**

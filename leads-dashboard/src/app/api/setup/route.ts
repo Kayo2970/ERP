@@ -4,6 +4,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { readCollection, mutateCollection } from '@/lib/server-db';
+import { encryptData, decryptData, isEncryptedPayload } from '@/lib/encryption';
 import { hashPassword } from '@/lib/password';
 import { parseJsonBody } from '@/lib/validation';
 import { apiError } from '@/lib/api-error';
@@ -88,6 +89,27 @@ export async function POST(request: Request) {
       finalKey = crypto.randomBytes(32).toString('hex');
       process.env.DATA_ENCRYPTION_KEY = finalKey;
       writeEncryptionKeyToEnv(finalKey);
+    }
+
+    // Re-encrypt any existing collections (seeded prior to key setup) under the new key
+    const DATA_DIR = path.join(process.cwd(), 'data');
+    if (fs.existsSync(DATA_DIR)) {
+      const files = fs.readdirSync(DATA_DIR);
+      for (const file of files) {
+        if (!file.endsWith('.json') || file.startsWith('_')) continue;
+        const filePath = path.join(DATA_DIR, file);
+        try {
+          const raw = fs.readFileSync(filePath, 'utf-8');
+          const parsed = JSON.parse(raw);
+          if (isEncryptedPayload(parsed)) {
+            const decrypted = decryptData(parsed);
+            const reencrypted = encryptData(decrypted);
+            fs.writeFileSync(filePath, JSON.stringify(reencrypted, null, 2), 'utf-8');
+          }
+        } catch (e) {
+          console.warn(`[setup] Could not re-encrypt ${file}:`, e);
+        }
+      }
     }
 
     const superUser = {
